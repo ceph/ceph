@@ -30,8 +30,34 @@ class List(object):
         if not devs:
             logger.debug('Listing block devices via lsblk...')
             devs = []
+            # adding '--inverse' allows us to get the mapper devices list in that command output.
+            # not listing root devices containing partitions shouldn't have side effect since we are
+            # in `ceph-volume raw` context.
+            #
+            #   example:
+            #   running `lsblk --paths --nodeps --output=NAME --noheadings` doesn't allow to get the mapper list
+            #   because the output is like following :
+            #
+            #   $ lsblk --paths --nodeps --output=NAME --noheadings
+            #   /dev/sda
+            #   /dev/sdb
+            #   /dev/sdc
+            #   /dev/sdd
+            #
+            #   the dmcrypt mappers are hidden because of the `--nodeps` given they are displayed as a dependency.
+            #
+            #   $ lsblk --paths --output=NAME --noheadings
+            #   /dev/sda
+            #   |-/dev/mapper/ceph-3b52c90d-6548-407d-bde1-efd31809702f-sda-block-dmcrypt
+            #   `-/dev/mapper/ceph-3b52c90d-6548-407d-bde1-efd31809702f-sda-db-dmcrypt
+            #   /dev/sdb
+            #   /dev/sdc
+            #   /dev/sdd
+            #
+            #   adding `--inverse` is a trick to get around this issue, the counterpart is that we can't list root devices if they contain
+            #   at least one partition but this shouldn't be an issue in `ceph-volume raw` context given we only deal with raw devices.
             out, err, ret = process.call([
-                'lsblk', '--paths', '--nodeps', '--output=NAME', '--noheadings'
+                'lsblk', '--paths', '--nodeps', '--output=NAME', '--noheadings', '--inverse'
             ])
             assert not ret
             devs = out
