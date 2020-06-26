@@ -1,4 +1,5 @@
 import pytest
+import json
 from ceph_volume.devices.lvm import batch
 
 
@@ -133,7 +134,7 @@ class TestFilterDevices(object):
             abspath="/dev/sda",
             rotational=True,
             is_lvm_member=False,
-            available=True
+            available=True,
         )
         ssd1 = factory(
             used_by_ceph=True,
@@ -143,9 +144,34 @@ class TestFilterDevices(object):
             available=False
         )
         args = factory(devices=[hdd1], db_devices=[ssd1], filtered_devices={},
-                      yes=True)
+                      yes=True, format="", report=False)
         b = batch.Batch([])
         b.args = args
         with pytest.raises(RuntimeError) as ex:
             b._filter_devices()
             assert '1 devices were filtered in non-interactive mode, bailing out' in str(ex.value)
+
+    def test_no_auto_prints_json_on_unavailable_device_and_report(self, factory, capsys):
+        hdd1 = factory(
+            used_by_ceph=False,
+            abspath="/dev/sda",
+            rotational=True,
+            is_lvm_member=False,
+            available=True,
+        )
+        ssd1 = factory(
+            used_by_ceph=True,
+            abspath="/dev/nvme0n1",
+            rotational=False,
+            is_lvm_member=True,
+            available=False
+        )
+        captured = capsys.readouterr()
+        args = factory(devices=[hdd1], db_devices=[ssd1], filtered_devices={},
+                      yes=True, format="json", report=True)
+        b = batch.Batch([])
+        b.args = args
+        with pytest.raises(SystemExit):
+            b._filter_devices()
+            result = json.loads(captured.out)
+            assert not result["changed"]
