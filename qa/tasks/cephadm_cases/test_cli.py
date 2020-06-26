@@ -35,3 +35,5 @@ class TestCephadmCLI(MgrTestCase):
         out = self._orch_cmd('ps', '--format', 'yaml')
         self.assertNotIn('!!python', out)
 
+        out = self._orch_cmd('status', '--format', 'yaml')
+        self.assertNotIn('!!python', out)
