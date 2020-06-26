@@ -106,7 +106,7 @@ class HostControllerTest(DashboardTestCase):
         hosts = self._get('{}'.format(self.URL_HOST))
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
         assert hosts[0]
-        data = self._get('{}/smart'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
+        self._get('{}/smart'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
         self.assertStatus(200)
 
 

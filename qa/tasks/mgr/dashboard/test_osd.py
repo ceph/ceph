@@ -71,7 +71,7 @@ class OsdTest(DashboardTestCase):
         self.assertTrue(data['is_safe_to_delete'])
 
     def test_osd_smart(self):
-        data = self._get('/api/osd/0/smart')
+        self._get('/api/osd/0/smart')
         self.assertStatus(200)
 
     def test_mark_out_and_in(self):
