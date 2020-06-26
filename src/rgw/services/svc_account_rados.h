@@ -72,15 +72,16 @@ public:
   			  RGWObjVersionTracker *objv_tracker,
   			  optional_yield y) override;
 
-  int add_user(RGWSI_MetaBackend::Context *ctx,
-  	       const std::string& account_id,
-  	       const rgw_user& rgw_user) override;
+  int add_user(const RGWAccountInfo& info,
+  	       const rgw_user& rgw_user,
+	       optional_yield y) override;
 
   int remove_user(RGWSI_MetaBackend::Context *ctx,
   		  const std::string& account_id,
   		  const rgw_user& rgw_user) override
   { return -ERR_NOT_IMPLEMENTED; }
 
+  rgw_raw_obj get_account_user_obj(const std::string& account_id) const;
 private:
   RGWSI_MetaBackend_Handler *be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;

@@ -77,6 +77,12 @@ int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dp
   return 0;
 }
 
+rgw_raw_obj RGWSI_Account_RADOS::get_account_user_obj(const std::string& account_id) const
+{
+  std::string oid = account_id + RGW_ACCOUNT_USER_OBJ_SUFFIX;
+  return rgw_raw_obj(svc.zone->get_zone_params().account_pool, oid);
+}
+
 int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
                                             RGWSI_MetaBackend::Context *_ctx,
                                             const RGWAccountInfo& info,
@@ -147,10 +153,65 @@ int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RGWSI_Account_RADOS::add_user(RGWSI_MetaBackend::Context *ctx,
-                                  const std::string& account_id,
-                                  const rgw_user& rgw_user)
+struct rgw_account_user_header {
+  uint32_t current_users {0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(current_users, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(current_users, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_account_user_header)
+
+
+int RGWSI_Account_RADOS::add_user(const RGWAccountInfo& info,
+                                  const rgw_user& user,
+                                  optional_yield y)
 {
 
-  return 0;
+  auto obj = get_account_user_obj(info.get_id());
+  auto obj_ctx = svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+
+  bufferlist bl;
+  int ret = sysobj.omap().get_header(&bl, y);
+  if (ret < 0 && ret!= -ENOENT) {
+    return ret;
+  }
+
+  rgw_account_user_header hdr;
+  if (ret != -ENOENT) {
+    try {
+      auto bl_iter = bl.cbegin();
+      decode(hdr, bl_iter);
+    } catch (buffer::error) {
+      ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode account user hdr, "
+                                   << "caught buffer::error" << dendl;
+      return -EIO;
+    }
+  }
+
+  if (++hdr.current_users > info.get_max_users()) {
+    ldout(svc.meta_be->ctx(), 0) << "ERROR: user quota exceeded for account "
+                                 << info.get_id() << " max_users=" << info.get_max_users()
+                                 << dendl;
+    return -ERANGE;
+  }
+
+  bufferlist empty_bl;
+  ret = sysobj.omap().set(user.to_str(), bl, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist header_bl;
+  encode(hdr, header_bl);
+  return sysobj.omap().set_header(header_bl, y);
 }
