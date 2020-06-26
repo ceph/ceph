@@ -93,6 +93,9 @@ protected:
                             std::map<std::string, bufferlist> *m,
                             bool *pmore,
                             optional_yield y);
+  virtual int omap_get_header(const DoutPrefixProvider *dpp,
+                              const rgw_raw_obj& obj,
+                              bufferlist *bl, optional_yield y);
   virtual int omap_set(const DoutPrefixProvider *dpp, 
                        const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
@@ -100,6 +103,9 @@ protected:
   virtual int omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                        const std::map<std::string, bufferlist>& m, bool must_exist,
                        optional_yield y);
+  virtual int omap_set_header(const DoutPrefixProvider *dpp,
+                              const rgw_raw_obj& obj, const bufferlist& bl,
+                              bool must_exist, optional_yield y);
   virtual int omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
 
