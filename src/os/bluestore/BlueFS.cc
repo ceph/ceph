@@ -1182,10 +1182,12 @@ uint64_t BlueFS::_estimate_log_size()
 void BlueFS::compact_log()
 {
   std::unique_lock<std::mutex> l(lock);
-  if (cct->_conf->bluefs_compact_log_sync) {
-     _compact_log_sync();
-  } else {
-    _compact_log_async(l);
+  if (!cct->_conf->bluefs_replay_recovery_disable_compact) {
+    if (cct->_conf->bluefs_compact_log_sync) {
+      _compact_log_sync();
+    } else {
+      _compact_log_async(l);
+    }
   }
 }
 
@@ -2061,13 +2063,14 @@ void BlueFS::sync_metadata()
     utime_t end = ceph_clock_now();
     utime_t dur = end - start;
     dout(10) << __func__ << " done in " << dur << dendl;
-  }
-
-  if (_should_compact_log()) {
-    if (cct->_conf->bluefs_compact_log_sync) {
-      _compact_log_sync();
-    } else {
-      _compact_log_async(l);
+    if (!cct->_conf->bluefs_replay_recovery_disable_compact) {
+      if (_should_compact_log()) {
+	if (cct->_conf->bluefs_compact_log_sync) {
+	  _compact_log_sync();
+	} else {
+	  _compact_log_async(l);
+	}
+      }
     }
   }
 }
