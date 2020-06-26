@@ -4029,6 +4029,10 @@ std::vector<Option> get_global_options() {
 			  "This options enables heuristics that scans devices for missing data. "
 			  "DO NOT ENABLE BY DEFAULT"),
 
+    Option("bluefs_replay_recovery_disable_compact", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)
