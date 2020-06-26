@@ -463,6 +463,48 @@ int RGWSI_SysObj_Core::omap_set(const rgw_raw_obj& obj,
   return r;
 }
 
+int RGWSI_SysObj_Core::omap_set_header(const rgw_raw_obj& obj,
+				       const bufferlist& bl,
+				       bool must_exist, optional_yield y)
+{
+  RGWSI_RADOS::Obj rados_obj;
+  int r = get_rados_obj(zone_svc, obj, &rados_obj);
+  if (r < 0) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  if (must_exist)
+    op.assert_exists();
+
+  ldout(cct, 15) << "omap_set_header obj=" << obj << dendl;
+  op.omap_set_header(bl);
+  r = rados_obj.operate(&op, y);
+  return r;
+}
+
+int RGWSI_SysObj_Core::omap_get_header(const rgw_raw_obj& obj,
+                                       bufferlist* bl,
+                                       optional_yield y)
+{
+  RGWSI_RADOS::Obj rados_obj;
+  int r = get_rados_obj(zone_svc, obj, &rados_obj);
+  if (r < 0) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+
+  ldout(cct, 15) << "omap_get_header obj=" << obj << dendl;
+  int rv;
+  op.omap_get_header(bl, &rv);
+  r = rados_obj.operate(&op, nullptr, y);
+  return r;
+}
+
+
 int RGWSI_SysObj_Core::omap_del(const rgw_raw_obj& obj, const std::string& key,
                                 optional_yield y)
 {
