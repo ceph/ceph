@@ -250,6 +250,9 @@ daemon_id: ubuntu
 hostname: ubuntu
 status: 1
 status_desc: starting
+events:
+- 2020-06-10T10:08:22.933241 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
+  host 'ubuntu'"
 ---
 service_type: crash
 service_name: crash
@@ -262,6 +265,8 @@ status:
   last_refresh: '2020-06-10T10:57:40.715637'
   running: 1
   size: 1
+events:
+- 2020-06-10T10:37:31.139159 service:crash [INFO] "service was created"
 """
     types = (DaemonDescription, ServiceDescription)
 
