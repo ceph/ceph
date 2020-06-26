@@ -171,7 +171,8 @@ struct rgw_account_user_header {
 WRITE_CLASS_ENCODER(rgw_account_user_header)
 
 
-int RGWSI_Account_RADOS::add_user(const RGWAccountInfo& info,
+int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
+                                  const RGWAccountInfo& info,
                                   const rgw_user& user,
                                   optional_yield y)
 {
@@ -181,7 +182,7 @@ int RGWSI_Account_RADOS::add_user(const RGWAccountInfo& info,
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist bl;
-  int ret = sysobj.omap().get_header(&bl, y);
+  int ret = sysobj.omap().get_header(dpp, &bl, y);
   if (ret < 0 && ret!= -ENOENT) {
     return ret;
   }
@@ -192,26 +193,24 @@ int RGWSI_Account_RADOS::add_user(const RGWAccountInfo& info,
       auto bl_iter = bl.cbegin();
       decode(hdr, bl_iter);
     } catch (buffer::error) {
-      ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode account user hdr, "
-                                   << "caught buffer::error" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode account user hdr" << dendl;
       return -EIO;
     }
   }
 
   if (++hdr.current_users > info.get_max_users()) {
-    ldout(svc.meta_be->ctx(), 0) << "ERROR: user quota exceeded for account "
-                                 << info.get_id() << " max_users=" << info.get_max_users()
-                                 << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: user quota exceeded for account "
+        << info.get_id() << " max_users=" << info.get_max_users() << dendl;
     return -ERANGE;
   }
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(user.to_str(), bl, y);
+  ret = sysobj.omap().set(dpp, user.to_str(), bl, y);
   if (ret < 0) {
     return ret;
   }
 
   bufferlist header_bl;
   encode(hdr, header_bl);
-  return sysobj.omap().set_header(header_bl, y);
+  return sysobj.omap().set_header(dpp, header_bl, y);
 }

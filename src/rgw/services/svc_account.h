@@ -48,7 +48,8 @@ public:
 				  RGWObjVersionTracker *objv_tracker,
 				  optional_yield y) = 0;
 
-  virtual int add_user(const RGWAccountInfo& info,
+  virtual int add_user(const DoutPrefixProvider *dpp,
+		       const RGWAccountInfo& info,
 		       const rgw_user& rgw_user,
 		       optional_yield y) = 0;
 

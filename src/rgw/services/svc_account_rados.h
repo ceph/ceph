@@ -72,9 +72,10 @@ public:
   			  RGWObjVersionTracker *objv_tracker,
   			  optional_yield y) override;
 
-  int add_user(const RGWAccountInfo& info,
-  	       const rgw_user& rgw_user,
-	       optional_yield y) override;
+  int add_user(const DoutPrefixProvider *dpp,
+               const RGWAccountInfo& info,
+               const rgw_user& rgw_user,
+               optional_yield y) override;
 
   int remove_user(RGWSI_MetaBackend::Context *ctx,
   		  const std::string& account_id,
