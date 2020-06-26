@@ -90,6 +90,10 @@ public:
 
   const std::string& get_id() const { return id; }
   const std::string& get_tenant() { return tenant; }
+  uint32_t get_max_users() const
+  {
+    return account_quota.max_users == 0 ? UINT32_MAX: account_quota.max_users;
+  }
 
   void dump(Formatter * const f) const;
   void decode_json(JSONObj *obj);
@@ -116,7 +120,8 @@ public:
   ~RGWAccountCtl() = default;
 
   int add_user(const std::string& account_id,
-	       const rgw_user& user);
+	       const rgw_user& user,
+	       optional_yield);
   int add_role(const RGWRole& role);
 
   int list_users();
