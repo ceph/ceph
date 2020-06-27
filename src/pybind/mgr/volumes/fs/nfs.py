@@ -374,19 +374,7 @@ class FSExport(object):
         self.mgr = mgr
         self.rados_pool = 'nfs-ganesha'
         self.rados_namespace = namespace
-        self.exports = {}
-
-        try:
-            log.info("Begin export parsing")
-            for cluster_id in available_clusters(self.mgr):
-                self.export_conf_objs = []  # type: List[Export]
-                self._read_raw_config(cluster_id)
-                self.exports[cluster_id] = self.export_conf_objs
-            log.info(f"Exports parsed successfully {self.exports.items()}")
-        except orchestrator.NoOrchestrator:
-            # Pass it for vstart
-            log.info("Orchestrator not found")
-            pass
+        self._exports = None
 
     @staticmethod
     def _check_rados_notify(ioctx, obj):
@@ -394,6 +382,18 @@ class FSExport(object):
             ioctx.notify(obj)
         except TimedOut:
             log.exception(f"Ganesha timed out")
+
+    @property
+    def exports(self):
+        if self._exports is None:
+            self._exports = {}
+            log.info("Begin export parsing")
+            for cluster_id in available_clusters(self.mgr):
+                self.export_conf_objs = []  # type: List[Export]
+                self._read_raw_config(cluster_id)
+                self.exports[cluster_id] = self.export_conf_objs
+                log.info(f"Exports parsed successfully {self.exports.items()}")
+        return self._exports
 
     def _fetch_export(self, pseudo_path):
         try:
