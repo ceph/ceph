@@ -2878,6 +2878,9 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
     if (rocksdb::kDefaultColumnFamilyName == base_name) {
       default_cf = handles[i];
       must_close_default_cf = true;
+      std::unique_ptr<rocksdb::ColumnFamilyHandle, cf_deleter_t> ptr{
+        cf, [](rocksdb::ColumnFamilyHandle*) {}};
+      to_process_columns.emplace(full_name, std::move(ptr));
     } else {
       for (const auto& nsd : new_sharding_def) {
 	if (nsd.name == base_name) {
@@ -2889,8 +2892,12 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
 	  break;
 	}
       }
+      std::unique_ptr<rocksdb::ColumnFamilyHandle, cf_deleter_t> ptr{
+        cf, [this](rocksdb::ColumnFamilyHandle* handle) {
+	  db->DestroyColumnFamilyHandle(handle);
+	}};
+      to_process_columns.emplace(full_name, std::move(ptr));
     }
-    to_process_columns.emplace(full_name, cf);
   }
 
   //8. check if all cf_handles are filled
@@ -2930,12 +2937,12 @@ int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns
 
     // verify that column is empty
     std::unique_ptr<rocksdb::Iterator> it{
-      db->NewIterator(rocksdb::ReadOptions(), handle)};
+      db->NewIterator(rocksdb::ReadOptions(), handle.get())};
     ceph_assert(it);
     it->SeekToFirst();
     ceph_assert(!it->Valid());
 
-    if (rocksdb::Status status = db->DropColumnFamily(handle); !status.ok()) {
+    if (rocksdb::Status status = db->DropColumnFamily(handle.get()); !status.ok()) {
       derr << __func__ << " Failed to drop column: "  << name << dendl;
       return -EINVAL;
     }
@@ -3053,14 +3060,14 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 
   for (auto& [name, handle] : to_process_columns) {
     dout(5) << "Processing column=" << name
-	    << " handle=" << handle << dendl;
+	    << " handle=" << handle.get() << dendl;
     if (name == rocksdb::kDefaultColumnFamilyName) {
-      ceph_assert(handle == default_cf);
+      ceph_assert(handle.get() == default_cf);
       r = process_column(default_cf, std::string());
     } else {
       std::string fixed_prefix = name.substr(0, name.find('-'));
       dout(10) << "Prefix: " << fixed_prefix << dendl;
-      r = process_column(handle, fixed_prefix);
+      r = process_column(handle.get(), fixed_prefix);
     }
     if (r != 0) {
       derr << "Error processing column " << name << dendl;
@@ -3090,13 +3097,7 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
     r = -EIO;
   }
 
-  cleanup:
-  //close column handles
-  for (const auto& col: cf_handles) {
-    for (size_t i = 0; i < col.second.handles.size(); i++) {
-      db->DestroyColumnFamilyHandle(col.second.handles[i]);
-    }
-  }
+cleanup:
   cf_handles.clear();
   close();
   return r;

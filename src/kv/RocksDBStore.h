@@ -478,7 +478,10 @@ err:
 private:
   WholeSpaceIterator get_default_cf_iterator();
 
-  using columns_t = std::map<std::string, rocksdb::ColumnFamilyHandle*>;
+  using cf_deleter_t = std::function<void(rocksdb::ColumnFamilyHandle*)>;
+  using columns_t = std::map<std::string,
+			     std::unique_ptr<rocksdb::ColumnFamilyHandle,
+					     cf_deleter_t>>;
   int prepare_for_reshard(const std::string& new_sharding,
 			  columns_t& to_process_columns);
   int reshard_cleanup(const columns_t& current_columns);
