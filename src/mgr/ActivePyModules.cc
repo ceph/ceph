@@ -448,15 +448,17 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   const auto name = py_module->get_name();
   auto active_module = std::make_shared<ActivePyModule>(py_module, clog);
 
+  pending_modules.insert(name);
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
   finisher.queue(new LambdaContext([this, active_module, name](int) {
     int r = active_module->load(this);
+    std::lock_guard l(lock);
+    pending_modules.erase(name);
     if (r != 0) {
       derr << "Failed to run module in active mode ('" << name << "')"
            << dendl;
     } else {
-      std::lock_guard l(lock);
       auto em = modules.emplace(name, active_module);
       ceph_assert(em.second); // actually inserted
 
