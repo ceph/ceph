@@ -22,6 +22,7 @@
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "include/common_fwd.h"
+#include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
@@ -2952,8 +2953,6 @@ int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns
 
 int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::resharding_ctrl* ctrl_in)
 {
-  rocksdb::Status status;
-  int r;
 
   resharding_ctrl ctrl = ctrl_in ? *ctrl_in : resharding_ctrl();
   size_t bytes_in_batch = 0;
@@ -3051,11 +3050,15 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
     return 0;
   };
 
+  auto close_column_handles = make_scope_guard([this] {
+    cf_handles.clear();
+    close();
+  });
   columns_t to_process_columns;
-  r = prepare_for_reshard(new_sharding, to_process_columns);
+  int r = prepare_for_reshard(new_sharding, to_process_columns);
   if (r != 0) {
     dout(1) << "failed to prepare db for reshard" << dendl;
-    goto cleanup;
+    return r;
   }
 
   for (auto& [name, handle] : to_process_columns) {
@@ -3071,34 +3074,29 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
     }
     if (r != 0) {
       derr << "Error processing column " << name << dendl;
-      goto cleanup;
+      return r;
     }
     if (ctrl.unittest_fail_after_processing_column) {
-      r = -1001;
-      goto cleanup;
+      return -1001;
     }
   }
 
   r = reshard_cleanup(to_process_columns);
   if (r != 0) {
     dout(5) << "failed to cleanup after reshard" << dendl;
-    goto cleanup;
+    return r;
   }
 
   if (ctrl.unittest_fail_after_successful_processing) {
-    r = -1002;
-    goto cleanup;
+    return -1002;
   }
   env->CreateDir(sharding_def_dir);
-  status = rocksdb::WriteStringToFile(env, new_sharding,
-				      sharding_def_file, true);
-  if (!status.ok()) {
+  if (auto status = rocksdb::WriteStringToFile(env, new_sharding,
+					       sharding_def_file, true);
+      !status.ok()) {
     derr << __func__ << " cannot write to " << sharding_def_file << dendl;
-    r = -EIO;
+    return -EIO;
   }
 
-cleanup:
-  cf_handles.clear();
-  close();
   return r;
 }
