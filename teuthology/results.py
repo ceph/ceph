@@ -9,6 +9,7 @@ import teuthology
 from teuthology.config import config
 from teuthology import misc
 from teuthology.report import ResultsReporter
+from teuthology.scrape import Scraper
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ def results(archive_dir, name, email, timeout, dry_run):
 
     (subject, body) = build_email_body(name)
 
+    Scraper(archive_dir).analyze()
     if email and dry_run:
         print("From: %s" % (config.results_sending_email or 'teuthology'))
         print("To: %s" % email)
