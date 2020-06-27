@@ -2911,12 +2911,12 @@ int RocksDBStore::reshard_cleanup(const std::vector<std::string>& current_column
 				  const std::vector<rocksdb::ColumnFamilyHandle*>& current_handles)
 {
   std::vector<std::string> new_sharding_columns;
-  for (const auto& col: cf_handles) {
-    if (col.second.handles.size() == 1) {
-      new_sharding_columns.push_back(col.first);
+  for (const auto& [name, handle] : cf_handles) {
+    if (handle.handles.size() == 1) {
+      new_sharding_columns.push_back(name);
     } else {
-      for (size_t i = 0; i < col.second.handles.size(); i++) {
-	new_sharding_columns.push_back(col.first + "-" + to_string(i));
+      for (size_t i = 0; i < handle.handles.size(); i++) {
+	new_sharding_columns.push_back(name + "-" + to_string(i));
       }
     }
   }
