@@ -83,7 +83,7 @@ private:
   // use real_clock so it can be converted to utime_t
   using clock = ceph::coarse_real_clock;
 
-  class Connector;
+  class ConnectionListener;
   class Connection;
   class Session;
   class Peer;
@@ -130,21 +130,25 @@ inline std::ostream& operator<<(std::ostream& out, const Heartbeat& hb) {
   return out;
 }
 
-class Heartbeat::Connector {
+/*
+ * Event driven interface for Heartbeat::Peer to be notified when both hb_front
+ * and hb_back are connected, or connection is lost.
+ */
+class Heartbeat::ConnectionListener {
  public:
-  Connector(size_t connections) : connections{connections} {}
+  ConnectionListener(size_t connections) : connections{connections} {}
 
   void increase_connected() {
     assert(connected < connections);
     ++connected;
     if (connected == connections) {
-      all_connected();
+      on_connected();
     }
   }
   void decrease_connected() {
     assert(connected > 0);
     if (connected == connections) {
-      connection_lost();
+      on_disconnected();
     }
     --connected;
   }
@@ -152,8 +156,8 @@ class Heartbeat::Connector {
   virtual entity_addr_t get_peer_addr(type_t) = 0;
 
  protected:
-  virtual void all_connected() = 0;
-  virtual void connection_lost() = 0;
+  virtual void on_connected() = 0;
+  virtual void on_disconnected() = 0;
 
  private:
   const size_t connections;
@@ -162,18 +166,20 @@ class Heartbeat::Connector {
 
 class Heartbeat::Connection {
  public:
-  using type_t = Connector::type_t;
+  using type_t = ConnectionListener::type_t;
   Connection(osd_id_t peer, bool is_winner_side, type_t type,
-             crimson::net::Messenger& msgr, Connector& connector)
-    : peer{peer}, is_winner_side{is_winner_side}, type{type},
-      msgr{msgr}, connector{connector} {
+             crimson::net::Messenger& msgr,
+             ConnectionListener& listener)
+    : peer{peer}, type{type},
+      msgr{msgr}, listener{listener},
+      is_winner_side{is_winner_side} {
     connect();
   }
   ~Connection();
 
-  bool match(crimson::net::Connection* _conn) const;
-  bool match(crimson::net::ConnectionRef conn) const {
-    return match(conn.get());
+  bool matches(crimson::net::Connection* _conn) const;
+  bool matches(crimson::net::ConnectionRef conn) const {
+    return matches(conn.get());
   }
   void connected() {
     set_connected();
@@ -191,14 +197,42 @@ class Heartbeat::Connection {
   void connect();
 
   const osd_id_t peer;
-  const bool is_winner_side;
   const type_t type;
   crimson::net::Messenger& msgr;
-  Connector& connector;
+  ConnectionListener& listener;
+
+/*
+ * Resolve the following racing when both me and peer are trying to connect
+ * each other symmetrically, under SocketPolicy::lossy_client:
+ *
+ * OSD.A               OSD.B
+ * -                       -
+ * |-[1]---->       <----[2]-|
+ *           \     /
+ *             \ /
+ *    delay..   X   delay..
+ *             / \
+ * |-[1]x>   /     \   <x[2]-|
+ * |<-[2]---         ---[1]->|
+ * |(reset#1)       (reset#2)|
+ * |(reconnectB) (reconnectA)|
+ * |-[2]--->         <---[1]-|
+ *  delay..           delay..
+ *   (remote close populated)
+ * |-[2]x>             <x[1]-|
+ * |(reset#2)       (reset#1)|
+ * | ...                 ... |
+ *         (dead loop!)
+ *
+ * Our solution is to remember if such racing was happened recently, and
+ * establish connection asymmetrically only from the winner side whose osd-id
+ * is larger.
+ */
+  const bool is_winner_side;
+  bool racing_detected = false;
 
   crimson::net::ConnectionRef conn;
   bool is_connected = false;
-  bool racing_detected = false;
 
  friend std::ostream& operator<<(std::ostream& os, const Connection c) {
    if (c.type == type_t::front) {
@@ -209,13 +243,31 @@ class Heartbeat::Connection {
  }
 };
 
+/*
+ * Track the ping history and ping reply (the pong) from the same session, clean up
+ * history once hb_front or hb_back loses connection and restart the session once
+ * both connections are connected again.
+ *
+ * We cannot simply remove the entire Heartbeat::Peer once hb_front or hb_back
+ * loses connection, because we would end up with the following deadloop:
+ *
+ * OSD.A                                   OSD.B
+ * -                                           -
+ * hb_front reset <--(network)--- hb_front close
+ *       |                             ^
+ *       |                             |
+ *  remove Peer B  (dead loop!)   remove Peer A
+ *       |                             |
+ *       V                             |
+ * hb_back close ----(network)---> hb_back reset
+ */
 class Heartbeat::Session {
  public:
   Session(osd_id_t peer) : peer{peer} {}
 
   void set_epoch(epoch_t epoch_) { epoch = epoch_; }
   epoch_t get_epoch() const { return epoch; }
-  bool is_started() const { return started; }
+  bool is_started() const { return connected; }
   bool pinged() const {
     if (clock::is_zero(first_tx)) {
       // i can never receive a pong without sending any ping message first.
@@ -257,23 +309,23 @@ class Heartbeat::Session {
     last_tx = now;
   }
 
-  void start() {
-    assert(!started);
-    started = true;
+  void on_connected() {
+    assert(!connected);
+    connected = true;
     ping_history.clear();
   }
 
-  void emplace_history(const utime_t& sent_stamp,
-                       const clock::time_point& deadline) {
-    assert(started);
+  void on_ping(const utime_t& sent_stamp,
+               const clock::time_point& deadline) {
+    assert(connected);
     [[maybe_unused]] auto [reply, added] =
       ping_history.emplace(sent_stamp, reply_t{deadline, 2});
   }
 
-  bool handle_reply(const utime_t& ping_stamp,
-                    Connection::type_t type,
-                    clock::time_point now) {
-    assert(started);
+  bool on_pong(const utime_t& ping_stamp,
+               Connection::type_t type,
+               clock::time_point now) {
+    assert(connected);
     auto ping = ping_history.find(ping_stamp);
     if (ping == ping_history.end()) {
       // old replies, deprecated by newly sent pings.
@@ -294,9 +346,9 @@ class Heartbeat::Session {
     return true;
   }
 
-  void lost() {
-    assert(started);
-    started = false;
+  void on_disconnected() {
+    assert(connected);
+    connected = false;
     if (!ping_history.empty()) {
       // we lost our ping_history of the last session, but still need to keep
       // the oldest deadline for unhealthy check.
@@ -313,7 +365,7 @@ class Heartbeat::Session {
 
  private:
   const osd_id_t peer;
-  bool started = false;
+  bool connected = false;
   // time we sent our first ping request
   clock::time_point first_tx;
   // last time we sent a ping request
@@ -334,7 +386,7 @@ class Heartbeat::Session {
   std::map<utime_t, reply_t> ping_history;
 };
 
-class Heartbeat::Peer final : private Heartbeat::Connector {
+class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
  public:
   Peer(Heartbeat&, osd_id_t);
   ~Peer();
@@ -355,7 +407,7 @@ class Heartbeat::Peer final : private Heartbeat::Connector {
   seastar::future<> handle_reply(crimson::net::Connection*, Ref<MOSDPing>);
   void handle_reset(crimson::net::ConnectionRef conn, bool is_replace) {
     for_each_conn([&] (auto& _conn) {
-      if (_conn.match(conn)) {
+      if (_conn.matches(conn)) {
         if (is_replace) {
           _conn.replaced();
         } else {
@@ -366,7 +418,7 @@ class Heartbeat::Peer final : private Heartbeat::Connector {
   }
   void handle_connect(crimson::net::ConnectionRef conn) {
     for_each_conn([&] (auto& _conn) {
-      if (_conn.match(conn)) {
+      if (_conn.matches(conn)) {
         _conn.connected();
       }
     });
@@ -379,8 +431,8 @@ class Heartbeat::Peer final : private Heartbeat::Connector {
 
  private:
   entity_addr_t get_peer_addr(type_t type) override;
-  void all_connected() override;
-  void connection_lost() override;
+  void on_connected() override;
+  void on_disconnected() override;
   void do_send_heartbeat(
       clock::time_point, ceph::signedspan, std::vector<seastar::future<>>*);
 
@@ -393,7 +445,7 @@ class Heartbeat::Peer final : private Heartbeat::Connector {
   Heartbeat& heartbeat;
   const osd_id_t peer;
   Session session;
-  // if need to send heartbeat when session started
+  // if need to send heartbeat when session connected
   bool pending_send = false;
   Connection con_front;
   Connection con_back;

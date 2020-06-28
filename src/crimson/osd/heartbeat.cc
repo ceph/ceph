@@ -358,19 +358,15 @@ Heartbeat::Connection::~Connection()
   }
 }
 
-bool Heartbeat::Connection::match(crimson::net::Connection* _conn) const
+bool Heartbeat::Connection::matches(crimson::net::Connection* _conn) const
 {
-  if (conn && conn.get() == _conn) {
-    return true;
-  } else {
-    return false;
-  }
+  return (conn && conn.get() == _conn);
 }
 
 void Heartbeat::Connection::accepted(crimson::net::ConnectionRef accepted_conn)
 {
   if (!conn) {
-    if (accepted_conn->get_peer_addr() == connector.get_peer_addr(type)) {
+    if (accepted_conn->get_peer_addr() == listener.get_peer_addr(type)) {
       logger().info("Heartbeat::Connection::accepted(): "
                     "{} racing resolved", *this);
       conn = accepted_conn;
@@ -399,7 +395,7 @@ void Heartbeat::Connection::reset()
   conn = nullptr;
   if (is_connected) {
     is_connected = false;
-    connector.decrease_connected();
+    listener.decrease_connected();
   }
   if (!racing_detected || is_winner_side) {
     connect();
@@ -419,7 +415,7 @@ seastar::future<> Heartbeat::Connection::send(MessageRef msg)
 void Heartbeat::Connection::validate()
 {
   assert(is_connected);
-  auto peer_addr = connector.get_peer_addr(type);
+  auto peer_addr = listener.get_peer_addr(type);
   if (conn->get_peer_addr() != peer_addr) {
     logger().info("Heartbeat::Connection::validate(): "
                   "{} has new address {} over {}, reset",
@@ -447,13 +443,13 @@ void Heartbeat::Connection::set_connected()
 {
   assert(!is_connected);
   is_connected = true;
-  connector.increase_connected();
+  listener.increase_connected();
 }
 
 void Heartbeat::Connection::connect()
 {
   assert(!conn);
-  auto addr = connector.get_peer_addr(type);
+  auto addr = listener.get_peer_addr(type);
   conn = msgr.connect(addr, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer));
   if (conn->is_connected()) {
     set_connected();
@@ -485,20 +481,19 @@ Heartbeat::Session::failed_since(Heartbeat::clock::time_point now) const
 
 void Heartbeat::Session::set_inactive_history(clock::time_point now)
 {
-  assert(!started);
+  assert(!connected);
   if (ping_history.empty()) {
     const utime_t sent_stamp{now};
     const auto deadline =
       now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
-    [[maybe_unused]] auto [reply, added] =
-      ping_history.emplace(sent_stamp, reply_t{deadline, 0});
+    ping_history.emplace(sent_stamp, reply_t{deadline, 0});
   } else { // the entry is already added
     assert(ping_history.size() == 1);
   }
 }
 
 Heartbeat::Peer::Peer(Heartbeat& heartbeat, osd_id_t peer)
-  : Connector(2), heartbeat{heartbeat}, peer{peer}, session{peer},
+  : ConnectionListener(2), heartbeat{heartbeat}, peer{peer}, session{peer},
   con_front(peer, heartbeat.whoami > peer, Connection::type_t::front,
             *heartbeat.front_msgr, *this),
   con_back(peer, heartbeat.whoami > peer, Connection::type_t::back,
@@ -548,15 +543,15 @@ seastar::future<> Heartbeat::Peer::handle_reply(
     return seastar::now();
   }
   type_t type;
-  if (con_front.match(conn)) {
+  if (con_front.matches(conn)) {
     type = type_t::front;
-  } else if (con_back.match(conn)) {
+  } else if (con_back.matches(conn)) {
     type = type_t::back;
   } else {
     return seastar::now();
   }
   const auto now = clock::now();
-  if (session.handle_reply(m->ping_stamp, type, now)) {
+  if (session.on_pong(m->ping_stamp, type, now)) {
     if (session.do_health_screen(now) == Session::health_state::HEALTHY) {
       return heartbeat.failing_peers.cancel_one(peer);
     }
@@ -574,21 +569,21 @@ entity_addr_t Heartbeat::Peer::get_peer_addr(type_t type)
   }
 }
 
-void Heartbeat::Peer::all_connected()
+void Heartbeat::Peer::on_connected()
 {
-  logger().info("Heartbeat::Peer: osd.{} started (send={})",
+  logger().info("Heartbeat::Peer: osd.{} connected (send={})",
                 peer, pending_send);
-  session.start();
+  session.on_connected();
   if (pending_send) {
     pending_send = false;
     do_send_heartbeat(clock::now(), heartbeat.service.get_mnow(), nullptr);
   }
 }
 
-void Heartbeat::Peer::connection_lost()
+void Heartbeat::Peer::on_disconnected()
 {
-  logger().info("Heartbeat::Peer: osd.{} reset", peer);
-  session.lost();
+  logger().info("Heartbeat::Peer: osd.{} disconnected", peer);
+  session.on_disconnected();
 }
 
 void Heartbeat::Peer::do_send_heartbeat(
@@ -599,7 +594,7 @@ void Heartbeat::Peer::do_send_heartbeat(
   const utime_t sent_stamp{now};
   const auto deadline =
     now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
-  session.emplace_history(sent_stamp, deadline);
+  session.on_ping(sent_stamp, deadline);
   for_each_conn([&, this] (auto& conn) {
     auto min_message = static_cast<uint32_t>(
       local_conf()->osd_heartbeat_min_size);
