@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 import logging
 
+from functools import wraps
 from typing import List, Optional
 
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
@@ -9,7 +10,6 @@ from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from orchestrator import HostSpec
 from .. import mgr
-from ..tools import wraps
 
 logger = logging.getLogger('orchestrator')
 

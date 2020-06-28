@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os.path
 
 import time
+from functools import wraps
 
 from . import ApiController, Endpoint, ReadPermission, UpdatePermission
 from . import RESTController, Task
@@ -11,7 +12,7 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient
-from ..tools import TaskManager, wraps
+from ..tools import TaskManager
 
 
 def get_device_osd_map():
