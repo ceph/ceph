@@ -9,15 +9,11 @@ import logging
 import threading
 import warnings
 
-import six
-from six.moves.urllib import parse
+from urllib import parse
 
 from .. import mgr
 from ..tools import prepare_url_prefix
 
-
-if six.PY2:
-    FileNotFoundError = IOError  # pylint: disable=redefined-builtin
 
 logger = logging.getLogger('sso')
 
