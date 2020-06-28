@@ -8,7 +8,6 @@ except ImportError:
 import logging
 import errno
 import json
-import six
 import threading
 from collections import defaultdict, namedtuple
 import rados
@@ -197,7 +196,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
     def get_take_weight_osd_map(self, root):
         uglymap = self._get_take_weight_osd_map(root)
-        return {int(k): v for k, v in six.iteritems(uglymap.get('weights', {}))}
+        return {int(k): v for k, v in uglymap.get('weights', {}).items()}
 
     @staticmethod
     def have_default_choose_args(dump):
