@@ -2,9 +2,8 @@ from contextlib import contextmanager
 import json
 import logging
 import datetime
-import six
 import time
-from six import StringIO
+from io import StringIO
 from textwrap import dedent
 import os
 import re
@@ -498,7 +497,7 @@ class CephFSMount(object):
     def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
-        return six.ensure_str(p.stdout.getvalue().strip())
+        return p.stdout.getvalue().strip()
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
                   cwd=None, omit_sudo=True):
