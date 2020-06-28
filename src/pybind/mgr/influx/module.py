@@ -2,12 +2,9 @@ from contextlib import contextmanager
 from datetime import datetime
 from threading import Event, Thread
 from itertools import chain
-from six import next
-from six.moves import queue
-from six.moves import xrange as range
+import queue
 import json
 import errno
-import six
 import time
 
 from mgr_module import MgrModule
@@ -214,7 +211,7 @@ class Module(MgrModule):
     def get_pg_summary_osd(self, pool_info, now):
         pg_sum = self.get('pg_summary')
         osd_sum = pg_sum['by_osd']
-        for osd_id, stats in six.iteritems(osd_sum):
+        for osd_id, stats in osd_sum.items():
             metadata = self.get_metadata('osd', "%s" % osd_id)
             if not metadata:
                 continue
@@ -235,7 +232,7 @@ class Module(MgrModule):
 
     def get_pg_summary_pool(self, pool_info, now):
         pool_sum = self.get('pg_summary')['by_pool']
-        for pool_id, stats in six.iteritems(pool_sum):
+        for pool_id, stats in pool_sum.items():
             for stat in stats:
                 yield {
                     "measurement": "ceph_pg_summary_pool",
@@ -251,7 +248,7 @@ class Module(MgrModule):
                 }
 
     def get_daemon_stats(self, now):
-        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
+        for daemon, counters in self.get_all_perf_counters().items():
             svc_type, svc_id = daemon.split(".", 1)
             metadata = self.get_metadata(svc_type, svc_id)
 
