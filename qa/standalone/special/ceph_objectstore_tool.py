@@ -688,10 +688,7 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
 
 
 def main(argv):
-    if sys.version_info[0] < 3:
-        sys.stdout = stdout = os.fdopen(sys.stdout.fileno(), 'wb', 0)
-    else:
-        stdout = sys.stdout.buffer
+    stdout = sys.stdout.buffer
     if len(argv) > 1 and argv[1] == "debug":
         nullfd = stdout
     else:
