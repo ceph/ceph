@@ -515,8 +515,8 @@ maybe_get_omap_vals(
 }
 
 seastar::future<ceph::bufferlist> PGBackend::omap_get_header(
-  crimson::os::CollectionRef& c,
-  const ghobject_t& oid)
+  const crimson::os::CollectionRef& c,
+  const ghobject_t& oid) const
 {
   return store->omap_get_header(c, oid);
 }
