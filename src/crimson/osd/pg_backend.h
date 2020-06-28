@@ -132,8 +132,8 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
   seastar::future<ceph::bufferlist> omap_get_header(
-    crimson::os::CollectionRef& c,
-    const ghobject_t& oid);
+    const crimson::os::CollectionRef& c,
+    const ghobject_t& oid) const;
   seastar::future<> omap_get_header(
     const ObjectState& os,
     OSDOp& osd_op) const;
