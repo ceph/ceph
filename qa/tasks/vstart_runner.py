@@ -52,7 +52,6 @@ from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
-import six
 import logging
 
 def init_log():
@@ -199,8 +198,8 @@ class LocalRemoteProcess(object):
         self.exitstatus = self.returncode = self.subproc.returncode
 
         if self.exitstatus != 0:
-            sys.stderr.write(six.ensure_str(out))
-            sys.stderr.write(six.ensure_str(err))
+            sys.stderr.write(out.decode())
+            sys.stderr.write(err.decode())
 
         if self.check_status and self.exitstatus != 0:
             raise CommandFailedError(self.args, self.exitstatus)
@@ -278,17 +277,10 @@ class LocalRemote(object):
     # holding same path. For teuthology, same path still represents
     # different locations as they lie on different machines.
     def put_file(self, src, dst, sudo=False):
-        if sys.version_info.major < 3:
-            exception = shutil.Error
-        elif sys.version_info.major >= 3:
-            exception = shutil.SameFileError
-
         try:
             shutil.copy(src, dst)
-        except exception as e:
-            if sys.version_info.major < 3:
-                if 'are the same file' not in  e.message:
-                    raise e
+        except shutil.SameFileError:
+            pass
 
     # XXX: accepts only two arugments to maintain compatibility with
     # teuthology's mkdtemp.
@@ -315,7 +307,7 @@ class LocalRemote(object):
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
-        if isinstance(args, str) or isinstance(args, six.text_type):
+        if isinstance(args, str):
             args = args.split()
 
         # We'll let sudo be a part of command even omit flag says otherwise in
@@ -400,7 +392,7 @@ class LocalRemote(object):
         else:
             # Sanity check that we've got a list of strings
             for arg in args:
-                if not isinstance(arg, six.string_types):
+                if not isinstance(arg, str):
                     raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
                         arg, arg.__class__
                     ))
