@@ -164,13 +164,13 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     local codename=$1
-    if apt -qq list ceph-libboost1.67-dev 2>/dev/null | grep -q installed; then
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.67.*'
-	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.67.list
+    if apt -qq list ceph-libboost1.72-dev 2>/dev/null | grep -q installed; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.72.*'
+	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.72.list
     fi
     local project=libboost
-    local ver=1.72
-    local sha1=1d7c7a00cc3f37e340bae0360191a757b44ec80c
+    local ver=1.73
+    local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
     install_pkg_on_ubuntu \
 	$project \
 	$sha1 \
