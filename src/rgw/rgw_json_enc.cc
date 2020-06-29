@@ -517,6 +517,7 @@ void RGWUserInfo::dump(Formatter *f) const
   }
   encode_json("type", user_source_type, f);
   encode_json("mfa_ids", mfa_ids, f);
+  encode_json("account_id", account_id, f);
 }
 
 
@@ -590,6 +591,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
     type = TYPE_NONE;
   }
   JSONDecoder::decode_json("mfa_ids", mfa_ids, obj);
+  JSONDecoder::decode_json("account_id", account_id, obj);
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
