@@ -43,7 +43,7 @@ tasks:
       - ceph orch ls
       - ceph orch host ls
       - ceph orch device ls
-      - ceph orch apply mds --placement=host.a
+      - ceph orch apply mds cephfs --placement=host.a
 - print: "**** done cephadm.shell"
 - exec:
     osd.0:
