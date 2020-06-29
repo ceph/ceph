@@ -1,0 +1,9 @@
+meta:
+- desc: |
+   rbd object class functional tests
+tasks:
+  - workunit:
+      clients:
+        client.1:
+          - cls/test_cls_rbd.sh
+  - print: "**** done cls/test_cls_rbd.sh 4-final-workload"
