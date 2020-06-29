@@ -89,6 +89,8 @@ int SIProvider_MetaFull::get_all_sections() {
     result.clear();
   } while (truncated);
 
+  meta.mgr->list_keys_complete(handle);
+
   return 0;
 }
 
@@ -137,21 +139,26 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
     }
   }
 
-  void *handle;
+  void *handle = nullptr;
 
   result->done = false;
   result->more = true;
 
-  do {
-    int ret = meta.mgr->list_keys_init(section, m, &handle);
-    if (ret < 0) {
-      lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
-      return ret;
+  bool new_section = true;
+
+  while (max > 0) {
+    int ret;
+    if (new_section) {
+      ret = meta.mgr->list_keys_init(section, m, &handle);
+      if (ret < 0) {
+        lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
+        return ret;
+      }
+      new_section = false;
     }
 
     std::list<RGWMetadataHandler::KeyInfo> entries;
     bool truncated;
-    int max = 32;
 
     ret = meta.mgr->list_keys_next(handle, max, entries,
                                    &truncated);
@@ -178,16 +185,16 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
         result->more = false;
         break;
       }
+      meta.mgr->list_keys_complete(handle);
+      handle = nullptr;
       m.clear();
       new_section = true;
     }
+  }
 
-    if (max == 0) {
-      break;
-    }
-
-  } while (true);
-
+  if (handle) {
+    meta.mgr->list_keys_complete(handle);
+  }
 
   return 0;
 }

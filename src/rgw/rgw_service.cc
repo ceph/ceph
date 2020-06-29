@@ -37,6 +37,7 @@
 
 #include "rgw_sync_info.h"
 #include "rgw_sip_meta.h"
+#include "rgw_sip_data.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -456,6 +457,14 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
     return r;
   }
   si.mgr->register_sip("meta.inc", std::make_shared<RGWSIPGen_Single>(inc_sip));
+
+  auto data_full_sip = new SIProvider_DataFull(cct, meta.mgr);
+  r = data_full_sip->init();
+  if (r < 0) {
+    lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
+    return r;
+  }
+  si.mgr->register_sip("data.full", std::make_shared<RGWSIPGen_Single>(data_full_sip));
 
   return 0;
 }
