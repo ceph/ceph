@@ -1200,10 +1200,21 @@ class LocalContext(object):
         if test_path:
             shutil.rmtree(test_path)
 
+
+class LogRotate():
+    def __init__(self):
+        self.conf_file_path = os.path.join(os.getcwd(), 'logrotate.conf')
+        self.state_file_path = os.path.join(os.getcwd(), 'logrotate.state')
+
+    def run_logrotate(self):
+        remote.run(args=['logrotate', '-f', self.conf_file_path, '-s',
+                         self.state_file_path, '--verbose'])
+
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
     remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
     remote.run(args=['rm', '-rf', './dev', './out'])
+
 
 def clear_old_log():
     from os import stat
@@ -1236,6 +1247,7 @@ def exec_test():
     opt_use_ns = False
     opt_brxnet= None
     opt_verbose = True
+    opt_rotate_log = True
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1273,6 +1285,8 @@ def exec_test():
                 sys.exit(-1)
         elif '--no-verbose' == f:
             opt_verbose = False
+        elif f == '--dont-rotate':
+            opt_rotate_log = False
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1503,14 +1517,23 @@ def exec_test():
             else:
                 super(LoggingResult, self).addSkip(test, reason)
 
+
     # Execute!
     overall_suite = load_tests(modules, loader.TestLoader())
     no_of_tests_execed = 0
+    if opt_rotate_log:
+        logrotate = LogRotate()
     started_at = datetime.datetime.utcnow()
     for suite_, case in enumerate_methods(overall_suite):
+        # don't run logrotate beforehand since some ceph daemons might be
+        # down and pre/post-rotate scripts in logrotate.conf might fail.
+        if opt_rotate_log:
+            logrotate.run_logrotate()
+
         result = unittest.TextTestRunner(stream=LogStream(),
                                          resultclass=LoggingResult,
                                          verbosity=2, failfast=True).run(case)
+
         if not result.wasSuccessful():
             break
 
