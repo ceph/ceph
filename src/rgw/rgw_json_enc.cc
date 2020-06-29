@@ -792,7 +792,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("index_type", (uint32_t)layout.current_index.layout.type, f);
   encode_json("mdsearch_config", mdsearch_config, f);
   encode_json("reshard_status", (int)reshard_status, f);
-  encode_json("bucket_instance_id", bucket_instance_id, f);
+  encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
   }
@@ -832,7 +832,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("mdsearch_config", mdsearch_config, obj);
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
-  reshard_status = (rgw::BucketReshardState)rs;
+  reshard_status = (cls_rgw_reshard_status)rs;
 
   rgw_sync_policy_info sp;
   JSONDecoder::decode_json("sync_policy", sp, obj);

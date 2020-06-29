@@ -324,7 +324,7 @@ static int update_num_shards(rgw::sal::RGWRadosStore *store,
 
   bucket_info.layout.target_index.layout.normal.num_shards = new_num_shards;
 
-  bucket_info.reshard_status = rgw::BucketReshardState::NONE;
+  bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
 
   int ret = store->getRados()->put_bucket_instance_info(bucket_info, true, real_time(), &attrs);
   if (ret < 0) {
@@ -363,7 +363,7 @@ class BucketInfoReshardUpdate
   bool in_progress{false};
 
   int set_status(rgw::BucketReshardState s) {
-    bucket_info.reshard_status = s;
+    bucket_info.layout.resharding = s;
     int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
@@ -641,7 +641,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   //overwrite current_index for the next reshard process
   bucket_info.layout.current_index = bucket_info.layout.target_index;
-  bucket_info.reshard_status = rgw::BucketReshardState::NONE;
+  bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
   ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed writing bucket instance info: " << dendl;
@@ -784,7 +784,6 @@ int RGWReshard::update(const RGWBucketInfo& bucket_info)
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
-  entry.instance_id = bucket_info.bucket_instance_id;
   entry.tenant = bucket_info.owner.tenant;
 
   int ret = get(entry);

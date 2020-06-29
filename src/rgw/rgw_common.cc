@@ -2060,7 +2060,7 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   encode(creation_time, bl);
   encode(mdsearch_config, bl);
   encode(reshard_status, bl);
-  encode(bucket_instance_id, bl);
+  encode(new_bucket_instance_id, bl);
   if (obj_lock_enabled()) {
     encode(obj_lock, bl);
   }
@@ -2137,7 +2137,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   }
   if (struct_v >= 19) {
     decode(reshard_status, bl);
-    decode(bucket_instance_id, bl);
+    decode(new_bucket_instance_id, bl);
   }
   if (struct_v >= 20 && obj_lock_enabled()) {
     decode(obj_lock, bl);

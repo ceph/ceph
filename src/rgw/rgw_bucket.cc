@@ -1745,7 +1745,7 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
                           << cpp_strerror(-r) << dendl;
       continue;
     }
-    if (binfo.reshard_status == rgw::BucketReshardState::NONE)
+    if (binfo.reshard_status == cls_rgw_reshard_status::DONE)
       stale_instances.emplace_back(std::move(binfo));
     else {
       other_instances.emplace_back(std::move(binfo));
@@ -1772,13 +1772,13 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
   }
 
   // Don't process further in this round if bucket is resharding
-  if (cur_bucket_info.reshard_status == rgw::BucketReshardState::IN_PROGRESS)
+  if (cur_bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS)
     return;
 
   other_instances.erase(std::remove_if(other_instances.begin(), other_instances.end(),
                                        [&cur_bucket_info](const RGWBucketInfo& b){
                                          return (b.bucket.bucket_id == cur_bucket_info.bucket.bucket_id ||
-                                                 b.bucket.bucket_id == cur_bucket_info.bucket_instance_id);
+                                                 b.bucket.bucket_id == cur_bucket_info.new_bucket_instance_id);
                                        }),
                         other_instances.end());
 
