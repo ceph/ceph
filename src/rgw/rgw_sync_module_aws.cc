@@ -1321,7 +1321,7 @@ public:
       }
 
       if (retcode < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to initialize multipart upload for dest object=" << dest_obj << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to complete multipart upload for dest object=" << dest_obj << dendl;
         return set_cr_error(retcode);
       }
       {
@@ -1332,7 +1332,7 @@ public:
          */
         RGWXMLDecoder::XMLParser parser;
         if (!parser.init()) {
-          ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing multipart complete response from server" << dendl;
           return set_cr_error(-EIO);
         }
 
@@ -1645,7 +1645,7 @@ public:
         if (retcode < 0 ) {
           RGWXMLDecoder::XMLParser parser;
           if (!parser.init()) {
-            ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing creating bucket response from server" << dendl;
             return set_cr_error(retcode);
           }
 
