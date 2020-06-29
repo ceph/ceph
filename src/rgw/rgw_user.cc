@@ -24,6 +24,7 @@
 
 #include "rgw_bucket.h"
 #include "rgw_quota.h"
+#include "rgw_account.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -2882,11 +2883,38 @@ int RGWUserCtl::read_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb)
   });
 }
 
-int RGWUserCtl::link_account(const rgw_user& user,
+int RGWUserCtl::link_account(const rgw_user& user_id,
 			     const string& account_id,
+			     const PutParams& put_params,
 			     optional_yield y)
 {
+  RGWUserInfo user_info;
 
+  int ret = get_info_by_uid(user_id, &user_info, y, RGWUserCtl::GetParams()
+			   .set_objv_tracker(put_params.objv_tracker));
+  if (ret < 0) {
+    return ret;
+  }
+
+  return link_account(user_info, account_id, put_params, y);
+}
+
+int RGWUserCtl::link_account(RGWUserInfo& user_info,
+			     const string& account_id,
+			     const PutParams& put_params,
+			     optional_yield y)
+{
+  if (!user_info.account_id.empty()) {
+    //TODO unlink previous account
+  }
+
+  int ret = ctl.account->add_user(account_id, user_info.user_id, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  user_info.account_id = account_id;
+  return store_info(user_info, y, put_params);
 }
 
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
