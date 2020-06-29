@@ -2,6 +2,8 @@
 
 Please see http://ceph.com/ for current info.
 
+DNM Testing https://jenkins.ceph.com/job/ceph-pull-requests-dgalloway/
+
 
 ## Contributing Code
 
