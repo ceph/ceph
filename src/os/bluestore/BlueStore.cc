@@ -6864,11 +6864,9 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 
   if (!link_db.empty()) {
     r = unlink(link_db.c_str());
-    ceph_assert(r == 0);
   }
   if (!link_wal.empty()) {
     r = unlink(link_wal.c_str());
-    ceph_assert(r == 0);
   }
   r = _setup_block_symlink_or_file(
     target_name,

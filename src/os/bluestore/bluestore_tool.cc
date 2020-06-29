@@ -747,6 +747,11 @@ int main(int argc, char **argv)
     map<string, int> src_devs;
 
     parse_devices(cct.get(), devs, &cur_devs_map, nullptr, nullptr);
+
+    int id = -1;
+    id = BlueFS::BDEV_SLOW;
+    cur_devs_map.emplace("slow", id);
+
     for (auto& s :  devs_source) {
       auto i = cur_devs_map.find(s);
       if (i != cur_devs_map.end()) {
@@ -758,6 +763,12 @@ int main(int argc, char **argv)
 	  src_devs.emplace(*i);
 	  src_dev_ids.emplace(i->second);
 	}
+      } else if (s == "slow_to_wal") { 
+        id = BlueFS::BDEV_WAL;
+        src_dev_ids.emplace(id);
+      } else if (s == "slow_to_db") {
+        id = BlueFS::BDEV_DB;
+        src_dev_ids.emplace(id);
       } else {
 	cerr << "can't migrate " << s << ", not a valid bluefs volume "
 	      << std::endl;
