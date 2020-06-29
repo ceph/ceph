@@ -1491,7 +1491,7 @@ struct cap_reconnect_t {
     capinfo.pathbase = pino;
     capinfo.flock_len = 0;
     snap_follows = sf;
-    flockbl.claim(lb);
+    flockbl = std::move(lb);
   }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);

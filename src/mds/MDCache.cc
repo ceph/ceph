@@ -9753,7 +9753,7 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
     } else if (mdr->more()->srcdn_auth_mds == *p &&
 	       mdr->more()->inode_import.length() > 0) {
       // information about rename imported caps
-      r->inode_export.claim(mdr->more()->inode_import);
+      r->inode_export = std::move(mdr->more()->inode_import);
     }
 
     mds->send_message_mds(r, *p);

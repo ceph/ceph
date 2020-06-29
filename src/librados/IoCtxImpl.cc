@@ -75,7 +75,7 @@ struct CB_notify_Finish {
     if (preply_buf_len)
       *preply_buf_len = reply_bl.length();
     if (preply_bl)
-      preply_bl->claim(reply_bl);
+      *preply_bl = std::move(reply_bl);
 
     ctx->complete(ceph::from_error_code(ec));
   }

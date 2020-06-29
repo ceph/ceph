@@ -64,7 +64,7 @@ public:
     ZTracer::Trace trace;
     write_item(uint64_t s, ceph::buffer::list& b, int ol, TrackedOpRef opref) :
       seq(s), orig_len(ol), tracked_op(opref) {
-      bl.claim(b);
+      bl = std::move(b);
     }
     write_item() : seq(0), orig_len(0) {}
   };
@@ -265,7 +265,7 @@ private:
 
     aio_info(ceph::buffer::list& b, uint64_t o, uint64_t s)
       : iov(NULL), done(false), off(o), len(b.length()), seq(s) {
-      bl.claim(b);
+      bl = std::move(b);
     }
     ~aio_info() {
       delete[] iov;

@@ -249,7 +249,7 @@ public:
       if (data.length()) {
 	ceph::buffer::list t;
 	t.substr_of(data, 0, newlen);
-	data.claim(t);
+	data = std::move(t);
       }
       length = newlen;
     }

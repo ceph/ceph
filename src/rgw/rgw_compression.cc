@@ -50,7 +50,7 @@ int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
         compressed = false;
         ldout(cct, 5) << "Compression failed with exit code " << cr
             << " for first part, storing uncompressed" << dendl;
-        out.claim(in);
+        out = std::move(in);
       } else {
         compressed = true;
     
@@ -63,7 +63,7 @@ int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
       }
     } else {
       compressed = false;
-      out.claim(in);
+      out = std::move(in);
     }
     // end of compression stuff
   }
@@ -106,7 +106,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     in_bl.append(temp_in_bl);        
     waiting.clear();
   } else {
-    in_bl.claim(temp_in_bl);
+    in_bl = std::move(temp_in_bl);
   }
   bl_len = in_bl.length();
   
