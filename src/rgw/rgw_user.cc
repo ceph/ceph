@@ -2943,6 +2943,13 @@ int RGWUserCtl::read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& 
   });
 }
 
+int RGWUserCtl::link_account(const rgw_user& user,
+			     const string& account_id,
+			     optional_yield y)
+{
+
+}
+
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
   return new RGWUserMetadataHandler(user_svc);
 }
