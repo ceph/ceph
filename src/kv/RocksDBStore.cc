@@ -2878,7 +2878,7 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
     }
     if (rocksdb::kDefaultColumnFamilyName == base_name) {
       default_cf = handles[i];
-      must_close_default_cf = true;
+      must_close_default_cf = false;
     } else {
       for (const auto& nsd : new_sharding_def) {
 	if (nsd.name == base_name) {
@@ -3113,11 +3113,19 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 
   cleanup:
   //close column handles
+  std::set<rocksdb::ColumnFamilyHandle*> to_close;
   for (const auto& col: cf_handles) {
     for (size_t i = 0; i < col.second.handles.size(); i++) {
-      db->DestroyColumnFamilyHandle(col.second.handles[i]);
+      to_close.insert(col.second.handles[i]);
     }
   }
+  for (const auto& h: to_process_handles) {
+    to_close.insert(h);
+  }
+  for (const auto& c: to_close) {
+    db->DestroyColumnFamilyHandle(c);
+  }
+
   cf_handles.clear();
   close();
   return r;
