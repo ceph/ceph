@@ -207,7 +207,7 @@ int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
-  outbl->claim(ops[0].outdata);
+  *outbl = std::move(ops[0].outdata);
   return outbl->length();
 }
 
@@ -284,7 +284,7 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
   if (r < 0)
     return r;
 
-  outbl->claim(op.outdata);
+  *outbl = std::move(op.outdata);
   return outbl->length();
 }
 
@@ -436,7 +436,7 @@ int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
   if (ret < 0)
     return ret;
 
-  outbl->claim(op.outdata);
+  *outbl = std::move(op.outdata);
 
   return 0;
 }
@@ -545,7 +545,7 @@ int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
   OSDOp& op = ops[0];
-  op.indata.claim(*inbl);
+  op.indata = std::move(*inbl);
 
   op.op.op = CEPH_OSD_OP_OMAPSETHEADER;
 

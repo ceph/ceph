@@ -138,7 +138,7 @@ int cls_cxx_read2(cls_method_context_t hctx,
   if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
     return ret;
   }
-  outbl->claim(op.outdata);
+  *outbl = std::move(op.outdata);
   return outbl->length();
 }
 
@@ -209,7 +209,7 @@ int cls_cxx_getxattr(cls_method_context_t hctx,
   if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
     return ret;
   }
-  outbl->claim(op.outdata);
+  *outbl = std::move(op.outdata);
   return outbl->length();
 }
 

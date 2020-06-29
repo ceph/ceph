@@ -732,7 +732,7 @@ void PGLog::_write_log_and_missing_wo_missing(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   for (auto p = log.log.rbegin();
@@ -742,7 +742,7 @@ void PGLog::_write_log_and_missing_wo_missing(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (log_keys_debug) {
@@ -779,7 +779,7 @@ void PGLog::_write_log_and_missing_wo_missing(
       break;
     bufferlist bl;
     encode(entry, bl);
-    (*km)[entry.get_key_name()].claim(bl);
+    (*km)[entry.get_key_name()] = std::move(bl);
   }
 
   for (auto p = log.dups.rbegin();
@@ -789,7 +789,7 @@ void PGLog::_write_log_and_missing_wo_missing(
        ++p) {
     bufferlist bl;
     encode(*p, bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (dirty_divergent_priors) {
@@ -861,7 +861,7 @@ void PGLog::_write_log_and_missing(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   for (auto p = log.log.rbegin();
@@ -871,7 +871,7 @@ void PGLog::_write_log_and_missing(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (log_keys_debug) {
@@ -908,7 +908,7 @@ void PGLog::_write_log_and_missing(
       break;
     bufferlist bl;
     encode(entry, bl);
-    (*km)[entry.get_key_name()].claim(bl);
+    (*km)[entry.get_key_name()] = std::move(bl);
   }
 
   for (auto p = log.dups.rbegin();
@@ -918,7 +918,7 @@ void PGLog::_write_log_and_missing(
        ++p) {
     bufferlist bl;
     encode(*p, bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (clear_divergent_priors) {

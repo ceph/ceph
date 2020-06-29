@@ -1517,7 +1517,7 @@ int BufferlistObject::write(uint64_t offset, const ceph::buffer::list &src)
     newdata.append(tail);
   }
 
-  data.claim(newdata);
+  data = std::move(newdata);
   return 0;
 }
 
@@ -1546,7 +1546,7 @@ int BufferlistObject::truncate(uint64_t size)
   if (get_size() > size) {
     ceph::buffer::list bl;
     bl.substr_of(data, 0, size);
-    data.claim(bl);
+    data = std::move(bl);
   } else if (get_size() == size) {
     // do nothing
   } else {

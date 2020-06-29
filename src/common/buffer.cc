@@ -1272,14 +1272,6 @@ static ceph::spinlock debug_lock;
     }
   }
 
-  // sort-of-like-assignment-op
-  void buffer::list::claim(list& bl)
-  {
-    // free my buffers
-    clear();
-    claim_append(bl);
-  }
-
   void buffer::list::claim_append(list& bl)
   {
     // steal the other guy's buffers
