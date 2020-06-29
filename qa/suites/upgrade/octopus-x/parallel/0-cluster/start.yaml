@@ -5,8 +5,8 @@ meta:
    CephFS tests running on client 2,3
 roles:
 - - host.a
-  # removed to workaround "FSCID None not in map" error
-  #- mds.a
+  # ASSUMED this as fixed => removed to workaround "FSCID None not in map" error
+  - mds.a
   - osd.0
   - osd.1
   - osd.2
