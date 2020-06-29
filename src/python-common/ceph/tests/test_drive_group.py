@@ -73,7 +73,7 @@ def test_ceph_volume_command_0():
                           )
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd'
 
 
@@ -84,7 +84,7 @@ def test_ceph_volume_command_1():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --yes --no-systemd')
 
@@ -100,7 +100,7 @@ def test_ceph_volume_command_2():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
                    '--yes --no-systemd')
@@ -118,7 +118,7 @@ def test_ceph_volume_command_3():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd '
                    '--wal-devices /dev/sde /dev/sdf --dmcrypt '
@@ -140,7 +140,7 @@ def test_ceph_volume_command_4():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
                    '--block-wal-size 500M --block-db-size 500M --dmcrypt '
@@ -154,7 +154,7 @@ def test_ceph_volume_command_5():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --filestore --yes --no-systemd'
 
 
@@ -167,7 +167,7 @@ def test_ceph_volume_command_6():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, []).run()
+    cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sdc /dev/sdd '
                    '--journal-size 500M --journal-devices /dev/sda /dev/sdb '
                    '--filestore --yes --no-systemd')
@@ -180,5 +180,5 @@ def test_ceph_volume_command_7():
                           )
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(spec, sel, ['0', '1']).run()
+    cmd = translate.to_ceph_volume(sel, ['0', '1']).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-ids 0 1 --yes --no-systemd'
