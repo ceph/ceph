@@ -1,3 +1,4 @@
+@use "sass:map";
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep cd-login {
@@ -8,7 +9,7 @@
     margin-bottom: 2rem;
 
     &:focus-within {
-      border-left: 4px solid bd.$color-accent;
+      border-left: 4px solid map.get(bd.$theme-colors, "accent");
     }
 
     .invalid-feedback {

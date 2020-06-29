@@ -1,12 +1,12 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .about-container {
-  background-color: bd.$color-secondary;
+  background-color: bd.$secondary;
   background-image: url('../../../../assets/ceph_background.gif');
   background-position: right bottom;
   background-repeat: no-repeat;
-  color: bd.$color-solid-white;
-  text-shadow: 1px 1px bd.$color-secondary;
+  color: bd.$white;
+  text-shadow: 1px 1px bd.$secondary;
 }
 
 .product-versions {
@@ -22,7 +22,7 @@
 }
 
 .modal-header .close {
-  color: bd.$color-solid-white;
+  color: bd.$white;
   font-size: 2em;
 }
 

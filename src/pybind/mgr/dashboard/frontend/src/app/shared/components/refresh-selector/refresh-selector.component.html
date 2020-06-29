@@ -1,17 +1,19 @@
-<div class="row">
-  <div class="col-12">
-    <div class="float-right d-inline-flex">
-      <label for="refreshInterval"
-             class="col-form-label my-0 mx-2"
-             i18n>Refresh</label>
-      <select id="refreshInterval"
-              name="refreshInterval"
-              class="form-control custom-select"
-              (change)="changeRefreshInterval($event.target.value)"
-              [(ngModel)]="selectedInterval">
-        <option *ngFor="let key of intervalKeys"
-                [value]="intervalList[key]">{{ key }}</option>
-      </select>
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="float-right d-inline-flex">
+        <label for="refreshInterval"
+               class="col-form-label my-0 mx-2"
+               i18n>Refresh</label>
+        <select id="refreshInterval"
+                name="refreshInterval"
+                class="form-control custom-select"
+                (change)="changeRefreshInterval($event.target.value)"
+                [(ngModel)]="selectedInterval">
+          <option *ngFor="let key of intervalKeys"
+                  [value]="intervalList[key]">{{ key }}</option>
+        </select>
+      </div>
     </div>
   </div>
 </div>
