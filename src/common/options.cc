@@ -6787,6 +6787,10 @@ std::vector<Option> get_rgw_options() {
     .add_tag("performance")
     .add_service("rgw"),
 
+    Option("rgw_check_http_x_forwarded_for", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Allow inspection of HTTP_X_FORWARDED_FOR"),
+
     Option("rgw_trust_forwarded_https", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Trust Forwarded and X-Forwarded-Proto headers")
