@@ -824,6 +824,7 @@ class RGWUserCtl
 
   struct Ctl {
     RGWBucketCtl *bucket{nullptr};
+    RGWAccountCtl *account{nullptr};
   } ctl;
 
   RGWUserMetadataHandler *umhandler;
@@ -834,8 +835,9 @@ public:
              RGWSI_User *user_svc,
              RGWUserMetadataHandler *_umhandler);
 
-  void init(RGWBucketCtl *bucket_ctl) {
+  void init(RGWBucketCtl *bucket_ctl, RGWAccountCtl *account_ctl) {
     ctl.bucket = bucket_ctl;
+    ctl.account = account_ctl;
   }
 
   RGWBucketCtl *get_bucket_ctl() {
@@ -958,6 +960,14 @@ public:
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
   int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
+
+  int link_account(const rgw_user& user,
+		   const string& account_id,
+		   optional_yield y);
+
+  int link_account(const RGWUserInfo& uinfo,
+		   const string& account_id,
+		   optional_yield y);
 };
 
 class RGWUserMetaHandlerAllocator {

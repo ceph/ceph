@@ -2882,6 +2882,13 @@ int RGWUserCtl::read_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb)
   });
 }
 
+int RGWUserCtl::link_account(const rgw_user& user,
+			     const string& account_id,
+			     optional_yield y)
+{
+
+}
+
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
   return new RGWUserMetadataHandler(user_svc);
 }
