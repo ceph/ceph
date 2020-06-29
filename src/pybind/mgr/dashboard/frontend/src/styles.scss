@@ -8,16 +8,6 @@
 $fa-font-path: '~fork-awesome/fonts';
 $font-family-icon: 'ForkAwesome';
 
-// Bootstrap
-$theme-colors: (
-  'primary': $color-primary,
-  'secondary': $color-accent,
-  'dark': $color-mild-gray
-);
-
-$font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
-  'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-
 $badge-font-size: 1rem;
 $form-feedback-font-size: 100%;
 $popover-max-width: 350px;
@@ -33,44 +23,12 @@ $popover-max-width: 350px;
 @import './src/styles/ceph-custom/forms';
 @import './src/styles/ceph-custom/grid';
 @import './src/styles/ceph-custom/icons';
+@import './src/styles/ceph-custom/navs';
+@import './src/styles/ceph-custom/toast';
 
 /* If javascript is disabled. */
 .noscript {
   padding-top: 5em;
-}
-
-.noscript p {
-  color: $color-noscript-text;
-}
-
-/* Card */
-.card-footer button.btn:not(:first-child) {
-  margin-left: 5px;
-}
-/* Modal dialog */
-.modal-footer button.btn:not(:first-child) {
-  margin-left: 5px;
-}
-
-.nav-tabs {
-  margin-bottom: 15px;
-}
-
-/* Block UI */
-.block-ui-wrapper {
-  background: $color-transparent-black !important;
-}
-
-.tooltip-inner {
-  background-color: $color-solid-white;
-  border: 1px solid $color-gray20;
-  color: $color-gray13;
-  font-size: 1.1em;
-}
-
-.toast-message > ul {
-  margin: 0;
-  padding-left: 1em;
 }
 
 .cd-header,
@@ -133,40 +91,40 @@ bfv-messages {
   }
 
   .weak {
-    background: $color-solid-red;
+    background: $danger;
     width: 25%;
   }
 
   .ok {
-    background: $color-bright-yellow;
+    background: $warning;
     width: 50%;
   }
 
   .strong {
-    background: $color-bright-green;
+    background: $success;
     width: 75%;
   }
 
   .very-strong {
-    background: $color-green;
+    background: darken($success, 30%);
     width: 100%;
   }
 }
 
 // Custom badges.
 .badge-hdd {
-  background-color: $color-blue-gray;
-  color: $color-solid-white;
+  background-color: $gray-600;
+  color: $white;
 }
 
 .badge-ssd {
-  background-color: $color-blue;
-  color: $color-solid-white;
+  background-color: $primary;
+  color: $white;
 }
 
 .badge-tab {
-  background-color: $color-light-shade-gray;
-  color: $color-solid-gray;
+  background-color: $gray-200;
+  color: $gray-700;
 }
 
 // angular-tree-component
@@ -175,4 +133,24 @@ tree-root {
     // Fix visual bug when tree is empty
     min-height: 1em;
   }
+}
+
+// Other
+tags-input .tags {
+  border-radius: 4px;
+  border: 1px solid $gray-400;
+  box-shadow: inset 0 1px 1px rgba($black, 0.09);
+}
+.card-header {
+  font-size: 1.3em;
+}
+.card-body h2:first-child {
+  margin-top: 0;
+}
+.disabled {
+  pointer-events: none;
+}
+.clickable,
+a {
+  cursor: pointer;
 }

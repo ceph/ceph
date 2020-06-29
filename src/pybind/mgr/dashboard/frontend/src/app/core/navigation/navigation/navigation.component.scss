@@ -155,7 +155,7 @@ $sidebar-width: 200px;
   #sidebar {
     background: bd.$color-navbar-bg;
     bottom: 0;
-    color: bd.$color-solid-white;
+    color: bd.$white;
     left: 0;
     overflow-y: auto;
     position: fixed;
@@ -175,12 +175,12 @@ $sidebar-width: 200px;
       }
 
       p {
-        color: bd.$color-solid-white;
+        color: bd.$white;
         padding: 10px;
       }
 
       li a {
-        color: bd.$color-solid-white;
+        color: bd.$white;
         display: block;
         font-size: 1.1em;
         padding: 10px;
@@ -190,7 +190,7 @@ $sidebar-width: 200px;
 
         &:hover {
           background: bd.$color-primary;
-          color: bd.$color-solid-white;
+          color: bd.$white;
         }
 
         > .badge {
@@ -200,7 +200,7 @@ $sidebar-width: 200px;
 
       li.active > a,
       li > a a[aria-expanded='true'] {
-        color: bd.$color-solid-white;
+        color: bd.$white;
       }
     }
   }

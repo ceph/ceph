@@ -1,11 +1,11 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .bg-info {
-  background-color: bd.$color-progress-bar-info-bg !important;
+  background-color: bd.$primary !important;
 }
 
 .bg-freespace {
-  background-color: bd.$color-progress-bar-freespace-bg !important;
+  background-color: bd.$gray-500 !important;
 }
 
 .progress {
@@ -18,7 +18,7 @@
   }
 
   span {
-    color: bd.$color-progress-text;
+    color: bd.$black;
     display: block;
     font-weight: normal;
     position: absolute;

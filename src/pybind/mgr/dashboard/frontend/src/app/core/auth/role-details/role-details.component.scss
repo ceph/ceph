@@ -1,13 +1,8 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
-thead {
-  background-color: bd.$color-table-header-bg;
-}
-
 .fa {
   font-size: large;
-
   &.fa-square-o {
-    color: bd.$color-light-gray;
+    color: bd.$gray-400;
   }
 }
