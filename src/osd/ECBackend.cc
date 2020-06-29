@@ -1248,6 +1248,7 @@ void ECBackend::handle_sub_read_reply(
   ceph_assert(rop.in_progress.count(from));
   rop.in_progress.erase(from);
   unsigned is_complete = 0;
+  bool need_resend = false;
   // For redundant reads check for completion as each shard comes in,
   // or in a non-recovery read check for completion once all the shards read.
   if (rop.do_redundant_reads || rop.in_progress.empty()) {
@@ -1274,7 +1275,8 @@ void ECBackend::handle_sub_read_reply(
 	  if (!rop.do_redundant_reads) {
 	    int r = send_all_remaining_reads(iter->first, rop);
 	    if (r == 0) {
-	      // We added to in_progress and not incrementing is_complete
+	      // We changed the rop's to_read and not incrementing is_complete
+	      need_resend = true;
 	      continue;
 	    }
 	    // Couldn't read any additional shards so handle as completed with errors
@@ -1302,11 +1304,17 @@ void ECBackend::handle_sub_read_reply(
 	    rop.complete[iter->first].errors.clear();
 	  }
 	}
+	// avoid re-read for completed object as we may send remaining reads for uncopmpleted objects
+	rop.to_read.at(iter->first).need.clear();
+	rop.to_read.at(iter->first).want_attrs = false;
 	++is_complete;
       }
     }
   }
-  if (rop.in_progress.empty() || is_complete == rop.complete.size()) {
+  if (need_resend) {
+    do_read_op(rop);
+  } else if (rop.in_progress.empty() || 
+             is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
     complete_read_op(rop, m);
@@ -2452,7 +2460,6 @@ int ECBackend::send_all_remaining_reads(
 	shards,
 	want_attrs,
 	c)));
-  do_read_op(rop);
   return 0;
 }
 
