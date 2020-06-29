@@ -77,8 +77,7 @@ done
 
         # abort and verify
         self._abort_scrub(0)
-        out_json = self._get_scrub_status()
-        self.assertTrue("no active" in out_json['status'])
+        self.wait_until_true(lambda: "no active" in self._get_scrub_status()['status'], 30)
 
         # sleep enough to fetch updated task status
         checked = self._check_task_status_na()
@@ -255,13 +254,6 @@ class TestScrubChecks(CephFSTestCase):
         command = "scrub start {filepath}".format(filepath=filepath)
         self.tell_command(mds_rank, command, success_validator)
 
-        filepath = "{repo_path}/suites/fs/basic/clusters/fixed-3-cephfs.yaml". \
-            format(repo_path=test_repo_path)
-        command = "scrub start {filepath}".format(filepath=filepath)
-        self.tell_command(mds_rank, command,
-                          lambda j, r: self.json_validator(j, r, "performed_validation",
-                                                           False))
-
         if run_seq == 0:
             log.info("First run: flushing base dir /")
             command = "flush_path /"
@@ -290,15 +282,24 @@ class TestScrubChecks(CephFSTestCase):
         rados_obj_name = "{ino:x}.00000000".format(ino=ino)
         command = "scrub start {file}".format(file=test_new_file)
 
-        # Missing parent xattr -> ENODATA
-        self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
-        self.tell_command(mds_rank, command,
-                          lambda j, r: self.json_validator(j, r, "return_code", -errno.ENODATA))
+        def _get_scrub_status():
+            return self.fs.rank_tell(["scrub", "status"], mds_rank)
 
-        # Missing object -> ENOENT
-        self.fs.rados(["rm", rados_obj_name], pool=self.fs.get_data_pool_name())
-        self.tell_command(mds_rank, command,
-                          lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
+        def _check_and_clear_damage(ino, dtype):
+            all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
+            damage = [d for d in all_damage if d['ino'] == ino and d['damage_type'] == dtype]
+            for d in damage:
+                self.fs.mon_manager.raw_cluster_cmd(
+                    'tell', 'mds.{0}'.format(self.fs.get_active_names()[mds_rank]),
+                    "damage", "rm", str(d['id']))
+            return len(damage) > 0
+
+        # Missing parent xattr
+        self.assertFalse(_check_and_clear_damage(ino, "backtrace"));
+        self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
+        self.tell_command(mds_rank, command, success_validator)
+        self.wait_until_true(lambda: "no active" in _get_scrub_status()['status'], 30)
+        self.assertTrue(_check_and_clear_damage(ino, "backtrace"));
 
         command = "flush_path /"
         self.asok_command(mds_rank, command, success_validator)
