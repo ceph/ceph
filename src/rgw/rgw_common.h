@@ -754,6 +754,7 @@ struct RGWUserInfo
   uint32_t type;
   std::set<std::string> mfa_ids;
   std::string assumed_role_arn;
+  std::string account_id;
 
   RGWUserInfo()
     : suspended(0),
@@ -776,7 +777,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(22, 9, bl);
+     ENCODE_START(23, 9, bl);
      encode((uint64_t)0, bl); // old auid
      std::string access_key;
      std::string secret_key;
@@ -820,10 +821,11 @@ struct RGWUserInfo
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
      encode(user_id.ns, bl);
+     encode(account_id, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(23, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -908,6 +910,9 @@ struct RGWUserInfo
       decode(user_id.ns, bl);
     } else {
       user_id.ns.clear();
+    }
+    if (struct_v >= 23) {
+      decode(account_id, bl);
     }
     DECODE_FINISH(bl);
   }
