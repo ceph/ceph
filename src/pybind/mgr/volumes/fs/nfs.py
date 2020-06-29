@@ -383,7 +383,7 @@ class FSExport(object):
                 self._read_raw_config(cluster_id)
                 self.exports[cluster_id] = self.export_conf_objs
             log.info(f"Exports parsed successfully {self.exports.items()}")
-        except orchestrator.NoOrchestrator:
+        except (orchestrator.NoOrchestrator, ImportError):
             # Pass it for vstart
             log.info("Orchestrator not found")
             pass
