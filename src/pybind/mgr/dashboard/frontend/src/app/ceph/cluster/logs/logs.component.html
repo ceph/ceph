@@ -3,8 +3,9 @@
 
   <ul ngbNav
       #nav="ngbNav"
-      class="nav-tabs">
-    <li ngbNavItem>
+      class="nav-tabs"
+      cdStatefulTab="logs">
+    <li ngbNavItem="cluster-logs">
       <a ngbNavLink
          i18n>Cluster Logs</a>
       <ng-template ngbNavContent>
@@ -23,7 +24,7 @@
         </div>
       </ng-template>
     </li>
-    <li ngbNavItem>
+    <li ngbNavItem="audit-logs">
       <a ngbNavLink
          i18n>Audit Logs</a>
       <ng-template ngbNavContent>
