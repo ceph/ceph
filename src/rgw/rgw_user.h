@@ -891,6 +891,16 @@ public:
 		   const std::string& account_id,
 		   const PutParams& put_params,
 		   optional_yield y);
+  int unlink_account(const DoutPrefixProvider *dpp,
+                     const rgw_user& user_id,
+                     const std::string& account_id,
+                     const PutParams& put_params,
+                     optional_yield y);
+  int unlink_account(const DoutPrefixProvider *dpp,
+                     RGWUserInfo& uinfo,
+                     const std::string& account_id,
+                     const PutParams& put_params,
+                     optional_yield y);
 };
 
 class RGWUserMetaHandlerAllocator {

@@ -2967,16 +2967,58 @@ int RGWUserCtl::link_account(const DoutPrefixProvider *dpp,
 			     const PutParams& put_params,
 			     optional_yield y)
 {
+  int ret;
+  // unlink previous accounts if any
   if (!user_info.account_id.empty()) {
-    //TODO unlink previous account
+    ret = unlink_account(dpp, user_info, account_id, put_params, y);
+    if (ret < 0) {
+      ldout(svc.user->ctx(),0) << "Failed unlinking previous account: "
+			       << user_info.account_id << " error: "
+			       << cpp_strerror(ret) << dendl;
+      return ret;
+    }
   }
 
-  int ret = ctl.account->add_user(dpp, account_id, user_info.user_id, y);
+  ret = ctl.account->add_user(dpp, account_id, user_info.user_id, y);
   if (ret < 0) {
     return ret;
   }
 
   user_info.account_id = account_id;
+  return store_info(dpp, user_info, y, put_params);
+}
+
+int RGWUserCtl::unlink_account(const DoutPrefixProvider *dpp,
+                               const rgw_user& user_id,
+                               const string& account_id,
+                               const PutParams& put_params,
+                               optional_yield y)
+{
+  RGWUserInfo user_info;
+
+  int ret = get_info_by_uid(dpp, user_id, &user_info, y, RGWUserCtl::GetParams()
+                            .set_objv_tracker(put_params.objv_tracker));
+  if (ret < 0) {
+    return ret;
+  }
+
+  return unlink_account(dpp, user_info, account_id, put_params, y);
+
+}
+
+int RGWUserCtl::unlink_account(const DoutPrefixProvider *dpp,
+                               RGWUserInfo& user_info,
+                               const string& account_id,
+                               const PutParams& put_params,
+                               optional_yield y)
+{
+
+  int ret = ctl.account->remove_user(dpp, account_id, user_info.user_id, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  user_info.account_id.clear();
   return store_info(dpp, user_info, y, put_params);
 }
 
