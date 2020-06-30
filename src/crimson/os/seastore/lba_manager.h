@@ -129,13 +129,11 @@ public:
     laddr_t addr) = 0;
 
   // TODO: probably unused, removed
-  using submit_lba_transaction_ertr = crimson::errorator<
+  using complete_transaction_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using submit_lba_transaction_ret = submit_lba_transaction_ertr::future<>;
-  virtual submit_lba_transaction_ret submit_lba_transaction(
+  using complete_transaction_ret = complete_transaction_ertr::future<>;
+  virtual complete_transaction_ret complete_transaction(
     Transaction &t) = 0;
-
-  virtual TransactionRef create_transaction() = 0;
 
   virtual ~LBAManager() {}
 };

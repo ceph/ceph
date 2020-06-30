@@ -17,6 +17,7 @@
 
 #include "os/Transaction.h"
 #include "crimson/os/futurized_store.h"
+#include "transaction.h"
 
 namespace crimson::os::seastore {
 
@@ -28,8 +29,6 @@ using OnodeRef = boost::intrusive_ptr<Onode>;
 class Journal;
 class LBAManager;
 class TransactionManager;
-class Transaction;
-using TransactionRef = std::unique_ptr<Transaction>;
 class Cache;
 
 class SeaStore final : public FuturizedStore {

@@ -54,7 +54,7 @@ struct cache_test_t : public seastar_test_suite_t {
       std::move(bl),
       true
     ).safe_then(
-      [this, prev, t=std::move(t)] {
+      [this, prev, t=std::move(t)]() mutable {
 	cache.complete_commit(*t, prev);
 	return seastar::make_ready_future<std::optional<paddr_t>>(prev);
       },
@@ -65,14 +65,14 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   auto get_transaction() {
-    return TransactionRef(new Transaction);
+    return make_transaction();
   }
 
   seastar::future<> set_up_fut() final {
     return segment_manager.init().safe_then(
       [this] {
 	return seastar::do_with(
-	  TransactionRef(new Transaction()),
+	  make_transaction(),
 	  [this](auto &transaction) {
 	    cache.init();
 	    return cache.mkfs(*transaction).safe_then(

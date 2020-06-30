@@ -139,7 +139,7 @@ public:
 
   /// Creates empty transaction
   TransactionRef create_transaction() {
-    return lba_manager.create_transaction();
+    return make_transaction();
   }
 
   /**

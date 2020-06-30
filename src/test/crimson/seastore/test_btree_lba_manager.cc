@@ -62,7 +62,7 @@ struct btree_lba_manager_test :
     }
 
     return journal.submit_record(std::move(*record)).safe_then(
-      [this, t=std::move(t)](paddr_t addr) {
+      [this, t=std::move(t)](paddr_t addr) mutable {
 	cache.complete_commit(*t, addr);
       },
       crimson::ct_error::all_same_way([](auto e) {
@@ -76,7 +76,7 @@ struct btree_lba_manager_test :
       return journal.open_for_write();
     }).safe_then([this] {
       return seastar::do_with(
-	lba_manager->create_transaction(),
+	make_transaction(),
 	[this](auto &transaction) {
 	  cache.init();
 	  return cache.mkfs(*transaction
@@ -119,7 +119,7 @@ struct btree_lba_manager_test :
 
   auto create_transaction() {
     auto t = test_transaction_t{
-      lba_manager->create_transaction(),
+      make_transaction(),
       test_lba_mappings
     };
     cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);

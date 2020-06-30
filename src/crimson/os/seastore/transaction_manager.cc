@@ -36,7 +36,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return journal.open_for_write().safe_then([this] {
     logger().debug("TransactionManager::mkfs: about to do_with");
     return seastar::do_with(
-      lba_manager.create_transaction(),
+      create_transaction(),
       [this](auto &transaction) {
 	logger().debug("TransactionManager::mkfs: about to cache.mkfs");
 	cache.init();
@@ -132,7 +132,7 @@ TransactionManager::submit_transaction(
   logger().debug("TransactionManager::submit_transaction");
 
   return journal.submit_record(std::move(*record)).safe_then(
-    [this, t=std::move(t)](paddr_t addr) {
+    [this, t=std::move(t)](paddr_t addr) mutable {
       cache.complete_commit(*t, addr);
     },
     submit_transaction_ertr::pass_further{},

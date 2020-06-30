@@ -80,13 +80,8 @@ public:
     return update_refcount(t, addr, 1);
   }
 
-  submit_lba_transaction_ret submit_lba_transaction(
+  complete_transaction_ret complete_transaction(
     Transaction &t) final;
-
-  TransactionRef create_transaction() final {
-    auto t = new Transaction;
-    return TransactionRef(t);
-  }
 
 private:
   SegmentManager &segment_manager;

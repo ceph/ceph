@@ -156,12 +156,12 @@ BtreeLBAManager::set_extent(
     });
 }
 
-BtreeLBAManager::submit_lba_transaction_ret
-BtreeLBAManager::submit_lba_transaction(
+BtreeLBAManager::complete_transaction_ret
+BtreeLBAManager::complete_transaction(
   Transaction &t)
 {
   // This is a noop for now and may end up not being necessary
-  return submit_lba_transaction_ertr::now();
+  return complete_transaction_ertr::now();
 }
 
 BtreeLBAManager::BtreeLBAManager(
