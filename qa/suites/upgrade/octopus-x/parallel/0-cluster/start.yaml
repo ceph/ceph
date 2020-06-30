@@ -4,8 +4,9 @@ meta:
    Use xfs beneath the osds.
    CephFS tests running on client 2,3
 roles:
-- - host.a
-  # ASSUMED this as fixed => removed to workaround "FSCID None not in map" error
+#- - host.a
+- - mon.a #temp as roleless disabled
+  - mgr.x #temp as roleless disabled
   - mds.a
   - osd.0
   - osd.1
@@ -13,7 +14,8 @@ roles:
   - osd.3
   - client.0
   - client.1
-- - host.b
+#- - host.b
+- - mon.b #temp as roleless disabled
   - osd.4
   - osd.5
   - osd.6
