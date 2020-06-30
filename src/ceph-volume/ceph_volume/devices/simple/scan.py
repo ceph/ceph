@@ -80,7 +80,7 @@ class Scan(object):
             device = os.readlink(path)
         else:
             device = path
-        lvm_device = lvm.get_lv_from_argument(device)
+        lvm_device = lvm.get_first_lv(filters={'lv_path': device})
         if lvm_device:
             device_uuid = lvm_device.lv_uuid
         else:

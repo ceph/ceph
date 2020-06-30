@@ -1,5 +1,6 @@
 import os
 import pytest
+from copy import deepcopy
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
 
@@ -7,64 +8,78 @@ from ceph_volume.devices.lvm import zap
 class TestFindAssociatedDevices(object):
 
     def test_no_lvs_found_that_match_id(self, volumes, monkeypatch, device_info):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
         tags = 'ceph.osd_id=9,ceph.journal_uuid=x,ceph.type=data'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', vg_name='vg', lv_tags=tags)
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
+                         lv_tags=tags, lv_path='/dev/VolGroup/lv')
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs: {})
+
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id=10)
 
     def test_no_lvs_found_that_match_fsid(self, volumes, monkeypatch, device_info):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
-        tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', vg_name='vg', lv_tags=tags)
+        tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,'+\
+               'ceph.type=data'
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', lv_tags=tags,
+                         vg_name='vg', lv_path='/dev/VolGroup/lv')
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs: {})
+
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_fsid='aaaa-lkjh')
 
     def test_no_lvs_found_that_match_id_fsid(self, volumes, monkeypatch, device_info):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
-        tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', vg_name='vg', lv_tags=tags)
+        tags = 'ceph.osd_id=9,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,'+\
+               'ceph.type=data'
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
+                         lv_tags=tags, lv_path='/dev/VolGroup/lv')
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs: {})
+
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id='9', osd_fsid='aaaa-lkjh')
 
     def test_no_ceph_lvs_found(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', lv_path='/dev/VolGroup/lv', lv_tags='')
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', lv_tags='',
+                         lv_path='/dev/VolGroup/lv')
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs: {})
+
         with pytest.raises(RuntimeError):
             zap.find_associated_devices(osd_id=100)
 
     def test_lv_is_matched_id(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
+                         lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs:
+                            deepcopy(volumes))
+
         result = zap.find_associated_devices(osd_id='0')
         assert result[0].abspath == '/dev/VolGroup/lv'
 
     def test_lv_is_matched_fsid(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
-        tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+        tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,' +\
+               'ceph.type=data'
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
+                         lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs:
+                            deepcopy(volumes))
+
         result = zap.find_associated_devices(osd_fsid='asdf-lkjh')
         assert result[0].abspath == '/dev/VolGroup/lv'
 
     def test_lv_is_matched_id_fsid(self, volumes, monkeypatch):
-        monkeypatch.setattr(zap.api, 'Volumes', lambda: volumes)
-        tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=data'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+        tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,' +\
+               'ceph.type=data'
+        osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
+                         lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(osd)
+        monkeypatch.setattr(zap.api, 'get_lvs', lambda **kwargs:
+                            deepcopy(volumes))
+
         result = zap.find_associated_devices(osd_id='0', osd_fsid='asdf-lkjh')
         assert result[0].abspath == '/dev/VolGroup/lv'
 
