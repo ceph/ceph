@@ -2245,8 +2245,8 @@ namespace librbd {
     }
 
     bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
-    if (discard_zero && mem_is_zero(bl.c_str(), bl.length())) {
-      int r = ictx->io_work_queue->discard(ofs, len, 0);
+    if (discard_zero && bl.is_zero()) {
+      int r = ictx->io_work_queue->write_zeroes(ofs, len, 0U, op_flags);
       tracepoint(librbd, writesame_exit, r);
       return r;
     }
@@ -2254,6 +2254,13 @@ namespace librbd {
     int r = ictx->io_work_queue->writesame(ofs, len, bufferlist{bl}, op_flags);
     tracepoint(librbd, writesame_exit, r);
     return r;
+  }
+
+  ssize_t Image::write_zeroes(uint64_t ofs, size_t len, int zero_flags,
+                              int op_flags)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return ictx->io_work_queue->write_zeroes(ofs, len, zero_flags, op_flags);
   }
 
   ssize_t Image::compare_and_write(uint64_t ofs, size_t len,
@@ -2383,8 +2390,9 @@ namespace librbd {
     }
 
     bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
-    if (discard_zero && mem_is_zero(bl.c_str(), bl.length())) {
-      ictx->io_work_queue->aio_discard(get_aio_completion(c), off, len, 0);
+    if (discard_zero && bl.is_zero()) {
+      ictx->io_work_queue->aio_write_zeroes(get_aio_completion(c), off, len, 0U,
+                                            op_flags, true);
       tracepoint(librbd, aio_writesame_exit, 0);
       return 0;
     }
@@ -2392,6 +2400,15 @@ namespace librbd {
     ictx->io_work_queue->aio_writesame(get_aio_completion(c), off, len,
                                        bufferlist{bl}, op_flags);
     tracepoint(librbd, aio_writesame_exit, 0);
+    return 0;
+  }
+
+  int Image::aio_write_zeroes(uint64_t off, size_t len, RBD::AioCompletion *c,
+                              int zero_flags, int op_flags)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    ictx->io_work_queue->aio_write_zeroes(
+      get_aio_completion(c), off, len, zero_flags, op_flags, true);
     return 0;
   }
 
@@ -5226,7 +5243,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
 
   bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
   if (discard_zero && mem_is_zero(buf, data_len)) {
-    int r = ictx->io_work_queue->discard(ofs, len, 0);
+    int r = ictx->io_work_queue->write_zeroes(ofs, len, 0, op_flags);
     tracepoint(librbd, writesame_exit, r);
     return r;
   }
@@ -5236,6 +5253,13 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
   int r = ictx->io_work_queue->writesame(ofs, len, std::move(bl), op_flags);
   tracepoint(librbd, writesame_exit, r);
   return r;
+}
+
+extern "C" ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs, size_t len,
+                                    int zero_flags, int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return ictx->io_work_queue->write_zeroes(ofs, len, zero_flags, op_flags);
 }
 
 extern "C" ssize_t rbd_compare_and_write(rbd_image_t image,
@@ -5449,7 +5473,8 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
 
   bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
   if (discard_zero && mem_is_zero(buf, data_len)) {
-    ictx->io_work_queue->aio_discard(get_aio_completion(comp), off, len, 0);
+    ictx->io_work_queue->aio_write_zeroes(get_aio_completion(comp), off, len, 0,
+                                          op_flags, true);
     tracepoint(librbd, aio_writesame_exit, 0);
     return 0;
   }
@@ -5459,6 +5484,18 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
   ictx->io_work_queue->aio_writesame(get_aio_completion(comp), off, len,
                                      std::move(bl), op_flags);
   tracepoint(librbd, aio_writesame_exit, 0);
+  return 0;
+}
+
+extern "C" int rbd_aio_write_zeroes(rbd_image_t image, uint64_t off, size_t len,
+                                    rbd_completion_t c, int zero_flags,
+                                    int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  ictx->io_work_queue->aio_write_zeroes(
+    get_aio_completion(comp), off, len, zero_flags, op_flags, true);
   return 0;
 }
 
