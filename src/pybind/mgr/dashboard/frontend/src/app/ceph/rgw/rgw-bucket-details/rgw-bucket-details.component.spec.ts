@@ -1,7 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
@@ -13,7 +11,7 @@ describe('RgwBucketDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwBucketDetailsComponent],
-    imports: [SharedModule, NgbNavModule],
+    imports: [SharedModule],
     providers: [i18nProviders]
   });
 

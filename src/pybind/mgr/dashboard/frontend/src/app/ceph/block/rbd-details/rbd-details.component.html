@@ -5,8 +5,9 @@
 <ng-container *ngIf="selection">
   <ul ngbNav
       #nav="ngbNav"
-      class="nav-tabs">
-    <li ngbNavItem>
+      class="nav-tabs"
+      cdStatefulTab="rbd-details">
+    <li ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -124,7 +125,7 @@
         </table>
       </ng-template>
     </li>
-    <li ngbNavItem>
+    <li ngbNavItem="snapshots">
       <a ngbNavLink
          i18n>Snapshots</a>
       <ng-template ngbNavContent>
@@ -135,7 +136,7 @@
                               [rbdName]="selection.name"></cd-rbd-snapshot-list>
       </ng-template>
     </li>
-    <li ngbNavItem>
+    <li ngbNavItem="configuration">
       <a ngbNavLink
          i18n>Configuration</a>
       <ng-template ngbNavContent>
