@@ -122,13 +122,22 @@ def main(ctx):
                     print(json.dumps(statuses, indent=4))
 
             elif ctx.brief:
+                maxname = max((len(_['name'] or '')
+                                            for _ in statuses), default=0)
+                maxuser = max((len(_['locked_by'] or 'None')
+                                            for _ in statuses), default=0)
+                node_status_template = (
+                    '{{host:<{name}}} {{up:<4}} {{locked:<8}} '
+                    '{{owner:<{user}}} "{{desc}}"'
+                    ).format(name=maxname, user=maxuser)
                 for s in sorted(statuses, key=lambda s: s.get('name')):
-                    locked = "un" if s['locked'] == 0 else "  "
+                    locked = 'unlocked' if s['locked'] == 0 else 'locked'
+                    up = 'up' if s['up'] else 'down'
                     mo = re.match('\w+@(\w+?)\..*', s['name'])
                     host = mo.group(1) if mo else s['name']
-                    print('{host} {locked}locked {owner} "{desc}"'.format(
-                        locked=locked, host=host,
-                        owner=s['locked_by'], desc=s['description']))
+                    print(node_status_template.format(
+                        up=up, locked=locked, host=host,
+                        owner=s['locked_by'] or 'None', desc=s['description']))
 
             else:
                 frag = {'targets': {}}
