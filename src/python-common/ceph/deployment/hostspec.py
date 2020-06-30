@@ -54,6 +54,11 @@ class HostSpec(object):
 
         return "HostSpec({})".format(', '.join(map(repr, args)))
 
+    def __str__(self):
+        if self.hostname != self.addr:
+            return f'{self.hostname} ({self.addr})'
+        return self.hostname
+
     def __eq__(self, other):
         # Let's omit `status` for the moment, as it is still the very same host.
         return self.hostname == other.hostname and \
