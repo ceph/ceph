@@ -89,6 +89,23 @@ int RGWAccountCtl::add_user(const std::string& account_id,
   return svc.account->add_user(info, user, y);
 }
 
+int RGWAccountCtl::remove_user(const std::string& account_id,
+                               const rgw_user& user_id,
+                               optional_yield y)
+{
+  RGWAccountInfo info;
+  RGWObjVersionTracker objv_tracker;
+  real_time mtime;
+
+  int ret = read_info(account_id, &info, &objv_tracker, &mtime, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return svc.account->remove_user(info.get_id(), user_id, y);
+}
+
+
 RGWMetadataObject* RGWAccountMetadataHandler::get_meta_obj(JSONObj *jo,
                                                             const obj_version& objv,
                                                             const ceph::real_time& mtime)
