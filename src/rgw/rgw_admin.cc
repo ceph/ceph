@@ -9259,8 +9259,9 @@ next:
    }
 
    if (opt_cmd == OPT::ACCOUNT_USER_ADD) {
-
-     ret = store->ctl()->account->add_user(account_id, user_id, null_yield);
+     ret = store->ctl()->user->link_account(user_id, account_id,
+					    RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
+					    null_yield);
      if (ret < 0) {
        cerr << "ERROR: could not add user" << cpp_strerror(-ret) << std::endl;
        return -ret;
