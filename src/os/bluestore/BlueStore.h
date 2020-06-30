@@ -1148,6 +1148,16 @@ public:
     void rewrite_omap_key(const std::string& old, std::string *out);
     void get_omap_tail(std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
+
+    // Return the offset of an object on disk.  This function is intended *only*
+    // for use with zoned storage devices because in these devices, the objects
+    // are laid out contiguously on disk, which is not the case in general.
+    // Also, it should always be called after calling extent_map.fault_range(),
+    // so that the extent map is loaded.
+    int64_t get_ondisk_starting_offset() const {
+      return extent_map.extent_map.begin()->blob->
+	  get_blob().calc_offset(0, nullptr);
+    }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1577,6 +1587,18 @@ public:
 
     std::set<OnodeRef> onodes;     ///< these need to be updated/written
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
+
+    // A map from onode to a vector of object offset.  For new objects created
+    // in the transaction we append the new offset to the vector, for
+    // overwritten objects we append the negative of the previous ondisk offset
+    // followed by the new offset, and for truncated objects we append the
+    // negative of the previous ondisk offset.  We need to maintain a vector of
+    // offsets because *within the same transaction* an object may be truncated
+    // and then written again, or an object may be overwritten multiple times to
+    // different zones.  See update_cleaning_metadata function for how this map
+    // is used.
+    std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
+
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
@@ -1647,6 +1669,30 @@ public:
     void note_removed_object(OnodeRef& o) {
       onodes.erase(o);
       modified_objects.insert(o);
+    }
+
+    void zoned_note_new_object(OnodeRef &o) {
+      auto [_, ok] = zoned_onode_to_offset_map.emplace(
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->get_ondisk_starting_offset()}));
+      ceph_assert(ok);
+    }
+
+    void zoned_note_updated_object(OnodeRef &o, int64_t prev_offset) {
+      int64_t new_offset = o->get_ondisk_starting_offset();
+      auto [it, ok] = zoned_onode_to_offset_map.emplace(
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {-prev_offset, new_offset}));
+      if (!ok) {
+	it->second.push_back(-prev_offset);
+	it->second.push_back(new_offset);
+      }
+    }
+
+    void zoned_note_truncated_object(OnodeRef &o, int64_t offset) {
+      auto [it, ok] = zoned_onode_to_offset_map.emplace(
+	    std::pair<OnodeRef, std::vector<int64_t>>(o, {-offset}));
+      if (!ok) {
+	it->second.push_back(-offset);
+      }
     }
 
     void aio_finish(BlueStore *store) override {
@@ -3429,6 +3475,10 @@ private:
 
   void _fsck_check_objects(FSCKDepth depth,
     FSCK_ObjectCtx& ctx);
+
+  // Zoned storage related stuff
+  void zoned_update_cleaning_metadata(TransContext *txc);
+  std::string zoned_get_prefix(uint64_t offset);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {
