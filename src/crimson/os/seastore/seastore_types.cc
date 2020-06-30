@@ -37,8 +37,6 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 std::ostream &operator<<(std::ostream &out, extent_types_t t)
 {
   switch (t) {
-  case extent_types_t::ROOT_LOCATION:
-    return out << "ROOT_LOCATION";
   case extent_types_t::ROOT:
     return out << "ROOT";
   case extent_types_t::LADDR_INTERNAL:
@@ -71,6 +69,18 @@ std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs)
     first = true;
   }
   return out << ']';
+}
+
+std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs)
+{
+  return lhs << "delta_info_t("
+	     << "type: " << rhs.type
+	     << ", paddr: " << rhs.paddr
+	     << ", prev_crc: " << rhs.prev_crc
+	     << ", final_crc: " << rhs.final_crc
+	     << ", length: " << rhs.length
+	     << ", pversion: " << rhs.pversion
+	     << ")";
 }
 
 }

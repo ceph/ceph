@@ -53,6 +53,14 @@ public:
     return pin->get_laddr();
   }
 
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) final {
+    apply_delta(bl);
+    set_last_committed_crc(get_crc32c());
+  }
+protected:
+  virtual void apply_delta(const ceph::bufferlist &bl) = 0;
+
 private:
   LBAPinRef pin;
 };

@@ -142,7 +142,7 @@ using TransactionRef = std::unique_ptr<Transaction>;
  */
 class Cache {
 public:
-  Cache(SegmentManager &segment_manager) : segment_manager(segment_manager) {}
+  Cache(SegmentManager &segment_manager);
   ~Cache();
 
   TransactionRef get_transaction() {
@@ -191,6 +191,10 @@ public:
       ref->set_io_wait();
       ref->set_paddr(offset);
       ref->state = CachedExtent::extent_state_t::CLEAN;
+
+      /* TODO: crc should be checked against LBA manager */
+      ref->last_committed_crc = ref->get_crc32c();
+
       return segment_manager.read(
 	offset,
 	length,
@@ -322,6 +326,11 @@ public:
   );
 
   /**
+   * init
+   */
+  void init();
+
+  /**
    * mkfs
    *
    * Alloc initial root node and add to t.  The intention is for other
@@ -334,7 +343,7 @@ public:
   /**
    * close
    *
-   * TODO: currently a noop -- probably should be used to flush dirty blocks
+   * TODO: should flush dirty blocks
    */
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
@@ -346,8 +355,6 @@ public:
    * Intended for use in Journal::delta. For each delta, should decode delta,
    * read relevant block from disk or cache (using correct type), and call
    * CachedExtent::apply_delta marking the extent dirty.
-   *
-   * TODO: currently only handles the ROOT_LOCATION delta.
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
@@ -381,8 +388,23 @@ private:
   /// Add extent to extents handling dirty and refcounting
   void add_extent(CachedExtentRef ref);
 
+  /// Mark exising extent ref dirty -- mainly for replay
+  void mark_dirty(CachedExtentRef ref);
+
   /// Remove extent from extents handling dirty and refcounting
   void retire_extent(CachedExtentRef ref);
+
+  /**
+   * get_extent_by_type
+   *
+   * Based on type, instantiate the correct concrete type
+   * and read in the extent at location offset~length.
+   */
+  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+    extent_types_t type,  ///< [in] type tag
+    paddr_t offset,       ///< [in] starting addr
+    segment_off_t length  ///< [in] length
+  );
 };
 
 }
