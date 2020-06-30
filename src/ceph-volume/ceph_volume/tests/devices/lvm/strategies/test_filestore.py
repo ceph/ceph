@@ -178,7 +178,9 @@ class TestMixedType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [ssd, hdd]
-        result = filestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
+
+        result = filestore.MixedType.with_auto_devices(args, devices).\
+            computed['osds'][0]
         assert result['journal']['path'] == 'vg: fast'
         assert result['journal']['percentage'] == 71
         assert result['journal']['human_readable_size'] == '5.00 GB'
@@ -195,9 +197,10 @@ class TestMixedType(object):
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
 
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1,
-                       journal_size=None, osd_ids=[])
+        args = factory(filtered_devices=[], osds_per_device=1, osd_ids=[],
+                       journal_size=None)
         devices = [ssd1, ssd2, hdd]
+
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType.with_auto_devices(args, devices)
             assert 'Could not find a common VG between devices' in str(error.value)

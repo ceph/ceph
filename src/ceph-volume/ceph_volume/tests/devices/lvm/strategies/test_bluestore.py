@@ -61,7 +61,7 @@ class TestMixedType(object):
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
         monkeypatch.setattr(lvm, 'VolumeGroup', lambda x, **kw: [])
-        monkeypatch.setattr(lvm, 'VolumeGroups', lambda: [])
+        monkeypatch.setattr(lvm, 'get_vgs', lambda: [])
         bluestore.MixedType(args, [], [db_dev], [])
 
 
