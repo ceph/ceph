@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -28,14 +28,13 @@ describe('OsdFlagsModalComponent', () => {
   configureTestBed({
     imports: [
       ReactiveFormsModule,
-      ModalModule.forRoot(),
       SharedModule,
       HttpClientTestingModule,
       RouterTestingModule,
       ToastrModule.forRoot()
     ],
     declarations: [OsdFlagsModalComponent],
-    providers: [BsModalRef, i18nProviders]
+    providers: [i18nProviders, NgbActiveModal]
   });
 
   beforeEach(() => {
@@ -63,7 +62,7 @@ describe('OsdFlagsModalComponent', () => {
   describe('test submitAction', function () {
     let notificationType: NotificationType;
     let notificationService: NotificationService;
-    let bsModalRef: BsModalRef;
+    let bsModalRef: NgbActiveModal;
 
     beforeEach(() => {
       notificationService = TestBed.inject(NotificationService);
@@ -71,8 +70,8 @@ describe('OsdFlagsModalComponent', () => {
         notificationType = type;
       });
 
-      bsModalRef = TestBed.inject(BsModalRef);
-      spyOn(bsModalRef, 'hide').and.callThrough();
+      bsModalRef = TestBed.inject(NgbActiveModal);
+      spyOn(bsModalRef, 'close').and.callThrough();
       component.unknownFlags = ['foo'];
     });
 
@@ -84,7 +83,7 @@ describe('OsdFlagsModalComponent', () => {
       expect(req.request.body).toEqual({ flags: ['pause', 'purged_snapdirs', 'foo'] });
 
       expect(notificationType).toBe(NotificationType.success);
-      expect(component.bsModalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('should hide modal if request fails', () => {
@@ -94,7 +93,7 @@ describe('OsdFlagsModalComponent', () => {
       req.flush([], { status: 500, statusText: 'failure' });
 
       expect(notificationService.show).toHaveBeenCalledTimes(0);
-      expect(component.bsModalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
   });
 });

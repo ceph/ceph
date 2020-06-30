@@ -2,9 +2,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { AuthService } from '../../../shared/api/auth.service';
@@ -22,6 +22,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { CdPwdExpirationSettings } from '../../../shared/models/cd-pwd-expiration-settings';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { PasswordPolicyService } from '../../../shared/services/password-policy.service';
 import { UserFormMode } from './user-form-mode.enum';
@@ -37,7 +38,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
   removeSelfUserReadUpdatePermissionTpl: TemplateRef<any>;
 
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   userForm: CdFormGroup;
   response: UserFormModel;
@@ -64,7 +65,7 @@ export class UserFormComponent extends CdForm implements OnInit {
     private authStorageService: AuthStorageService,
     private route: ActivatedRoute,
     public router: Router,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private roleService: RoleService,
     private userService: UserService,
     private notificationService: NotificationService,
@@ -226,7 +227,7 @@ export class UserFormComponent extends CdForm implements OnInit {
         buttonText: this.i18n('Continue'),
         bodyTpl: this.removeSelfUserReadUpdatePermissionTpl,
         onSubmit: () => {
-          this.modalRef.hide();
+          this.modalRef.close();
           this.doEditAction();
         },
         onCancel: () => {
@@ -234,7 +235,7 @@ export class UserFormComponent extends CdForm implements OnInit {
           this.userForm.get('roles').reset(this.userForm.get('roles').value);
         }
       };
-      this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
+      this.modalRef = this.modalService.show(ConfirmationModalComponent, initialState);
     } else {
       this.doEditAction();
     }

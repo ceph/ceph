@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-orchestrator-doc-modal',
@@ -11,9 +11,9 @@ export class OrchestratorDocModalComponent {
   actionDescription: string;
   itemDescription: string;
 
-  constructor(public bsModalRef: BsModalRef) {}
+  constructor(public activeModal: NgbActiveModal) {}
 
   onSubmit() {
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
 }

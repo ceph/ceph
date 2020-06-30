@@ -7,7 +7,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ButtonsModule } from 'ngx-bootstrap/buttons';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -19,6 +18,7 @@ import { ComponentsModule } from '../../../shared/components/components.module';
 import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { PasswordPolicyService } from './../../../shared/services/password-policy.service';
@@ -31,7 +31,7 @@ describe('UserFormComponent', () => {
   let fixture: ComponentFixture<UserFormComponent>;
   let httpTesting: HttpTestingController;
   let userService: UserService;
-  let modalService: BsModalService;
+  let modalService: ModalService;
   let router: Router;
   let formHelper: FormHelper;
 
@@ -70,7 +70,7 @@ describe('UserFormComponent', () => {
     form = component.userForm;
     httpTesting = TestBed.inject(HttpTestingController);
     userService = TestBed.inject(UserService);
-    modalService = TestBed.inject(BsModalService);
+    modalService = TestBed.inject(ModalService);
     router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();
@@ -221,8 +221,8 @@ describe('UserFormComponent', () => {
     it('should alert if user is removing needed role permission', () => {
       spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       let modalBodyTpl = null;
-      spyOn(modalService, 'show').and.callFake((_content, config) => {
-        modalBodyTpl = config.initialState.bodyTpl;
+      spyOn(modalService, 'show').and.callFake((_content, initialState) => {
+        modalBodyTpl = initialState.bodyTpl;
       });
       formHelper.setValue('roles', ['read-only']);
       component.submit();

@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -53,7 +53,7 @@ describe('OsdDevicesSelectionModalComponent', () => {
       RouterTestingModule,
       ToastrModule.forRoot()
     ],
-    providers: [BsModalRef, i18nProviders],
+    providers: [NgbActiveModal, i18nProviders],
     declarations: [OsdDevicesSelectionModalComponent, InventoryDevicesComponent]
   });
 

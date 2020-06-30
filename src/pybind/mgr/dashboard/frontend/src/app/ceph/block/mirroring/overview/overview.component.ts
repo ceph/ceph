@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -11,6 +11,7 @@ import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { Pool } from '../../../pool/pool';
 import { BootstrapCreateModalComponent } from '../bootstrap-create-modal/bootstrap-create-modal.component';
 import { BootstrapImportModalComponent } from '../bootstrap-import-modal/bootstrap-import-modal.component';
@@ -25,7 +26,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
   permission: Permission;
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   peersExist = true;
   siteName: any;
   status: ViewCacheStatus;
@@ -34,7 +35,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
   constructor(
     private authStorageService: AuthStorageService,
     private rbdMirroringService: RbdMirroringService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdMirroring;
@@ -84,20 +85,20 @@ export class OverviewComponent implements OnInit, OnDestroy {
     const initialState = {
       siteName: this.siteName
     };
-    this.modalRef = this.modalService.show(EditSiteNameModalComponent, { initialState });
+    this.modalRef = this.modalService.show(EditSiteNameModalComponent, initialState);
   }
 
   createBootstrapModal() {
     const initialState = {
       siteName: this.siteName
     };
-    this.modalRef = this.modalService.show(BootstrapCreateModalComponent, { initialState });
+    this.modalRef = this.modalService.show(BootstrapCreateModalComponent, initialState);
   }
 
   importBootstrapModal() {
     const initialState = {
       siteName: this.siteName
     };
-    this.modalRef = this.modalService.show(BootstrapImportModalComponent, { initialState });
+    this.modalRef = this.modalService.show(BootstrapImportModalComponent, initialState);
   }
 }

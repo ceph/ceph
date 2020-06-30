@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title|Example: Create Pool@@formTitle"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
 
@@ -123,7 +123,7 @@
                           (submitAction)="onSubmit()"
                           i18n="form action button|Example: Create Pool@@formActionButton"
                           [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+        <cd-back-button [back]="activeModal.close"></cd-back-button>
       </div>
     </form>
   </ng-container>

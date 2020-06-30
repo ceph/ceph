@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n
                 class="modal-title">Restore Image</ng-container>
 
@@ -37,7 +37,7 @@
         <cd-submit-button [form]="restoreForm"
                           (submitAction)="restore()"
                           i18n>Restore Image</cd-submit-button>
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

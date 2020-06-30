@@ -5,7 +5,6 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -35,7 +34,7 @@ describe('RgwUserFormComponent', () => {
       ToastrModule.forRoot(),
       NgbTooltipModule
     ],
-    providers: [BsModalService, i18nProviders]
+    providers: [i18nProviders]
   });
 
   beforeEach(() => {

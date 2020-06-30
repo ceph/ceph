@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -19,7 +19,7 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
 
   settingsForm: CdFormGroup;
 
-  constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
+  constructor(public activeModal: NgbActiveModal, public iscsiService: IscsiService) {}
 
   ngOnInit() {
     const fg: Record<string, FormControl> = {};
@@ -39,7 +39,7 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
     });
 
     this.target_controls.setValue(settings);
-    this.modalRef.hide();
+    this.activeModal.close();
   }
 
   getTargetControlLimits(setting: string) {

@@ -2,9 +2,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -26,6 +26,7 @@ import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../../shared/services/dep-checker.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
@@ -61,7 +62,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   permissions: Permissions;
   tableActions: CdTableAction[];
-  bsModalRef: BsModalRef;
+  bsModalRef: NgbModalRef;
   columns: CdTableColumn[];
   clusterWideActions: CdTableAction[];
   icons = Icons;
@@ -85,7 +86,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private router: Router,
@@ -378,31 +379,29 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     const selectedOsd = _.filter(this.osds, ['id', this.selection.first().id]).pop();
 
     this.modalService.show(FormModalComponent, {
-      initialState: {
-        titleText: this.i18n('Edit OSD: {{id}}', {
-          id: selectedOsd.id
-        }),
-        fields: [
-          {
-            type: 'text',
-            name: 'deviceClass',
-            value: selectedOsd.tree.device_class,
-            label: this.i18n('Device class'),
-            required: true
-          }
-        ],
-        submitButtonText: this.i18n('Edit OSD'),
-        onSubmit: (values: any) => {
-          this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
-            this.notificationService.show(
-              NotificationType.success,
-              this.i18n(`Updated OSD '{{id}}'`, {
-                id: selectedOsd.id
-              })
-            );
-            this.getOsdList();
-          });
+      titleText: this.i18n('Edit OSD: {{id}}', {
+        id: selectedOsd.id
+      }),
+      fields: [
+        {
+          type: 'text',
+          name: 'deviceClass',
+          value: selectedOsd.tree.device_class,
+          label: this.i18n('Device class'),
+          required: true
         }
+      ],
+      submitButtonText: this.i18n('Edit OSD'),
+      onSubmit: (values: any) => {
+        this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
+          this.notificationService.show(
+            NotificationType.success,
+            this.i18n(`Updated OSD '{{id}}'`, {
+              id: selectedOsd.id
+            })
+          );
+          this.getOsdList();
+        });
       }
     });
   }
@@ -417,38 +416,34 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       deep: deep
     };
 
-    this.bsModalRef = this.modalService.show(OsdScrubModalComponent, { initialState });
+    this.bsModalRef = this.modalService.show(OsdScrubModalComponent, initialState);
   }
 
   configureFlagsAction() {
-    this.bsModalRef = this.modalService.show(OsdFlagsModalComponent, {});
+    this.bsModalRef = this.modalService.show(OsdFlagsModalComponent);
   }
 
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
     this.bsModalRef = this.modalService.show(ConfirmationModalComponent, {
-      initialState: {
-        titleText: this.i18n('Mark OSD {{markAction}}', { markAction: markAction }),
-        buttonText: this.i18n('Mark {{markAction}}', { markAction: markAction }),
-        bodyTpl: this.markOsdConfirmationTpl,
-        bodyContext: {
-          markActionDescription: markAction
-        },
-        onSubmit: () => {
-          observableForkJoin(
-            this.getSelectedOsdIds().map((osd: any) => onSubmit.call(this.osdService, osd))
-          ).subscribe(() => this.bsModalRef.hide());
-        }
+      titleText: this.i18n('Mark OSD {{markAction}}', { markAction: markAction }),
+      buttonText: this.i18n('Mark {{markAction}}', { markAction: markAction }),
+      bodyTpl: this.markOsdConfirmationTpl,
+      bodyContext: {
+        markActionDescription: markAction
+      },
+      onSubmit: () => {
+        observableForkJoin(
+          this.getSelectedOsdIds().map((osd: any) => onSubmit.call(this.osdService, osd))
+        ).subscribe(() => this.bsModalRef.close());
       }
     });
   }
 
   reweight() {
     const selectedOsd = this.osds.filter((o) => o.id === this.selection.first().id).pop();
-    this.modalService.show(OsdReweightModalComponent, {
-      initialState: {
-        currentWeight: selectedOsd.weight,
-        osdId: selectedOsd.id
-      }
+    this.bsModalRef = this.modalService.show(OsdReweightModalComponent, {
+      currentWeight: selectedOsd.weight,
+      osdId: selectedOsd.id
     });
   }
 
@@ -511,39 +506,37 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   ): void {
     check(this.getSelectedOsdIds()).subscribe((result) => {
       const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-        initialState: {
-          actionDescription: actionDescription,
-          itemDescription: itemDescription,
-          bodyTemplate: this.criticalConfirmationTpl,
-          bodyContext: {
-            safeToPerform: result[checkKey],
-            message: result.message,
-            actionDescription: templateItemDescription,
-            osdIds: this.getSelectedOsdIds()
-          },
-          childFormGroup: childFormGroup,
-          childFormGroupTemplate: childFormGroupTemplate,
-          submitAction: () => {
-            const observable = observableForkJoin(
-              this.getSelectedOsdIds().map((osd: any) => action.call(this.osdService, osd))
+        actionDescription: actionDescription,
+        itemDescription: itemDescription,
+        bodyTemplate: this.criticalConfirmationTpl,
+        bodyContext: {
+          safeToPerform: result[checkKey],
+          message: result.message,
+          actionDescription: templateItemDescription,
+          osdIds: this.getSelectedOsdIds()
+        },
+        childFormGroup: childFormGroup,
+        childFormGroupTemplate: childFormGroupTemplate,
+        submitAction: () => {
+          const observable = observableForkJoin(
+            this.getSelectedOsdIds().map((osd: any) => action.call(this.osdService, osd))
+          );
+          if (taskWrapped) {
+            observable.subscribe({
+              error: () => {
+                this.getOsdList();
+                modalRef.close();
+              },
+              complete: () => modalRef.close()
+            });
+          } else {
+            observable.subscribe(
+              () => {
+                this.getOsdList();
+                modalRef.close();
+              },
+              () => modalRef.close()
             );
-            if (taskWrapped) {
-              observable.subscribe({
-                error: () => {
-                  this.getOsdList();
-                  modalRef.hide();
-                },
-                complete: () => modalRef.hide()
-              });
-            } else {
-              observable.subscribe(
-                () => {
-                  this.getOsdList();
-                  modalRef.hide();
-                },
-                () => modalRef.hide()
-              );
-            }
           }
         }
       });
@@ -551,10 +544,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   configureQosParamsAction() {
-    this.bsModalRef = this.modalService.show(OsdRecvSpeedModalComponent, {});
+    this.bsModalRef = this.modalService.show(OsdRecvSpeedModalComponent);
   }
 
   configurePgScrubAction() {
-    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { class: 'modal-lg' });
+    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { size: 'lg' });
   }
 }

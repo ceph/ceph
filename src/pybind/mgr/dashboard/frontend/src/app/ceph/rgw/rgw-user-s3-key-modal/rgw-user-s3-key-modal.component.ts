@@ -1,9 +1,9 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -31,7 +31,7 @@ export class RgwUserS3KeyModalComponent {
 
   constructor(
     private formBuilder: CdFormBuilder,
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -81,6 +81,6 @@ export class RgwUserS3KeyModalComponent {
   onSubmit() {
     const key: RgwUserS3Key = this.formGroup.value;
     this.submitAction.emit(key);
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
 }

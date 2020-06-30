@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin, Observable } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';
@@ -16,6 +16,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namespace-form-modal.component';
@@ -29,7 +30,7 @@ import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namesp
 export class RbdNamespaceListComponent implements OnInit {
   columns: CdTableColumn[];
   namespaces: any;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   permission: Permission;
   selection = new CdTableSelection();
   tableActions: CdTableAction[];
@@ -38,7 +39,7 @@ export class RbdNamespaceListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private rbdService: RbdService,
     private poolService: PoolService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
@@ -120,7 +121,7 @@ export class RbdNamespaceListComponent implements OnInit {
 
   createModal() {
     this.modalRef = this.modalService.show(RbdNamespaceFormModalComponent);
-    this.modalRef.content.onSubmit.subscribe(() => {
+    this.modalRef.componentInstance.onSubmit.subscribe(() => {
       this.refresh();
     });
   }
@@ -129,27 +130,25 @@ export class RbdNamespaceListComponent implements OnInit {
     const pool = this.selection.first().pool;
     const namespace = this.selection.first().namespace;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Namespace',
-        itemNames: [`${pool}/${namespace}`],
-        submitAction: () =>
-          this.rbdService.deleteNamespace(pool, namespace).subscribe(
-            () => {
-              this.notificationService.show(
-                NotificationType.success,
-                this.i18n(`Deleted namespace '{{pool}}/{{namespace}}'`, {
-                  pool: pool,
-                  namespace: namespace
-                })
-              );
-              this.modalRef.hide();
-              this.refresh();
-            },
-            () => {
-              this.modalRef.content.stopLoadingSpinner();
-            }
-          )
-      }
+      itemDescription: 'Namespace',
+      itemNames: [`${pool}/${namespace}`],
+      submitAction: () =>
+        this.rbdService.deleteNamespace(pool, namespace).subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n(`Deleted namespace '{{pool}}/{{namespace}}'`, {
+                pool: pool,
+                namespace: namespace
+              })
+            );
+            this.modalRef.close();
+            this.refresh();
+          },
+          () => {
+            this.modalRef.componentInstance.stopLoadingSpinner();
+          }
+        )
     });
   }
 
