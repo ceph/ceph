@@ -75,18 +75,7 @@ def test_parse_host_placement_specs_raises_wrong_format(test_input):
         HostPlacementSpec.parse(test_input)
 
 
-@pytest.mark.parametrize(
-    "s_type,o_spec,s_id",
-    [
-        ("mgr", ServiceSpec, 'test'),
-        ("mon", ServiceSpec, 'test'),
-        ("mds", ServiceSpec, 'test'),
-        ("rgw", RGWSpec, 'realm.zone'),
-        ("nfs", NFSServiceSpec, 'test'),
-        ("iscsi", IscsiServiceSpec, 'test'),
-        ("osd", DriveGroupSpec, 'test'),
-    ])
-def test_servicespec_map_test(s_type, o_spec, s_id):
+def _get_dict_spec(s_type, s_id):
     dict_spec = {
         "service_id": s_id,
         "service_type": s_type,
@@ -105,7 +94,26 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
                 'all': True
             }
         }
-    spec = ServiceSpec.from_json(dict_spec)
+    elif s_type == 'rgw':
+        dict_spec['rgw_realm'] = 'realm'
+        dict_spec['rgw_zone'] = 'zone'
+
+    return dict_spec
+
+
+@pytest.mark.parametrize(
+    "s_type,o_spec,s_id",
+    [
+        ("mgr", ServiceSpec, 'test'),
+        ("mon", ServiceSpec, 'test'),
+        ("mds", ServiceSpec, 'test'),
+        ("rgw", RGWSpec, 'realm.zone'),
+        ("nfs", NFSServiceSpec, 'test'),
+        ("iscsi", IscsiServiceSpec, 'test'),
+        ("osd", DriveGroupSpec, 'test'),
+    ])
+def test_servicespec_map_test(s_type, o_spec, s_id):
+    spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
     assert isinstance(spec, o_spec)
     assert isinstance(spec.placement, PlacementSpec)
     assert isinstance(spec.placement.hosts[0], HostPlacementSpec)
@@ -183,7 +191,7 @@ spec:
                                          service_type='mon',
                                          service_id='foo'
                                      ),
-                                     False
+                                     True
                              ),
                              # Add service_type='mgr'
                              (
@@ -225,3 +233,19 @@ def test_spec_hash_eq(spec1: ServiceSpec,
                       eq: bool):
 
     assert (spec1 == spec2) is eq
+
+@pytest.mark.parametrize(
+    "s_type,s_id,s_name",
+    [
+        ('mgr', 's_id', 'mgr'),
+        ('mon', 's_id', 'mon'),
+        ('mds', 's_id', 'mds.s_id'),
+        ('rgw', 's_id', 'rgw.s_id'),
+        ('nfs', 's_id', 'nfs.s_id'),
+        ('iscsi', 's_id', 'iscsi.s_id'),
+        ('osd', 's_id', 'osd.s_id'),
+    ])
+def test_service_name(s_type, s_id, s_name):
+    spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
+    spec.validate()
+    assert spec.service_name() == s_name
