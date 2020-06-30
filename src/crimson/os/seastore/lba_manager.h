@@ -23,23 +23,6 @@
 
 namespace crimson::os::seastore {
 
-class LBAPin;
-using LBAPinRef = std::unique_ptr<LBAPin>;
-class LBAPin {
-public:
-  virtual extent_len_t get_length() const = 0;
-  virtual paddr_t get_paddr() const = 0;
-  virtual laddr_t get_laddr() const = 0;
-  virtual LBAPinRef duplicate() const = 0;
-
-  virtual ~LBAPin() {}
-};
-std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
-
-using lba_pin_list_t = std::list<LBAPinRef>;
-
-std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
-
 /**
  * Abstract interface for managing the logical to physical mapping
  */
