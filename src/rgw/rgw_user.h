@@ -968,6 +968,14 @@ public:
 		   const string& account_id,
 		   const PutParams& put_params,
 		   optional_yield y);
+  int unlink_account(const rgw_user& user_id,
+                     const string& account_id,
+                     const PutParams& put_params,
+                     optional_yield y);
+  int unlink_account(RGWUserInfo& uinfo,
+                     const string& account_id,
+                     const PutParams& put_params,
+                     optional_yield y);
 };
 
 class RGWUserMetaHandlerAllocator {
