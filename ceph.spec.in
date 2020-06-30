@@ -1199,6 +1199,12 @@ make DESTDIR=%{buildroot} install
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
 popd
+
+%if 0%{with seastar}
+# package crimson-osd with the name of ceph-osd
+install -m 0755 %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd
+%endif
+
 install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
