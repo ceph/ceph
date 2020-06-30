@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { UserService } from '../../../shared/api/user.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -16,6 +16,7 @@ import { Permission } from '../../../shared/models/permissions';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { EmptyPipe } from '../../../shared/pipes/empty.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 
@@ -37,12 +38,12 @@ export class UserListComponent implements OnInit {
   users: Array<any>;
   selection = new CdTableSelection();
 
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   constructor(
     private userService: UserService,
     private emptyPipe: EmptyPipe,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
     private i18n: I18n,
@@ -132,14 +133,14 @@ export class UserListComponent implements OnInit {
     this.userService.delete(username).subscribe(
       () => {
         this.getUsers();
-        this.modalRef.hide();
+        this.modalRef.close();
         this.notificationService.show(
           NotificationType.success,
           this.i18n(`Deleted user '{{username}}'`, { username: username })
         );
       },
       () => {
-        this.modalRef.content.stopLoadingSpinner();
+        this.modalRef.componentInstance.stopLoadingSpinner();
       }
     );
   }
@@ -155,12 +156,11 @@ export class UserListComponent implements OnInit {
       );
       return;
     }
+
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'User',
-        itemNames: [username],
-        submitAction: () => this.deleteUser(username)
-      }
+      itemDescription: 'User',
+      itemNames: [username],
+      submitAction: () => this.deleteUser(username)
     });
   }
 }

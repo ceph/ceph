@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
@@ -21,6 +21,7 @@ import { Task } from '../../../shared/models/task';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -39,7 +40,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   available: boolean = undefined;
   columns: CdTableColumn[];
   docsUrl: string;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   permission: Permission;
   selection = new CdTableSelection();
   cephIscsiConfigVersion: number;
@@ -66,7 +67,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     private cephReleaseNamePipe: CephReleaseNamePipe,
     private notAvailablePipe: NotAvailablePipe,
     private summaryservice: SummaryService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -221,21 +222,19 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     const target_iqn = this.selection.first().target_iqn;
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: this.i18n('iSCSI target'),
-        itemNames: [target_iqn],
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('iscsi/target/delete', {
-              target_iqn: target_iqn
-            }),
-            call: this.iscsiService.deleteTarget(target_iqn)
-          })
-      }
+      itemDescription: this.i18n('iSCSI target'),
+      itemNames: [target_iqn],
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('iscsi/target/delete', {
+            target_iqn: target_iqn
+          }),
+          call: this.iscsiService.deleteTarget(target_iqn)
+        })
     });
   }
 
   configureDiscoveryAuth() {
-    this.modalService.show(IscsiTargetDiscoveryModalComponent, {});
+    this.modalService.show(IscsiTargetDiscoveryModalComponent);
   }
 }

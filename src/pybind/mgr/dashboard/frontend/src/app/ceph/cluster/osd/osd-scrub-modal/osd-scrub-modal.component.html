@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>OSDs {deep, select, 1 {Deep }}Scrub</ng-container>
 
@@ -16,7 +16,7 @@
         <cd-submit-button (submitAction)="scrub()"
                           [form]="scrubForm"
                           i18n>Submit</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { concat, forkJoin, Observable, Subscription } from 'rxjs';
 import { last } from 'rxjs/operators';
 
@@ -32,7 +32,7 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -178,7 +178,7 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       error: finishHandler,
       complete: () => {
         finishHandler();
-        this.modalRef.hide();
+        this.activeModal.close();
       }
     });
   }

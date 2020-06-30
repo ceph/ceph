@@ -8,7 +8,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { BsDatepickerDirective, BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
@@ -26,6 +25,7 @@ import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { AlertmanagerSilence } from '../../../../shared/models/alertmanager-silence';
 import { Permission } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { SilenceFormComponent } from './silence-form.component';
@@ -460,10 +460,10 @@ describe('SilenceFormComponent', () => {
       addMatcher('alertname', 'alert.*', true);
       expectMatch(null);
 
-      const modalService = TestBed.inject(BsModalService);
+      const modalService = TestBed.inject(ModalService);
       spyOn(modalService, 'show').and.callFake(() => {
         return {
-          content: {
+          componentInstance: {
             preFillControls: (matcher: any) => {
               expect(matcher).toBe(component.matchers[0]);
             },

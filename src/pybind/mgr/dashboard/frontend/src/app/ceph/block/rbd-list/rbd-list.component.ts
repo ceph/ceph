@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -23,6 +23,7 @@ import { Task } from '../../../shared/models/task';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
@@ -63,7 +64,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   viewCacheStatusList: any[];
   selection = new CdTableSelection();
 
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   builders = {
     'rbd/create': (metadata: object) =>
@@ -104,7 +105,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     private rbdService: RbdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private dimlessPipe: DimlessPipe,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     private taskListService: TaskListService,
     private i18n: I18n,
@@ -339,22 +340,20 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'RBD',
-        itemNames: [imageSpec],
-        bodyTemplate: this.deleteTpl,
-        bodyContext: {
-          hasSnapshots: this.hasSnapshots(),
-          snapshots: this.listProtectedSnapshots()
-        },
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('rbd/delete', {
-              image_spec: imageSpec.toString()
-            }),
-            call: this.rbdService.delete(imageSpec)
-          })
-      }
+      itemDescription: 'RBD',
+      itemNames: [imageSpec],
+      bodyTemplate: this.deleteTpl,
+      bodyContext: {
+        hasSnapshots: this.hasSnapshots(),
+        snapshots: this.listProtectedSnapshots()
+      },
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('rbd/delete', {
+            image_spec: imageSpec.toString()
+          }),
+          call: this.rbdService.delete(imageSpec)
+        })
     });
   }
 
@@ -365,7 +364,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       imageName: this.selection.first().name,
       hasSnapshots: this.hasSnapshots()
     };
-    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
+    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, initialState);
   }
 
   flattenRbd(imageSpec: ImageSpec) {
@@ -378,7 +377,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       })
       .subscribe({
         complete: () => {
-          this.modalRef.hide();
+          this.modalRef.close();
         }
       });
   }
@@ -408,7 +407,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       }
     };
 
-    this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, initialState);
   }
 
   hasSnapshots() {

@@ -3,8 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import {
   configureTestBed,
@@ -33,7 +32,7 @@ describe('SilenceMatcherModalComponent', () => {
       RouterTestingModule,
       ReactiveFormsModule
     ],
-    providers: [BsModalRef, i18nProviders]
+    providers: [NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {

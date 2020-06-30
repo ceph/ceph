@@ -5,7 +5,6 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { ModalModule } from 'ngx-bootstrap/modal';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { AuthGuardService } from '../../shared/services/auth-guard.service';
@@ -33,7 +32,6 @@ import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-us
     ReactiveFormsModule,
     PerformanceCounterModule,
     NgbNavModule,
-    ModalModule.forRoot(),
     RouterModule,
     NgBootstrapFormValidationModule,
     NgbTooltipModule

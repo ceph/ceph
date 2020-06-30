@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>{mode, select, edit {Edit} other {Add}}
   pool mirror peer</ng-container>
@@ -95,7 +95,7 @@
         <cd-submit-button i18n
                           [form]="editPeerForm"
                           (submitAction)="update()">Submit</cd-submit-button>
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

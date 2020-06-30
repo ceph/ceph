@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -26,7 +26,7 @@ describe('OsdReweightModalComponent', () => {
       SubmitButtonComponent,
       BackButtonComponent
     ],
-    providers: [OsdService, BsModalRef, CdFormBuilder, i18nProviders]
+    providers: [OsdService, NgbActiveModal, CdFormBuilder, i18nProviders]
   });
 
   beforeEach(() => {

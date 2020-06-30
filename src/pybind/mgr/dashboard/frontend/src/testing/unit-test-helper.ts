@@ -4,10 +4,9 @@ import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
-import { NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
+import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { configureTestSuite } from 'ng-bullet';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
@@ -180,21 +179,18 @@ export class FormHelper {
 }
 
 /**
- * Use this to mock 'ModalService.show' to make the embedded component with it's fixture usable
+ * Use this to mock 'modalService.open' to make the embedded component with it's fixture usable
  * in tests. The function gives back all needed parts including the modal reference.
  *
  * Please make sure to call this function *inside* your mock and return the reference at the end.
  */
 export function modalServiceShow(componentClass: Type<any>, modalConfig: any) {
-  const ref = new BsModalRef();
-  const fixture = TestBed.createComponent(componentClass);
-  let component = fixture.componentInstance;
-  if (modalConfig.initialState) {
-    component = Object.assign(component, modalConfig.initialState);
+  const modal: NgbModal = TestBed.inject(NgbModal);
+  const modalRef = modal.open(componentClass);
+  if (modalConfig) {
+    Object.assign(modalRef.componentInstance, modalConfig);
   }
-  fixture.detectChanges();
-  ref.content = component;
-  return { ref, fixture, component };
+  return modalRef;
 }
 
 export class FixtureHelper {

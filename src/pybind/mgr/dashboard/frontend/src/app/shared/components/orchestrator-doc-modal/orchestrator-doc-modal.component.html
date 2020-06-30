@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>{{ actionDescription }} {{ itemDescription }}</ng-container>
 
@@ -7,7 +7,7 @@
       <cd-orchestrator-doc-panel></cd-orchestrator-doc-panel>
     </div>
     <div class="modal-footer">
-      <cd-back-button [back]="bsModalRef.hide"
+      <cd-back-button [back]="activeModal.close"
                       name="Close"
                       i18n-name>
       </cd-back-button>

@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subject } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -33,7 +33,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
   public onSubmit: Subject<string>;
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private rbdService: RbdService,
     private taskManagerService: TaskManagerService,
     private notificationService: NotificationService,
@@ -92,7 +92,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
             this.notificationService.notifyTask(asyncFinishedTask);
           }
         );
-        this.modalRef.hide();
+        this.activeModal.close();
         this.onSubmit.next(this.snapName);
       })
       .catch(() => {
@@ -120,7 +120,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
             this.notificationService.notifyTask(asyncFinishedTask);
           }
         );
-        this.modalRef.hide();
+        this.activeModal.close();
         this.onSubmit.next(snapshotName);
       })
       .catch(() => {

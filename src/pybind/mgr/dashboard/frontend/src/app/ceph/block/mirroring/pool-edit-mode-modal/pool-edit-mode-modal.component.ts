@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -37,7 +37,7 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private i18n: I18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
@@ -97,7 +97,7 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
       error: () => this.editModeForm.setErrors({ cdSubmitButton: true }),
       complete: () => {
         this.rbdMirroringService.refresh();
-        this.modalRef.hide();
+        this.activeModal.close();
       }
     });
   }

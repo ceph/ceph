@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { configureTestBed, i18nProviders, TabHelper } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
@@ -17,7 +16,7 @@ describe('RgwUserDetailsComponent', () => {
   configureTestBed({
     declarations: [RgwUserDetailsComponent],
     imports: [BrowserAnimationsModule, HttpClientTestingModule, SharedModule, NgbNavModule],
-    providers: [BsModalService, i18nProviders]
+    providers: [i18nProviders]
   });
 
   beforeEach(() => {

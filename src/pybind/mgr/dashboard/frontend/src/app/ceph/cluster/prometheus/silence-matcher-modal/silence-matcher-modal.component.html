@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>Matcher</ng-container>
 
@@ -77,7 +77,7 @@
                           [form]="form">
           <ng-container i18n>{editMode, select, 1 {Update} other {Add}}</ng-container>
         </cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Close"
                         i18n-name>
         </cd-back-button>

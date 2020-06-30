@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -37,7 +37,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
-    providers: [ErasureCodeProfileService, BsModalRef, i18nProviders]
+    providers: [ErasureCodeProfileService, NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {

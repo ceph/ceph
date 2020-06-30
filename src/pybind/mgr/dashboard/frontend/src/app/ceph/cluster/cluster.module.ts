@@ -7,7 +7,6 @@ import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstra
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { ModalModule } from 'ngx-bootstrap/modal';
 import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -58,7 +57,6 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     FormsModule,
     ReactiveFormsModule,
     BsDatepickerModule.forRoot(),
-    ModalModule.forRoot(),
     NgbTooltipModule,
     MgrModulesModule,
     NgbTypeaheadModule,

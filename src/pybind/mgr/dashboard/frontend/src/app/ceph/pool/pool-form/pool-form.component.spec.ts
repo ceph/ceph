@@ -6,10 +6,14 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbActiveModal,
+  NgbModalModule,
+  NgbModalRef,
+  NgbNavModule
+} from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -32,6 +36,7 @@ import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile'
 import { Permission } from '../../../shared/models/permissions';
 import { PoolFormInfo } from '../../../shared/models/pool-form-info';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../pool';
 import { PoolModule } from '../pool.module';
@@ -130,25 +135,29 @@ describe('PoolFormComponent', () => {
 
   const routes: Routes = [{ path: '404', component: NotFoundComponent }];
 
-  configureTestBed({
-    declarations: [NotFoundComponent],
-    imports: [
-      BrowserAnimationsModule,
-      HttpClientTestingModule,
-      RouterTestingModule.withRoutes(routes),
-      ToastrModule.forRoot(),
-      NgbNavModule,
-      PoolModule,
-      NgBootstrapFormValidationModule.forRoot()
-    ],
-    providers: [
-      ErasureCodeProfileService,
-      BsModalRef,
-      SelectBadgesComponent,
-      { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } },
-      i18nProviders
-    ]
-  });
+  configureTestBed(
+    {
+      declarations: [NotFoundComponent],
+      imports: [
+        BrowserAnimationsModule,
+        HttpClientTestingModule,
+        RouterTestingModule.withRoutes(routes),
+        ToastrModule.forRoot(),
+        NgbNavModule,
+        PoolModule,
+        NgBootstrapFormValidationModule.forRoot(),
+        NgbModalModule
+      ],
+      providers: [
+        ErasureCodeProfileService,
+        NgbActiveModal,
+        SelectBadgesComponent,
+        { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } },
+        i18nProviders
+      ]
+    },
+    [CriticalConfirmationModalComponent]
+  );
 
   let navigationSpy: jasmine.Spy;
 
@@ -782,9 +791,9 @@ describe('PoolFormComponent', () => {
     it('should select the newly created rule', () => {
       expect(form.getValue('crushRule').rule_name).toBe('rep1');
       const name = 'awesomeRule';
-      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
         return {
-          content: {
+          componentInstance: {
             submitAction: of({ name })
           }
         };
@@ -845,11 +854,11 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        modalSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(
-          (deletionClass: any, config: any) => {
-            deletion = Object.assign(new deletionClass(), config.initialState);
+        modalSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(
+          (deletionClass: any, initialState: any) => {
+            deletion = Object.assign(new deletionClass(), initialState);
             return {
-              content: deletion
+              componentInstance: deletion
             };
           }
         );
@@ -906,7 +915,7 @@ describe('PoolFormComponent', () => {
 
         it('should hide the tooltip when clicking on add', () => {
           modalSpy.and.callFake((): any => ({
-            content: {
+            componentInstance: {
               submitAction: of('someRule')
             }
           }));
@@ -950,9 +959,9 @@ describe('PoolFormComponent', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile').name).toBe('ecp1');
       const name = 'awesomeProfile';
-      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
         return {
-          content: {
+          componentInstance: {
             submitAction: of({ name })
           }
         };
@@ -969,11 +978,11 @@ describe('PoolFormComponent', () => {
       let deletion: CriticalConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
-      let modal: any;
+      let modal: NgbModalRef;
 
       const callEcpDeletion = () => {
         component.deleteErasureCodeProfile();
-        modal.ref.content.callSubmitAction();
+        modal.componentInstance.callSubmitAction();
       };
 
       const expectSuccessfulEcpDeletion = (name: string) => {
@@ -994,10 +1003,10 @@ describe('PoolFormComponent', () => {
 
       beforeEach(() => {
         deletion = undefined;
-        modalSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(
           (comp: any, init: any) => {
             modal = modalServiceShow(comp, init);
-            return modal.ref;
+            return modal;
           }
         );
         deleteSpy = spyOn(ecpService, 'delete').and.callFake((name: string) => {
@@ -1066,7 +1075,7 @@ describe('PoolFormComponent', () => {
 
         it('should hide the tooltip when clicking on add', () => {
           modalSpy.and.callFake((): any => ({
-            content: {
+            componentInstance: {
               submitAction: of('someProfile')
             }
           }));

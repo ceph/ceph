@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -21,14 +21,13 @@ describe('OsdRecvSpeedModalComponent', () => {
   configureTestBed({
     imports: [
       HttpClientTestingModule,
-      ModalModule.forRoot(),
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot()
     ],
     declarations: [OsdRecvSpeedModalComponent],
-    providers: [BsModalRef, i18nProviders]
+    providers: [NgbActiveModal, i18nProviders]
   });
 
   let configOptions: any[] = [];

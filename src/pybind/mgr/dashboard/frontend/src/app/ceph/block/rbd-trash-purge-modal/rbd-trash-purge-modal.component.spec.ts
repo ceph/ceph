@@ -7,7 +7,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -30,7 +30,7 @@ describe('RbdTrashPurgeModalComponent', () => {
       RouterTestingModule
     ],
     declarations: [RbdTrashPurgeModalComponent],
-    providers: [BsModalRef, i18nProviders]
+    providers: [NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {
@@ -71,17 +71,17 @@ describe('RbdTrashPurgeModalComponent', () => {
 
   describe('should call purge', () => {
     let notificationService: NotificationService;
-    let modalRef: BsModalRef;
+    let activeModal: NgbActiveModal;
     let req: TestRequest;
 
     beforeEach(() => {
       fixture.detectChanges();
       notificationService = TestBed.inject(NotificationService);
-      modalRef = TestBed.inject(BsModalRef);
+      activeModal = TestBed.inject(NgbActiveModal);
 
       component.purgeForm.patchValue({ poolName: 'foo' });
 
-      spyOn(modalRef, 'hide').and.stub();
+      spyOn(activeModal, 'close').and.stub();
       spyOn(component.purgeForm, 'setErrors').and.stub();
       spyOn(notificationService, 'show').and.stub();
 
@@ -93,13 +93,13 @@ describe('RbdTrashPurgeModalComponent', () => {
     it('with success', () => {
       req.flush(null);
       expect(component.purgeForm.setErrors).toHaveBeenCalledTimes(0);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('with failure', () => {
       req.flush(null, { status: 500, statusText: 'failure' });
       expect(component.purgeForm.setErrors).toHaveBeenCalledTimes(1);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(0);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(0);
     });
   });
 });

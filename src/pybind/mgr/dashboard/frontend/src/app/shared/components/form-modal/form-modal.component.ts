@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { CdFormBuilder } from '../../forms/cd-form-builder';
 import { CdFormGroup } from '../../forms/cd-form-group';
@@ -28,7 +28,7 @@ export class FormModalComponent implements OnInit {
   formGroup: CdFormGroup;
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private formBuilder: CdFormBuilder,
     private formatter: FormatterService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
@@ -104,7 +104,7 @@ export class FormModalComponent implements OnInit {
         values[key] = this.formatter.toBytes(value);
       }
     });
-    this.bsModalRef.hide();
+    this.activeModal.close();
     if (_.isFunction(this.onSubmit)) {
       this.onSubmit(values);
     }

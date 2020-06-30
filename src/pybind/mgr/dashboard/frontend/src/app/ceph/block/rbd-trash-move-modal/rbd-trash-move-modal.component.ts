@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as moment from 'moment';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -38,7 +38,7 @@ export class RbdTrashMoveModalComponent implements OnInit {
 
   constructor(
     private rbdService: RbdService,
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private fb: CdFormBuilder,
     private taskWrapper: TaskWrapperService
   ) {
@@ -90,7 +90,7 @@ export class RbdTrashMoveModalComponent implements OnInit {
       })
       .subscribe({
         complete: () => {
-          this.modalRef.hide();
+          this.activeModal.close();
         }
       });
   }

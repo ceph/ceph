@@ -1,8 +1,8 @@
 import { AfterViewInit, Component, EventEmitter, Output, ViewChild } from '@angular/core';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { TableColumnProp } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
@@ -41,7 +41,7 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
 
   constructor(
     private formBuilder: CdFormBuilder,
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n
   ) {
     this.action = actionLabels.ADD;
@@ -82,6 +82,6 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
 
   onSubmit() {
     this.submitAction.emit(this.event);
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
 }

@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -34,7 +34,7 @@ describe('PoolEditPeerModalComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [BsModalRef, BsModalService, i18nProviders]
+    providers: [NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {
@@ -60,13 +60,13 @@ describe('PoolEditPeerModalComponent', () => {
       component.mode = 'add';
       component.peerUUID = undefined;
       spyOn(rbdMirroringService, 'refresh').and.stub();
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
       fixture.detectChanges();
     });
 
     afterEach(() => {
       expect(rbdMirroringService.refresh).toHaveBeenCalledTimes(1);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('should call addPeer', () => {
@@ -103,14 +103,14 @@ describe('PoolEditPeerModalComponent', () => {
 
       spyOn(rbdMirroringService, 'getPeer').and.callFake(() => of(response));
       spyOn(rbdMirroringService, 'refresh').and.stub();
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
       fixture.detectChanges();
     });
 
     afterEach(() => {
       expect(rbdMirroringService.getPeer).toHaveBeenCalledWith('somePool', 'somePeer');
       expect(rbdMirroringService.refresh).toHaveBeenCalledTimes(1);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('should call updatePeer', () => {
