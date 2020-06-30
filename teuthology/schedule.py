@@ -23,6 +23,11 @@ def main(args):
             if args[opt]:
                 raise ValueError(msg_fmt.format(opt=opt))
 
+    if args['--first-in-suite'] or args['--last-in-suite']:
+        report_status = False
+    else:
+        report_status = True
+
     name = args['--name']
     if not name or name.isdigit():
         raise ValueError("Please use a more descriptive value for --name")
@@ -30,7 +35,7 @@ def main(args):
     if args['--dry-run']:
         pprint.pprint(job_config)
     else:
-        schedule_job(job_config, args['--num'])
+        schedule_job(job_config, args['--num'], report_status)
 
 
 def build_config(args):
@@ -75,7 +80,7 @@ def build_config(args):
     return job_config
 
 
-def schedule_job(job_config, num=1):
+def schedule_job(job_config, num=1, report_status=True):
     """
     Schedule a job.
 
@@ -96,5 +101,6 @@ def schedule_job(job_config, num=1):
         print('Job scheduled with name {name} and ID {jid}'.format(
             name=job_config['name'], jid=jid))
         job_config['job_id'] = str(jid)
-        report.try_push_job_info(job_config, dict(status='queued'))
+        if report_status:
+            report.try_push_job_info(job_config, dict(status='queued'))
         num -= 1
