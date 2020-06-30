@@ -360,3 +360,17 @@ class TestNFS(MgrTestCase):
             # Command should fail for test to pass
             if e.exitstatus != errno.ENOENT:
                 raise
+
+    def test_cluster_info(self):
+        '''
+        Test cluster info outputs correct ip and hostname
+        '''
+        self._test_create_cluster()
+        info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))
+        host_details = {self.cluster_id: [{
+            "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
+            "ip": list(set(self._sys_cmd(['hostname', '-I']).decode("utf-8").split())),
+            "port": 2049
+            }]}
+        self.assertDictEqual(info_output, host_details)
+        self._test_delete_cluster()
