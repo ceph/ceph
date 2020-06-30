@@ -127,7 +127,10 @@ public:
 
   int list_users();
 
-  int remove_user(const rgw_user& user);
+  int remove_user(const DoutPrefixProvider* dpp,
+                  const std::string& account_id,
+                  const rgw_user& user,
+                  optional_yield y);
   int remove_role(const RGWRole& role);
 
   int store_info(const DoutPrefixProvider* dpp,
