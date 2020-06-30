@@ -8,7 +8,8 @@ tasks:
     branch: octopus
 - print: "**** done installing octopus"
 - cephadm:
-    roleless: true
+    #temp as roleless disabled
+    #roleless: true
     cephadm_branch: octopus
     #use image from for example dockerhub
     #image: docker.io/ceph/daemon-base:latest-octopus-devel
