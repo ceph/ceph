@@ -1,17 +1,17 @@
 @import 'defaults.scss';
 
 .breadcrumb {
-  padding: 8px 0;
   background-color: transparent;
   border-radius: 0;
   margin-top: 8px;
+  padding: 8px 0;
 }
 
-.breadcrumb > li + li:before {
-  padding: 0 5px 0 7px;
+.breadcrumb > li + li::before {
   color: $color-breadcrumb;
-  font-family: 'ForkAwesome';
   content: '\f101';
+  font-family: 'ForkAwesome';
+  padding: 0 5px 0 7px;
 }
 
 .breadcrumb > li > span {
