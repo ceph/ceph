@@ -125,23 +125,18 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
     if (shard_id < 0) {
       for (uint32_t i = 0; i < num_shards; ++i) {
         if (gen_id) {
-          if (gen_id != 0) {
           snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, i);
           bucket_objects[i] = buf;
           } else {
             snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
             bucket_objects[i] = buf;
           }
-        } else {
-          snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
-          bucket_objects[i] = buf;
-        }
       }
     } else {
       if ((uint32_t)shard_id > num_shards) {
         return;
       } else {
-		if (gen_id && gen_id != 0) {
+		if (gen_id) {
 		  snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
 		  bucket_objects[shard_id] = buf;
 		} else {
