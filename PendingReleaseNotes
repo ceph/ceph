@@ -1,0 +1,88 @@
+>=16.0.0
+--------
+
+* Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
+  by default. However, if enabled, user now have to pass the
+  ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
+  sure of configuring pool size 1.
+
+* librbd now inherits the stripe unit and count from its parent image upon creation.
+  This can be overridden by specifying different stripe settings during clone creation.
+
+* The balancer is now on by default in upmap mode. Since upmap mode requires
+  ``require_min_compat_client`` luminous, new clusters will only support luminous
+  and newer clients by default. Existing clusters can enable upmap support by running
+  ``ceph osd set-require-min-compat-client luminous``. It is still possible to turn
+  the balancer off using the ``ceph balancer off`` command. In earlier versions,
+  the balancer was included in the ``always_on_modules`` list, but needed to be
+  turned on explicitly using the ``ceph balancer on`` command.
+
+* Cephadm: There were a lot of small usability improvements and bug fixes:
+
+  * Grafana when deployed by Cephadm now binds to all network interfaces.
+  * ``cephadm check-host`` now prints all detected problems at once.
+  * Cephadm now calls ``ceph dashboard set-grafana-api-ssl-verify false``
+    when generating an SSL certificate for Grafana.
+  * The Alertmanager is now correctly pointed to the Ceph Dashboard
+  * ``cephadm adopt`` now supports adopting an Alertmanager
+  * ``ceph orch ps`` now supports filtering by service name
+  * ``ceph orch host ls`` now marks hosts as offline, if they are not
+    accessible.
+
+* Cephadm can now deploy NFS Ganesha services. For example, to deploy NFS with
+  a service id of mynfs, that will use the RADOS pool nfs-ganesha and namespace
+  nfs-ns::
+
+    ceph orch apply nfs mynfs nfs-ganesha nfs-ns
+
+* Cephadm: ``ceph orch ls --export`` now returns all service specifications in
+  yaml representation that is consumable by ``ceph orch apply``. In addition,
+  the commands ``orch ps`` and ``orch ls`` now support ``--format yaml`` and
+  ``--format json-pretty``.
+
+* CephFS: Automatic static subtree partitioning policies may now be configured
+  using the new distributed and random ephemeral pinning extended attributes on
+  directories. See the documentation for more information:
+  https://docs.ceph.com/docs/master/cephfs/multimds/
+
+* Cephadm: ``ceph orch apply osd`` supports a ``--preview`` flag that prints a preview of
+  the OSD specification before deploying OSDs. This makes it possible to
+  verify that the specification is correct, before applying it.
+
+* RGW: The ``radosgw-admin`` sub-commands dealing with orphans --
+  ``radosgw-admin orphans find``, ``radosgw-admin orphans find``,
+  ``radosgw-admin orphans find`` -- have been deprecated. They have
+  not been actively maintained and they store intermediate results on
+  the cluster, which could fill a nearly-full cluster.  They have been
+  replaced by a tool, currently considered experimental,
+  ``rgw-orphan-list``.
+
+* RBD: The name of the rbd pool object that is used to store
+  rbd trash purge schedule is changed from "rbd_trash_trash_purge_schedule"
+  to "rbd_trash_purge_schedule". Users that have already started using
+  ``rbd trash purge schedule`` functionality and have per pool or namespace
+  schedules configured should copy "rbd_trash_trash_purge_schedule"
+  object to "rbd_trash_purge_schedule" before the upgrade and remove
+  "rbd_trash_purge_schedule" using the following commands in every RBD
+  pool and namespace where a trash purge schedule was previously
+  configured::
+
+    rados -p <pool-name> [-N namespace] cp rbd_trash_trash_purge_schedule rbd_trash_purge_schedule
+    rados -p <pool-name> [-N namespace] rm rbd_trash_trash_purge_schedule
+
+  or use any other convenient way to restore the schedule after the
+  upgrade.
+
+
+>=16.0.0
+---------
+
+* librbd: The shared, read-only parent cache has been moved to a separate librbd
+  plugin. If the parent cache was previously in-use, you must also instruct
+  librbd to load the plugin by adding the following to your configuration::
+
+    rbd_plugins = parent_cache
+
+* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
+  If any OSD has repaired more than this many I/O errors in stored data a
+ ``OSD_TOO_MANY_REPAIRS`` health warning is generated.

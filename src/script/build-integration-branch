@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+"""
+Builds integration branches. Something similar to 
+  $ git checkout -b branch-name
+  $ for b in $(get-branches-from-github) ; do
+  >   git pull b
+  > done
+
+Requires `~/.github_token`.
+
+
+Usage:
+  build-integration-branch <label> [--no-date]
+  build-integration-branch -h | --help
+
+Options:
+  -h --help   Show this screen.
+  --no-date   Don't add `{postfix}` to the branch name.
+"""
+
+from __future__ import print_function
+
+import json
+import os
+import requests
+from subprocess import call
+import sys
+import time
+try:
+    from urllib.parse import urljoin
+except:
+    from urlparse import urljoin
+
+TIME_FORMAT = '%Y-%m-%d-%H%M'
+postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
+
+repo = "ceph/ceph"
+
+try:
+  from docopt import docopt
+  arguments = docopt(__doc__.format(postfix=postfix))
+  label = arguments['<label>']
+  branch = label
+  if not arguments['--no-date']:
+      branch += postfix
+except ImportError:
+  # Fallback without docopt.
+  label = sys.argv[1]
+  assert len(sys.argv) == 2
+  branch = label + postfix
+
+
+with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
+    token = myfile.readline().strip()
+
+# get prs
+baseurl = urljoin('https://api.github.com', (
+                      'repos/{repo}/issues?labels={label}'
+                      '&access_token={token}'
+                      '&sort=created'
+                      '&direction=asc'
+                    )
+                 )
+url = baseurl.format(
+    label=label,
+    repo=repo,
+    token=token)
+r = requests.get(url)
+assert(r.ok)
+j = json.loads(r.text or r.content)
+print("--- found %d issues tagged with %s" % (len(j), label))
+
+prs = []
+prtext = []
+for issue in j:
+    if 'pull_request' not in issue:
+        continue
+    r = requests.get(issue['pull_request']['url'] + '?access_token=' + token)
+    pr = json.loads(r.text or r.content)
+    prs.append(pr)
+    prtext.append(pr['html_url'] + ' - ' + pr['title'])
+print("--- queried %s prs" % len(prs))
+
+print("branch %s" % branch)
+
+# assemble
+print('--- creating branch %s' % branch)
+r = call(['git', 'branch', '-D', branch])
+r = call(['git', 'checkout', '-b', branch])
+assert not r
+for pr in prs:
+    print('--- pr %d --- pulling %s branch %s' % (
+        pr['number'],
+        pr['head']['repo']['clone_url'],
+        pr['head']['ref']))
+    r = call(['git', 'pull', '--no-edit',
+              pr['head']['repo']['clone_url'],
+              pr['head']['ref']])
+    assert not r
+print('--- done. these PRs were included:')
+print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
+print('--- perhaps you want to: make && ctest -j12 && git push ci %s' % branch)

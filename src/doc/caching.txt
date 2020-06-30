@@ -1,0 +1,313 @@
+
+SPANNING TREE PROPERTY
+
+All metadata that exists in the cache is attached directly or
+indirectly to the root inode.  That is, if the /usr/bin/vi inode is in
+the cache, then /usr/bin, /usr, and / are too, including the inodes,
+directory objects, and dentries.
+
+
+AUTHORITY
+
+The authority maintains a list of what nodes cache each inode.
+Additionally, each replica is assigned a nonce (initial 0) to
+disambiguate multiple replicas of the same item (see below).
+
+  map<int, int> replicas;  // maps replicating mds# to nonce
+
+The cached_by set _always_ includes all nodes that cache a
+particular object, but may additionally include nodes that used to
+cache it but no longer do.  In those cases, an expire message should
+be in transit.  That is, we have two invariants:
+
+ 1) the authority's replica set will always include all actual
+    replicas, and
+
+ 2) cache expiration notices will be reliably delivered to the
+    authority.
+
+The second invariant is particularly important because the presence of
+replicas will pin the metadata object in memory on the authority,
+preventing it from being trimmed from the cache.  Notification of
+expiration of the replicas is required to allow previously replicated
+objects from eventually being trimmed from the cache as well.
+
+Each metdata object has a authority bit that indicates whether it is
+authoritative or a replica.  
+
+
+REPLICA NONCE
+
+Each replicated object maintains a "nonce" value, issued by the
+authority at the time the replica was created.  If the authority has
+already created a replica for the given MDS, the new replica will be
+issues a new (incremented) nonce.  This nonce is attached
+to cache expirations, and allows the authority to disambiguate
+expirations when multiple replicas of the same object are created and
+cache expiration is coincident with replication.  That is, when an
+old replica is expired from the replicating MDS at the same time that
+a new replica is issued by the authority and the resulting messages
+cross paths, the authority can tell that it was the old replica that
+was expired and effectively ignore the expiration message.  The
+replica is removed from the replicas map only if the nonce matches.
+
+
+SUBTREE PARTITION
+
+Authority of the file system namespace is partitioned using a
+subtree-based partitioning strategy.  This strategy effectively
+separates directory inodes from directory contents, such that the
+directory contents are the unit of redelegation.  That is, if / is
+assigned to mds0 and /usr to mds1, the inode for /usr will be managed
+by mds0 (it is part of the / directory), while the contents of /usr
+(and everything nested beneath it) will be managed by mds1.
+
+The description for this partition exists solely in the collective
+memory of the MDS cluster and in the individual MDS journals.  It is
+not described in the regular on-disk metadata structures.  This is
+related to the fact that authority delegation is a property of the
+{\it directory} and not the directory's {\it inode}.
+
+Subsequently, if an MDS is authoritative for a directory inode and does
+not yet have any state associated with the directory in its cache,
+then it can assume that it is also authoritative for the directory.
+
+Directory state consists of a data object that describes any cached
+dentries contained in the directory, information about the
+relationship between the cached contents and what appears on disk, and
+any delegation of authority.  That is, each CDir object has a dir_auth
+element.  Normally dir_auth has a value of AUTH_PARENT, meaning that
+the authority for the directory is the same as the directory's inode.
+When dir_auth specifies another metadata server, that directory is
+point of authority delegation and becomes a {\it subtree root}.  A
+CDir is a subtree root iff its dir_auth specifies an MDS id (and is not
+AUTH_PARENT).
+
+ - A dir is a subtree root iff dir_auth != AUTH_PARENT.  
+
+ - If dir_auth = AUTH_PARENT then the inode auth == dir auth, but the
+   converse may not be true.
+
+The authority for any metadata object in the cache can be determined
+by following the parent pointers toward the root until a subtree root
+CDir object is reached, at which point the authority is specified by
+its dir_auth.
+
+Each MDS cache maintains a subtree data structure that describes the
+subtree partition for all objects currently in the cache:
+
+  map< CDir*, set<CDir*> > subtrees;
+
+ - A dir will appear in the subtree map (as a key) IFF it is a subtree
+   root.
+
+Each subtree root will have an entry in the map.  The map value is a
+set of all other subtree roots nested beneath that point.  Nested
+subtree roots effectively bound or prune a subtree.  For example, if
+we had the following partition:
+
+ mds0 /
+ mds1 /usr
+ mds0 /usr/local
+ mds0 /home
+
+The subtree map on mds0 would be
+
+ /     -> (/usr, /home)
+ /usr/local -> ()
+ /home -> ()
+
+and on mds1:
+
+ /usr  -> (/usr/local)
+
+
+AMBIGUOUS DIR_AUTH
+
+While metadata for a subtree is being migrated between two MDS nodes,
+the dir_auth for the subtree root is allowed to be ambiguous.  That
+is, it will specify both the old and new MDS ids, indicating that a
+migration is in progress.  
+
+If a replicated metadata object is expired from the cache from a
+subtree whose authority is ambiguous, the cache expiration is sent to
+both potential authorities.  This ensures that the message will be
+reliably delivered, even if either of those nodes fails.  A number of
+alternative strategies were considered.  Sending the expiration to the
+old or new authority and having it forwarded if authority has been
+delegated can result in message loss if the forwarding node fails.
+Pinning ambiguous metadata in cache is computationally expensive for
+implementation reasons, and while delaying the transmission of expiration
+messages is difficult to implement because the replicating must send
+the final expiration messages when the subtree authority is
+disambiguated, forcing it to keep certain elements of it cache in
+memory.  Although duplicated expirations incurs a small communications
+overhead, the implementation is much simpler.
+
+
+AUTH PINS
+
+Most operations that modify metadata must allow some amount of time to
+pass in order for the operation to be journaled or for communication
+to take place between the object's authority and any replicas.  For
+this reason it must not only be pinned in the authority's metadata
+cache, but also be locked such that the object's authority is not
+allowed to change until the operation completes.  This is accomplished
+using {\it auth pins}, which increment a reference counter on the
+object in question, as well as all parent metadata objects up to the
+root of the subtree.  As long as the pin is in place, it is impossible
+for that subtree (or any fragment of it that contains one or more
+pins) to be migrated to a different MDS node.  Pins can be placed on
+both inodes and directories.
+
+Auth pins can only exist for authoritative metadata, because they are
+only created if the object is authoritative, and their presence
+prevents the migration of authority.
+
+
+FREEZING
+
+More specifically, auth pins prevent a subtree from being frozen.
+When a subtree is frozen, all updates to metadata are forbidden.  This
+includes updates to the replicas map that describes which replicas
+(and nonces) exist for each object.
+
+In order for metadata to be migrated between MDS nodes, it must first
+be frozen.  The root of the subtree is initially marked as {\it
+freezing}.  This prevents the creation of any new auth pins within the
+subtree.  After all existing auth pins are removed, the subtree is
+then marked as {\it frozen}, at which point all updates are
+forbidden.  This allows metadata state to be packaged up in a message
+and transmitted to the new authority, without worrying about
+intervening updates.
+
+If the directory at the base of a freezing or frozen subtree is not
+also a subtree root (that is, it has dir_auth == AUTH_PARENT), the
+directory's parent inode is auth pinned.  
+
+ - a frozen tree root dir will auth_pin its inode IFF it is auth AND
+   not a subtree root.
+
+This prevents a parent directory from being concurrently frozen, and a
+range of resulting implementation complications relating metadata
+migration.
+
+
+CACHE EXPIRATION FOR EXPORTING SUBTREES
+
+Cache expiration messages that are received for a subtree that is
+being exported are either deferred or handled immediately, based on
+the sender and receiver states. The importing MDS will always defer until
+after the export finishes, because the import could fail. The exporting MDS
+processes the expire UNLESS the expiring MDS does not know about the export or
+the exporting MDS is no longer auth.
+Because MDSes get witness notifications on export, this is safe. Either:
+a) The expiring MDS knows about the export, and has sent messages to both
+MDSes involved, or
+b) The expiring MDS did not know about the export at the time the message
+was sent, and so only sent it to the exporting MDS. (This implies that the
+exporting MDS hasn't yet encoded the state to send to the replica MDS.)
+
+When the subtree export completes, deferred expirations are either processed
+(if the MDS is authoritative) or discarded (if it is not).  Because either
+the exporting or importing metadata can fail during the migration
+process, the MDS cannot tell whether it will be authoritative or not
+until the process completes.
+
+During a migration, the subtree will first be frozen on both the
+exporter and importer, and then all other replicas will be informed of
+a subtrees ambiguous authority.  This ensures that all expirations
+during migration will go to both parties, and nothing will be lost in
+the event of a failure.
+
+
+
+NORMAL MIGRATION
+
+The exporter begins by doing some checks in export_dir() to verify
+that it is permissible to export the subtree at this time.  In
+particular, the cluster must not be degraded, the subtree root may not
+be freezing or frozen, and the path must be pinned (\ie not conflicted
+with a rename).  If these conditions are met, the subtree root
+directory is temporarily auth pinned, the subtree freeze is initiated,
+and the exporter is committed to the subtree migration, barring an
+intervening failure of the importer or itself.
+
+The MExportDiscover serves simply to ensure that the inode for the
+base directory being exported is open on the destination node.  It is
+pinned by the importer to prevent it from being trimmed.  This occurs
+before the exporter completes the freeze of the subtree to ensure that
+the importer is able to replicate the necessary metadata.  When the
+exporter receives the MDiscoverAck, it allows the freeze to proceed by
+removing its temporary auth pin.
+
+The MExportPrep message then follows to populate the importer with a
+spanning tree that includes all dirs, inodes, and dentries necessary
+to reach any nested subtrees within the exported region.  This
+replicates metadata as well, but it is pushed out by the exporter,
+avoiding deadlock with the regular discover and replication process.
+The importer is responsible for opening the bounding directories from
+any third parties authoritative for those subtrees before
+acknowledging.  This ensures that the importer has correct dir_auth
+information about where authority is redelegated for all points nested
+beneath the subtree being migrated.  While processing the MExportPrep,
+the importer freezes the entire subtree region to prevent any new
+replication or cache expiration.
+
+A warning stage occurs only if the base subtree directory is open by
+nodes other than the importer and exporter.  If it is not, then this
+implies that no metadata within or nested beneath the subtree is
+replicated by any node other than the importer an exporter.  If it is,
+then a MExportWarning message informs any bystanders that the
+authority for the region is temporarily ambiguous, and lists both the
+exporter and importer as authoritative MDS nodes.  In particular,
+bystanders who are trimming items from their cache must send
+MCacheExpire messages to both the old and new authorities.  This is
+necessary to ensure that the surviving authority reliably receives all
+expirations even if the importer or exporter fails.  While the subtree
+is frozen (on both the importer and exporter), expirations will not be
+immediately processed; instead, they will be queued until the region
+is unfrozen and it can be determined that the node is or is not
+authoritative.
+
+The exporter walks the subtree hierarchy and packages up an MExport
+message containing all metadata and important state (\eg, information
+about metadata replicas).  At the same time, the expoter's metadata
+objects are flagged as non-authoritative.  The MExport message sends
+the actual subtree metadata to the importer.  Upon receipt, the
+importer inserts the data into its cache, marks all objects as
+authoritative, and logs a copy of all metadata in an EImportStart
+journal message.  Once that has safely flushed, it replies with an
+MExportAck.  The exporter can now log an EExport journal entry, which
+ultimately specifies that the export was a success.  In the presence
+of failures, it is the existence of the EExport entry only that
+disambiguates authority during recovery.
+
+Once logged, the exporter will send an MExportNotify to any
+bystanders, informing them that the authority is no longer ambiguous
+and cache expirations should be sent only to the new authority (the
+importer).  Once these are acknowledged back to the exporter,
+implicitly flushing the bystander to exporter message streams of any
+stray expiration notices, the exporter unfreezes the subtree, cleans
+up its migration-related state, and sends a final MExportFinish to the
+importer.  Upon receipt, the importer logs an EImportFinish(true)
+(noting locally that the export was indeed a success), unfreezes its
+subtree, processes any queued cache expierations, and cleans up its
+state.
+
+
+PARTIAL FAILURE RECOVERY
+
+
+
+
+RECOVERY FROM JOURNAL
+
+
+
+
+
+
+
+
+

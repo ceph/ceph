@@ -1,0 +1,9 @@
+@import 'defaults.scss';
+
+.running i {
+  color: $color-primary;
+}
+
+.running:hover i {
+  color: $color-solid-white;
+}

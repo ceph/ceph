@@ -1,0 +1,44 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>Cluster-wide OSD Flags</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="osdFlagsForm"
+          #formDir="ngForm"
+          [formGroup]="osdFlagsForm"
+          novalidate>
+      <div class="modal-body osd-modal">
+        <div class="custom-control custom-checkbox"
+             *ngFor="let flag of flags; let last = last">
+          <input class="custom-control-input"
+                 type="checkbox"
+                 [checked]="flag.value"
+                 (change)="flag.value = !flag.value"
+                 [name]="flag.code"
+                 [id]="flag.code"
+                 [disabled]="flag.disabled">
+          <label class="custom-control-label"
+                 [for]="flag.code"
+                 ng-class="['tc_' + key]">
+            <strong>{{ flag.name }}</strong>
+            <br>
+            <span class="form-text text-muted">{{ flag.description }}</span>
+          </label>
+          <hr class="oa-hr-small"
+              *ngIf="!last">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button *ngIf="permissions.osd.update"
+                          (submitAction)="submitAction()"
+                          [form]="osdFlagsForm"
+                          i18n>Submit</cd-submit-button>
+        <cd-back-button [back]="bsModalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

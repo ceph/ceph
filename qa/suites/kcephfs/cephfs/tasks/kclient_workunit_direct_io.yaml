@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - direct_io
+

@@ -1,0 +1,43 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>Reweight OSD: {{ osdId }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form [formGroup]="reweightForm">
+      <div class="modal-body">
+        <div class="row">
+          <label for="weight"
+                 class="col-sm-2 col-form-label">Weight</label>
+          <div class="col-sm-10">
+            <input id="weight"
+                   class="form-control"
+                   type="number"
+                   step="0.1"
+                   formControlName="weight"
+                   min="0"
+                   max="1"
+                   [value]="currentWeight">
+            <span class="invalid-feedback"
+                  *ngIf="weight.errors">
+              <span *ngIf="weight.errors?.required"
+                    i18n>This field is required.</span>
+              <span *ngIf="weight.errors?.max || weight.errors?.min"
+                    i18n>The value needs to be between 0 and 1.</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="reweight()"
+                          [form]="reweightForm"
+                          [disabled]="reweightForm.invalid"
+                          i18n>Reweight</cd-submit-button>
+        <cd-back-button [back]="bsModalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

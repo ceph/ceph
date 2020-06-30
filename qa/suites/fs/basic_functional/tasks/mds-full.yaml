@@ -1,0 +1,37 @@
+
+overrides:
+  ceph:
+    cephfs_ec_profile:
+      - disabled
+    log-whitelist:
+      - OSD full dropping all updates
+      - OSD near full
+      - pausewr flag
+      - failsafe engaged, dropping updates
+      - failsafe disengaged, no longer dropping
+      - is full \(reached quota
+      - POOL_FULL
+      - POOL_BACKFILLFULL
+    conf:
+      mon:
+        mon osd nearfull ratio: 0.6
+        mon osd backfillfull ratio: 0.6
+        mon osd full ratio: 0.7
+      osd:
+        osd mon report interval: 5
+        osd objectstore: memstore
+        osd failsafe full ratio: 1.0
+        memstore device bytes: 200000000
+      client.0:
+        debug client: 20
+        debug objecter: 20
+        debug objectcacher: 20
+      client.1:
+        debug client: 20
+        debug objecter: 20
+        debug objectcacher: 20
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_full

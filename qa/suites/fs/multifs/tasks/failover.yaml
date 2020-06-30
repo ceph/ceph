@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - Replacing daemon mds
+      - \(MDS_INSUFFICIENT_STANDBY\)
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
+  ceph-fuse:
+    disabled: true
+tasks:
+  - exec:
+      mon.a:
+        - ceph config set mgr mgr/crash/warn_recent_interval 0
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_failover
+

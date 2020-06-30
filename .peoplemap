@@ -1,0 +1,65 @@
+#
+# More information at
+#  http://tracker.ceph.com/projects/ceph/wiki/Ceph_contributors_list_maintenance_guide
+#
+# See .githubmap for GitHub username contributors
+# See .mailmap for name and mail normalization.
+# See .organizationmap for organization affiliation
+#
+# In .mailmap, an individual may be represented by multiple mails which may reflect
+# an organization affiliation change that needs to be preserved to find out which
+# organization sponsored which commit.
+# 
+# The .peoplemap file aggregates these mails to show a single line for each person
+#
+# The names that need to be added to .peoplemap can be displayed with:
+#
+# git log --pretty='%aN <%aE>' $range | git -c mailmap.file=.peoplemap check-mailmap --stdin | sort | uniq | sed -e 's/\(.*\) \(<.*\)/\2 \1/' | uniq --skip-field=1 --all-repeated | sed -e 's/\(.*>\) \(.*\)/\2 \1/'
+#
+Abhishek Lekshmanan <abhishek@suse.com> Abhishek Lekshmanan <abhishek.lekshmanan@ril.com> 
+Adam Kupczyk <akupczyk@redhat.com> <akupczyk@mirantis.com>
+Alexandre Marangone <amarango@redhat.com> Alexandre Marangone <alexandre.marangone@inktank.com>
+Alfredo Deza <adeza@redhat.com> Alfredo Deza <alfredo.deza@inktank.com>
+Dan Mick <dmick@redhat.com> Dan Mick <dan.mick@inktank.com>
+David Zafman <dzafman@redhat.com> David Zafman <david.zafman@inktank.com>
+Florian Haas <florian@citynetwork.eu> Florian Haas <florian@hastexo.com>
+Greg Farnum <gfarnum@redhat.com> Greg Farnum <greg@inktank.com>
+Gregory Meno <gmeno@redhat.com> <gregory.meno@inktank.com>
+Igor Fedotov <ifedotov@suse.com> Igor Fedotov <ifedotov@mirantis.com>
+Ilya Dryomov <idryomov@redhat.com> Ilya Dryomov <ilya.dryomov@inktank.com>
+Jenkins <jenkins@ceph.com> Jenkins <jenkins@inktank.com>
+João Eduardo Luís <joao@suse.de> João Eduardo Luís <joao.luis@inktank.com>
+João Eduardo Luís <joao@suse.de> João Eduardo Luís <joao@redhat.com>
+John Spray <jspray@redhat.com> John Spray <john.spray@inktank.com>
+John Wilkins <jwilkins@redhat.com> John Wilkins <john.wilkins@inktank.com>
+Josh Durgin <jdurgin@redhat.com> Josh Durgin <josh.durgin@inktank.com>
+Ken Dreyer <kdreyer@redhat.com> Ken Dreyer <ken.dreyer@inktank.com>
+Коренберг Марк <mark@ideco.ru> Коренберг Марк <socketpair@gmail.com>
+Loic Dachary <ldachary@redhat.com> Loic Dachary <loic-201408@dachary.org>
+Loic Dachary <ldachary@redhat.com> Loic Dachary <loic@dachary.org>
+Mark Nelson <mnelson@redhat.com> Mark Nelson <mark.nelson@inktank.com>
+Mark Nelson <mnelson@redhat.com> Mark Nelson <mark.nelson@dreamhost.com>
+Mykola Golub <mgolub@suse.com> Mykola Golub <mgolub@mirantis.com>
+Mykola Golub <mgolub@suse.com> Mykola Golub <to.my.trociny@gmail.com>
+Neil Levine <nlevine@redhat.com> Neil Levine <neil.levine@inktank.com>
+Noah Watkins <nwatkins@redhat.com> Noah Watkins <noah.watkins@inktank.com>
+Patrick McGarry <pmcgarry@redhat.com> Patrick McGarry <patrick@inktank.com>
+Piotr Dałek <piotr.dalek@corp.ovh.com> Piotr Dałek <git@predictor.org.pl> Piotr Dałek <piotr.dalek@ts.fujitsu.com>
+Radoslaw Zarzynski <rzarzyns@redhat.com> <rzarzynski@mirantis.com>
+Robin H. Johnson <rjohnson@digitalocean.com> <robin.johnson@dreamhost.com>
+Ross Turk <rturk@redhat.com> Ross Turk <ross.turk@inktank.com>
+Sage Weil <sweil@redhat.com> Sage Weil <sage@inktank.com>
+Sahid Orentino Ferdjaoui <sahid.ferdjaoui@redhat.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com>
+Samuel Just <sjust@redhat.com> Samuel Just <sam.just@inktank.com>
+Sandon Van Ness <svanness@redhat.com> Sandon Van Ness <sandon@inktank.com>
+Tamil Muthamizhan <tmuthami@redhat.com> Tamil Muthamizhan <tamil.muthamizhan@inktank.com>
+Tyler Brekke <tbrekke@redhat.com> Tyler Brekke <tyler.brekke@inktank.com>
+Varada Kari <varadaraja.kari@flipkart.com> <varada.kari@sandisk.com>
+Warren Usui <wusui@redhat.com> Warren Usui <warren.usui@inktank.com>
+Wang Song Bo <wangsongbo@cloudin.cn> wangsongbo <wangsongbo@unitedstack.com>
+Yan, Zheng <zyan@redhat.com> Yan, Zheng <zheng.z.yan@intel.com>
+Yehuda Sadeh <ysadehwe@redhat.com> Yehuda Sadeh <yehuda@inktank.com>
+Yuri Weinstein <yuriw@redhat.com> Yuri Weinstein <yuri.weinstein@inktank.com>
+Zhi Zhang <zhangz.david@outlook.com> Zhi (David) Zhang <zhangz@yahoo-inc.com>
+Zheng Yin <zhengyin@huayun.com> Zheng Yin <zhengyin@chinac.com>
+Patrick Donnelly <pdonnell@redhat.com> Patrick Donnelly <batrick@batbytes.com>

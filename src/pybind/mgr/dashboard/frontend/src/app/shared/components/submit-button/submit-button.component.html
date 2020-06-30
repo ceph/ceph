@@ -1,0 +1,10 @@
+<button [type]="type"
+        class="btn btn-secondary tc_submitButton"
+        [ngClass]="btnClass"
+        [disabled]="loading || disabled"
+        (click)="submit($event)">
+  <ng-content></ng-content>
+  <span *ngIf="loading">
+    <i [ngClass]="[icons.spinner, icons.spin]"></i>
+  </span>
+</button>

@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(OSDMAP_FLAGS\)
+      - \(SMALLER_PGP_NUM\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(SLOW OPS\)
+      - slow request
+tasks:
+- mon_recovery:

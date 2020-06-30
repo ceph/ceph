@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    fs: xfs
+    log-whitelist:
+      - \(PG_AVAILABILITY\)
+- cram:
+    clients:
+      client.0:
+      - src/test/cli-integration/balancer/misplaced.t

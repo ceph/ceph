@@ -1,0 +1,15 @@
+roles:
+- [mon.a, mds.a, mgr.x, osd.0, osd.1, client.0]
+overrides:
+  ceph:
+    log-whitelist:
+      - \(POOL_APP_NOT_ENABLED\)
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+- workunit:
+    clients:
+      all:
+        - rados/version_number_sanity.sh

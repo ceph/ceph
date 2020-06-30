@@ -1,0 +1,78 @@
+<ng-template #popTemplate>
+  <form name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div>
+      <input type="text"
+             formControlName="filter"
+             i18n-placeholder
+             [placeholder]="messages.filter"
+             (keyup)="$event.keyCode == 13 ? selectOption() : updateFilter()"
+             class="form-control text-center" />
+      <ng-container *ngFor="let error of Object.keys(messages.customValidations)">
+        <span class="invalid-feedback text-center"
+              *ngIf="form.showError('filter', formDir) && filter.hasError(error)">
+          {{ messages.customValidations[error] }}
+        </span>
+      </ng-container>
+    </div>
+  </form>
+  <div *ngFor="let option of filteredOptions"
+       class="select-menu-item"
+       [ngClass]="{'help-block disabled': (data.length === selectionLimit || !option.enabled) && !option.selected}"
+       (click)="triggerSelection(option)">
+    <div class="select-menu-item-icon">
+      <i [ngClass]="[icons.check]"
+         aria-hidden="true"
+         *ngIf="option.selected"></i>
+      &nbsp;
+    </div>
+    <div class="select-menu-item-content">
+      {{ option.name }}
+      <ng-container *ngIf="option.description">
+        <br>
+        <small class="form-text text-muted">
+          {{ option.description }}&nbsp;
+        </small>
+      </ng-container>
+    </div>
+  </div>
+  <div *ngIf="isCreatable()"
+       class="select-menu-item"
+       (click)="addCustomOption()">
+    <div class="select-menu-item-icon">
+      <i [ngClass]="[icons.tag]"
+         aria-hidden="true"></i>
+      &nbsp;
+    </div>
+    <div class="select-menu-item-content">
+      {{ messages.add }} '{{ filter.value }}'
+    </div>
+  </div>
+  <div class="is-invalid"
+       *ngIf="data.length === selectionLimit">
+    <span class="form-text text-muted text-center text-warning"
+          [ngbTooltip]="messages.selectionLimit.tooltip"
+          *ngIf="data.length === selectionLimit">
+      {{ messages.selectionLimit.text }}
+    </span>
+  </div>
+</ng-template>
+
+<a class="select-menu-edit float-left"
+   [ngClass]="elemClass"
+   [ngbPopover]="popTemplate"
+   *ngIf="customBadges || options.length > 0">
+  <ng-content></ng-content>
+</a>
+
+<span class="form-text text-muted float-left"
+      *ngIf="data.length === 0 && !(!customBadges && options.length === 0)">
+  {{ messages.empty }}
+</span>
+
+<span class="form-text text-muted  float-left"
+      *ngIf="!customBadges && options.length === 0">
+  {{ messages.noOptions }}
+</span>

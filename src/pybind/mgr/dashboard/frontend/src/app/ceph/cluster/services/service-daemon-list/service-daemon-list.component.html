@@ -1,0 +1,17 @@
+<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
+<cd-table *ngIf="hasOrchestrator"
+          #daemonsTable
+          [data]="daemons"
+          [columns]="columns"
+          columnMode="flex"
+          [autoReload]="60000"
+          (fetchData)="getDaemons($event)">
+</cd-table>
+
+<ng-template #statusTpl
+             let-row="row">
+  <span class="badge"
+        [ngClass]="getStatusClass(row.status)">
+    {{ row.status_desc }}
+  </span>
+</ng-template>

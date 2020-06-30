@@ -1,0 +1,26 @@
+<ng-template #usageTooltipTpl>
+  <table>
+    <tr>
+      <td class="text-left">Used:&nbsp;</td>
+      <td class="text-right"><strong> {{ isBinary ? (used | dimlessBinary) : (used | dimless) }}</strong></td>
+    </tr>
+    <tr>
+      <td class="text-left">Free:&nbsp;</td>
+      <td class="'text-right"><strong>{{ isBinary ? (total - used | dimlessBinary) : (total - used | dimless) }}</strong></td>
+    </tr>
+  </table>
+</ng-template>
+
+<div class="progress"
+     data-placement="left"
+     [ngbTooltip]="usageTooltipTpl">
+  <div class="progress-bar bg-info"
+       role="progressbar"
+       [style.width]="usedPercentage + '%'">
+    <span>{{ usedPercentage }}%</span>
+  </div>
+  <div class="progress-bar bg-freespace"
+       role="progressbar"
+       [style.width]="freePercentage + '%'">
+  </div>
+</div>

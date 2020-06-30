@@ -1,0 +1,47 @@
+@import 'defaults.scss';
+
+:host {
+  position: fixed;
+  top: $navbar-height + 10px;
+  bottom: 10px;
+  right: -350px;
+
+  width: 350px;
+  max-width: 90vw;
+
+  z-index: 9;
+
+  transition: all 0.6s;
+}
+
+:host.active {
+  right: 20px;
+}
+
+.card {
+  height: 100%;
+}
+
+ngx-simplebar {
+  height: calc(100% - 42.2px);
+}
+
+.separator {
+  padding: 5px 12px;
+  color: $color-popover-seperator-text;
+  background-color: $color-popover-seperator-bg;
+  font-size: 12px;
+}
+
+.btn-link .fa-trash-o {
+  color: $color-black;
+}
+
+table {
+  width: 100%;
+}
+
+.row {
+  margin-left: 0;
+  margin-right: 0;
+}

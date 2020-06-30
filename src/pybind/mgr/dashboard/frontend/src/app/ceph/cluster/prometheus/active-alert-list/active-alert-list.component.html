@@ -1,0 +1,32 @@
+<cd-table [data]="prometheusAlertService.alerts"
+          [columns]="columns"
+          identifier="fingerprint"
+          [forceIdentifier]="true"
+          [customCss]="customCss"
+          selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+
+  <cd-table-key-value cdTableDetail
+                      *ngIf="expandedRow"
+                      [renderObjects]="true"
+                      [hideEmpty]="true"
+                      [appendParentKey]="false"
+                      [data]="expandedRow"
+                      [customCss]="customCss"
+                      [autoReload]="false">
+  </cd-table-key-value>
+</cd-table>
+
+<ng-template #externalLinkTpl
+             let-row="row"
+             let-value="value">
+  <a [href]="value"
+     target="_blank"><i [ngClass]="[icons.lineChart]"></i> Source</a>
+</ng-template>

@@ -1,0 +1,68 @@
+#!/bin/sh
+set -e
+
+if ! command -v virtualenv >/dev/null; then
+    echo "$0: virtualenv not installed, skipping python-using tests." 1>&2
+    exit 1
+fi
+
+SRCDIR="$(dirname "$0")"
+
+# build directory, if different, can be passed as an argument;
+# it is expected to point to the equivalent subdirectory of the
+# tree as where this script is stored
+BUILDDIR="$SRCDIR"
+case "$1" in
+    ''|-*)
+	# not set or looks like a flag to cram
+        ;;
+    *)
+	# looks like the builddir
+	BUILDDIR="$1"
+	shift
+	;;
+esac
+
+VENV="$BUILDDIR/virtualenv"
+CRAM_BIN="$VENV/bin/cram"
+if [ ! -e "$CRAM_BIN" ]; then
+    # With "make distcheck", the source directory must be read-only. I
+    # patched cram to support that. See upstream ticket at
+    # https://bitbucket.org/brodie/cram/issue/9/allow-read-only-directories-for-t
+    # -- tv@inktank.com
+    virtualenv "$VENV" && $VENV/bin/pip --log "$VENV"/log.txt install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
+fi
+
+SRCDIR_ABS="$(readlink -f "$SRCDIR")"
+BUILDDIR_ABS="$(readlink -f "$BUILDDIR")"
+FAKE_HOME="$BUILDDIR_ABS/fake_home"
+mkdir -p "$FAKE_HOME"
+
+# cram doesn't like seeing the same foo.t basename twice on the same
+# run, so run it once per directory
+FAILED=0
+FAILEDTOOLS=""
+for tool in "$SRCDIR"/cli/*; do
+    toolname="$(basename "$tool")"
+    install -d -m0755 -- "$BUILDDIR/cli/$toolname"
+    if ! env -i \
+	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
+	CEPH_CONF=/dev/null \
+	CEPH_ARGS="--no-mon-config" \
+	CCACHE_DIR="$CCACHE_DIR" \
+	CC="$CC" \
+	CXX="$CXX" \
+	HOME="$FAKE_HOME" \
+	"$SRCDIR/run-cli-tests-maybe-unset-ccache" \
+	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
+    then
+	FAILED=1
+	FAILEDTOOLS="$FAILEDTOOLS $toolname"
+    fi
+done
+
+if [ $FAILED -eq 1 ]; then
+    echo "Tests that failed: $FAILEDTOOLS"
+fi
+
+exit "$FAILED"

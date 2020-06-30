@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject socket failures: 2500
+        ms inject delay type: mon
+        ms inject delay probability: .005
+        ms inject delay max: 1
+        ms inject internal delays: .002
+        mon client directed command retry: 5
+      mgr:
+        debug monc: 10
+    log-whitelist:
+      - \(OSD_SLOW_PING_TIME

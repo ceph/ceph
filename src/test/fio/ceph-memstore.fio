@@ -1,0 +1,17 @@
+# Runs a 64k random write test against the ceph MemStore.
+[global]
+ioengine=libfio_ceph_objectstore.so # must be found in your LD_LIBRARY_PATH
+
+conf=ceph-memstore.conf # must point to a valid ceph configuration file
+directory=/mnt/fio-memstore # directory for osd_data
+
+rw=randwrite
+iodepth=16
+
+time_based=1
+runtime=20s
+
+[memstore]
+nr_files=64
+size=256m
+bs=64k

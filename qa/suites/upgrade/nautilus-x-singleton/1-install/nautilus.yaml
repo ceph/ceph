@@ -1,0 +1,29 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+      - slow request
+      - Not found or unloadable
+meta:
+- desc: install ceph/nautilus latest
+tasks:
+- install:
+    branch: nautilus
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+- print: "**** done install nautilus"
+- ceph:
+- print: "**** done ceph"
+
+# create a hit set test pool that will generate hit sets prior to octopus
+- exec:
+    mon.a:
+      - sudo ceph osd pool create test-hit-set-base 32
+      - sudo ceph osd pool create test-hit-set-cache 32
+      - sudo ceph osd tier add test-hit-set-base test-hit-set-cache
+      - sudo ceph osd pool set test-hit-set-cache hit_set_type bloom
+      - sudo ceph osd pool set test-hit-set-cache hit_set_count 32
+      - sudo ceph osd pool set test-hit-set-cache hit_set_period 15
+      - rados -p test-hit-set-cache bench 30 write -b 1

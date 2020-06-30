@@ -1,0 +1,810 @@
+commit d783e33b672ec324eb48d588f956da0c51ff5dac
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Sun Aug 18 23:54:49 2013 -0700
+
+    v0.61.8
+
+commit 21a6e2479133a3debb9ab9057ff9fae70c9eede9
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Aug 8 15:12:46 2013 -0700
+
+    RadosClient: shutdown monclient after dropping lock
+
+    Otherwise, the monclient shutdown may deadlock waiting
+    on a context trying to take the RadosClient lock.
+
+    Fixes: #5897
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0aacd10e2557c55021b5be72ddf39b9cea916be4)
+
+commit 64bef4ae4bab28b0b82a1481381b0c68a22fe1a4
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Aug 17 09:05:32 2013 -0700
+
+    mon/OSDMonitor: make 'osd pool mksnap ...' not expose uncommitted state
+
+    [This is a backport of d1501938f5d07c067d908501fc5cfe3c857d7281]
+
+    We were returning success without waiting if the pending pool state had
+    the snap.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+
+commit 411871f6bcc9a4b81140c2e98d13dc123860f6f7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 16 10:52:02 2013 -0700
+
+    mon/OSDMonitor: make 'osd pool rmsnap ...' not racy/crashy
+
+    NOTE: This is a manual backport of d90683fdeda15b726dcf0a7cab7006c31e99f14.
+    Due to all kinds of collateral changes in the mon the original patch
+    doesn't cleanly apply.
+
+    Ensure that the snap does in fact exist before we try to remove it.  This
+    avoids a crash where a we get two dup rmsnap requests (due to thrashing, or
+    a reconnect, or something), the committed (p) value does have the snap, but
+    the uncommitted (pp) does not.  This fails the old test such that we try
+    to remove it from pp again, and assert.
+
+    Restructure the flow so that it is easier to distinguish the committed
+    short return from the uncommitted return (which must still wait for the
+    commit).
+
+             0> 2013-07-16 14:21:27.189060 7fdf301e9700 -1 osd/osd_types.cc: In function 'void pg_pool_t::remove_snap(snapid_t)' thread 7fdf301e9700 time 2013-07-16 14:21:27.187095
+        osd/osd_types.cc: 662: FAILED assert(snaps.count(s))
+
+         ceph version 0.66-602-gcd39d8a (cd39d8a6727d81b889869e98f5869e4227b50720)
+         1: (pg_pool_t::remove_snap(snapid_t)+0x6d) [0x7ad6dd]
+         2: (OSDMonitor::prepare_command(MMonCommand*)+0x6407) [0x5c1517]
+         3: (OSDMonitor::prepare_update(PaxosServiceMessage*)+0x1fb) [0x5c41ab]
+         4: (PaxosService::dispatch(PaxosServiceMessage*)+0x937) [0x598c87]
+         5: (Monitor::handle_command(MMonCommand*)+0xe56) [0x56ec36]
+         6: (Monitor::_ms_dispatch(Message*)+0xd1d) [0x5719ad]
+         7: (Monitor::handle_forward(MForward*)+0x821) [0x572831]
+         8: (Monitor::_ms_dispatch(Message*)+0xe44) [0x571ad4]
+         9: (Monitor::ms_dispatch(Message*)+0x32) [0x588c52]
+         10: (DispatchQueue::entry()+0x549) [0x7cf1d9]
+         11: (DispatchQueue::DispatchThread::entry()+0xd) [0x7060fd]
+         12: (()+0x7e9a) [0x7fdf35165e9a]
+         13: (clone()+0x6d) [0x7fdf334fcccd]
+         NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+
+commit 50698d1862065c8d74338fd08c7e5af66e222490
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 13 12:52:41 2013 -0700
+
+    librados: fix async aio completion wakeup
+
+    For aio flush, we register a wait on the most recent write.  The write
+    completion code, however, was *only* waking the waiter if they were waiting
+    on that write, without regard to previous writes (completed or not).
+    For example, we might have 6 and 7 outstanding and wait on 7.  If they
+    finish in order all is well, but if 7 finishes first we do the flush
+    completion early.  Similarly, if we
+
+     - start 6
+     - start 7
+     - finish 7
+     - flush; wait on 7
+     - finish 6
+
+    we can hang forever.
+
+    Fix by doing any completions that are prior to the oldest pending write in
+    the aio write completion handler.
+
+    Refs: #5919
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Tested-by: Oliver Francke <Oliver.Francke@filoo.de>
+    (cherry picked from commit 16ed0b9af8bc08c7dabead1c1a7c1a22b1fb02fb)
+
+commit ef731dfc84a71d3c3262f5cff9a9d33a60255485
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Aug 12 19:17:09 2013 -0700
+
+    librados: fix locking for AioCompletionImpl refcounting
+
+    Add an already-locked helper so that C_Aio{Safe,Complete} can
+    increment the reference count when their caller holds the
+    lock. C_AioCompleteAndSafe's caller is not holding the lock, so call
+    regular get() to ensure no racing updates can occur.
+
+    This eliminates all direct manipulations of AioCompletionImpl->ref,
+    and makes the necessary locking clear.
+
+    The only place C_AioCompleteAndSafe is used is in handling
+    aio_flush_async(). This could cause a missing completion.
+
+    Refs: #5919
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Tested-by: Oliver Francke <Oliver.Francke@filoo.de>
+    (cherry picked from commit 7a52e2ff5025754f3040eff3fc52d4893cafc389)
+
+commit 32631685199f2e47c2ba0ed27d16eff80fa6917d
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 12 14:27:04 2013 -0700
+
+    mon/Paxos: bootstrap peon too if monmap updates
+
+    If we get a monmap update, the leader bootstraps.  Peons should do the
+    same.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit efe5b67bb700ef6218d9579abf43cc9ecf25ef52)
+
+commit 1ea6b56170fc9e223e7c30635db02fa2ad8f4b4e
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 25 13:16:45 2013 -0700
+
+    osd: fix race when queuing recovery ops
+
+    Previously we would sample how many ops to start under the lock, drop it,
+    and start that many.  This is racy because multiple threads can jump in
+    and we start too many ops.  Instead, claim as many slots as we can and
+    release them back later if we do not end up using them.
+
+    Take care to re-wake the work-queue since we are releasing more resources
+    for wq use.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 01d3e094823d716be0b39e15323c2506c6f0cc3b)
+
+commit 4433f9ad8b338b6a55e205602434b307287bfaa3
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 24 16:37:29 2013 -0700
+
+    osd: tolerate racing threads starting recovery ops
+
+    We sample the (max - active) recovery ops to know how many to start, but
+    do not hold the lock over the full duration, such that it is possible to
+    start too many ops.  This isn't problematic except that our condition
+    checks for being == max but not beyond it, and we will continue to start
+    recovery ops when we shouldn't.  Fix this by adjusting the conditional
+    to be <=.
+
+    Reported-by: Stefan Priebe <s.priebe@profihost.ag>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 3791a1e55828ba541f9d3e8e3df0da8e79c375f9)
+
+commit 0964d53ef3e8e386e0a1635d2240aefad7b8e2c1
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 9 18:02:32 2013 -0700
+
+    ceph-disk: fix mount options passed to move_mount
+
+    Commit 6cbe0f021f62b3ebd5f68fcc01a12fde6f08cff5 added a mount_options but
+    in certain cases it may be blank.  Fill in with the defaults, just as we
+    do in mount().
+
+    Backport: cuttlefish
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cb50b5a7f1ab2d4e7fdad623a0e7769000755a70)
+
+commit d6be5ed2601b8cf45570afe7ca75ce5aba3f8b4f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 12 10:05:44 2013 -0700
+
+    rgw: fix multi delete
+
+    Fixes: #5931
+    Backport: bobtail, cuttlefish
+
+    Fix a bad check, where we compare the wrong field. Instead of
+    comparing the ret code to 0, we compare the string value to 0
+    which generates implicit casting, hence the crash.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f9f1c48ad799da2b4be0077bf9d61ae116da33d7)
+
+    Conflicts:
+	src/rgw/rgw_rest_s3.cc
+
+commit ecaa46a13837305b9382ab319d43890729c54f1e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Jul 23 21:56:09 2013 +0200
+
+    ceph.spec.in: obsolete ceph-libs only on the affected distro
+
+    The ceph-libs package existed only on Redhat based distro,
+    there was e.g. never such a package on SUSE. Therefore: make
+    sure the 'Obsoletes' is only set on these affected distros.
+
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+
+commit 81aa68c309a6d4eaecc54f8d735efde8843fed8c
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Wed Jul 3 11:28:28 2013 -0700
+
+    ceph.spec.in:  Obsolete ceph-libs
+
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 2a34df68bb02d14f6a25bd13dff600a4d629ad05
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Fri Aug 9 14:48:15 2013 -0700
+
+    common: pick_addresses: fix bug with observer class that triggered #5205
+
+    The Observer class we defined to observe conf changes and thus avoid
+    triggering #5205 (as fixed by eb86eebe1ba42f04b46f7c3e3419b83eb6fe7f9a),
+    was returning always the same const static array, which would lead us to
+    always populate the observer's list with an observer for 'public_addr'.
+
+    This would of course become a problem when trying to obtain the observer
+    for 'cluster_add' during md_config_t::set_val() -- thus triggering the
+    same assert as initially reported on #5205.
+
+    Backport: cuttlefish
+    Fixes: #5205
+
+    Signed-off-by: Joao Eduardo Luis <jecluis@gmail.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7ed6de9dd7aed59f3c5dd93e012cf080bcc36d8a)
+
+commit 1243c9749ed27850c5d041023780efcdf7b31a68
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Thu Aug 8 16:09:26 2013 -0700
+
+    make sure we are using the mount options
+
+    Signed-off-by: Alfredo Deza <alfredo@deza.pe>
+    (cherry picked from commit 34831d0989d4bcec4920068b6ee09ab6b3234c91)
+
+commit a9a370be2d8155b696ebe2866febb0571da5740f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Aug 2 11:58:52 2013 -0700
+
+    PG: set !flushed in Reset()
+
+    Otherwise, we might serve a pull before we start_flush in the
+    ReplicaActive constructor.
+
+    Fixes: #5799
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9e7d6d547e0e8a6db6ba611882afa9bf74ea0195)
+
+commit 65bfa4941f983c988837cd010f731966ff53fd19
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 26 14:02:07 2013 -0700
+
+    osd: make open classes on start optional
+
+    This is cuttlefish; default to the old behavior!
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6f996223fb34650771772b88355046746f238cf2)
+
+commit e8253ae5451b1c8e3d7d50199b8db7b2d4c66486
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 26 13:58:46 2013 -0700
+
+    osd: load all classes on startup
+
+    This avoid creating a wide window between when ceph-osd is started and
+    when a request arrives needing a class and it is loaded.  In particular,
+    upgrading the packages in that window may cause linkage errors (if the
+    class API has changed, for example).
+
+    Fixes: #5752
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit c24e652d8c5e693498814ebe38c6adbec079ea36)
+
+    Conflicts:
+	src/osd/ClassHandler.cc
+
+commit 7a1d6d3e727fd8b6947c658e171bf7ec31cd7966
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 28 15:42:08 2013 -0700
+
+    ceph_test_rados: print version banner on startup
+
+    It is helpful when looking at qa run logs to see what version of the
+    tester is running.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 12c1f1157c7b9513a3d9f716a8ec62fce00d28f5)
+
+commit 86769f05ccc54bfec403bb9ea9a3a951bbcea301
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 22:08:36 2013 -0700
+
+    ceph_test_rados: add --pool <name> arg
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bcfbd0a3ffae6947464d930f636c8b35d1331e9d)
+
+commit b70a9abc5e3ae01204256f414bd7e69d083ed7c6
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 26 14:07:02 2013 -0700
+
+    upstart: stop ceph-create-keys when the monitor stops
+
+    This avoids lingering ceph-create-keys tasks.
+
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a90a2b42db8de134b8ea5d81cab7825fb9ec50b4)
+
+commit 5af48dc7c7e3a0d7f7bc22af58831d58d165e657
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jul 26 13:42:27 2013 -0700
+
+    FileStore: fix fd leak in _check_global_replay_guard
+
+    Bug introduced in f3f92fe21061e21c8b259df5ef283a61782a44db.
+
+    Fixes: #5766
+    Backport: cuttlefish
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c562b72e703f671127d0ea2173f6a6907c825cd1)
+
+commit 17aa2d6d16c77028bae1d2a77903cdfd81efa096
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 25 11:10:53 2013 -0700
+
+    mon/Paxos: share uncommitted value when leader is/was behind
+
+    If the leader has and older lc than we do, and we are sharing states to
+    bring them up to date, we still want to also share our uncommitted value.
+    This particular case was broken by b26b7f6e, which was only contemplating
+    the case where the leader was ahead of us or at the same point as us, but
+    not the case where the leader was behind.  Note that the call to
+    share_state() a few lines up will bring them fully up to date, so
+    after they receive and store_state() for this message they will be at the
+    same lc as we are.
+
+    Fixes: #5750
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 05b6c7e8645081f405c616735238ae89602d3cc6)
+
+commit 09a664e25391dbad9a479bae33904d28231f429d
+Merge: 8f010af b0535fc
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 25 15:21:31 2013 -0700
+
+    Merge remote-tracking branch 'gh/cuttlefish-next' into cuttlefish
+
+commit b0535fcf854c5042d6b5ff481aabca08026d8f7f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jul 23 18:04:40 2013 -0700
+
+    HashIndex: reset attr upon split or merge completion
+
+    A replay of an in progress merge or split might make
+    our counts unreliable.
+
+    Fixes: #5723
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0dc3efdd885377a07987d868af5bb7a38245c90b)
+
+commit 8f73302b4e637ca8b85d68ea7503279faecb57d8
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jul 23 17:34:25 2013 -0700
+
+    test/filestore/store_test: add test for 5723
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 37a4c4af54879512429bb114285bcb4c7c3488d5)
+
+    Conflicts:
+	src/os/LFNIndex.cc
+	src/test/filestore/store_test.cc
+
+commit 6a7b9e5f0c1d2344209c69ab9992f94221a16468
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jul 23 13:51:26 2013 -0700
+
+    FileStore::_collection_rename: fix global replay guard
+
+    If the replay is being replayed, we might have already
+    performed the rename, skip it.  Also, we must set the
+    collection replay guard only after we have done the
+    rename.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 870c474c5348831fcb13797d164f49682918fb30)
+
+commit 7d98651775265896c22bacfc4afcfccbb0128470
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 22 13:46:10 2013 -0700
+
+    PGLog::rewind_divergent_log: unindex only works from tail, index() instead
+
+    Fixes: #5714
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6957dbc75cc2577652b542aa3eae69f03060cb63)
+
+    The original patch covered the same code in PGLog.cc.
+
+    Conflicts:
+
+	src/osd/PGLog.cc
+	src/osd/PG.cc
+
+commit 611a06ae6c9cba468db206dfc82ec883c7a394af
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 18 09:55:43 2013 -0700
+
+    msg/Pipe: do not hold pipe_lock for verify_authorizer()
+
+    We shouldn't hold the pipe_lock while doing the ms_verify_authorizer
+    upcalls.
+
+    Fix by unlocking a bit earlier, and verifying our state is still correct
+    in the failure path.
+
+    This regression was introduced by ecab4bb9513385bd765cca23e4e2fadb7ac4bac2.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 723d691f7a1f53888618dfc311868d1988f61f56)
+
+    Conflicts:
+
+	src/msg/Pipe.cc
+
+commit 45bda482fa8a23f4b80d115e29d6f04cb5e226d6
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 16 14:17:05 2013 -0700
+
+    msg/Pipe: a bit of additional debug output
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 16568d9e1fb8ac0c06ebaa1e1dc1d6a432a5e4d4)
+
+commit 806eab59ad1a32aedb662c51de3b4a1d61fcbb62
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 16 13:13:46 2013 -0700
+
+    msg/Pipe: hold pipe_lock during important parts of accept()
+
+    Previously we did not bother with locking for accept() because we were
+    not visible to any other threads.  However, we need to close accepting
+    Pipes from mark_down_all(), which means we need to handle interference.
+
+    Fix up the locking so that we hold pipe_lock when looking at Pipe state
+    and verify that we are still in the ACCEPTING state any time we retake
+    the lock.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ecab4bb9513385bd765cca23e4e2fadb7ac4bac2)
+
+commit ce6a0b74459996f91a0511a4a7147179bcd47876
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed Jul 17 15:23:12 2013 -0700
+
+    msgr: fix a typo/goto-cross from dd4addef2d
+
+    We didn't build or review carefully enough!
+
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1a84411209b13084b3edb87897d5d678937e3299)
+
+commit 1ed51ad535612d5c444a3cc35a331f5e6a68ce30
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 15 17:16:23 2013 -0700
+
+    msgr: close accepting_pipes from mark_down_all()
+
+    We need to catch these pipes too, particularly when doing a rebind(),
+    to avoid them leaking through.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 687fe888b32ac9d41595348dfc82111c8dbf2fcb)
+
+commit 2f696f17a413015a3038d5aa76d18fe94f503f03
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 15 17:14:25 2013 -0700
+
+    msgr: maintain list of accepting pipes
+
+    New pipes exist in a sort of limbo before we know who the peer is and
+    add them to rank_pipe.  Keep a list of them in accepting_pipes for that
+    period.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit dd4addef2d5b457cc9a58782fe42af6b13c68b81)
+
+commit 540a6f49d402c1990f0e0fe9f8897dd664e79501
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 16 16:25:28 2013 -0700
+
+    msgr: adjust nonce on rebind()
+
+    We can have a situation where:
+
+     - we have a pipe to a peer
+     - pipe goes to standby (on peer)
+     - we rebind to a new port
+     - ....
+     - we rebind again to the same old port
+     - we connect to peer
+
+    and get reattached to the ancient pipe from two instances back.  Avoid that
+    by picking a new nonce each time we rebind.
+
+    Add 1,000,000 each time so that the port is still legible in the printed
+    output.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 994e2bf224ab7b7d5b832485ee14de05354d2ddf)
+
+    Conflicts:
+
+	src/msg/Accepter.cc
+
+commit f938a5bf604885ffba65a9b86e19258ca254e58c
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 15 17:10:23 2013 -0700
+
+    msgr: mark_down_all() after, not before, rebind
+
+    If we are shutting down all old connections and binding to new ports,
+    we want to avoid a sequence like:
+
+     - close all prevoius connections
+     - new connection comes in on old port
+     - rebind to new ports
+     -> connection from old port leaks through
+
+    As a first step, close all connections after we shut down the old
+    accepter and before we start the new one.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 07a0860a1899c7353bb506e33de72fdd22b857dd)
+
+    Conflicts:
+
+	src/msg/SimpleMessenger.cc
+
+commit 07b9ebf4212d53606ce332ff927a2ff68ed26978
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 16 13:01:18 2013 -0700
+
+    msg/Pipe: unlock msgr->lock earlier in accept()
+
+    Small cleanup.  Nothing needs msgr->lock for the previously larger
+    window.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ad548e72fd94b4a16717abd3b3f1d1be4a3476cf)
+
+commit ae85a0a101d624363fe761c06ecd52d3d38ba4a2
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 16 10:09:02 2013 -0700
+
+    msg/Pipe: avoid creating empty out_q entry
+
+    We need to maintain the invariant that all sub queues in out_q are never
+    empty.  Fix discard_requeued_up_to() to avoid creating an entry unless we
+    know it is already present.
+
+    This bug leads to an incorrect reconnect attempt when
+
+     - we accept a pipe (lossless peer)
+     - they send some stuff, maybe
+     - fault
+     - we initiate reconnect, even tho we have nothing queued
+
+    In particular, we shouldn't reconnect because we aren't checking for
+    resets, and the fact that our out_seq is 0 while the peer's might be
+    something else entirely will trigger asserts later.
+
+    This fixes at least one source of #5626, and possibly #5517.
+
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9f1c27261811733f40acf759a72958c3689c8516)
+
+commit 21e27262edc6f5f090ea8915517ee867e30b9066
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 15 14:47:05 2013 -0700
+
+    msg/Pipe: assert lock is held in various helpers
+
+    These all require that we hold pipe_lock.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 579d858aabbe5df88543d096ef4dbddcfc023cca)
+
+commit 25f4786ac41869b3f135bd072000634765bb8919
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 14 08:55:52 2013 -0700
+
+    msg/Pipe: be a bit more explicit about encoding outgoing messages
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4282971d47b90484e681ff1a71ae29569dbd1d32)
+
+commit 48105a32605aa59b6970eb89fce4ecc4201e8d04
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 12 16:21:24 2013 -0700
+
+    msg/Pipe: fix RECONNECT_SEQ behavior
+
+    Calling handle_ack() here has no effect because we have already
+    spliced sent messages back into our out queue.  Instead, pull them out
+    of there and discard.  Add a few assertions along the way.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 495ee108dbb39d63e44cd3d4938a6ec7d11b12e3)
+
+commit 1eab069017ce6b71e4bc2bb9679dbe31b50ae938
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 13:32:38 2013 -0700
+
+    msgr: reaper: make sure pipe has been cleared (under pipe_lock)
+
+    All paths to pipe shutdown should have cleared the con->pipe reference
+    already.  Assert as much.
+
+    Also, do it under pipe_lock!
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9586305a2317c7d6bbf31c9cf5b67dc93ccab50d)
+
+commit db06a5092bc45d0479fe492a5d592713a7c53494
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 14:14:02 2013 -0700
+
+    msg/Pipe: goto fail_unlocked on early failures in accept()
+
+    Instead of duplicating an incomplete cleanup sequence (that does not
+    clear_pipe()), goto fail_unlocked and do the cleanup in a generic way.
+    s/rc/r/ while we are here.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ec612a5bda119cea52bbac9b2a49ecf1e83b08e5)
+
+commit 8612e50fd70bfceebd6c291e6cab10d9dfd39e8c
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 13:32:07 2013 -0700
+
+    msgr: clear con->pipe inside pipe_lock on mark_down
+
+    We need to do this under protection of the pipe_lock.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit afafb87e8402242d3897069f4b94ba46ffe0c413)
+
+commit 8aafe131acadc22cb069f3d98bba6922ab09c749
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 12:47:11 2013 -0700
+
+    msgr: clear_pipe inside pipe_lock on mark_down_all
+
+    Observed a segfault in rebind -> mark_down_all -> clear_pipe -> put that
+    may have been due to a racing thread clearing the connection_state pointer.
+    Do the clear_pipe() call under the protection of pipe_lock, as we do in
+    all other contexts.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5fc1dabfb3b2cbffdee3214d24d7769d6e440e45)
+
+    Conflicts:
+
+	src/msg/SimpleMessenger.cc
+
+commit 2f7979d1262e9d4899be76963a1620db46b334e8
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jul 18 19:26:02 2013 -0700
+
+    ReplicatedPG: track temp collection contents, clear during on_change
+
+    We also assert in on_flushed() that the temp collection is actually
+    empty.
+
+    Fixes: #5670
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 47516d9c4b7f023f3a16e166749fa7b1c7b3b24c)
+
+    Conflicts:
+
+	src/osd/ReplicatedPG.cc
+
+commit c7e2945a42541f966017180684dd969389eef3ac
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jul 18 19:25:14 2013 -0700
+
+    PG, ReplicatedPG: pass a transaction down to ReplicatedPG::on_change
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9f56a7b8bfcb63cb4fbbc0c9b8ff01de9e518c57)
+
+commit 7ffc65fc4d7d842954cf791c016fd2711f644a9c
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jul 17 15:04:10 2013 -0700
+
+    PG: start flush on primary only after we process the master log
+
+    Once we start serving reads, stray objects must have already
+    been removed.  Therefore, we have to flush all operations
+    up to the transaction writing out the authoritative log.
+    On replicas, we flush in Stray() if we will not eventually
+    be activated and in ReplicaActive if we are in the acting
+    set.  This way a replica won't serve a replica read until
+    the store is consistent.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b41f1ba48563d1d3fd17c2f62d10103b5d63f305)
+
+commit 850da0890da5df7e670df9268afe420d0c906c38
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jul 17 12:51:19 2013 -0700
+
+    ReplicatedPG: replace clean_up_local with a debug check
+
+    Stray objects should have been cleaned up in the merge_log
+    transactions.  Only on the primary have those operations
+    necessarily been flushed at activate().
+
+    Fixes: 5084
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 278c7b59228f614addf830cb0afff4988c9bc8cb)
+
+commit 95b1b5da439f1b7e2fb1886aaeec2d61532183f0
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jul 18 10:12:17 2013 -0700
+
+    FileStore: add global replay guard for split, collection_rename
+
+    In the event of a split or collection rename, we need to ensure that
+    we don't replay any operations on objects within those collections
+    prior to that point.  Thus, we mark a global replay guard on the
+    collection after doing a syncfs and make sure to check that in
+    _check_replay_guard() for all object operations.
+
+    Fixes: #5154
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f3f92fe21061e21c8b259df5ef283a61782a44db)
+
+    Conflicts:
+
+	src/os/FileStore.cc
+
+commit d92a43d8ff0123b234e47a94c2ce73fcaae7f625
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 15 13:44:20 2013 -0700
+
+    OSD: add config option for peering_wq batch size
+
+    Large peering_wq batch sizes may excessively delay
+    peering messages resulting in unreasonably long
+    peering.  This may speed up peering.
+
+    Backport: cuttlefish
+    Related: #5084
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 39e5a2a406b77fa82e9a78c267b679d49927e3c3)

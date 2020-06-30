@@ -1,0 +1,30 @@
+#!/bin/sh
+
+[ $# -lt 2 ] && echo "usage: $0 <name> <command> [params...]" && exit 1
+
+root=`dirname $0`
+run_name=$1
+command=$2
+CEPH_BIN=$root
+CEPH_CONF_PATH=$root/run/$run_name
+
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
+if [ -e CMakeCache.txt ]; then
+    CEPH_BIN=$PWD/bin
+    CEPH_CONF_PATH=$PWD/run/$run_name
+elif [ -e $root/../${BUILD_DIR}/CMakeCache.txt ]; then
+    cd $root/../${BUILD_DIR}
+    CEPH_BIN=$PWD/bin
+    CEPH_CONF_PATH=$PWD/run/$run_name
+fi
+
+shift 2
+
+if [ "$RGW_VALGRIND" == 'yes' ] && [ $command == 'radosgw' ]; then
+    valgrind --trace-children=yes --tool=memcheck --max-threads=1024 $CEPH_BIN/$command -c $CEPH_CONF_PATH/ceph.conf "$@"
+    sleep 10
+else
+    $CEPH_BIN/$command -c $CEPH_CONF_PATH/ceph.conf "$@"
+fi
+

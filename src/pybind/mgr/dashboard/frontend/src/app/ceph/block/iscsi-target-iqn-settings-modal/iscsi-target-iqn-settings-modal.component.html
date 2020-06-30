@@ -1,0 +1,36 @@
+<cd-modal [modalRef]="modalRef">
+  <ng-container class="modal-title"
+                i18n>Advanced Settings</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="settingsForm"
+          #formDir="ngForm"
+          [formGroup]="settingsForm"
+          novalidate>
+      <div class="modal-body">
+        <p class="alert-warning"
+           i18n>Changing these parameters from their default values is usually not necessary.</p>
+
+        <div class="form-group row"
+             *ngFor="let setting of settingsForm.controls | keyvalue">
+          <div class="col-sm-12">
+            <cd-iscsi-setting [settingsForm]="settingsForm"
+                              [formDir]="formDir"
+                              [setting]="setting.key"
+                              [limits]="getTargetControlLimits(setting.key)"></cd-iscsi-setting>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button i18n
+                          [form]="settingsForm"
+                          (submitAction)="save()">Confirm</cd-submit-button>
+        <cd-back-button [back]="modalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

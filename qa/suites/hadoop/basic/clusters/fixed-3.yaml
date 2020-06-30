@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        client permissions: false
+roles:
+- [mon.0, mds.a, osd.0, hadoop.master.0]
+- [mon.1, mgr.x, osd.1, hadoop.slave.0]
+- [mon.2, mgr.y, hadoop.slave.1, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 1
+    size: 10 # GB

@@ -1,0 +1,33 @@
+@import 'defaults.scss';
+
+::ng-deep .login {
+  color: $color-login-row-text;
+  background-color: $color-login-row-bg;
+  background-image: url('assets/ceph_background.gif');
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  header {
+    position: absolute;
+    width: 100vw;
+
+    .navbar {
+      padding: 1rem 2rem;
+
+      .dropdown-menu {
+        margin-top: 0.2rem;
+
+        li a {
+          &:hover {
+            background-color: $color-brand-teal;
+          }
+        }
+      }
+    }
+  }
+
+  section {
+    display: inline-flex;
+    width: 100vw;
+    min-height: 100vh;
+  }
+}

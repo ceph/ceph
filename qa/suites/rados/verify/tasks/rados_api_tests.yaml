@@ -1,0 +1,30 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+      - overall HEALTH_
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(POOL_FULL\)
+      - \(SMALLER_PGP_NUM\)
+      - \(SLOW_OPS\)
+      - \(CACHE_POOL_NEAR_FULL\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
+      - \(OBJECT_MISPLACED\)
+      - slow request
+    conf:
+      client:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+        debug monc: 20
+      mon:
+        mon warn on pool no app: false
+tasks:
+- workunit:
+    timeout: 6h
+    env:
+      ALLOW_TIMEOUTS: "1"
+    clients:
+      client.0:
+        - rados/test.sh

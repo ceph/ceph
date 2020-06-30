@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        osd max backfills: 9
+    log-whitelist:
+    - but it is still running
+    - objects unfound and apparently lost
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 3
+    chance_pgpnum_fix: 1
+    min_in: 8

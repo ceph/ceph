@@ -1,0 +1,54 @@
+# begin crush map
+
+# devices
+device 0 osd.0 class ssd
+device 1 osd.1 class ssd
+device 2 osd.2 class ssd
+device 3 osd.3 class hdd
+device 4 osd.4 class hdd
+device 5 osd.5 class hdd
+
+# types
+type 0 osd
+type 1 host
+type 2 root
+
+# buckets
+host foo {
+     id -3
+     alg straw2
+     hash 0
+     item osd.0 weight 1.0
+     item osd.1 weight 1.0
+     item osd.2 weight 1.0
+}
+
+host bar {
+     id -2
+     alg straw2
+     hash 0
+     item osd.3 weight 1.0
+     item osd.4 weight 1.0
+     item osd.5 weight 1.0
+}
+
+root default {
+     id -1
+     alg straw2
+     hash 0
+     item foo weight 3.0
+     item bar weight 3.0
+}
+
+# rules
+rule data {
+	ruleset 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take default
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+# end crush map

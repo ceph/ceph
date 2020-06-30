@@ -1,0 +1,147 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.ceph</groupId>
+  <artifactId>libcephfs</artifactId>
+  <packaging>jar</packaging>
+  <version>${version}</version>
+  <name>libcephfs</name>
+  <url>http://www.ceph.com</url>
+  <description>Ceph FS Java API.</description>
+  <licenses>
+    <license>
+      <name>GNU Lesser General Public License, Version 2.1</name>
+      <url>http://www.gnu.org/licenses/lgpl-2.1.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+	  <name>Sage Weil</name>
+	  <email>sage@inktank.com</email>
+	  <organization>Red Hat</organization>
+	  <organizationUrl>http://www.redhat.com</organizationUrl>
+    </developer>
+
+    <developer>
+	  <name>Noah Watkins</name>
+	  <email>noahwatkins@gmail.com</email>
+	  <organization>Red Hat</organization>
+	  <organizationUrl>http://www.redhat.com</organizationUrl>
+    </developer>
+
+    <developer>
+      <name>Greg Farnum</name>
+      <email>greg@inktank.com</email>
+      <organization>Red Hat</organization>
+      <organizationUrl>http://www.redhat.com</organizationUrl>
+    </developer>
+
+    <developer>
+      <name>Joe Buck</name>
+      <email>jbbuck@gmail.com</email>
+    </developer>
+
+    <developer>
+      <name>Gary Lowell</name>
+      <email>glowell@inktank.com</email>
+      <organization>Red Hat</organization>
+      <organizationUrl>http://www.redhat.com</organizationUrl>
+    </developer>
+
+    <developer>
+      <name>Dmitry Smirnov</name>
+      <email>onlyjob@member.fsf.org</email>
+    </developer>
+
+    <developer>
+      <name>Danny Al-Gaaf</name>
+      <email>danny.al-gaaf@bisect.de</email>
+    </developer>
+
+    <developer>
+      <name>Huamin Chen</name>
+      <email>hchen@redhat.com</email>
+      <organization>Red Hat</organization>
+      <organizationUrl>http://www.redhat.com</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:git@github.com:ceph/ceph.git</connection>
+    <developerConnection>scm:git:git@github.com:ceph/ceph.git</developerConnection>
+    <url>scm:git:git@github.com:ceph/ceph.git</url>
+  </scm>
+
+  <distributionManagement>
+    <snapshotRepository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+
+  <build>
+    <sourceDirectory>java</sourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.1</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+        <version>2.4.1</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonatype.plugins</groupId>
+        <artifactId>nexus-staging-maven-plugin</artifactId>
+        <version>1.6.2</version>
+        <extensions>true</extensions>
+        <configuration>
+          <serverId>ossrh</serverId>
+          <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+          <autoReleaseAfterClose>true</autoReleaseAfterClose>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>1.5</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

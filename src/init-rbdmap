@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# rbdmap Ceph RBD Mapping
+#
+# chkconfig: 2345 20 80
+# description: Ceph RBD Mapping
+
+### BEGIN INIT INFO
+# Provides:          rbdmap
+# Required-Start:    $network $remote_fs
+# Required-Stop:     $network $remote_fs
+# Should-Start:      ceph
+# Should-Stop:       ceph
+# X-Start-Before:    $x-display-manager
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Ceph RBD Mapping
+# Description:       Ceph RBD Mapping
+### END INIT INFO
+
+RBDMAPFILE="/etc/ceph/rbdmap"
+
+if [ -e /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+fi
+
+
+
+
+case "$1" in
+  start)
+	rbdmap device map
+	;;
+
+  stop)
+	rbdmap device unmap
+	;;
+
+  restart|force-reload)
+	$0 stop
+	$0 start
+	;;
+
+  reload)
+	rbdmap device map
+	;;
+
+  status)
+	rbd device list
+	;;
+
+  *)
+	echo "Usage: rbdmap {start|stop|restart|force-reload|reload|status}"
+	exit 1
+	;;
+esac

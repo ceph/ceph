@@ -1,0 +1,9 @@
+meta:
+- desc: |
+   librbd python api tests
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_librbd_python.sh
+- print: "**** done rbd/test_librbd_python.sh 9-workload"

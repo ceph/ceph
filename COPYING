@@ -1,0 +1,198 @@
+Format-Specification: http://anonscm.debian.org/viewvc/dep/web/deps/dep5/copyright-format.xml?revision=279&view=markup
+Name: ceph
+Maintainer: Sage Weil <sage@newdream.net>
+Source: http://ceph.com/
+
+Files: *
+Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
+License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
+
+Files: cmake/modules/FindLTTngUST.cmake
+Copyright:
+    Copyright 2016 Kitware, Inc.
+    Copyright 2016 Philippe Proulx <pproulx@efficios.com>
+License: BSD 3-clause
+
+Files: doc/*
+Copyright: (c) 2010-2012 New Dream Network and contributors
+License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
+
+Files: bin/git-archive-all.sh
+License: GPL3
+
+Files: src/mount/canonicalize.c
+Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
+License: LGPL-2 or later
+
+Files: src/os/btrfs_ioctl.h
+Copyright: Copyright (C) 2007 Oracle.  All rights reserved.
+License: GPL2 (see COPYING-GPL2)
+
+Files: src/include/ceph_hash.cc
+Copyright: None
+License: Public domain
+
+Files: src/common/bloom_filter.hpp
+Copyright: Copyright (C) 2000 Arash Partow <arash@partow.net>
+License: Boost Software License, Version 1.0
+
+Files: src/common/crc32c_intel*:
+Copyright:
+    Copyright 2012-2013 Intel Corporation All Rights Reserved.
+License: BSD 3-clause
+
+Files: src/common/deleter.h
+Copyright:
+    Copyright (C) 2014 Cloudius Systems, Ltd.
+License:
+    Apache-2.0
+
+Files: src/common/sctp_crc32.c: 
+Copyright:
+    Copyright (c) 2001-2007, by Cisco Systems, Inc. All rights reserved.
+    Copyright (c) 2004-2006 Intel Corporation - All Rights Reserved
+License:
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+ 
+  a) Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ 
+  b) Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the distribution.
+ 
+  c) Neither the name of Cisco Systems, Inc. nor the names of its
+     contributors may be used to endorse or promote products derived
+     from this software without specific prior written permission.
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+  THE POSSIBILITY OF SUCH DAMAGE.
+
+Files: src/common/sstring.hh
+Copyright:
+    Copyright 2014 Cloudius Systems
+License:
+    Apache-2.0
+
+Files: src/include/cpp-btree
+Copyright:
+    Copyright 2013 Google Inc. All Rights Reserved.
+License:
+    Apache-2.0
+
+Files: src/json_spirit
+Copyright:
+	Copyright John W. Wilkinson 2007 - 2011
+License:
+  The MIT License
+
+  Copyright (c) 2007 - 2010 John W. Wilkinson
+
+  Permission is hereby granted, free of charge, to any person
+  obtaining a copy of this software and associated documentation
+  files (the "Software"), to deal in the Software without
+  restriction, including without limitation the rights to use,
+  copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the
+  Software is furnished to do so, subject to the following
+  conditions:
+
+  The above copyright notice and this permission notice shall be
+  included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+  OTHER DEALINGS IN THE SOFTWARE.
+
+Files: src/test/common/Throttle.cc src/test/filestore/chain_xattr.cc
+Copyright: Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+License: LGPL-2.1 or later
+
+Files: src/osd/ErasureCodePluginJerasure/*.{c,h}
+Copyright: Copyright (c) 2011, James S. Plank <plank@cs.utk.edu>
+License:
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+  
+   - Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  
+   - Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in
+     the documentation and/or other materials provided with the
+     distribution.
+  
+   - Neither the name of the University of Tennessee nor the names of its
+     contributors may be used to endorse or promote products derived
+     from this software without specific prior written permission.
+  
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+Packaging:
+    Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
+    Copyright (C) 2010 Canonical, Ltd.
+    Licensed under LGPL-2.1 or LGPL-3.0
+
+Files: src/test/perf_local.cc
+Copyright:
+  (c) 2011-2014 Stanford University
+  (c) 2011 Facebook
+License:
+  The MIT License
+
+File: qa/workunits/erasure-code/jquery.js
+  Copyright 2012 jQuery Foundation and other contributors
+  Released under the MIT license
+  http://jquery.org/license
+
+Files: qa/workunits/erasure-code/jquery.{flot.categories,flot}.js
+  Copyright (c) 2007-2014 IOLA and Ole Laursen.
+  Licensed under the MIT license.
+
+Files: src/include/timegm.h
+  Copyright (C) Copyright Howard Hinnant
+  Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
+  License: Boost Software License, Version 1.0
+
+Files: src/pybind/mgr/diskprediction_local/models/*
+Copyright: None
+License: Public domain
+
+Files: src/ceph-volume/plugin/zfs/*
+Copyright: 2018, Willem Jan Withagen
+License: BSD 3-clause
+
+Files: src/include/function2.hpp
+Copyright: 2015-2018, Denis Blank
+License: Boost Software License, Version 1.0
+
+Files: src/include/expected.hpp
+Copyright: 2017, Simon Brand
+License: CC0

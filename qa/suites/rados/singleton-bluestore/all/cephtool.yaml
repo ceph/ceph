@@ -1,0 +1,48 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - but it is still running
+    - had wrong client addr
+    - had wrong cluster addr
+    - must scrub before tier agent can activate
+    - failsafe engaged, dropping updates
+    - failsafe disengaged, no longer dropping updates
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(OSD_
+    - \(PG_
+    - \(SMALLER_PG_NUM\)
+    - \(SMALLER_PGP_NUM\)
+    - \(CACHE_POOL_NO_HIT_SET\)
+    - \(CACHE_POOL_NEAR_FULL\)
+    - \(FS_WITH_FAILED_MDS\)
+    - \(FS_DEGRADED\)
+    - \(POOL_BACKFILLFULL\)
+    - \(POOL_FULL\)
+    - \(SMALLER_PGP_NUM\)
+    - \(POOL_NEARFULL\)
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(AUTH_BAD_CAPS\)
+    - \(FS_INLINE_DATA_DEPRECATED\)
+    - \(MON_DOWN\)
+    - \(SLOW_OPS\)
+    - slow request
+- workunit:
+    clients:
+      all:
+        - cephtool
+        - mon/pool_ops.sh

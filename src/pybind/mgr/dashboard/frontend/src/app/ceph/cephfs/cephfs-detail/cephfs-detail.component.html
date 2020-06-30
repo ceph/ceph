@@ -1,0 +1,42 @@
+<div class="row">
+  <div class="col-sm-6">
+    <legend i18n>Ranks</legend>
+    <cd-table [data]="data.ranks"
+              [columns]="columns.ranks"
+              [toolHeader]="false">
+    </cd-table>
+
+    <legend i18n>Standbys</legend>
+    <cd-table-key-value [data]="standbys">
+    </cd-table-key-value>
+  </div>
+
+  <div class="col-sm-6">
+    <legend i18n>Pools</legend>
+    <cd-table [data]="data.pools"
+              [columns]="columns.pools"
+              [toolHeader]="false">
+    </cd-table>
+  </div>
+</div>
+
+<legend i18n>MDS performance counters</legend>
+<div class="row"
+     *ngFor="let mdsCounter of objectValues(data.mdsCounters); trackBy: trackByFn">
+  <div class="col-md-12">
+    <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+  </div>
+</div>
+
+<!-- templates -->
+<ng-template #poolUsageTpl
+             let-row="row">
+  <cd-usage-bar [total]="row.size"
+                [used]="row.used"></cd-usage-bar>
+</ng-template>
+
+<ng-template #activityTmpl
+             let-row="row"
+             let-value="value">
+  {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
+</ng-template>

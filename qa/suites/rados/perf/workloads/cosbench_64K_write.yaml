@@ -1,0 +1,25 @@
+overrides:
+  rgw:
+    data_pool_pg_size: 64
+    index_pool_pg_size: 64
+tasks:
+- cbt:
+    benchmarks:
+      cosbench:
+        obj_size: [64KB]
+        osd_ra: [4096]
+        workers: 1
+        containers_max: 1000
+        objects_max: 100
+        mode: [write]
+        template: [default]
+        rampup: 30
+        runtime: 300
+        rampdown: 30
+        containers: ["u(1,100)"]
+        objects: ["u(1,100)"]
+        ratio: [100]
+    cluster:
+      user: 'ubuntu'
+      osds_per_node: 1
+      iterations: 1

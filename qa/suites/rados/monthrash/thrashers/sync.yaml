@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+    conf:
+      mon:
+        paxos min: 10
+        paxos trim min: 10
+tasks:
+- mon_thrash:
+    revive_delay: 90
+    thrash_delay: 1

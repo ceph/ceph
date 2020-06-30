@@ -1,0 +1,11 @@
+pylint==2.3.1; python_version >= '3'
+flake8==3.7.8; python_version >= '3'
+flake8-colors==0.1.6; python_version >= '3'
+#TODO: Fix docstring issues: https://tracker.ceph.com/issues/41224
+#flake8-docstrings
+#flake8-import-order
+#flake8-typing-imports; python_version >= '3'
+#pep8-naming
+rstcheck==3.3.1; python_version >= '3'
+autopep8; python_version >= '3'
+pyfakefs; python_version >= '3'

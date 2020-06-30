@@ -1,0 +1,37 @@
+commit c461ee19ecbc0c5c330aca20f7392c9a00730367
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Fri Dec 9 20:08:24 2016 +0000
+
+    10.2.5
+
+commit 2c7d2b99d3be6f23188af4bf95f2d6f4a4fb516a
+Merge: 9411351 f7abffe
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Dec 8 07:55:27 2016 -0800
+
+    Merge pull request #12376 from liewegas/wip-msgr-eagain-loop-jewel
+    
+    msg/simple/Pipe: avoid returning 0 on poll timeout
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit f7abffec751e454d119df273dc6e49e5f7106078
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Dec 7 18:25:55 2016 -0600
+
+    msg/simple/Pipe: avoid returning 0 on poll timeout
+    
+    If poll times out it will return 0 (no data to read on socket).  In
+    165e5abdbf6311974d4001e43982b83d06f9e0cc we changed tcp_read_wait from
+    returning -1 to returning -errno, which means we return 0 instead of -1
+    in this case.
+    
+    This makes tcp_read() get into an infinite loop by repeatedly trying to
+    read from the socket and getting EAGAIN.
+    
+    Fix by explicitly checking for a 0 return from poll(2) and returning
+    EAGAIN in that case.
+    
+    Fixes: http://tracker.ceph.com/issues/18184
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 6c3d015c6854a12cda40673848813d968ff6afae)

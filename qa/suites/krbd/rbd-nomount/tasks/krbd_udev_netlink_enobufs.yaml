@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - pauserd,pausewr flag\(s\) set
+
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_udev_netlink_enobufs.sh

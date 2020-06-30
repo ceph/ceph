@@ -1,0 +1,94 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: barbican
+        rgw keystone barbican project: rgwcrypt
+        rgw keystone barbican user: rgwcrypt-user
+        rgw keystone barbican password: rgwcrypt-pass
+        rgw keystone barbican domain: Default
+        rgw keystone api version: 3
+        rgw keystone accepted roles: admin,Member,creator
+        rgw keystone implicit tenants: true
+        rgw keystone accepted admin roles: admin
+        rgw swift enforce content length: true
+        rgw swift account in url: true
+        rgw swift versioning enabled: true
+        rgw keystone admin project: admin
+        rgw keystone admin user: admin
+        rgw keystone admin password: ADMIN
+        rgw keystone admin domain: Default
+  rgw:
+    client.0:
+      use-keystone-role: client.0
+      use-barbican-role: client.0
+
+tasks:
+- tox: [ client.0 ]
+- keystone:
+    client.0:
+      sha1: 17.0.0.0rc2
+      force-branch: master
+      projects:
+        - name: rgwcrypt
+          description: Encryption Tenant
+          domain: default
+        - name: barbican
+          description: Barbican
+          domain: default
+        - name: s3
+          description: S3 project
+          domain: default
+      users:
+        - name: rgwcrypt-user
+          password: rgwcrypt-pass
+          project: rgwcrypt
+          domain: default
+        - name: barbican-user
+          password: barbican-pass
+          project: barbican
+          domain: default
+        - name: s3-user
+          password: s3-pass
+          project: s3
+          domain: default
+      roles: [ name: Member, name: creator ]
+      role-mappings:
+        - name: Member
+          user: rgwcrypt-user
+          project: rgwcrypt
+        - name: admin
+          user: barbican-user
+          project: barbican
+        - name: creator
+          user: s3-user
+          project: s3
+      services:
+        - name: swift
+          type: object-store
+          description: Swift Service
+- barbican:
+    client.0:
+      sha1: 5.0.1
+      force-branch: master
+      use-keystone-role: client.0
+      keystone_authtoken:
+        auth_plugin: password
+        username: barbican-user
+        password: barbican-pass
+        user_domain_name: Default
+      rgw_user:
+        tenantName: rgwcrypt
+        username: rgwcrypt-user
+        password: rgwcrypt-pass
+      secrets:
+        - name: my-key-1
+          base64: a2V5MS5GcWVxKzhzTGNLaGtzQkg5NGVpb1FKcFpGb2c=
+          tenantName: s3
+          username: s3-user
+          password: s3-pass
+        - name: my-key-2
+          base64: a2V5Mi5yNUNNMGFzMVdIUVZxcCt5NGVmVGlQQ1k4YWg=
+          tenantName: s3
+          username: s3-user
+          password: s3-pass

@@ -1,0 +1,96 @@
+<cd-modal [modalRef]="modalRef">
+  <ng-container class="modal-title">
+    <ng-container i18n>Configure</ng-container>&nbsp;
+    <small>{{ image }}</small>
+  </ng-container>
+
+  <ng-container class="modal-content">
+    <form name="settingsForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="settingsForm"
+          novalidate>
+      <div class="modal-body">
+        <p class="alert-warning"
+           i18n>Changing these parameters from their default values is usually not necessary.</p>
+
+        <span *ngIf="api_version >= 1">
+          <legend class="cd-header"
+                  i18n>Identifier</legend>
+          <!-- LUN -->
+          <div class="form-group row">
+            <div class="col-sm-12">
+              <label class="col-form-label required"
+                     for="lun"
+                     i18n>lun</label>
+              <input type="number"
+                     class="form-control"
+                     id="lun"
+                     name="lun"
+                     formControlName="lun">
+              <span class="invalid-feedback"
+                    *ngIf="settingsForm.showError('lun', formDir, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- WWN -->
+          <div class="form-group row">
+            <div class="col-sm-12">
+              <label class="col-form-label"
+                     for="wwn"
+                     i18n>wwn</label>
+              <input type="text"
+                     class="form-control"
+                     id="wwn"
+                     name="wwn"
+                     formControlName="wwn">
+            </div>
+          </div>
+        </span>
+
+        <legend class="cd-header"
+                i18n>Settings</legend>
+
+        <!-- BACKSTORE -->
+        <div class="form-group row">
+          <div class="col-sm-12">
+            <label class="col-form-label"
+                   i18n>Backstore</label>
+            <select id="backstore"
+                    name="backstore"
+                    class="form-control custom-select"
+                    formControlName="backstore">
+              <option *ngFor="let bs of backstores"
+                      [value]="bs">{{ bs | iscsiBackstore }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- CONTROLS -->
+        <ng-container *ngFor="let bs of backstores">
+          <ng-container *ngIf="settingsForm.value['backstore'] === bs">
+            <div class="form-group row"
+                 *ngFor="let setting of disk_default_controls[bs] | keyvalue">
+              <div class="col-sm-12">
+                <cd-iscsi-setting [settingsForm]="settingsForm"
+                                  [formDir]="formDir"
+                                  [setting]="setting.key"
+                                  [limits]="getDiskControlLimits(bs, setting.key)"></cd-iscsi-setting>
+              </div>
+            </div>
+          </ng-container>
+        </ng-container>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button i18n
+                          [form]="settingsForm"
+                          (submitAction)="save()">Confirm</cd-submit-button>
+        <cd-back-button [back]="modalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

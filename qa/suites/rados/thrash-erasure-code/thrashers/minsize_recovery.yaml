@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - but it is still running
+    - objects unfound and apparently lost
+    create_rbd_pool: False
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    conf:
+      osd:
+        osd debug reject backfill probability: .3
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        osd max backfills: 2
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_test_min_size: 3 

@@ -1,0 +1,423 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+require 'yaml'
+require 'time'
+VAGRANTFILE_API_VERSION = '2'
+
+DEBUG = false
+
+global_settings = {}
+if File.symlink?(__FILE__)
+  global_config =  File.expand_path(
+    File.join(
+      File.dirname(File.readlink(__FILE__)),
+      'global_vagrant_variables.yml')
+  )
+  if File.exist?(global_config)
+    global_settings = YAML.load_file(global_config)
+  end
+end
+
+LIBVIRT_URI = global_settings.fetch('libvirt_uri', '')
+LIBVIRT_STORAGE_POOL = global_settings.fetch('libvirt_storage_pool', '')
+
+config_file=File.expand_path(File.join(File.dirname(__FILE__), 'vagrant_variables.yml'))
+settings=YAML.load_file(config_file)
+
+LABEL_PREFIX   = settings['label_prefix'] ? settings['label_prefix'] + "-" : ""
+NMONS          = settings['mon_vms']
+NOSDS          = settings['osd_vms']
+NMDSS          = settings['mds_vms']
+NRGWS          = settings['rgw_vms']
+NNFSS          = settings['nfs_vms']
+RESTAPI        = settings['restapi']
+NRBD_MIRRORS   = settings['rbd_mirror_vms']
+CLIENTS        = settings['client_vms']
+NISCSI_GWS     = settings['iscsi_gw_vms']
+PUBLIC_SUBNET  = settings['public_subnet']
+CLUSTER_SUBNET = settings['cluster_subnet']
+BOX            = settings['vagrant_box']
+CLIENT_BOX     = settings['client_vagrant_box']
+BOX_URL        = settings['vagrant_box_url']
+SYNC_DIR       = settings.fetch('vagrant_sync_dir', '/vagrant')
+MEMORY         = settings['memory']
+ETH            = settings['eth']
+USER           = settings['ssh_username']
+
+ASSIGN_STATIC_IP = settings.fetch('assign_static_ip', true)
+DISABLE_SYNCED_FOLDER = settings.fetch('vagrant_disable_synced_folder', false)
+DISK_UUID = Time.now.utc.to_i
+
+def create_vmdk(name, size)
+  dir = Pathname.new(__FILE__).expand_path.dirname
+  path = File.join(dir, '.vagrant', name + '.vmdk')
+  `vmware-vdiskmanager -c -s #{size} -t 0 -a scsi #{path} \
+   2>&1 > /dev/null` unless File.exist?(path)
+end
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.ssh.insert_key = false # workaround for https://github.com/mitchellh/vagrant/issues/5048
+  config.ssh.private_key_path = settings['ssh_private_key_path']
+  config.ssh.username = USER
+
+  config.vm.provider :libvirt do |lv|
+    # When using libvirt, avoid errors like:
+    # "CPU feature cmt not found"
+    lv.cpu_mode = 'host-passthrough'
+    # set libvirt uri if present
+    if not LIBVIRT_URI.empty?
+      lv.uri = LIBVIRT_URI
+    end
+    # set libvirt storage pool if present
+    if not LIBVIRT_STORAGE_POOL.empty?
+      lv.storage_pool_name = LIBVIRT_STORAGE_POOL
+    end
+  end
+
+  (0..CLIENTS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}client#{i}" do |client|
+      client.vm.box = CLIENT_BOX
+      client.vm.hostname = "#{LABEL_PREFIX}client#{i}"
+      if ASSIGN_STATIC_IP
+        client.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.4#{i}"
+      end
+      # Virtualbox
+      client.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      client.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      client.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+
+      # Parallels
+      client.vm.provider "parallels" do |prl|
+        prl.name = "client#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      client.vm.provider :linode do |provider|
+        provider.label = client.vm.hostname
+      end
+    end
+  end
+
+  (0..NRGWS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}rgw#{i}" do |rgw|
+      rgw.vm.box = BOX
+      rgw.vm.box_url = BOX_URL
+      rgw.vm.hostname = "#{LABEL_PREFIX}rgw#{i}"
+      if ASSIGN_STATIC_IP
+        rgw.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.5#{i}"
+      end
+
+      # Virtualbox
+      rgw.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      rgw.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      rgw.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+
+      # Parallels
+      rgw.vm.provider "parallels" do |prl|
+        prl.name = "rgw#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      rgw.vm.provider :linode do |provider|
+        provider.label = rgw.vm.hostname
+      end
+    end
+  end
+
+  (0..NNFSS - 1).each do |i|
+    config.vm.define "nfs#{i}" do |nfs|
+      nfs.vm.box = BOX
+      nfs.vm.box_url = BOX_URL
+      nfs.vm.hostname = "nfs#{i}"
+      if ASSIGN_STATIC_IP
+        nfs.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.6#{i}"
+      end
+
+      # Virtualbox
+      nfs.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      nfs.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      nfs.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+
+      # Parallels
+      nfs.vm.provider "parallels" do |prl|
+        prl.name = "nfs#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      nfs.vm.provider :linode do |provider|
+        provider.label = nfs.vm.hostname
+      end
+    end
+  end
+
+  (0..NMDSS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}mds#{i}" do |mds|
+      mds.vm.box = BOX
+      mds.vm.box_url = BOX_URL
+      mds.vm.hostname = "#{LABEL_PREFIX}mds#{i}"
+      if ASSIGN_STATIC_IP
+        mds.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.7#{i}"
+      end
+      # Virtualbox
+      mds.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      mds.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      mds.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+      # Parallels
+      mds.vm.provider "parallels" do |prl|
+        prl.name = "mds#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      mds.vm.provider :linode do |provider|
+        provider.label = mds.vm.hostname
+      end
+    end
+  end
+
+  (0..NRBD_MIRRORS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}rbd_mirror#{i}" do |rbd_mirror|
+      rbd_mirror.vm.box = BOX
+      rbd_mirror.vm.box_url = BOX_URL
+      rbd_mirror.vm.hostname = "#{LABEL_PREFIX}rbd-mirror#{i}"
+      if ASSIGN_STATIC_IP
+        rbd_mirror.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.8#{i}"
+      end
+      # Virtualbox
+      rbd_mirror.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      rbd_mirror.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      rbd_mirror.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+      # Parallels
+      rbd_mirror.vm.provider "parallels" do |prl|
+        prl.name = "rbd-mirror#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      rbd_mirror.vm.provider :linode do |provider|
+        provider.label = rbd_mirror.vm.hostname
+      end
+    end
+  end
+
+  (0..NISCSI_GWS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}iscsi_gw#{i}" do |iscsi_gw|
+      iscsi_gw.vm.box = BOX
+      iscsi_gw.vm.box_url = BOX_URL
+      iscsi_gw.vm.hostname = "#{LABEL_PREFIX}iscsi-gw#{i}"
+      if ASSIGN_STATIC_IP
+        iscsi_gw.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.9#{i}"
+      end
+      # Virtualbox
+      iscsi_gw.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      iscsi_gw.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      iscsi_gw.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+      # Parallels
+      iscsi_gw.vm.provider "parallels" do |prl|
+        prl.name = "iscsi-gw#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      iscsi_gw.vm.provider :linode do |provider|
+        provider.label = iscsi_gw.vm.hostname
+      end
+    end
+  end
+
+  (0..NMONS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}mon#{i}" do |mon|
+      mon.vm.box = BOX
+      mon.vm.box_url = BOX_URL
+      mon.vm.hostname = "#{LABEL_PREFIX}mon#{i}"
+      if ASSIGN_STATIC_IP
+        mon.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.1#{i}"
+      end
+      # Virtualbox
+      mon.vm.provider :virtualbox do |vb|
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      mon.vm.provider :vmware_fusion do |v|
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      mon.vm.provider :libvirt do |lv|
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+
+      # Parallels
+      mon.vm.provider "parallels" do |prl|
+        prl.name = "mon#{i}"
+        prl.memory = "#{MEMORY}"
+      end
+
+      mon.vm.provider :linode do |provider|
+        provider.label = mon.vm.hostname
+      end
+    end
+  end
+
+  (0..NOSDS - 1).each do |i|
+    config.vm.define "#{LABEL_PREFIX}osd#{i}" do |osd|
+      osd.vm.box = BOX
+      osd.vm.box_url = BOX_URL
+      osd.vm.hostname = "#{LABEL_PREFIX}osd#{i}"
+      if ASSIGN_STATIC_IP
+        osd.vm.network :private_network,
+          ip: "#{PUBLIC_SUBNET}.10#{i}"
+        osd.vm.network :private_network,
+          ip: "#{CLUSTER_SUBNET}.20#{i}"
+      end
+      # Virtualbox
+      osd.vm.provider :virtualbox do |vb|
+        # Create our own controller for consistency and to remove VM dependency
+        # but only do it once, otherwise it would fail when rebooting machines.
+        # We assume this has run if one disk was created before
+        unless File.exist?("disk-#{i}-0.vdi")
+            vb.customize ['storagectl', :id,
+                          '--name', 'OSD Controller',
+                          '--add', 'scsi']
+        end
+        (0..2).each do |d|
+          vb.customize ['createhd',
+                        '--filename', "disk-#{i}-#{d}",
+                        '--size', '12000'] unless File.exist?("disk-#{i}-#{d}.vdi")
+          vb.customize ['storageattach', :id,
+                        '--storagectl', 'OSD Controller',
+                        '--port', 3 + d,
+                        '--device', 0,
+                        '--type', 'hdd',
+                        '--medium', "disk-#{i}-#{d}.vdi"]
+        end
+        vb.customize ['modifyvm', :id, '--memory', "#{MEMORY}"]
+      end
+
+      # VMware
+      osd.vm.provider :vmware_fusion do |v|
+        (0..1).each do |d|
+          v.vmx["scsi0:#{d + 1}.present"] = 'TRUE'
+          v.vmx["scsi0:#{d + 1}.fileName"] =
+            create_vmdk("disk-#{i}-#{d}", '11000MB')
+        end
+        v.vmx['memsize'] = "#{MEMORY}"
+      end
+
+      # Libvirt
+      driverletters = ('b'..'z').to_a
+      osd.vm.provider :libvirt do |lv|
+        # always make /dev/sd{a/b/c/d} so that CI can ensure that
+        # virtualbox and libvirt will have the same devices to use for OSDs
+        (0..3).each do |d|
+          lv.storage :file, :device => "sd#{driverletters[d]}", :size => '12G'
+        end
+        lv.memory = MEMORY
+        lv.random_hostname = true
+        lv.nic_model_type = "e1000"
+      end
+
+      # Parallels
+      osd.vm.provider "parallels" do |prl|
+        prl.name = "osd#{i}"
+        prl.memory = "#{MEMORY}"
+        (0..1).each do |d|
+          prl.customize ["set", :id,
+                         "--device-add",
+                         "hdd",
+                         "--iface",
+                         "sata"]
+        end
+      end
+
+      osd.vm.provider :linode do |provider|
+        provider.label = osd.vm.hostname
+      end
+
+    end
+  end
+
+  # Faster bootup. Disables mounting the sync folder for libvirt and virtualbox
+  config.vm.synced_folder './', SYNC_DIR, disabled: DISABLE_SYNCED_FOLDER
+
+end

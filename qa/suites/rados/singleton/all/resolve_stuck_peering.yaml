@@ -1,0 +1,19 @@
+roles:
+- [mon.a, mgr.x]
+- [osd.0, osd.1, osd.2, client.0]
+
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    fs: xfs
+    log-whitelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_DEGRADED\)
+      - \(POOL_APP_NOT_ENABLED\)
+- resolve_stuck_peering:
+

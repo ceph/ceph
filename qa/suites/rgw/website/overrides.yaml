@@ -1,0 +1,31 @@
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
+# letting this run on ubuntu for now, though -sage
+#os_type: centos
+
+overrides:
+  install:
+#    flavor: notcmalloc
+  ceph:
+    conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl: false
+        rgw enable static website: True
+      client.0:
+        rgw lc debug interval: 10
+      client.1:
+        rgw enable apis: s3website
+    rgw:
+      client.0:
+#        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+      client.1:
+#        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+  s3tests:
+    calling-format: subdomain

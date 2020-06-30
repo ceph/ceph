@@ -1,0 +1,800 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(objectstore, exists_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, exists_exit,
+    TP_ARGS(
+       uint8_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint8_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, stat_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, stat_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, read_enter,
+    TP_ARGS(
+        const char *, coll_name,
+        uint64_t,     offset,
+        size_t,     len),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, read_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, fiemap_enter,
+    TP_ARGS(
+        const char *, coll_name,
+        uint64_t,     offset,
+        size_t,     len),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, fiemap_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, getattr_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, getattr_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, getattrs_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, getattrs_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, list_collections_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, list_collections_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_stat_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_stat_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_exists_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_exists_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_empty_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_empty_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_list_range_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_list_range_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_list_partial_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_list_partial_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_list_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, collection_list_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_header_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_header_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_keys_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_keys_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_values_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_get_values_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_check_keys_enter,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_check_keys_exit,
+    TP_ARGS(
+       int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, get_omap_iterator,
+    TP_ARGS(
+        const char *, coll_name),
+    TP_FIELDS(
+        ctf_string(coll_name, coll_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, write_enter,
+    TP_ARGS(
+        const char *, osr_name,
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, write_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, setallochint_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, setallochint_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, split_coll_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, split_coll_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, split_coll2_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, split_coll2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, merge_coll_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, merge_coll_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_setheader_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_setheader_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_rmkeyrange_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_rmkeyrange_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_rmkeys_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_rmkeys_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_setkeys_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_setkeys_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_clear_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, omap_clear_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_rmattr_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_rmattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_setattr_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_setattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_move_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, coll_move_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_move_rename_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, coll_move_rename_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_try_rename_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, coll_try_rename_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_remove_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_add_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, coll_add_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, rmcoll_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, rmcoll_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, mkcoll_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, mkcoll_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, clone_range2_enter,
+    TP_ARGS(
+        const char *, osr_name,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, clone_range2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, move_ranges_destroy_src_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, move_ranges_destroy_src_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, clone_range_enter,
+    TP_ARGS(
+        const char *, osr_name,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, clone_range_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, clone_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, clone_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, rmattrs_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, rmattrs_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, rmattr_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, rmattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, setattrs_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, setattrs_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, setattr_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, setattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, remove_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, truncate_enter,
+    TP_ARGS(
+        const char *, osr_name,
+        uint64_t, offset),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+        ctf_integer(uint64_t, offset, offset)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, truncate_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, zero_enter,
+    TP_ARGS(
+        const char *, osr_name,
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, zero_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, touch_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, touch_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

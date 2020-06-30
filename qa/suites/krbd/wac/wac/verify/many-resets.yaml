@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject socket failures: 500
+        mon client directed command retry: 5
+    log-whitelist:
+      - \(OSD_SLOW_PING_TIME
+tasks:
+- exec:
+    client.0:
+    - "dmesg | grep -q 'libceph: osd.* socket closed'"
+    - "dmesg | grep -q 'libceph: osd.* socket error on write'"

@@ -1,0 +1,41 @@
+@import 'defaults.scss';
+
+cd-info-card {
+  padding: 0 0.5vw 0 0.5vw;
+}
+
+::ng-deep .pg-status-popover-wrapper {
+  position: relative;
+
+  .popover {
+    position: absolute;
+    width: 116%;
+    max-height: 20vh;
+    min-width: unset !important;
+    max-width: unset !important;
+
+    .popover-body {
+      max-width: 100%;
+      max-height: 19vh;
+      font-size: 12px;
+    }
+  }
+}
+
+.logs-link {
+  text-align: center;
+}
+
+.card-text-error {
+  display: inline;
+  color: $color-solid-red;
+}
+
+.card-text-line-break:after {
+  content: '\A';
+  white-space: pre;
+}
+
+.popover-info:hover {
+  cursor: pointer;
+}

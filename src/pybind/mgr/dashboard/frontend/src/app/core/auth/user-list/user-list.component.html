@@ -1,0 +1,27 @@
+<cd-user-tabs></cd-user-tabs>
+
+<cd-table [data]="users"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="username"
+          selectionType="single"
+          (fetchData)="getUsers()"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+</cd-table>
+
+<ng-template #userRolesTpl
+             let-value="value">
+  <span *ngFor="let role of value; last as isLast">
+    {{ role }}{{ !isLast ? ", " : "" }}
+  </span>
+</ng-template>
+
+<ng-template #userEnabledTpl
+             let-value="value">
+  <span>{{ value | booleanText }}</span>
+</ng-template>

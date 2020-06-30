@@ -1,0 +1,12 @@
+# Over-ride submodule URLs to use Local mirror
+# Only used by autobuild-ceph.
+ceph-object-corpus git://apt-mirror.front.sepia.ceph.com/ceph-object-corpus.git
+src/civetweb git://apt-mirror.front.sepia.ceph.com/civetweb.git
+src/mongoose git://apt-mirror.front.sepia.ceph.com/mongoose.git
+src/leveldb git://apt-mirror.front.sepia.ceph.com/leveldb.git
+src/erasure-code/jerasure/jerasure git://apt-mirror.front.sepia.ceph.com/jerasure.git
+src/erasure-code/jerasure/gf-complete git://apt-mirror.front.sepia.ceph.com/gf-complete.git
+src/rocksdb git://apt-mirror.front.sepia.ceph.com/rocksdb.git
+ceph-erasure-code-corpus git://apt-mirror.front.sepia.ceph.com/ceph-erasure-code-corpus.git
+# FIXME: Should be changed to src/googletest
+# src/gmock git://apt-mirror.front.sepia.ceph.com/gmock.git

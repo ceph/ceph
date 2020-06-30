@@ -1,0 +1,54 @@
+<cd-modal [modalRef]="modalRef">
+  <ng-container i18n
+                class="modal-title">Move an image to trash</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="moveForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="moveForm"
+          novalidate>
+      <div class="modal-body">
+        <div class="alert alert-warning"
+             *ngIf="hasSnapshots"
+             role="alert">
+          <span i18n>This image contains snapshot(s), which will prevent it
+            from being removed after moved to trash.</span>
+        </div>
+
+        <p i18n>To move <kbd>{{ imageSpecStr }}</kbd> to trash,
+          click <kbd>Move Image</kbd>. Optionally, you can pick an expiration date.</p>
+
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="expires"
+                 i18n>Protection expires at</label>
+          <input type="text"
+                 placeholder="NOT PROTECTED"
+                 i18n-placeholder
+                 class="form-control"
+                 [minDate]="minDate"
+                 [bsConfig]="bsConfig"
+                 formControlName="expiresAt"
+                 bsDatepicker>
+          <span class="invalid-feedback"
+                *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
+                i18n>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span>
+          <span class="invalid-feedback"
+                *ngIf="moveForm.showError('expiresAt', formDir, 'expired')"
+                i18n>Protection has already expired. Please pick a future date or leave it empty.</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button i18n
+                          [form]="moveForm"
+                          (submitAction)="moveImage()">Move Image</cd-submit-button>
+        <cd-back-button [back]="modalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

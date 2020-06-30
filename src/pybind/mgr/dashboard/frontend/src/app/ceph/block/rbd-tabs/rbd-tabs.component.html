@@ -1,0 +1,23 @@
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/block/rbd">
+    <a ngbNavLink
+       i18n>Images</a>
+  </li>
+  <li ngbNavItem="/block/rbd/namespaces">
+    <a ngbNavLink
+       i18n>Namespaces</a>
+  </li>
+  <li ngbNavItem="/block/rbd/trash">
+    <a ngbNavLink
+       i18n>Trash</a>
+  </li>
+  <li ngbNavItem="/block/rbd/performance"
+      *ngIf="grafanaPermission.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+  </li>
+</ul>

@@ -1,0 +1,17 @@
+@import 'defaults.scss';
+
+.modal-header {
+  @include hf;
+  border-radius: 5px 5px 0 0;
+}
+
+::ng-deep .modal-footer {
+  @include hf;
+  border-radius: 0 0 5px 5px;
+}
+
+::ng-deep .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}

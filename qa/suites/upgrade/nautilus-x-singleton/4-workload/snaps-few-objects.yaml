@@ -1,0 +1,19 @@
+meta:
+- desc: |
+   randomized correctness test for rados operations on a replicated pool with snapshot operations
+split_tasks:
+  sequential:
+  - full_sequential:
+    - rados:
+        clients: [client.0]
+        ops: 4000
+        objects: 50
+        write_append_excl: false
+        op_weights:
+          read: 100
+          write: 100
+          delete: 50
+          snap_create: 50
+          snap_remove: 50
+          rollback: 50
+  - print: "**** done rados/snaps-few-objects 5-workload"

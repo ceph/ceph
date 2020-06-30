@@ -1,0 +1,63 @@
+commit 2ee413f77150c0f375ff6f10edd6c8f9c7d060d0
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Thu Jul 13 13:04:57 2017 +0000
+
+    10.2.9
+
+commit 9295f588535c45431d19b9601b4063c8de88752d
+Merge: 7b10d629ae fef1c8718f
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Jul 13 10:31:31 2017 +0200
+
+    Merge pull request #16282 from smithfarm/wip-20599-jewel
+    
+    jewel: cephfs: Damaged MDS with 10.2.8
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit fef1c8718f77c190a0908d353f38b16b7c3832ab
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Jul 12 08:40:20 2017 +0200
+
+    Revert "osdc/Journaler: make header write_pos align to boundary of flushed entry"
+    
+    This reverts commit 2e299b50de4a297fee2aec21290632336d239857.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 3f89971e9edb88e313e1c190f7d05a83b52e6d91
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Jul 12 08:40:13 2017 +0200
+
+    Revert "osdc/Journaler: avoid executing on_safe contexts prematurely"
+    
+    This reverts commit 06cf9f365033f7913051bdf4060f0bc6fc0444d7.
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 7b10d629ae32122b267486fe9e176f5cd0e330cf
+Merge: f5b1f1fd7c 6b479c275a
+Author: Sage Weil <sage@newdream.net>
+Date:   Tue Jul 11 15:58:04 2017 -0500
+
+    Merge pull request #16273 from smithfarm/wip-jewel-pending-release-notes
+    
+    jewel: doc: clarify status of jewel PendingReleaseNotes
+
+commit 6b479c275a24451c278074d81758a385eca12869
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Jul 11 22:53:56 2017 +0200
+
+    doc: zero PendingReleaseNotes in preparation for v10.2.9
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 55de93f9d711e13980168cc884dcb04d8849708e
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Jul 11 22:27:33 2017 +0200
+
+    doc: clarify status of jewel PendingReleaseNotes
+    
+    Status as of 10.2.8 release
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>

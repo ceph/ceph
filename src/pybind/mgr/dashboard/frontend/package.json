@@ -1,0 +1,137 @@
+{
+  "name": "ceph-dashboard",
+  "version": "0.0.0",
+  "license": "MIT",
+  "config": {
+    "locale": "en"
+  },
+  "scripts": {
+    "ng": "ng",
+    "start": "npm run env_build && ng serve --host 0.0.0.0",
+    "build": "npm run env_build & ng build --configuration=$npm_package_config_locale",
+    "build:localize": "node cd --env --pre && ng build --localize",
+    "postbuild:localize": "node cd --res",
+    "env_build": "node cd --env",
+    "i18n": "npm run i18n:extract && npm run i18n:push && npm run i18n:pull && npm run i18n:merge",
+    "i18n:extract": "ng xi18n --output-path locale --progress=false && ngx-extractor -i 'src/**/*.ts' -f xlf -o src/locale/messages.xlf -l en-US",
+    "i18n:push": "npx i18ntool push -c i18n.config.json",
+    "i18n:pull": "npx i18ntool pull -c i18n.config.json",
+    "i18n:merge": "npx i18ntool merge -c i18n.config.json",
+    "i18n:token": "npx i18ntool config token",
+    "test": "jest --watch",
+    "test:ci": "JEST_SILENT_REPORTER_DOTS=true jest --coverage --reporters jest-silent-reporter",
+    "e2e": "start-test 4200 'cypress open'",
+    "e2e:ci": "start-test 4200 'cypress run -b chrome --headless'",
+    "lint:tslint": "ng lint",
+    "lint:prettier": "prettier --list-different \"{src,cypress}/**/*.{ts,scss}\"",
+    "lint:html": "htmllint src/app/**/*.html && html-linter --config html-linter.config.json",
+    "lint:tsc": "tsc -p src/tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit && tsc -p cypress/tsconfig.json --noEmit",
+    "lint": "npm run lint:tsc && npm run lint:tslint && npm run lint:prettier && npm run lint:html",
+    "fix:prettier": "prettier --write \"{src,cypress}/**/*.{ts,scss}\"",
+    "fix:tslint": "npm run lint:tslint -- --fix",
+    "fixmod": "pretty-quick --pattern \"{src,cypress}/**/*.{ts,scss}\" --branch HEAD",
+    "fix": "npm run fix:tslint; npm run fix:prettier",
+    "fix:audit": "npx npm-force-resolutions",
+    "compodoc": "compodoc",
+    "doc-build": "compodoc -p src/tsconfig.app.json",
+    "doc-serve": "compodoc --port 8444 -s src/tsconfig.app.json"
+  },
+  "private": true,
+  "jest": {
+    "preset": "jest-preset-angular",
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/setupJest.ts"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!@ngrx|ngx-bootstrap|@progress|simplebar)"
+    ],
+    "transform": {
+      "^.+\\.(ts|html)$": "ts-jest",
+      "^.+\\.(js)$": "babel-jest"
+    },
+    "setupFiles": [
+      "jest-canvas-mock"
+    ],
+    "coverageReporters": [
+      "cobertura",
+      "html"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/coverage/"
+    ],
+    "testMatch": [
+      "**/*.spec.ts"
+    ],
+    "testURL": "http://localhost/"
+  },
+  "dependencies": {
+    "@angular/animations": "9.1.11",
+    "@angular/common": "9.1.11",
+    "@angular/compiler": "9.1.11",
+    "@angular/core": "9.1.11",
+    "@angular/forms": "9.1.11",
+    "@angular/localize": "9.1.11",
+    "@angular/platform-browser": "9.1.11",
+    "@angular/platform-browser-dynamic": "9.1.11",
+    "@angular/router": "9.1.11",
+    "@auth0/angular-jwt": "4.2.0",
+    "@ng-bootstrap/ng-bootstrap": "6.1.0",
+    "@ngx-translate/i18n-polyfill": "1.0.0",
+    "@swimlane/ngx-datatable": "17.0.0",
+    "@types/file-saver": "2.0.1",
+    "angular-tree-component": "8.5.6",
+    "async-mutex": "0.2.2",
+    "bootstrap": "4.5.0",
+    "chart.js": "2.8.0",
+    "detect-browser": "5.1.0",
+    "file-saver": "2.0.2",
+    "fork-awesome": "1.1.7",
+    "lodash": "4.17.15",
+    "moment": "2.26.0",
+    "ng-block-ui": "2.1.8",
+    "ng-bootstrap-form-validation": "5.0.0",
+    "ng-click-outside": "6.0.0",
+    "ng2-charts": "2.3.0",
+    "ngx-bootstrap": "5.6.1",
+    "ngx-toastr": "12.1.0",
+    "rxjs": "6.5.5",
+    "simplebar-angular": "2.2.0",
+    "swagger-ui-dist": "3.26.0",
+    "tslib": "1.12.0",
+    "zone.js": "0.10.3"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "0.901.7",
+    "@angular/cli": "9.1.7",
+    "@angular/compiler-cli": "9.1.11",
+    "@angular/language-service": "9.1.11",
+    "@compodoc/compodoc": "1.1.11",
+    "@types/jest": "26.0.0",
+    "@types/lodash": "4.14.155",
+    "@types/node": "12.12.47",
+    "@types/simplebar": "5.1.1",
+    "codelyzer": "5.2.2",
+    "cypress": "4.8.0",
+    "html-linter": "1.1.1",
+    "htmllint-cli": "0.0.7",
+    "jest": "26.0.1",
+    "jest-canvas-mock": "2.2.0",
+    "jest-preset-angular": "8.2.0",
+    "jest-silent-reporter": "0.2.1",
+    "ng-bullet": "1.0.3",
+    "ng-mocks": "9.5.0",
+    "npm-force-resolutions": "0.0.3",
+    "prettier": "2.0.5",
+    "pretty-quick": "2.0.1",
+    "start-server-and-test": "1.11.0",
+    "transifex-i18ntool": "1.1.0",
+    "ts-jest": "26.1.0",
+    "ts-node": "8.10.2",
+    "tslint": "6.1.2",
+    "typescript": "3.8.3"
+  },
+  "resolutions": {
+    "mem": "4.3.0",
+    "fsevents": "2.1.2"
+  }
+}

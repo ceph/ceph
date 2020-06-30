@@ -1,0 +1,72 @@
+[submodule "ceph-object-corpus"]
+	path = ceph-object-corpus
+	url = https://github.com/ceph/ceph-object-corpus.git
+[submodule "src/civetweb"]
+	path = src/civetweb
+	url = https://github.com/ceph/civetweb
+[submodule "src/erasure-code/jerasure/jerasure"]
+	path = src/erasure-code/jerasure/jerasure
+	url = https://github.com/ceph/jerasure.git
+	branch = v2-ceph
+[submodule "src/erasure-code/jerasure/gf-complete"]
+	path = src/erasure-code/jerasure/gf-complete
+	url = https://github.com/ceph/gf-complete.git
+	branch = v3-ceph
+[submodule "src/rocksdb"]
+	path = src/rocksdb
+	url = https://github.com/ceph/rocksdb
+	ignore = dirty
+[submodule "ceph-erasure-code-corpus"]
+	path = ceph-erasure-code-corpus
+	url = https://github.com/ceph/ceph-erasure-code-corpus.git
+[submodule "src/googletest"]
+	path = src/googletest
+	url = https://github.com/ceph/googletest
+	branch = ceph-release-1.7.x
+[submodule "src/spdk"]
+	path = src/spdk
+	url = https://github.com/ceph/spdk.git
+[submodule "src/xxHash"]
+	path = src/xxHash
+	url = https://github.com/ceph/xxHash.git
+[submodule "src/isa-l"]
+	path = src/isa-l
+	url = https://github.com/ceph/isa-l
+[submodule "src/lua"]
+	path = src/lua
+	url = https://github.com/ceph/lua.git
+	branch = lua-5.3-ceph
+	ignore = dirty
+[submodule "src/zstd"]
+	path = src/zstd
+	url = https://github.com/facebook/zstd
+[submodule "src/crypto/isa-l/isa-l_crypto"]
+	path = src/crypto/isa-l/isa-l_crypto
+	url = https://github.com/01org/isa-l_crypto
+[submodule "src/blkin"]
+	path = src/blkin
+	url = https://github.com/ceph/blkin
+[submodule "src/rapidjson"]
+	path = src/rapidjson
+	url = https://github.com/ceph/rapidjson
+[submodule "src/dmclock"]
+	path = src/dmclock
+	url = https://github.com/ceph/dmclock.git
+[submodule "src/seastar"]
+	path = src/seastar
+	url = https://github.com/ceph/seastar.git
+[submodule "src/fmt"]
+	path = src/fmt
+	url = https://github.com/ceph/fmt.git
+[submodule "src/c-ares"]
+	path = src/c-ares
+	url = https://github.com/ceph/c-ares.git
+[submodule "src/spawn"]
+	path = src/spawn
+	url = https://github.com/ceph/spawn.git
+[submodule "src/pybind/mgr/rook/rook-client-python"]
+	path = src/pybind/mgr/rook/rook-client-python
+	url = https://github.com/ceph/rook-client-python.git
+[submodule "s3select"]
+	path = src/s3select
+	url = https://github.com/ceph/s3select.git

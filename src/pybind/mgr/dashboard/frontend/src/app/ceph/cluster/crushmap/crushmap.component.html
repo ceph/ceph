@@ -1,0 +1,39 @@
+<div class="row">
+  <div class="col-sm-12 col-lg-12">
+    <div class="card">
+      <div class="card-header"
+           i18n>CRUSH map viewer</div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-sm-6 col-lg-6">
+            <i *ngIf="loadingIndicator"
+               [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
+
+            <tree-root #tree
+                       [nodes]="nodes"
+                       [options]="treeOptions"
+                       (updateData)="onUpdateData()">
+              <ng-template #treeNodeTemplate
+                           let-node>
+                <span *ngIf="node.data.status"
+                      class="badge"
+                      [ngClass]="{'badge-success': ['in', 'up'].includes(node.data.status), 'badge-danger': ['down', 'out', 'destroyed'].includes(node.data.status)}">
+                  {{ node.data.status }}
+                </span>
+                <span>&nbsp;</span>
+                <span class="node-name"
+                      [ngClass]="{'type-osd': node.data.type === 'osd'}"
+                      [innerHTML]="node.data.name"></span>
+              </ng-template>
+            </tree-root>
+          </div>
+          <div class="col-sm-6 col-lg-6 metadata"
+               *ngIf="metadata">
+            <legend>{{ metadataTitle }}</legend>
+            <cd-table-key-value [data]="metadata"></cd-table-key-value>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,111 @@
+#!/bin/sh
+
+# srcdn         destdn        targeti
+
+## pri auth      null auth     -
+## pri rep       null auth     -
+## rem auth      null auth     -
+## rem rep       null auth     -
+
+#/ pri auth      null rep      - dup of pr_na
+#/ pri rep       null rep      -
+#/ rem auth      null rep      - dup of rr_na
+#/ rem rep       null rep      -
+
+
+## pri auth      pri auth      -
+# pri rep       pri auth      -
+## rem auth      pri auth      -
+# rem rep       pri auth      -
+
+# pri auth      pri rep       -
+# pri rep       pri rep       -
+# rem auth      pri rep       -
+# rem rep       pri rep       -
+
+## pri auth      rem auth      auth
+# pri rep       rem auth      auth
+## rem auth      rem auth      auth
+# rem rep       rem auth      auth
+
+# pri auth      rem rep       auth
+# pri rep       rem rep       auth
+# rem auth      rem rep       auth
+# rem rep       rem rep       auth
+
+# pri auth      rem auth      rep
+# pri rep       rem auth      rep
+# rem auth      rem auth      rep
+# rem rep       rem auth      rep
+
+# pri auth      rem rep       rep
+# pri rep       rem rep       rep
+# rem auth      rem rep       rep
+# rem rep       rem rep       rep
+
+
+types of operations
+
+pri  nul
+  srcdn=destdn
+  diff
+
+rem  nul
+  srci=srcdn=destdn
+  srci=srcdn
+  srcdn=destdn
+  srci=destdn
+  all different
+
+pri  pri
+  srcdn=destdn
+  different
+
+rem  pri
+  srci=srcdn=destdn
+  srci=srcdn
+  srcdn=destdn
+  srci=destdn
+  all different
+
+pri  rem
+  srcdn=destdn=desti
+  srcdn=destdn
+  destdn=desti
+  srcdn=desti
+  all different
+
+rem  rem
+  srci=srcdn=destdn=desti
+  srci=srcdn=destdn
+  srci=srcdn=desti
+  srci=destdn=desti
+  srcdni=destdn=desti
+  srci=srcdn destdn=desti
+  srci=destdn srcdn=desti
+  srci=desti srcdn=destdn
+  srci=srcdn
+  srci=destdn
+  srci=desti
+  srcdn=destdn
+  srcdn=desti
+  destdn=desti
+  all different
+
+
+
+
+
+
+
+
+
+p   n   same
+r   n   same
+p   n   diff
+r   n   diff
+
+p   p   same
+r   p   same
+
+p   r   

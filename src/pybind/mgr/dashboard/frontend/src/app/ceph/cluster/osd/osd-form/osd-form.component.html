@@ -1,0 +1,136 @@
+<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
+
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div class="card">
+      <div i18n="form title|Example: Create Pool@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+      <div class="card-body">
+        <fieldset>
+          <cd-osd-devices-selection-groups #dataDeviceSelectionGroups
+                                           name="Primary"
+                                           type="data"
+                                           [availDevices]="availDevices"
+                                           [canSelect]="availDevices.length !== 0"
+                                           (selected)="onDevicesSelected($event)"
+                                           (cleared)="onDevicesCleared($event)">
+          </cd-osd-devices-selection-groups>
+        </fieldset>
+
+        <!-- Shared devices -->
+        <fieldset>
+          <legend i18n>Shared devices</legend>
+
+          <!-- WAL devices button and table -->
+          <cd-osd-devices-selection-groups #walDeviceSelectionGroups
+                                           name="WAL"
+                                           type="wal"
+                                           [availDevices]="availDevices"
+                                           [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+                                           (selected)="onDevicesSelected($event)"
+                                           (cleared)="onDevicesCleared($event)">
+          </cd-osd-devices-selection-groups>
+
+          <!-- WAL slots -->
+          <div class="form-group row"
+               *ngIf="walDeviceSelectionGroups.devices.length !== 0">
+            <label class="cd-col-form-label"
+                   for="walSlots">
+              <ng-container i18n>WAL slots</ng-container>
+              <cd-helper>
+                <span i18n>How many OSDs per WAL device.</span>
+                <br>
+                <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input class="form-control"
+                     id="walSlots"
+                     name="walSlots"
+                     type="number"
+                     min="0"
+                     formControlName="walSlots">
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('walSlots', formDir, 'min')"
+                    i18n>Value should be greater than or equal to 0</span>
+            </div>
+          </div>
+
+          <!-- DB devices button and table -->
+          <cd-osd-devices-selection-groups #dbDeviceSelectionGroups
+                                           name="DB"
+                                           type="db"
+                                           [availDevices]="availDevices"
+                                           [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+                                           (selected)="onDevicesSelected($event)"
+                                           (cleared)="onDevicesCleared($event)">
+          </cd-osd-devices-selection-groups>
+
+          <!-- DB slots -->
+          <div class="form-group row"
+               *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
+            <label class="cd-col-form-label"
+                   for="dbSlots">
+              <ng-container i18n>DB slots</ng-container>
+              <cd-helper>
+                <span i18n>How many OSDs per DB device.</span>
+                <br>
+                <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input class="form-control"
+                     id="dbSlots"
+                     name="dbSlots"
+                     type="number"
+                     min="0"
+                     formControlName="dbSlots">
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('dbSlots', formDir, 'min')"
+                    i18n>Value should be greater than or equal to 0</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Configuration -->
+        <fieldset>
+          <legend i18n>Configuration</legend>
+
+          <!-- Features -->
+          <div class="form-group row"
+               formGroupName="features">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="features">Features</label>
+            <div class="cd-col-form-input">
+              <div class="custom-control custom-checkbox"
+                   *ngFor="let feature of featureList">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="{{ feature.key }}"
+                       name="{{ feature.key }}"
+                       formControlName="{{ feature.key }}">
+                <label class="custom-control-label"
+                       for="{{ feature.key }}">{{ feature.desc }}</label>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+      <div class="card-footer">
+        <div class="text-right">
+          <cd-submit-button #previewButton
+                            (submitAction)="submit()"
+                            i18n
+                            [form]="formDir"
+                            [disabled]="dataDeviceSelectionGroups.devices.length === 0">Preview</cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,20 @@
+roles:
+  - [client.0, mon.a, mgr.x, osd.0, osd.1, osd.2]
+
+tasks:
+  - install:
+  - ceph:
+      pre-mgr-commands:
+        - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+      log-whitelist:
+        - Reduced data availability
+        - OSD_.*DOWN
+        - \(RECENT_CRASH\)
+  - workunit:
+      clients:
+         client.0:
+           - rados/test_crash.sh
+  - ceph.restart: [osd.*]
+  - exec:
+      mon.a:
+        - find $TESTDIR/archive/coredump -type f -exec rm -f {} \;

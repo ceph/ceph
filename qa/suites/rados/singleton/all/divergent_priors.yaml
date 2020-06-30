@@ -1,0 +1,28 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_
+      - \(POOL_APP_NOT_ENABLED\)
+
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+- divergent_priors:

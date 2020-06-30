@@ -1,0 +1,5 @@
+#!/bin/sh
+
+addgroup ceph -g 167 -S 2>/dev/null
+adduser ceph -u 167 -S -G ceph -s /sbin/nologin -h /var/lib/ceph -g "Ceph Daemons" 2> /dev/null
+exit 0

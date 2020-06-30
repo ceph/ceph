@@ -1,0 +1,467 @@
+# Contributor: John Coyle <dx9err@gmail.com>
+# Maintainer: John Coyle <dx9err@gmail.com>
+pkgname=ceph
+pkgver=@PROJECT_VERSION@
+pkgrel=@RPM_RELEASE@
+pkgdesc="Ceph is a distributed object store and file system"
+pkgusers="ceph"
+pkggroups="ceph"
+url="http://ceph.com"
+arch="x86_64"
+license="LGPL-2.1 and LGPL-3.0 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and \
+GPL-2.0-with-autoconf-exception and BSD-3-Clause and MIT"
+depends="ceph-osd ceph-mds ceph-mgr	ceph-mon"
+# grep --quiet option required
+# diffutils -y option required by osd-scrub-snaps.sh
+# util-linux uuidgen required
+makedepends="
+	acl-dev
+	argp-standalone
+	bc
+	boost-dev
+	btrfs-progs
+	bzip2-dev
+	cmake
+	coreutils
+	cryptsetup
+	curl-dev
+	cython-dev
+	diffutils
+	eudev-dev
+	expat-dev
+	fcgi-dev
+	flex
+	fuse-dev
+	git
+	grep
+	jq
+	keyutils-dev
+	leveldb-dev
+	libaio-dev
+	libedit-dev
+	libressl-dev
+	libtirpc-dev
+	libtool
+	libxml2-dev
+	linux-headers
+	lvm2-dev
+	nss-dev
+	openldap-dev
+	krb5-dev
+	parted
+	procps
+	python-dev
+	py-pip
+	py-nose
+	py-sphinx
+	py-virtualenv
+	readline-dev
+	rpcgen
+	snappy-dev
+	util-linux
+	xfsprogs-dev
+	xmlstarlet
+	yasm
+"
+source="@TARBALL_BASENAME@.tar.bz2"
+subpackages="
+	$pkgname-base
+	$pkgname-common
+	$pkgname-mds
+	$pkgname-mgr
+	$pkgname-mon
+	$pkgname-fuse:ceph_fuse
+	$pkgname-radosgw
+	$pkgname-osd
+	$pkgname-doc
+	$pkgname-bash-completion:bash_completion
+	rbd-fuse:rbd_fuse
+	rbd-mirror:rbd_mirror
+	rbd-nbd:rbd_nbd
+	librbd
+	librbd-dev:librbd_dev
+	libcephfs
+	libcephfs-dev:libcephfs_dev
+	librados
+	librados-dev:librados_dev
+	librgw
+	librgw-dev:librgw_dev
+	py-rados:py_rados
+	py-rgw:py_rgw
+	libradosstriper
+	libradosstriper-dev:libradosstriper_dev
+	py-rbd:py_rbd
+	py-cephfs:py_cephfs
+"
+
+if [ -n "$CEPH_TEST_PKG" ]; then
+	subpackages="$subpackages $pkgname-test:ceph_test"
+fi
+
+_ceph_uid=167
+_ceph_gid=167
+
+_prefix=/usr
+_bindir=$_prefix/bin
+_datadir=$_prefix/share
+_docdir=$_datadir/doc
+_includedir=$_prefix/include
+_libdir=$_prefix/lib
+_libexecdir=$_prefix/libexec
+_localstatedir=/var
+_mandir=$_datadir/man
+_sbindir=/usr/sbin
+_sysconfdir=/etc
+
+_udevrulesdir=/etc/udev/rules.d
+_python_sitelib=/usr/lib/python2.7/site-packages
+
+builddir=$srcdir/@TARBALL_BASENAME@
+
+build() {
+	export CEPH_BUILD_VIRTUALENV=$builddir
+
+	mkdir -p $builddir/build
+	cd $builddir/build
+
+	if [ -n "$MAKE_CHECK" ] || [ -n "$CEPH_TEST_PKG" ]; then
+		local _with_tests=ON
+	fi
+
+	cmake .. \
+		-DCMAKE_INSTALL_PREFIX=$_prefix \
+		-DCMAKE_INSTALL_LIBDIR=$_libdir \
+		-DCMAKE_INSTALL_LIBEXECDIR=$_libexecdir \
+		-DCMAKE_INSTALL_LOCALSTATEDIR=$_localstatedir \
+		-DCMAKE_INSTALL_SYSCONFDIR=$_sysconfdir \
+		-DCMAKE_INSTALL_DOCDIR=$_docdir/ceph \
+		-DCMAKE_INSTALL_MANDIR=$_mandir \
+		-DWITH_REENTRANT_STRSIGNAL=ON \
+		-DWITH_THREAD_SAFE_RES_QUERY=ON \
+		-DWITH_MANPAGE=ON \
+		-DWITH_PYTHON3=OFF \
+		-DWITH_LTTNG=OFF \
+		-DWITH_SYSTEM_BOOST=ON \
+		-DWITH_TESTS=${_with_tests:-OFF} \
+		|| return 1
+	make -j${JOBS:-2} || return 1
+
+	if [ -n "$MAKE_CHECK" ]; then
+		ctest -j${JOBS:-2}
+	fi
+}
+
+package() {
+	cd $builddir/build
+	make DESTDIR=$pkgdir install || return 1
+	cd ..
+
+	rm -f $pkgdir$_sysconfdir/init.d/ceph
+
+	install -m 0644 -D src/etc-rbdmap $pkgdir$_sysconfdir/ceph/rbdmap \
+		|| return 1
+
+	install -m 0644 -D src/logrotate.conf $pkgdir$_sysconfdir/logrotate.d/ceph \
+		|| return 1
+
+	chmod 0644 $pkgdir$_docdir/ceph/sample.ceph.conf || return 1
+
+	# udev rules
+	install -m 0644 -D udev/50-rbd.rules $pkgdir$_udevrulesdir/50-rbd.rules || return 1
+}
+
+base() {
+	pkgdesc="Base is the package that includes all the files shared amongst ceph servers"
+	depends="
+		ceph-common
+		cryptsetup
+		librbd
+		librados
+		libcephfs
+		librgw
+		logrotate
+		py-requests
+		py-setuptools
+		util-linux
+		xfsprogs
+	"
+
+	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run
+	_pkg $_sbindir ceph-create-keys mount.ceph
+	_pkg $_libexecdir/ceph ceph_common.sh
+	_pkg $_libdir/rados-classes *.so*
+	_pkg $_libdir/ceph/erasure-code libec_*.so*
+	_pkg $_libdir/ceph/compressor libceph_*.so*
+	_pkg $_sysconfdir/logrotate.d ceph
+	for dir in tmp bootstrap-osd bootstrap-mds bootstrap-rgw; do
+    	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
+    		$subpkgdir$_localstatedir/lib/ceph/$dir || return 1
+	done
+}
+
+common() {
+	pkgdesc="Common utilities to mount and interact with a ceph storage cluster."
+	depends="py-rados py-rbd py-cephfs"
+	install="$pkgname-common.pre-install"
+
+	_pkg $_bindir ceph \
+		ceph-authtool \
+		ceph-conf \
+		ceph-dencoder \
+		ceph-rbdnamer \
+		ceph-syn \
+		cephfs-data-scan \
+		cephfs-journal-tool \
+		cephfs-table-tool \
+		rados \
+		rbd \
+		rbd-replay \
+		rbd-replay-many \
+		rbdmap \
+		ceph-post-file \
+		ceph-brag
+	_pkg $_datadir/ceph known_hosts_drop.ceph.com id_rsa_drop.ceph.com \
+	 	id_rsa_drop.ceph.com.pub
+	_pkg $_sysconfdir/ceph rbdmap
+	_pkg $_python_sitelib ceph_argparse.py* ceph_daemon.py*
+	_pkg $_udevrulesdir 50-rbd.rules
+	install -m 3770 -o $_ceph_uid -g $_ceph_gid -d \
+		$subpkgdir$_localstatedir/log/ceph || return 1
+	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
+		$subpkgdir$_localstatedir/lib/ceph
+}
+
+mds() {
+	pkgdesc="Metadata server daemon for the Ceph distributed file system."
+	depends="ceph-base"
+
+	_pkg $_bindir ceph-mds
+	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
+		$subpkgdir$_localstatedir/lib/ceph/mds
+}
+
+mon() {
+	pkgdesc="Cluster monitor daemon for the Ceph distributed file system."
+	depends="ceph-base"
+
+	_pkg $_bindir ceph-mon ceph-rest-api
+	_pkg $_python_sitelib ceph_rest_api.py*
+	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
+		$subpkgdir$_localstatedir/lib/ceph/mon
+}
+
+ceph_fuse() {
+	pkgdesc="FUSE based client for Ceph distributed network file system."
+
+	_pkg $_bindir ceph-fuse
+	_pkg $_sbindir mount.fuse.ceph
+}
+
+rbd_fuse() {
+	pkgdesc="FUSE based client to map Ceph rbd images to files."
+	depends="librados librbd"
+
+	_pkg $_bindir rbd-fuse
+}
+
+rbd_mirror() {
+	pkgdesc="Daemon for mirroring RBD images between Ceph clusters."
+	depends="ceph-common librados"
+
+	_pkg $_bindir rbd-mirror
+}
+
+rbd_nbd() {
+	pkgdesc="NBD based client to map Ceph rbd images to local device."
+	depends="librbd librados"
+
+	_pkg $_bindir rbd-nbd
+}
+
+radosgw() {
+	pkgdesc="Rados REST gateway which implements Amazon's S3 and OpenStack's Swift APIs."
+	depends="ceph-common"
+
+	_pkg $_bindir radosgw radosgw-admin radosgw-token radosgw-es radosgw-object-expirer
+	mkdir -p $subpkgdir$_localstatedir/lib/ceph/radosgw
+}
+
+osd() {
+	pkgdesc="Object storage daemon for the Ceph distributed file system."
+	depends="ceph-base parted gptfdisk"
+
+	_pkg $_bindir ceph-clsinfo ceph-bluefs-tool ceph-objectstore-tool ceph-osd
+	_pkg $_sbindir ceph-volume
+	_pkg $_libexecdir/ceph ceph-osd-prestart.sh
+	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
+		$subpkgdir$_localstatedir/lib/ceph/osd
+}
+
+librados() {
+	pkgdesc="RADOS distributed object store client library"
+
+	_pkg $_libdir librados.so.*
+}
+
+librados_dev() {
+	pkgdesc="RADOS distributed object store client library headers"
+	depends="librados"
+
+	_pkg $_includedir/rados librados.h \
+		librados.hpp \
+		buffer.h \
+		buffer_fwd.h \
+		inline_memory.h \
+		page.h \
+		crc32c.h \
+		rados_types.h \
+		rados_types.hpp
+	_pkg $_libdir librados.so
+	_pkg $_bindir librados-config
+}
+
+librgw() {
+	pkgdesc="RADOS gateway client library"
+	depends="librados"
+
+	_pkg $_libdir librgw.so.*
+}
+
+librgw_dev() {
+	pkgdesc="RADOS gateway client library headers"
+	depends="librados"
+
+	_pkg $_includedir/rados librgw.h rgw_file.h
+	_pkg $_libdir librgw.so
+}
+
+py_rgw() {
+	pkgdesc="Python 2 libraries for the RADOS gateway"
+	depends="librgw py-rados"
+
+	_pkg $_python_sitelib rgw.so rgw-*.egg-info
+}
+
+py_rados() {
+	pkgdesc="Python libraries for the RADOS object store"
+	depends="librados"
+
+	_pkg $_python_sitelib rados.so rados-*.egg-info
+}
+
+libradosstriper() {
+	pkgdesc="RADOS striping library"
+	depends="librados"
+
+	_pkg $_libdir libradosstriper.so.*
+}
+
+libradosstriper_dev() {
+	pkgdesc="RADOS striping library headers"
+	depends="libradosstriper librados-dev"
+
+	_pkg $_includedir/radosstriper libradosstriper.h libradosstriper.hpp
+	_pkg $_libdir libradosstriper.so
+}
+
+librbd() {
+	pkgdesc="RADOS block device client library"
+	depends="librados"
+
+	_pkg $_libdir librbd.so.*
+}
+
+librbd_dev() {
+	pkgdesc="RADOS block device client library headers"
+	depends="librbd librados-dev"
+
+	_pkg $_includedir/rbd features.h librbd.h librbd.hpp
+	_pkg $_libdir librbd.so
+}
+
+py_rbd() {
+	pkgdesc="Python libraries for the RADOS block device"
+	depends="librbd py-rados"
+
+	_pkg $_python_sitelib rbd.so rbd-*.egg-info
+}
+
+libcephfs() {
+	pkgdesc="Ceph distributed file system client library"
+
+	_pkg $_libdir libcephfs.so.*
+}
+
+libcephfs_dev() {
+	pkgdesc="Ceph distributed file system client library headers"
+	depends="libcephfs librados-devel"
+
+	_pkg $_includedir/cephfs ceph_ll_client.h libcephfs.h metrics/Types.h
+	_pkg $_libdir libcephfs.so
+}
+
+py_cephfs() {
+	pkgdesc="Python libraries for Ceph distributed file system"
+	depends="libcephfs py-rados"
+
+	_pkg $_python_sitelib cephfs.so cephfs-*.egg-info ceph_volume_client.py*
+}
+
+ceph_test() {
+	pkgdesc="Ceph benchmarks and test tools"
+	depends="ceph-common xmlstarlet"
+
+	_pkg $_bindir ceph-client-debug \
+		ceph_bench_log \
+		ceph_kvstorebench \
+		ceph_multi_stress_watch \
+		ceph_erasure_code_benchmark \
+		ceph_omapbench \
+		ceph_objectstore_bench \
+		ceph_perf_objectstore \
+		ceph_perf_local \
+		ceph_perf_msgr_client \
+		ceph_perf_msgr_server \
+		ceph_psim \
+		ceph_radosacl \
+		ceph_rgw_jsonparser \
+		ceph_rgw_multiparser \
+		ceph_scratchtool \
+		ceph_scratchtoolpp \
+		ceph_test_* \
+		ceph-coverage \
+		ceph-monstore-tool \
+		ceph-osdomap-tool \
+		ceph-kvstore-tool \
+		ceph-debugpack \
+		ceph-dedup-tool
+
+	_pkg $_libdir ceph/ceph-monstore-update-crush.sh
+}
+
+bash_completion() {
+	depends="bash-completion"
+	pkgdesc="Bash completions for Ceph"
+	_pkg $_sysconfdir/bash_completion.d ceph rados radosgw-admin rbd
+}
+
+mgr() {
+	pkgdesc="Ceph Manager Daemon"
+	depends="ceph-base"
+
+	_pkg $_bindir ceph-mgr
+	_pkg $_libdir/ceph mgr
+
+	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
+		$subpkgdir$_localstatedir/lib/ceph/mgr
+}
+
+_pkg() {
+	local path=$1
+	shift
+	local files=$@
+	mkdir -p $subpkgdir$path || exit 1
+	for _file in $files; do
+		mv $pkgdir$path/$_file $subpkgdir$path || exit 1
+	done
+}

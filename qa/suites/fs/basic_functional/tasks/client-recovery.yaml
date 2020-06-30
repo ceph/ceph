@@ -1,0 +1,17 @@
+
+# The task interferes with the network, so we need
+# to permit OSDs to complain about that.
+overrides:
+  ceph:
+    log-whitelist:
+      - evicting unresponsive client
+      - but it is still running
+      - slow request
+      - MDS_CLIENT_LATE_RELEASE
+      - t responding to mclientcaps
+
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_client_recovery

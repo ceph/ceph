@@ -1,0 +1,73 @@
+digraph {
+
+node [shape=circle,style=unfilled,fixedsize=true,width=2.0]
+
+node [color=blue,peripheries=1];
+N0 [label="up:boot"]
+
+node [color=green,peripheries=1];
+S1 [label="up:standby"]
+N0 -> S1 [color=green,penwidth=2.0];
+S2 [label="up:standby_replay"]
+S1 -> S2 [color=green,penwidth=2.0];
+
+node [color=orange,peripheries=2];
+N1 [label="up:creating"]
+S1 -> N1 [color=orange,penwidth=2.0];
+N2 [label="up:starting"]
+S1 -> N2 [color=orange,penwidth=2.0];
+N3 [label="up:replay"]
+S1 -> N3 [color=orange,penwidth=2.0];
+S2 -> N3 [color=orange,penwidth=2.0];
+N4 [label="up:resolve"]
+N3 -> N4 [color=orange,penwidth=2.0];
+N5 [label="up:reconnect"]
+N3 -> N5 [color=orange,penwidth=2.0];
+N4 -> N5 [color=orange,penwidth=2.0];
+N6 [label="up:rejoin"]
+N5 -> N6 [color=orange,penwidth=2.0];
+N7 [label="up:clientreplay"]
+N6 -> N7 [color=orange,penwidth=2.0];
+
+node [color=green,peripheries=2];
+S0 [label="up:active"]
+N7 -> S0 [color=green,penwidth=2.0];
+N1 -> S0 [color=green,penwidth=2.0];
+N2 -> S0 [color=green,penwidth=2.0];
+N6 -> S0 [color=green,penwidth=2.0];
+
+// going down but still accessible by clients
+node [color=purple,peripheries=2];
+S3 [label="up:stopping"]
+S0 -> S3 [color=purple,penwidth=2.0];
+
+// terminal (but "in")
+node [shape=polygon,sides=6,color=red,peripheries=2];
+D0 [label="down:failed"]
+N2 -> D0 [color=red,penwidth=2.0];
+N3 -> D0 [color=red,penwidth=2.0];
+N4 -> D0 [color=red,penwidth=2.0];
+N5 -> D0 [color=red,penwidth=2.0];
+N6 -> D0 [color=red,penwidth=2.0];
+N7 -> D0 [color=red,penwidth=2.0];
+S0 -> D0 [color=red,penwidth=2.0];
+S3 -> D0 [color=red,penwidth=2.0];
+D0 -> N3 [color=red,penwidth=2.0];
+
+// terminal (but not "in")
+node [shape=polygon,sides=6,color=black,peripheries=1];
+D1 [label="down:damaged"]
+N3 -> D1 [color=black,penwidth=2.0];
+N4 -> D1 [color=black,penwidth=2.0];
+N5 -> D1 [color=black,penwidth=2.0];
+N6 -> D1 [color=black,penwidth=2.0];
+N7 -> D1 [color=black,penwidth=2.0];
+S0 -> D1 [color=black,penwidth=2.0];
+S3 -> D1 [color=black,penwidth=2.0];
+D1 -> D0 [color=red,penwidth=2.0]
+
+node [shape=polygon,sides=6,color=purple,peripheries=1];
+D3 [label="down:stopped"]
+S3 -> D3 [color=purple,penwidth=2.0];
+
+}

@@ -1,0 +1,54 @@
+meta:
+- desc: |
+   install ceph/nautilus latest
+   run workload and upgrade-sequence in parallel
+   upgrade the client node
+tasks:
+- install:
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+      - libcephfs-dev
+    branch: nautilus
+- print: "**** done installing nautilus"
+- ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+      - Not found or unloadable
+    conf:
+      global:
+        mon warn on pool no app: false
+        bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client nautilus
+- print: "**** done ceph"
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:
+- print: "**** done install.upgrade non-client hosts"
+- rgw:
+   - client.1
+- print: "**** done => started rgw client.1"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
+- install.upgrade:
+    client.0:
+- print: "**** done install.upgrade on client.0"

@@ -1,0 +1,279 @@
+@import 'defaults.scss';
+
+/* ---------------------------------------------------
+    NAVBAR STYLE
+--------------------------------------------------- */
+
+::ng-deep .cd-navbar-top {
+  .cd-navbar-brand {
+    background: $color-navbar-bg;
+    border-top: 4px solid $color-nav-top-bar;
+
+    &.isPwdDisplayed {
+      top: $top-notification-height;
+    }
+
+    .navbar-brand,
+    .navbar-brand:hover {
+      color: $color-navbar-brand;
+      height: auto;
+      padding: 0;
+    }
+
+    .navbar-brand > img {
+      height: 25px;
+    }
+
+    .navbar-toggler {
+      border: 0;
+
+      &:focus,
+      &:hover {
+        outline: 0;
+      }
+
+      .fa-navicon {
+        color: $color-nav-toggle-bar;
+      }
+    }
+
+    .navbar-collapse {
+      padding: 0;
+    }
+
+    .cd-navbar-utility > .active > a {
+      color: $color-nav-links;
+      background-color: $color-nav-links-hover;
+    }
+
+    .cd-navbar-utility > li > .open > a,
+    .cd-navbar-utility > li > .open > a:focus,
+    .cd-navbar-utility > li > .open > a:hover {
+      color: $color-nav-links;
+      border-color: transparent;
+      background-color: transparent;
+    }
+  }
+
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a,
+  .navbar-nav > li > .cd-navbar > a,
+  .navbar-nav > li > a {
+    color: $color-nav-links;
+    line-height: 1;
+    padding: 13.5px 18px !important;
+    position: relative;
+    display: block;
+    text-decoration: none;
+  }
+
+  .navbar-nav .nav-link,
+  .navbar-nav .nav-link:hover {
+    color: $color-nav-links;
+  }
+
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a:hover,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown].open > a,
+  .navbar-nav > li > .cd-navbar > a:hover,
+  .navbar-nav > li > a:hover,
+  .navbar-nav > li:hover {
+    background-color: $color-nav-links-hover;
+  }
+
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a:hover,
+  .navbar-nav > .open > .cd-navbar > a,
+  .navbar-nav > .open > .cd-navbar > a:focus,
+  .navbar-nav > .open > .cd-navbar > a:hover,
+  .navbar-nav > .open > .cd-navbar > li > a:focus,
+  .navbar-nav > .open > a,
+  .navbar-nav > .open > a:focus,
+  .navbar-nav > .open > a:hover {
+    color: $color-nav-links;
+    border-color: transparent;
+    background-color: transparent;
+  }
+
+  @media (min-width: $screen-md-min) {
+    .cd-navbar-utility {
+      border-bottom: 0;
+      position: absolute;
+      right: 0;
+      top: 0;
+      font-size: 1.1rem;
+    }
+  }
+
+  @media (max-width: $screen-sm-max) {
+    .navbar-nav {
+      margin: 0;
+
+      .fa {
+        margin-right: 0.5em;
+      }
+
+      .open .dropdown-menu {
+        border: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        background-color: $color-nav-open-bg;
+      }
+
+      .open .dropdown-menu > li > a {
+        padding: 5px 15px 5px 35px;
+        color: $color-nav-links;
+      }
+
+      .open .dropdown-menu > .active > a {
+        background-color: $color-nav-active-link-bg;
+      }
+
+      & > li > a:hover {
+        background-color: $color-nav-active-link-bg;
+      }
+    }
+  }
+}
+
+/* ---------------------------------------------------
+    SIDEBAR STYLE
+--------------------------------------------------- */
+
+$sidebar-width: 200px;
+
+.cd-navbar-primary .active > a,
+.cd-navbar-primary > .active > a:focus,
+.cd-navbar-primary > .active > a:hover {
+  color: $color-nav-links !important;
+  background-color: $color-nav-links-hover !important;
+  border: 0 !important;
+}
+
+.wrapper {
+  display: flex;
+  width: 100%;
+
+  #sidebar {
+    width: $sidebar-width;
+    top: $navbar-height;
+    background: $color-navbar-bg;
+    overflow-y: auto;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    z-index: 999;
+    color: $color-solid-white;
+    transition: all 0.3s;
+
+    &.active {
+      margin-left: -$sidebar-width;
+    }
+
+    ul {
+      &.component {
+        padding: 20px 0;
+        margin: 0;
+      }
+
+      p {
+        color: $color-solid-white;
+        padding: 10px;
+      }
+
+      li a {
+        padding: 10px;
+        font-size: 1.1em;
+        display: block;
+        color: $color-solid-white;
+
+        &:hover {
+          color: $color-solid-white;
+          background: $color-primary;
+        }
+
+        & > .badge {
+          margin-left: 5px;
+        }
+
+        text-decoration: none;
+      }
+
+      li.active > a,
+      li > a a[aria-expanded='true'] {
+        color: $color-solid-white;
+      }
+    }
+  }
+
+  a.dropdown-toggle {
+    position: relative;
+
+    &::after {
+      position: absolute;
+      right: 20px;
+      content: '\f054';
+      font-family: 'ForkAwesome';
+      border: 0;
+      font-size: 1rem;
+      transition: transform 0.3s ease-in-out;
+    }
+
+    &[aria-expanded='true']::after {
+      transform: rotate(90deg);
+    }
+  }
+
+  ul ul a {
+    font-size: 0.9em !important;
+    padding-left: 30px !important;
+    background: lighten($color-navbar-bg, 10);
+  }
+
+  .cd-navbar-primary a:focus {
+    outline: none;
+  }
+
+  ngx-simplebar {
+    height: 100%;
+  }
+}
+
+/* ---------------------------------------------------
+    CONTENT STYLE
+--------------------------------------------------- */
+
+#content {
+  width: calc(100% - #{$sidebar-width});
+  transition: all 0.3s;
+  position: absolute;
+  top: $navbar-height;
+  bottom: 0;
+  right: 0;
+
+  &.active {
+    width: 100vw;
+  }
+}
+
+/* ---------------------------------------------------
+    topNotification settings
+--------------------------------------------------- */
+
+@for $i from 1 through 2 {
+  :host.top-notification-#{$i} {
+    .cd-navbar-top .cd-navbar-brand {
+      top: $top-notification-height * $i;
+    }
+
+    #sidebar {
+      top: $navbar-height + $top-notification-height * $i;
+    }
+
+    #content {
+      top: $navbar-height + $top-notification-height * $i;
+    }
+
+    cd-notifications-sidebar {
+      top: $navbar-height + $top-notification-height * $i + 10px;
+    }
+  }
+}

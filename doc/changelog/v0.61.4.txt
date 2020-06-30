@@ -1,0 +1,823 @@
+commit 1669132fcfc27d0c0b5e5bb93ade59d147e23404
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Wed Jun 19 13:51:38 2013 -0700
+
+    v0.61.4
+
+commit b76540f6e2db7a08dee86f84358d56c4ea0b3293
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 22 14:29:37 2013 -0700
+
+    messages/MOSDMarkMeDown: fix uninit field
+    
+    Fixes valgrind warning:
+    ==14803== Use of uninitialised value of size 8
+    ==14803==    at 0x12E7614: sctp_crc32c_sb8_64_bit (sctp_crc32.c:567)
+    ==14803==    by 0x12E76F8: update_crc32 (sctp_crc32.c:609)
+    ==14803==    by 0x12E7720: ceph_crc32c_le (sctp_crc32.c:733)
+    ==14803==    by 0x105085F: ceph::buffer::list::crc32c(unsigned int) (buffer.h:427)
+    ==14803==    by 0x115D7B2: Message::calc_front_crc() (Message.h:441)
+    ==14803==    by 0x1159BB0: Message::encode(unsigned long, bool) (Message.cc:170)
+    ==14803==    by 0x1323934: Pipe::writer() (Pipe.cc:1524)
+    ==14803==    by 0x13293D9: Pipe::Writer::entry() (Pipe.h:59)
+    ==14803==    by 0x120A398: Thread::_entry_func(void*) (Thread.cc:41)
+    ==14803==    by 0x503BE99: start_thread (pthread_create.c:308)
+    ==14803==    by 0x6C6E4BC: clone (clone.S:112)
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit eb91f41042fa31df2bef9140affa6eac726f6187)
+
+commit 2434ecca6f8e1f2af62c74cb1b7df277f4a076f7
+Merge: f8973bd 3f32ded
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 19 10:56:51 2013 -0700
+
+    Merge remote-tracking branch 'gh/wip-4976-cuttlefish' into cuttlefish
+    
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit f8973bda801dbb2412c4cd83869c0203930f38e9
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 20:32:15 2013 -0700
+
+    common/Preforker: fix warning
+    
+    common/Preforker.h: In member function ‘int Preforker::signal_exit(int)’:
+    warning: common/Preforker.h:82:45: ignoring return value of ‘ssize_t safe_write(int, const void*, size_t)’, declared with attribute warn_unused_result [-Wunused-result]
+    
+    This is harder than it should be to fix.  :(
+      http://stackoverflow.com/questions/3614691/casting-to-void-doesnt-remove-warn-unused-result-error
+    
+    Whatever, I guess we can do something useful with this return value.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit ce7b5ea7d5c30be32e4448ab0e7e6bb6147af548)
+
+commit 6427985b746b7c29f5337d87b60aab9008a8bc6e
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed Jun 19 02:50:45 2013 +0100
+
+    mon: Monitor: make sure we backup a monmap during sync start
+    
+    First of all, we must find a monmap to backup.  The newest version.
+    
+    Secondly, we must make sure we back it up before clearing the store.
+    
+    Finally, we must make sure that we don't remove said backup while
+    clearing the store; otherwise, we would be out of a backup monmap if the
+    sync happened to fail (and if the monitor happened to be killed before a
+    new sync had finished).
+    
+    This patch makes sure these conditions are met.
+    
+    Fixes: #5256 (partially)
+    Backport: cuttlefish
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5e6dc4ea21b452e34599678792cd36ce1ba3edb3)
+
+commit f8f83e78218ee5b8602cfe6758caf2ecd3e06602
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed Jun 19 02:36:44 2013 +0100
+
+    mon: Monitor: obtain latest monmap on sync store init
+    
+    Always use the highest version amongst all the typically available
+    monmaps: whatever we have in memory, whatever we have under the
+    MonmapMonitor's store, and whatever we have backed up from a previous
+    sync.  This ensures we always use the newest version we came across
+    with.
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6284fdce794b73adcc757fee910e975b6b4bd054)
+
+commit 41e1a6beeef69136fe6ec3f31d07ea8c33d64cba
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed Jun 19 02:21:58 2013 +0100
+
+    mon: Monitor: don't remove 'mon_sync' when clearing the store during abort
+    
+    Otherwise, we will end up losing the monmap we backed up when we started
+    the sync, and the monitor may be unable to start if it is killed or
+    crashes in-between the sync abort and finishing a new sync.
+    
+    Fixes: #5256 (partially)
+    Backport: cuttlefish
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit af5a9861d7c6b4527b0d2312d0efa792910bafd9)
+
+commit 3f32ded41818ad3c607339d723c095f166e36f7e
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 18 21:31:23 2013 -0700
+
+    os/FileStore: drop posix_fadvise(...DONTNEED)
+    
+    On XFS this call is problematic because it directly calls the filemap
+    writeback without vectoring through xfs.  This can break the delicate
+    ordering of writeback and range zeroing; see #4976 and this thread
+    
+          http://oss.sgi.com/archives/xfs/2013-06/msg00066.html
+    
+    Drop this behavior for now to avoid subtle data corruption.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit ffade3c85dfffa13a16edd9630a52d99eb8a413d
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 18 21:24:16 2013 -0700
+
+    os/FileStore: use fdatasync(2) instead of sync_file_range(2)
+    
+    The use of sync_file_range(2) on XFS screws up XFS' delicate ordering
+    of writeback and range zeroing; see #4976 and this thread:
+    
+      http://oss.sgi.com/archives/xfs/2013-06/msg00066.html
+    
+    Instead, replace all sync_file_range(2) calls with fdatasync(2), which
+    *does* do ordered writeback and should not leak unzeroed blocks.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 3383ba6326aeff6500df4792fcef65740dd6b3ea
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 12 21:47:09 2013 -0700
+
+    config: fix run_dir typo
+    
+    From 654299108bfb11e7dce45f54946d1505f71d2de8.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e9689ac6f5f50b077a6ac874f811d204ef996c96)
+
+commit 41e1416c3585507db75f10ed69f65a5a80370827
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 18 14:51:08 2013 -0700
+
+    ceph.spec: create /var/run on package install
+    
+    The %ghost %dir ... line will make this get cleaned up but won't install
+    it.
+    
+    Reported-by: Derek Yarnell <derek@umiacs.umd.edu>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Gary Lowell <gary.lowell@inktank.com>
+    (cherry picked from commit 64ee0148a5b7324c7df7de2d5f869b880529d452)
+
+commit 2df3619169d2e83617fc3005b68de395e982b39a
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 7 17:03:41 2013 -0700
+
+    global: create /var/run/ceph on daemon startup
+    
+    This handles cases where the daemon is started without the benefit of
+    sysvinit or upstart (as with teuthology or ceph-fuse).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 654299108bfb11e7dce45f54946d1505f71d2de8)
+
+commit eace9987c19f4da5cc89ca84abec5e54035b4887
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jun 5 11:10:34 2013 -0700
+
+    PG: don't dirty log unconditionally in activate()
+    
+    merge_log and friends all take care of dirtying the log
+    as necessary.
+    
+    Fixes: #5238
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 5deece1d034749bf72b7bd04e4e9c5d97e5ad6ce)
+
+commit fda618e96690b2693c7a8dd523ece7c1c5a90b67
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Fri Jun 14 17:11:43 2013 +0100
+
+    mon: OSDMonitor: don't ignore apply_incremental()'s return on UfP [1]
+    
+    apply_incremental() may return -EINVAL.  Don't ignore it.
+    
+    [1] UfP = Update from Paxos
+    
+    Fixes: #5343
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit e3c33f4315cbf8718f61eb79e15dd6d44fc908b7)
+
+commit c14dd154584eef97075e4a260719b6cbe686d4c7
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 16:38:26 2013 -0700
+
+    client: handle reset during initial mds session open
+    
+    If we get a reset during our attempt to open an MDS session, close out the
+    Connection* and retry to open the session, moving the waiters over.
+    
+    Fixes: #5379
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit df8a3e5591948dfd94de2e06640cfe54d2de4322)
+
+commit aa8834831dbfcdebb96841686e3707e552c349f6
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 15:43:40 2013 -0700
+
+    ceph-disk: add some notes on wth we are up to
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8c6b24e9039079e897108f28d6af58cbc703a15a)
+
+commit 261964adc5a7efe7c0efac2d527bc10a95498e45
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 16:29:10 2013 -0700
+
+    ceph-disk: clear TERM to avoid libreadline hijinx
+    
+    The weird output from libreadline users is related to the TERM variable.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e538829f16ce19d57d63229921afa01cc687eb86)
+
+commit e36fb3267cdbe0ec5bb01f8a012485de1bbf1652
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 09:49:46 2013 -0700
+
+    ceph-disk-udev: set up by-partuuid, -typeuuid symlinks on ancient udev
+    
+    Make the ancient-udev/blkid workaround script for RHEL/CentOS create the
+    symlinks for us too.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d7f7d613512fe39ec883e11d201793c75ee05db1)
+
+commit c3936ebb159b419115bfdc5dc7a23f5807cff9fa
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jun 15 20:06:33 2013 -0700
+
+    ceph-disk: do not stop activate-all on first failure
+    
+    Keep going even if we hit one activation error.  This avoids failing to
+    start some disks when only one of them won't start (e.g., because it
+    doesn't belong to the current cluster).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c9074375bfbe1e3757b9c423a5ff60e8013afbce)
+
+commit 3cb783c31541cebe928b97cf27eb326bb4b54f9b
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 16:30:24 2013 -0700
+
+    ceph.spec: include partuuid rules in package
+    
+    Commit f3234c147e083f2904178994bc85de3d082e2836 missed this.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 253069e04707c5bf46869f4ff5a47ea6bb0fde3e)
+
+commit 2d771b57082545e139086f3c5c9f79ba47101a14
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 15:01:14 2013 -0700
+
+    ceph.spec: install/uninstall init script
+    
+    This was commented out almost years ago in commit 9baf5ef4 but it is not
+    clear to me that it was correct to do so.  In any case, we are not
+    installing the rc.d links for ceph, which means it does not start up after
+    a reboot.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cc9b83a80262d014cc37f0c974963cf7402a577a)
+
+commit dfe421e44cfa13178950258509a0cf71e308daa1
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 13:39:03 2013 -0700
+
+    sysvinit, upstart: ceph-disk activate-all on start
+    
+    On 'service ceph start' or 'service ceph start osd' or start ceph-osd-all
+    we should activate any osd GPT partitions.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 13680976ef6899cb33109f6f841e99d4d37bb168)
+
+commit ef47cf9c9dd7f4a1f549c14f984cd052fc95bb64
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 13:34:40 2013 -0700
+
+    ceph-disk: add 'activate-all'
+    
+    Scan /dev/disk/by-parttypeuuid for ceph OSDs and activate them all.  This
+    is useful when the event didn't trigger on the initial udev event for
+    some reason.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5c7a23687a1a21bec5cca7b302ac4ba47c78e041)
+
+commit 65ec1d87f96694ab08c99a7104329065c7c5ebae
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 13:23:52 2013 -0700
+
+    udev: /dev/disk/by-parttypeuuid/$type-$uuid
+    
+    We need this to help trigger OSD activations.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d512dc9eddef3299167d4bf44e2018b3b6031a22)
+
+commit 4a739b13f420acf4f0af21b4cf133ac08c97ee18
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Jun 14 14:53:54 2013 -0700
+
+    rgw: escape prefix correctly when listing objects
+    
+    Fixes: #5362
+    When listing objects prefix needs to be escaped correctly (the
+    same as with the marker). Otherwise listing objects with prefix
+    that starts with underscore doesn't work.
+    Backport: bobtail, cuttlefish
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit d582ee2438a3bd307324c5f44491f26fd6a56704)
+
+commit 6edba9e9ad1c115a462aeab858063fe3939a40e4
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 10 17:28:22 2013 -0700
+
+    messages/MMonSync: initialize crc in ctor
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cd1c289b96a874ff99a83a44955d05efc9f2765a)
+
+commit 2ad85576850bcb61c3ac8fee38609f9cd51bfac2
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jun 15 08:48:37 2013 -0700
+
+    client: fix ancient typo in caps revocation path
+    
+    If we have dropped all references to a revoked capability, send the ack
+    to the MDS.  This typo has been there since v0.7 (early 2009)!
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit b7143c2f84daafbe2c27d5b2a2d5dc40c3a68d15)
+
+commit d3d88983bceaf508f2585cc6bf8fc304a0943ffe
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 5 08:42:25 2013 -0700
+
+    messages/MMonHealth: remove unused flag field
+    
+    This was initialized in (one of) the ctor(s), but not encoded/decoded,
+    and not used.  Remove it.  This makes valgrind a happy.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 08bb8d510b5abd64f5b9f8db150bfc8bccaf9ce8)
+
+commit 646d9ccc575bf91cf73fbfaf91ab4d04ed2b5981
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 5 08:34:20 2013 -0700
+
+    messages/MMonProbe: fix uninitialized variables
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4974b29e251d433101b69955091e22393172bcd8)
+
+commit 08304a7c46da7517319b7db0b64d1c4f54771472
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jun 15 08:14:40 2013 -0700
+
+    common/Preforker: fix broken recursion on exit(3)
+    
+    If we exit via preforker, call exit(3) and not recursively back into
+    Preforker::exit(r).  Otherwise you get a hang with the child blocked
+    at:
+    
+    Thread 1 (Thread 0x7fa08962e7c0 (LWP 5419)):
+    #0  0x000000309860e0cd in write () from /lib64/libpthread.so.0
+    #1  0x00000000005cc906 in Preforker::exit(int) ()
+    #2  0x00000000005c8dfb in main ()
+    
+    and the parent at
+    
+    #0  0x000000309860eba7 in waitpid () from /lib64/libpthread.so.0
+    #1  0x00000000005cc87a in Preforker::parent_wait() ()
+    #2  0x00000000005c75ae in main ()
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7e7ff7532d343c473178799e37f4b83cf29c4eee)
+
+commit f202d332dc86844caa9076c7866cc009d87f76b6
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Jun 13 16:38:26 2013 -0700
+
+    rules:  Don't disable tcmalloc on ARM (and other non-intel)
+    
+    Fixes #5342
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit cbca9232618e85bd15b8677c9306042caad876a6
+Author: Guilhem Lettron <guilhem+github@lettron.fr>
+Date:   Mon May 27 12:41:53 2013 +0200
+
+    Remove mon socket in post-stop
+    
+    If ceph-mon segfault, socket file isn't removed.
+    
+    By adding a remove in post-stop, upstart clean run directory properly.
+    
+    Signed-off-by: Guilhem Lettron <guilhem@lettron.fr>
+    (cherry picked from commit 554b41b171eab997038e83928c462027246c24f4)
+
+commit 3f8b3cf1d4042ae6bb64a840ff19f859e6ce6dc2
+Author: James Page <james.page@ubuntu.com>
+Date:   Mon May 20 10:26:06 2013 +0100
+
+    Remove stop on from upstart tasks
+    
+    Upstart tasks don't have to concept of 'stop on' as they
+    are not long running.
+    (cherry picked from commit 17f6fccabc262b9a6d59455c524b550e77cd0fe3)
+
+commit 0b9b8368aec049bfdd4cf72b481f3a4aa8cb031e
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Wed Jun 12 22:22:42 2013 -0700
+
+    ceph-disk: extra dash in error message
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit f86b4e7a4831c684033363ddd335d2f3fb9a189a)
+
+commit ecddd1e0062ae58e8cc75e125cc683fc04b8befe
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri May 24 12:41:11 2013 +0200
+
+    ceph-disk: cast output of _check_output()
+    
+    Cast output of _check_output() to str() to be able to use
+    str.split().
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 16ecae153d260407085aaafbad1c1c51f4486c9a)
+
+commit 43855e3788cc90900f1b3424c4e4e2c28e8f351e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri May 24 12:46:15 2013 +0200
+
+    ceph-disk: remove unnecessary semicolons
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 9785478a2aae7bf5234fbfe443603ba22b5a50d2)
+
+commit 53927f94f3dcf7c57b73b66159d924557d92506e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri May 24 12:33:16 2013 +0200
+
+    ceph-disk: fix undefined variable
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 9429ff90a06368fc98d146e065a7b9d1b68e9822)
+
+commit f1beeb267d6e19754a9f2f483b5849a6b900f3ce
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri May 24 12:29:07 2013 +0200
+
+    ceph-disk: add missing spaces around operator
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit c127745cc021c8b244d721fa940319158ef9e9d4)
+
+commit fe23ae0042629f493792eadb88a30514c29fc1a0
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 22:02:03 2013 -0700
+
+    udev: drop useless --mount argument to ceph-disk
+    
+    It doesn't mean anything anymore; drop it.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bcfd2f31a50d27038bc02e645795f0ec99dd3b32)
+
+commit d99e0a8908d4feccc0a73952ee31586c83174589
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 22:01:34 2013 -0700
+
+    ceph-disk-udev: activate-journal
+    
+    Trigger 'ceph-disk activate-journal' from the alt udev rules.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b139152039bfc0d190f855910d44347c9e79b22a)
+
+commit dfbd20104e01ce22c7e501f748b2bf13382ee7f6
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 21:56:23 2013 -0700
+
+    ceph-disk: do not use mount --move (or --bind)
+    
+    The kernel does not let you mount --move when the parent mount is
+    shared (see, e.g., https://bugzilla.redhat.com/show_bug.cgi?id=917008
+    for another person this also confused).  We can't use --bind either
+    since that (on RHEL at least) screws up /etc/mtab so that the final
+    result looks like
+    
+     /var/lib/ceph/tmp/mnt.HNHoXU /var/lib/ceph/osd/ceph-0 none rw,bind 0 0
+    
+    Instead, mount the original dev in the final location and then umount
+    from the old location.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e5ffe0d2484eb6cbcefcaeb5d52020b1130871a5)
+
+commit 98a990d796e71c62fa64c13230a18a4a40aedcdf
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 21:22:53 2013 -0700
+
+    ceph.spec: include by-partuuid udev workaround rules
+    
+    These are need for old or buggy udev.  Having them for new and unbroken
+    udev is harmless.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f3234c147e083f2904178994bc85de3d082e2836)
+
+commit 1504e23f177fff00a794c0db76db8a8c72bc8eb7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 12:10:49 2013 -0700
+
+    ceph-disk: work around buggy rhel/centos parted
+    
+    parted on RHEL/Centos prefixes the *machine readable output* with
+    
+     1b 5b 3f 31 30 33 34 68
+    
+    Note that the same thing happens when you 'import readline' in python.
+    
+    Work around it!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 82ff72f827b9bd7f91d30a09d35e42b25d2a7344)
+
+commit 0b9482bd631aada9e2ca730b6cddd51d7954fb11
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 15:54:58 2013 -0700
+
+    ceph-disk: implement 'activate-journal'
+    
+    Activate an osd via its journal device.  udev populates its symlinks and
+    triggers events in an order that is not related to whether the device is
+    an osd data partition or a journal.  That means that triggering
+    'ceph-disk activate' can happen before the journal (or journal symlink)
+    is present and then fail.
+    
+    Similarly, it may be that they are on different disks that are hotplugged
+    with the journal second.
+    
+    This can be wired up to the journal partition type to ensure that osds are
+    started when the journal appears second.
+    
+    Include the udev rules to trigger this.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a2a78e8d16db0a71b13fc15457abc5fe0091c84c)
+
+commit 062b9296c98a03f4f291615dce010aebc55aaa32
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 11 18:35:01 2013 -0700
+
+    ceph-disk: call partprobe outside of the prepare lock; drop udevadm settle
+    
+    After we change the final partition type, sgdisk may or may not trigger a
+    udev event, depending on how well udev is behaving (it varies between
+    distros, it seems).  The old code would often settle and wait for udev to
+    activate the device, and then partprobe would uselessly fail because it
+    was already mounted.
+    
+    Call partprobe only at the very end, after prepare is done.  This ensures
+    that if partprobe calls udevadm settle (which is sometimes does) we do not
+    get stuck.
+    
+    Drop the udevadm settle.  I'm not sure what this accomplishes; take it out,
+    at least until we determine we need it.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8b3b59e01432090f7ae774e971862316203ade68)
+
+commit 9f9dc8b85a81529deb6865ec5f1cebb45f04ddc4
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 13 11:03:37 2013 -0700
+
+    ceph-disk: add 'zap' command
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 10ba60cd088c15d4b4ea0b86ad681aa57f1051b6)
+
+commit 4fab29c1c5e4dec79f089e9803adf0e855e5ec4f
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue May 21 12:52:03 2013 -0700
+
+    ceph-disk: fix stat errors with new suppress code
+    
+    Broken by 225fefe5e7c997b365f481b6c4f66312ea28ed61.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bcc8bfdb672654c6a6b48a2aa08267a894debc32)
+
+commit 01ba391b079a494272a071b76f8dee89b5f5c44d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon May 13 12:35:32 2013 -0700
+
+    ceph-disk: add '[un]suppress-activate <dev>' command
+    
+    It is often useful to prepare but not activate a device, for example when
+    preparing a bunch of spare disks.  This marks a device as 'do not
+    activate' so that it can be prepared without activating.
+    
+    Fixes: #3255
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 225fefe5e7c997b365f481b6c4f66312ea28ed61)
+
+commit 41a15a63349abc5f3e1c0b8de8fcc543e2567035
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 14 11:21:25 2013 -0700
+
+    upstart: start ceph-all on runlevel [2345]
+    
+    Starting when only one network interface has started breaks machines with
+    multiple nics in very problematic ways.
+    
+    There may be an earlier trigger that we can use for cases where other
+    services on the local machine depend on ceph, but for now this is better
+    than the existing behavior.
+    
+    See #5248
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7e08ed1bf154f5556b3c4e49f937c1575bf992b8)
+
+commit 60e4bb0acb41febb75c866646c7102e9a25782f7
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jun 8 17:38:07 2013 -0700
+
+    client: set issue_seq (not seq) in cap release
+    
+    We regularly have been observing a stall where the MDS is blocked waiting
+    for a cap revocation (Ls, in our case) and never gets a reply.  We finally
+    tracked down the sequence:
+    
+     - mds issues cap seq 1 to client
+     - mds does revocation (seq 2)
+     - client replies
+     - much time goes by
+     - client trims inode from cache, sends release with seq == 2
+     - mds ignores release because its issue_seq is 1
+     - mds later tries to revoke other caps
+     - client discards message because it doesn't have the inode in cache
+    
+    The problem is simply that we are using seq instead of issue_seq in the
+    cap release message.  Note that the other release call site in
+    encode_inode_release() is correct.  That one is much more commonly
+    triggered by short tests, as compared to this case where the inode needs to
+    get pushed out of the client cache.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 9b012e234a924efd718826ab6a53b9aeb7cd6649)
+
+commit ae522291d2a9b994a65fed5e63e9fec74eece5be
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 22 15:03:50 2013 -0700
+
+    osd: skip mark-me-down message if osd is not up
+    
+    Fixes crash when the OSD has not successfully booted and gets a
+    SIGINT or SIGTERM.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c2e262fc9493b4bb22c2b7b4990aa1ee7846940e)
+
+commit 48f8d6e3ffe9fc5bb71b362e3059ffb2da69926b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 21:21:51 2013 -0700
+
+    ceph-fuse: create finisher threads after fork()
+    
+    The ObjectCacher and MonClient classes both instantiate Finisher
+    threads.  We need to make sure they are created *after* the fork(2)
+    or else the process will fail to join() them on shutdown, and the
+    threads will not exist while fuse is doing useful work.
+    
+    Put CephFuse on the heap and move all this initalization into the child
+    block, and make sure errors are passed back to the parent.
+    
+    Fix-proposed-by: Alexandre Marangone <alexandre.maragone@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4fa5f99a40792341d247e51488c37301da3c4e4f)
+
+commit 7012d192e6a31d91e57bc9f5b00af6c541ceb3e0
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 6 16:35:54 2013 -0700
+
+    osd: do not include logbl in scrub map
+    
+    This is a potentially use object/file, usually prefixed by a zeroed region
+    on disk, that is not used by scrub at all.  It dates back to
+    f51348dc8bdd5071b7baaf3f0e4d2e0496618f08 (2008) and the original version of
+    scrub.
+    
+    This *might* fix #4179.  It is not a leak per se, but I observed 1GB
+    scrub messages going over the write.  Maybe the allocations are causing
+    fragmentation, or the sub_op queues are growing.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 0b036ecddbfd82e651666326d6f16b3c000ade18)
+
+commit c75760e39d8df5b1971343e9f9186fd67e154af6
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 6 21:53:00 2013 -0700
+
+    rgw: handle deep uri resources
+    
+    In case of deep uri resources (ones created beyond a single level
+    of hierarchy, e.g. auth/v1.0) we want to create a new empty
+    handlers for the path if no handlers exists. E.g., for
+    auth/v1.0 we need to have a handler for 'auth', otherwise
+    the default S3 handler will be used, which we don't want.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit ad3934e335399f7844e45fcfd17f7802800d2cb3)
+
+commit bd12e81e48014024171c55f5984c9183c8e363cb
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 6 21:47:21 2013 -0700
+
+    rgw: fix get_resource_mgr() to correctly identify resource
+    
+    Fixes: #5262
+    The original test was not comparing the correct string, ended up
+    with the effect of just checking the substring of the uri to match
+    the resource.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 8d55b87f95d59dbfcfd0799c4601ca37ebb025f5)
+
+commit b1d436e752c9c20e7dbff91b769cb2ba47383571
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 6 11:22:38 2013 -0700
+
+    rgw: add 'cors' to the list of sub-resources
+    
+    Fixes: #5261
+    Backport: cuttlefish
+    Add 'cors' to the list of sub-resources, otherwise auth signing
+    is wrong.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 9a0a9c205b8c24ca9c1e05b0cf9875768e867a9e)
+
+commit 4bf75015ae7539a9dbabbbfc0c784dbd58aa6004
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 21:23:45 2013 -0700
+
+    mon: fix preforker exit behavior behavior
+    
+    In 3c5706163b72245768958155d767abf561e6d96d we made exit() not actually
+    exit so that the leak checking would behave for a non-forking case.
+    That is only needed for the normal exit case; every other case expects
+    exit() to actually terminate and not continue execution.
+    
+    Instead, make a signal_exit() method that signals the parent (if any)
+    and then lets you return.  exit() goes back to it's usual behavior,
+    fixing the many other calls in main().
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 92d085f7fd6224ffe5b7651c1f83b093f964b5cd)
+
+commit d398a1850d5895ad409f5229f0dc06651c3d4d75
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Jun 4 13:23:36 2013 -0700
+
+    rados.py: correct some C types
+    
+    trunc was getting size_t instead of uint64_t, leading to bad results
+    in 32-bit environments. Explicitly cast to the desired type
+    everywhere, so it's clear the correct type is being used.
+    
+    Fixes: #5233
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 6dd7d469000144b499af84bda9b735710bb5cec3)

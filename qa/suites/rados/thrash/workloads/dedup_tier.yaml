@@ -1,0 +1,14 @@
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd pool create low_tier 4
+- rados:
+    clients: [client.0]
+    low_tier_pool: 'low_tier'
+    ops: 1500
+    objects: 50
+    set_chunk: true
+    enable_dedup: true
+    op_weights:
+      read: 100
+      write: 50

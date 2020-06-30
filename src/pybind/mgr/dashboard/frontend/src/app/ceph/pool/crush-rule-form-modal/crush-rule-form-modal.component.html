@@ -1,0 +1,124 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="form"
+          novalidate>
+      <div class="modal-body">
+        <div class="form-group row">
+          <label for="name"
+                 class="cd-col-form-label">
+            <ng-container i18n>Name</ng-container>
+            <span class="required"></span>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="text"
+                   id="name"
+                   name="name"
+                   class="form-control"
+                   placeholder="Name..."
+                   formControlName="name"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'required')"
+                  i18n>This field is required!</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'pattern')"
+                  i18n>The name can only consist of alphanumeric characters, dashes and underscores.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', frm, 'uniqueName')"
+                  i18n>The chosen erasure code profile name is already in use.</span>
+          </div>
+        </div>
+
+        <!-- Root -->
+        <div class="form-group row">
+          <label for="root"
+                 class="cd-col-form-label">
+            <ng-container i18n>Root</ng-container>
+            <cd-helper [html]="tooltips.root">
+            </cd-helper>
+            <span class="required"></span>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="root"
+                    name="root"
+                    formControlName="root">
+              <option *ngIf="!buckets"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let bucket of buckets"
+                      [ngValue]="bucket">
+                {{ bucket.name }}
+              </option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('root', frm, 'required')"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Failure Domain Type -->
+        <div class="form-group row">
+          <label for="failure_domain"
+                 class="cd-col-form-label">
+            <ng-container i18n>Failure domain type</ng-container>
+            <cd-helper [html]="tooltips.failure_domain">
+            </cd-helper>
+            <span class="required"></span>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="failure_domain"
+                    name="failure_domain"
+                    formControlName="failure_domain">
+              <option *ngIf="!failureDomains"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let domain of failureDomainKeys"
+                      [ngValue]="domain">
+                {{ domain }} ( {{failureDomains[domain].length}} )
+              </option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('failure_domain', frm, 'required')"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Class -->
+        <div class="form-group row">
+          <label for="device_class"
+                 class="cd-col-form-label">
+            <ng-container i18n>Device class</ng-container>
+            <cd-helper [html]="tooltips.device_class">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="device_class"
+                    name="device_class"
+                    formControlName="device_class">
+              <option ngValue=""
+                      i18n>Let Ceph decide</option>
+              <option *ngFor="let deviceClass of devices"
+                      [ngValue]="deviceClass">
+                {{ deviceClass }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          i18n="form action button|Example: Create Pool@@formActionButton"
+                          [form]="frm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

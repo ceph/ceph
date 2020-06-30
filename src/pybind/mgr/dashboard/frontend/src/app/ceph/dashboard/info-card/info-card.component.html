@@ -1,0 +1,18 @@
+<div class="card"
+     [ngClass]="cardClass">
+  <div class="card-body d-flex align-items-center justify-content-center">
+    <h5 class="card-title m-4">
+      <a *ngIf="link; else noLinkTitle"
+         [routerLink]="link">{{ cardTitle }}</a>
+
+      <ng-template #noLinkTitle>
+        {{ cardTitle }}
+      </ng-template>
+    </h5>
+
+    <div class="card-text text-center"
+         [ngClass]="contentClass">
+      <ng-content></ng-content>
+    </div>
+  </div>
+</div>

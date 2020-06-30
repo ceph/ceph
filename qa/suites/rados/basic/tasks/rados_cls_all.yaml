@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - \(PG_AVAILABILITY\)
+    conf:
+      osd:
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - cls

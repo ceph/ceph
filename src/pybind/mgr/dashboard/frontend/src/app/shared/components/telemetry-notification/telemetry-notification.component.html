@@ -1,0 +1,9 @@
+<ngb-alert class="no-margin-bottom"
+           type="warning"
+           *ngIf="displayNotification"
+           (close)="close($event)">
+  <div i18n>The Telemetry module is not submitting telemetry data at the
+    moment. Click
+  <a routerLink="/telemetry"
+     class="alert-link">here</a> to activate it now.</div>
+</ngb-alert>

@@ -1,0 +1,10 @@
+meta:
+  - desc: "Containerized prometheus and grafana"
+overrides:
+  cephmetrics:
+    group_vars:
+      all:
+        prometheus:
+          containerized: true
+        grafana:
+          containerized: true

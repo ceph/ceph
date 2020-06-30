@@ -1,0 +1,14 @@
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/user-management/users">
+    <a ngbNavLink
+       i18n>Users</a>
+  </li>
+  <li ngbNavItem="/user-management/roles">
+    <a ngbNavLink
+       i18n>Roles</a>
+  </li>
+</ul>

@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        rgw override bucket index max shards: 1

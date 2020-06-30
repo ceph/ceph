@@ -1,0 +1,52 @@
+<cd-rbd-tabs></cd-rbd-tabs>
+
+<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+               [status]="viewCacheStatus.status"
+               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+
+<cd-table [data]="images"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions class="btn-group"
+                      [permission]="permission"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+    <button class="btn btn-light"
+            type="button"
+            (click)="purgeModal()"
+            [disabled]="disablePurgeBtn"
+            *ngIf="permission.delete">
+      <i [ngClass]="[icons.destroy]"
+         aria-hidden="true"></i>
+      <ng-container i18n>Purge Trash</ng-container>
+    </button>
+  </div>
+</cd-table>
+
+<ng-template #expiresTpl
+             let-row="row"
+             let-value="value">
+  <ng-container *ngIf="row.cdIsExpired"
+                i18n>Expired at</ng-container>
+
+  <ng-container *ngIf="!row.cdIsExpired"
+                i18n>Protected until</ng-container>
+
+  {{ value | cdDate }}
+</ng-template>
+
+<ng-template #deleteTpl
+             let-expiresAt>
+  <p class="text-danger"
+     *ngIf="!isExpired(expiresAt)">
+    <strong>
+      <ng-container i18n>This image is protected until {{ expiresAt | cdDate }}.</ng-container>
+    </strong>
+  </p>
+</ng-template>

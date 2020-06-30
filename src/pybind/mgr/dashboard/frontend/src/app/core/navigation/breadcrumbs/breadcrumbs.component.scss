@@ -1,0 +1,19 @@
+@import 'defaults.scss';
+
+.breadcrumb {
+  padding: 8px 0;
+  background-color: transparent;
+  border-radius: 0;
+  margin-top: 8px;
+}
+
+.breadcrumb > li + li:before {
+  padding: 0 5px 0 7px;
+  color: $color-breadcrumb;
+  font-family: 'ForkAwesome';
+  content: '\f101';
+}
+
+.breadcrumb > li > span {
+  color: $color-breadcrumb;
+}

@@ -1,0 +1,21 @@
+                                                                                                   Messenger throttle (number and size)
+         |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+                                                                     FileStore op_queue throttle (number and size, includes a soft throttle based on filestore_expected_throughput_(ops|bytes))
+                                                                |--------------------------------------------------------|
+                                                                                                                                                                   WBThrottle
+                                                                                                                       |---------------------------------------------------------------------------------------------------------|
+                                                                                                                                                                 Journal (size, includes a soft throttle based on filestore_expected_throughput_bytes)
+                                                                 |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+                                                                                                                       |----------------------------------------------------------------------------------------------------> flushed ----------------> synced
+                                                                                                                       |
+Op: Read Header --DispatchQ--> OSD::_dispatch --OpWQ--> PG::do_request --journalq--> Journal --FileStore::OpWQ--> Apply Thread --Finisher--> op_applied ------------------------------------------------------------->  Complete
+                                              |                                                                                                                                                                      |
+SubOp:                                        --Messenger--> ReadHeader --DispatchQ--> OSD::_dispatch --OpWQ--> PG::do_request --journalq--> Journal --FileStore::OpWQ--> Apply Thread --Finisher--> sub_op_applied -
+                                                                                                                                                                              |
+                                                                                                                                                                              |-----------------------------> flushed ----------------> synced
+                                                                                                                                                |------------------------------------------------------------------------------------------|
+                                                                                                                                                                                        Journal (size)
+                                                                                                                                                                              |---------------------------------|
+                                                                                                                                                                                        WBThrottle
+                                                                                                                         |-----------------------------------------------------|
+                                                                                                                            FileStore op_queue throttle (number and size)

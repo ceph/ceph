@@ -1,0 +1,10 @@
+tasks:
+- install:
+- ceph:
+- rbd:
+    all:
+      fs_type: ext4
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - \(PG_AVAILABILITY\)
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - cls/test_cls_lock.sh
+        - cls/test_cls_log.sh
+        - cls/test_cls_refcount.sh
+        - cls/test_cls_rgw.sh
+        - cls/test_cls_cmpomap.sh
+        - cls/test_cls_2pc_queue.sh
+        - rgw/test_rgw_gc_log.sh
+        - rgw/test_rgw_obj.sh
+        - rgw/test_rgw_throttle.sh

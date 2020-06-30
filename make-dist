@@ -1,0 +1,144 @@
+#!/bin/bash -e
+
+if [ ! -d .git ]; then
+    echo "no .git present.  run this from the base dir of the git checkout."
+    exit 1
+fi
+
+version=$1
+[ -z "$version" ] && version=$(git describe --long --match 'v*' | sed 's/^v//')
+if expr index $version '-' > /dev/null; then
+    rpm_version=$(echo $version | cut -d - -f 1-1)
+    rpm_release=$(echo $version | cut -d - -f 2- | sed 's/-/./')
+else
+    rpm_version=$version
+    rpm_release=0
+fi
+
+outfile="ceph-$version"
+echo "version $version"
+
+# update submodules
+echo "updating submodules..."
+force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
+if ! git submodule sync || ! git submodule update $force --init --recursive; then
+    echo "Error: could not initialize submodule projects"
+    echo "  Network connectivity might be required."
+    exit 1
+fi
+
+download_boost() {
+    boost_version=$1
+    shift
+    boost_sha256=$1
+    shift
+    boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
+    boost_fname=boost_${boost_version_underscore}.tar.bz2
+    set +e
+    while true; do
+        url_base=$1
+        shift
+        if [ -z $url_base ]; then
+            echo "Error: failed to download boost."
+            exit
+        fi
+        url=$url_base/$boost_fname
+        wget -c --no-verbose -O $boost_fname $url
+        if [ $? != 0 -o ! -e $boost_fname ]; then
+            echo "Download of $url failed"
+        elif [ $(sha256sum $boost_fname | awk '{print $1}') != $boost_sha256 ]; then
+            echo "Error: failed to download boost: SHA256 mismatch."
+        else
+            break
+        fi
+    done
+    set -e
+    tar xjf $boost_fname -C src \
+        --exclude="$boost_version_underscore/libs/*/doc" \
+        --exclude="$boost_version_underscore/libs/*/example" \
+        --exclude="$boost_version_underscore/libs/*/examples" \
+        --exclude="$boost_version_underscore/libs/*/meta" \
+        --exclude="$boost_version_underscore/libs/*/test" \
+        --exclude="$boost_version_underscore/tools/boostbook" \
+        --exclude="$boost_version_underscore/tools/quickbook" \
+        --exclude="$boost_version_underscore/tools/auto_index" \
+        --exclude='doc' --exclude='more' --exclude='status'
+    mv src/boost_${boost_version_underscore} src/boost
+    tar cf ${outfile}.boost.tar ${outfile}/src/boost
+    rm -rf src/boost
+}
+
+build_dashboard_frontend() {
+  CURR_DIR=`pwd`
+  TEMP_DIR=`mktemp -d`
+
+  $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
+  $TEMP_DIR/bin/pip install nodeenv
+  $TEMP_DIR/bin/nodeenv -p --node=12.16.2
+  cd src/pybind/mgr/dashboard/frontend
+
+  . $TEMP_DIR/bin/activate
+  timeout 1h npm ci
+  echo "Building ceph-dashboard frontend with build:localize script";
+  # we need to use "--" because so that "--prod" survives accross all
+  # scripts redirections inside package.json
+  npm run build:localize -- --prod
+  deactivate
+  cd $CURR_DIR
+  rm -rf $TEMP_DIR
+  tar cf dashboard_frontend.tar $outfile/src/pybind/mgr/dashboard/frontend/dist
+}
+
+generate_rook_ceph_client() {
+  $outfile/src/pybind/mgr/rook/generate_rook_ceph_client.sh
+  tar cf rook_ceph_client.tar $outfile/src/pybind/mgr/rook/rook_client/*.py
+}
+
+# clean out old cruft...
+echo "cleanup..."
+rm -f $outfile*
+
+# build new tarball
+echo "building tarball..."
+bin/git-archive-all.sh --prefix ceph-$version/ \
+		       --verbose \
+		       --ignore corpus \
+		       $outfile.tar
+
+# populate files with version strings
+echo "including src/.git_version, ceph.spec"
+
+(git rev-parse HEAD ; echo $version) 2> /dev/null > src/.git_version
+
+for spec in ceph.spec.in alpine/APKBUILD.in; do
+    cat $spec |
+        sed "s/@PROJECT_VERSION@/$rpm_version/g" |
+        sed "s/@RPM_RELEASE@/$rpm_release/g" |
+        sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
+done
+ln -s . $outfile
+tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
+# NOTE: If you change this version number make sure the package is available
+# at the three URLs referenced below (may involve uploading to download.ceph.com)
+boost_version=1.73.0
+download_boost $boost_version 4eb3b8d442b426dc35346235c8733b5ae35ba431690e38c6a8263dce9fcbb402 \
+               https://dl.bintray.com/boostorg/release/$boost_version/source \
+               https://downloads.sourceforge.net/project/boost/boost/$boost_version \
+               https://download.ceph.com/qa
+
+build_dashboard_frontend
+generate_rook_ceph_client
+tar --concatenate -f $outfile.all.tar $outfile.version.tar
+tar --concatenate -f $outfile.all.tar $outfile.boost.tar
+tar --concatenate -f $outfile.all.tar $outfile.tar
+tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
+tar --concatenate -f $outfile.all.tar rook_ceph_client.tar
+mv $outfile.all.tar $outfile.tar
+rm $outfile
+rm -f $outfile.version.tar
+rm -f $outfile.boost.tar
+
+echo "compressing..."
+bzip2 -9 $outfile.tar
+
+echo "done."

@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon min osdmap epochs: 25
+        paxos service trim min: 5
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
+# thrashing monitors may make mgr have trouble w/ its keepalive
+    log-whitelist:
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+# slow mons -> slow peering -> PG_AVAILABILITY
+      - \(PG_AVAILABILITY\)
+      - \(SLOW_OPS\)
+      - slow request
+tasks:
+- install:
+- ceph:

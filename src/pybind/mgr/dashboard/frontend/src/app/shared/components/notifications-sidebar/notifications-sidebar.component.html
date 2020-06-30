@@ -1,0 +1,128 @@
+<ng-template #tasksTpl>
+  <!-- Executing -->
+  <div *ngFor="let executingTask of executingTasks; trackBy:trackByFn">
+    <div class="card tc_task border-0 mb-3">
+      <div class="row no-gutters">
+        <div class="col-md-3 text-center">
+          <span [ngClass]="[icons.stack, icons.large2x]"
+                class="text-info">
+            <i [ngClass]="[icons.stack2x, icons.circle]"></i>
+            <i [ngClass]="[icons.stack1x, icons.spinner, icons.spin, icons.inverse]"></i>
+          </span>
+        </div>
+        <div class="col-md-9">
+          <div class="card-body p-0">
+            <h6 class="card-title bold">{{ executingTask.description }}</h6>
+
+            <div class="mb-1">
+              <ngb-progressbar type="info"
+                               [value]="executingTask?.progress"
+                               [striped]="true"
+                               [animated]="true"></ngb-progressbar>
+            </div>
+
+            <p class="card-text text-muted">
+              <small class="date float-left">
+                {{ executingTask.begin_time | cdDate }}
+              </small>
+
+              <span class="float-right">
+                {{ executingTask.progress || 0 }} %
+              </span>
+            </p>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr>
+  </div>
+</ng-template>
+
+<ng-template #notificationsTpl>
+  <ng-container *ngIf="notifications.length > 0">
+    <button type="button"
+            class="btn btn-light btn-block"
+            (click)="removeAll(); $event.stopPropagation()">
+      <i [ngClass]="[icons.trash]"
+         aria-hidden="true"></i>
+      &nbsp;
+      <ng-container i18n>Clear notifications</ng-container>
+    </button>
+
+    <hr>
+
+    <div *ngFor="let notification of notifications; let i = index">
+      <div class="card tc_notification border-0 mb-3">
+        <div class="row no-gutters">
+          <div class="col-md-3 text-center">
+            <span [ngClass]="[icons.stack, icons.large2x, notification.textClass]">
+              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
+              <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
+            </span>
+          </div>
+          <div class="col-md-9">
+            <div class="card-body p-0">
+              <button class="btn btn-link float-right mt-0 pt-0"
+                      title="Remove notification"
+                      i18n-title
+                      (click)="remove(i); $event.stopPropagation()">
+                <i [ngClass]="[icons.trash]"></i>
+              </button>
+
+              <h6 class="card-title bold">{{ notification.title }}</h6>
+              <p class="card-text"
+                 [innerHtml]="notification.message"></p>
+              <p class="card-text text-muted">
+                <ng-container *ngIf="notification.duration">
+                  <small>
+                    <ng-container i18n>Duration:</ng-container> {{ notification.duration | duration }}
+                  </small>
+                  <br>
+                </ng-container>
+                <small class="date"
+                       [title]="notification.timestamp | cdDate">{{ notification.timestamp | duration: true }}</small>
+                <i class="float-right custom-icon"
+                   [ngClass]="[notification.applicationClass]"
+                   [title]="notification.application"></i>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr>
+    </div>
+  </ng-container>
+</ng-template>
+
+<ng-template #emptyTpl>
+  <div *ngIf="notifications.length === 0 && executingTasks.length === 0">
+    <div class="message text-center"
+         i18n>There are no notifications.</div>
+  </div>
+</ng-template>
+
+<div class="card"
+     (clickOutside)="closeSidebar()"
+     [clickOutsideEnabled]="isSidebarOpened">
+  <div class="card-header">
+    <ng-container i18n>Tasks and Notifications</ng-container>
+
+    <button class="close float-right"
+            tabindex="-1"
+            type="button"
+            (click)="closeSidebar()">
+      <span>×</span>
+    </button>
+  </div>
+
+  <ngx-simplebar [options]="simplebar">
+    <div class="card-body">
+      <ng-container *ngTemplateOutlet="tasksTpl"></ng-container>
+      <ng-container *ngTemplateOutlet="notificationsTpl"></ng-container>
+      <ng-container *ngTemplateOutlet="emptyTpl"></ng-container>
+    </div>
+  </ngx-simplebar>
+</div>

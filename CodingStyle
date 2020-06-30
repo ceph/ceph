@@ -1,0 +1,164 @@
+Ceph Coding style
+-----------------
+
+Coding style is most important for new code and (to a lesser extent)
+revised code.  It is not worth the churn to simply reformat old code.
+
+C code
+------
+
+For C code, we conform by the Linux kernel coding standards:
+
+    https://www.kernel.org/doc/Documentation/process/coding-style.rst
+
+
+C++ code
+--------
+
+For C++ code, things are a bit more complex.  As a baseline, we use Google's
+coding guide:
+
+    https://google.github.io/styleguide/cppguide.html
+
+
+As an addendum to the above, we add the following guidelines, organized
+by section.
+
+* Naming > Type Names:
+
+    Google uses CamelCaps for all type names.  We use two naming schemes:
+
+    - for naked structs (simple data containers), lower case with _t.
+      Yes, _t also means typedef.  It's perhaps not ideal.
+
+        struct my_type_t {
+          int a = 0, b = 0;
+	  void encode(...) ...
+	  ...
+        };
+
+    - for full-blown classes, CamelCaps, private: section, accessors,
+      probably not copyable, etc.
+
+* Naming > Variable Names:
+
+   Google uses _ suffix for class members.  That's ugly.  We'll use
+   a m_ prefix, like so, or none at all.
+
+        class Foo {
+	 public:
+          int get_foo() const { return m_foo; }
+          void set_foo(int foo) { m_foo = foo; }
+
+         private:
+          int m_foo;
+   	};
+
+* Naming > Constant Names:
+
+   Google uses kSomeThing for constants.  We prefer SOME_THING.
+
+* Naming > Function Names:
+
+   Google uses CamelCaps.  We use_function_names_with_underscores().
+
+   Accessors are the same, {get,set}_field().
+
+* Naming > Enumerator Names:
+
+   Name them like constants, as above (SOME_THING).
+
+* Comments > File Comments:
+
+   Don't sweat it, unless the license varies from that of the project
+   (LGPL2.1 or LGPL3.0) or the code origin isn't reflected by the git history.
+
+* Formatting > Tabs:
+  Indent width is two spaces.  When runs of 8 spaces can be compressed
+  to a single tab character, do so. The standard Emacs/Vim settings
+  header is:
+
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
+* Formatting > Conditionals:
+
+   - No spaces inside conditionals please, e.g.
+
+        if (foo) {   // okay
+
+        if ( foo ) { // no
+
+   - Always use newline following if, and use braces:
+
+        if (foo) {
+          bar;         // like this, even for a one-liner
+        }
+
+	if (foo)
+	  bar;         // no, usually harder to parse visually
+
+        if (foo) bar;  // no
+
+	if (foo) { bar; }  // definitely no
+
+* Header Files -> The `#define` Guard:
+
+  `#pragma once` is allowed for simplicity at the expense of
+   portability since `#pragma once` is widely supported and is known
+   to work on GCC and Clang.
+
+
+The following guidelines have not been followed in the legacy code,
+but are worth mentioning and should be followed strictly for new code:
+
+* Header Files > Function Parameter Ordering:
+
+    Inputs, then outputs.
+
+* Classes > Explicit Constructors:
+
+    You should normally mark constructors explicit to avoid getting silent
+type conversions.
+
+* Classes > Copy Constructors:
+
+    - Use defaults for basic struct-style data objects.
+
+    - Most other classes should DISALLOW_COPY_AND_ASSIGN.
+
+    - In rare cases we can define a proper copy constructor and operator=.
+
+* Other C++ Features > Reference Arguments:
+
+    Only use const references.  Use pointers for output arguments.
+
+* Other C++ Features > Avoid Default Arguments:
+
+    They obscure the interface.
+
+
+Python code
+-----------
+
+For new python code, PEP-8 should be observed:
+
+    https://www.python.org/dev/peps/pep-0008/
+
+Existing code can be refactored to adhere to PEP-8, and cleanups are welcome.
+
+
+JavaScript / TypeScript
+-----------------------
+
+For Angular code, we follow the official Angular style guide:
+
+    https://angular.io/guide/styleguide
+
+To check whether your code is conformant with the style guide, we use a
+combination of TSLint, Codelyzer and Prettier:
+
+    https://palantir.github.io/tslint/
+    http://codelyzer.com/
+    https://prettier.io/
+

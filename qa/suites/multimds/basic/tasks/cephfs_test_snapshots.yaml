@@ -1,0 +1,16 @@
+overrides:
+  check-counter:
+    dry_run: true
+  ceph:
+    log-whitelist:
+      - evicting unresponsive client
+      - RECENT_CRASH
+
+tasks:
+- exec:
+    mon.a:
+      - ceph config set mgr mgr/crash/warn_recent_interval 0
+- cephfs_test_runner:
+    fail_on_skip: false
+    modules:
+      - tasks.cephfs.test_snapshots

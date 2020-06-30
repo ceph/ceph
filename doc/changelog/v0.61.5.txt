@@ -1,0 +1,1199 @@
+commit 8ee10dc4bb73bdd918873f29c70eedc3c7ef1979
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Wed Jul 17 16:39:08 2013 -0700
+
+    v0.61.5
+
+commit 39bffac6b6c898882d03de392f7f2218933d942b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 16 13:14:50 2013 -0700
+
+    ceph-disk: rely on /dev/disk/by-partuuid instead of special-casing journal symlinks
+    
+    This was necessary when ceph-disk-udev didn't create the by-partuuid (and
+    other) symlinks for us, but now it is fragile and error-prone.  (It also
+    appears to be broken on a certain customer RHEL VM.)  See
+    d7f7d613512fe39ec883e11d201793c75ee05db1.
+    
+    Instead, just use the by-partuuid symlinks that we spent all that ugly
+    effort generating.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 64379e701b3ed862c05f156539506d3382f77aa8)
+
+commit 363d54288254b5e2311cd28fce5988d68cfd5773
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jul 16 16:49:48 2013 +0100
+
+    mon: Monitor: StoreConverter: clearer debug message on 'needs_conversion()'
+    
+    The previous debug message outputted the function's name, as often our
+    functions do.  This was however a source of bewilderment, as users would
+    see those in logs and think their stores would need conversion.  Changing
+    this message is trivial enough and it will make ceph users happier log
+    readers.
+    
+    Backport: cuttlefish
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ad1392f68170b391d11df0ce5523c2d1fb57f60e)
+
+commit 0ea89760def73f76d8100889eca3c25b0a6eb772
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jul 16 16:45:39 2013 +0100
+
+    mon: Monitor: do not reopen MonitorDBStore during conversion
+    
+    We already open the store on ceph_mon.cc, before we start the conversion.
+    Given we are unable to reproduce this every time a conversion is triggered,
+    we are led to believe that this causes a race in leveldb that will lead
+    to 'store.db/LOCK' being locked upon the open this patch removes.
+    
+    Regardless, reopening the db here is pointless as we already did it when
+    we reach Monitor::StoreConverter::convert().
+    
+    Fixes: #5640
+    Backport: cuttlefish
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 036e6739a4e873863bae3d7d00f310c015dfcdb3)
+
+commit 595c09df9134fb0d62144fe1594914c90e567dca
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 14 15:54:29 2013 -0700
+
+    messages/MClientReconnect: clear data when encoding
+    
+    The MClientReconnect puts everything in the data payload portion of
+    the message and nothing in the front portion.  That means that if the
+    message is resent (socket failure or something), the messenger thinks it
+    hasn't been encoded yet (front empty) and reencodes, which means
+    everything gets added (again) to the data portion.
+    
+    Decoding keep decoding until it runs out of data, so the second copy
+    means we decode garbage snap realms, leading to the crash in bug
+    
+    Clearing data each time around resolves the problem, although it does
+    mean we do the encoding work multiple times.  We could alternatively
+    (or also) stick some data in the front portion of the payload
+    (ignored), but that changes the wire protocol and I would rather not
+    do that.
+    
+    Fixes: #4565
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 314cf046b0b787ca69665e8751eab6fe7adb4037)
+
+commit 8c178e0d39d8d4a4820eb061f79d74f95e60199f
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 15 10:05:37 2013 -0700
+
+    mon: once sync full is chosen, make sure we don't change our mind
+    
+    It is possible for a sequence like:
+    
+     - probe
+     - first probe reply has paxos trim that indicates a full sync is
+       needed
+     - start sync
+     - clear store
+     - something happens that makes us abort and bootstrap (e.g., the
+       provider mon restarts
+     - probe
+     - first probe reply has older paxos trim bound and we call an election
+     - on election completion, we crash because we have no data.
+    
+    Non-determinism of the probe decision aside, we need to ensure that
+    the info we share during probe (fc, lc) is accurate, and that once we
+    clear the store we know we *must* do a full sync.
+    
+    This is a backport of aa60f940ec1994a61624345586dc70d261688456.
+    
+    Fixes: #5621
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 6af0ed9bc4cc955f8c30ad9dc6e9095599f323d0
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 9 14:12:15 2013 -0700
+
+    mon: do not scrub if scrub is in progress
+    
+    This prevents an assert from unexpected scrub results from the previous
+    scrub on the leader.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 00ae543b3e32f89d906a0e934792cc5309f57696)
+
+commit 5642155ba5ca9b384a7af058a6538ac00c2a592d
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 10 10:06:20 2013 -0700
+
+    messages/MPGStats: do not set paxos version to osdmap epoch
+    
+    The PaxosServiceMessage version field is meant for client-coordinated
+    ordering of messages when switching between monitors (and is rarely
+    used).  Do not fill it with the osdmap epoch lest it be compared to a
+    pgmap version, which may cause the mon to (near) indefinitely put it on
+    a wait queue until the pgmap version catches up.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit b36338be43f43b6dd4ee87c97f2eaa23b467c386)
+
+commit 06c65988bb0b1d1ec626fe31e9d806a1c4e24b28
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 11 18:43:24 2013 -0700
+
+    osd/OSDmap: fix OSDMap::Incremental::dump() for new pool names
+    
+    The name is always present when pools are created, but not when they are
+    modified.  Also, a name may be present with a new_pools entry if the pool
+    is just renamed.  Separate it out completely in the dump.
+    
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3e4a29111e89588385e63f8d92ce3d67739dd679)
+
+commit 658240710baaf9c661b8fbf856322907a0d394ee
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 10:49:28 2013 -0700
+
+    mon/PaxosService: prevent reads until initial service commit is done
+    
+    Do not process reads (or, by PaxosService::dispatch() implication, writes)
+    until we have committed the initial service state.  This avoids things like
+    EPERM due to missing keys when we race with mon creation, triggered by
+    teuthology tests doing their health check after startup.
+    
+    Fixes: #5515
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit d08b6d6df7dba06dad73bdec2c945f24afc02717)
+
+commit 5c3ff33771e227b3fb5cc354323846fe8db4ecc1
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 28 12:21:58 2013 -0700
+
+    client: send all request put's through put_request()
+    
+    Make sure all MetaRequest reference put's go through the same path that
+    releases inode references, including all of the error paths.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 87217e1e3cb2785b79d0dec49bd3f23a827551f5)
+
+commit 1df78ad73df581bc7537688ae28bda820b089a13
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 28 11:50:11 2013 -0700
+
+    client: fix remaining Inode::put() caller, and make method psuedo-private
+    
+    Not sure I can make this actually private and make Client::put_inode() a
+    friend method (making all of Client a friend would defeat the purpose).
+    This works well enough, though!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9af3b86b25574e4d2cdfd43e61028cffa19bdeb1)
+
+commit fea024cc3dd2c6fd9ff322d1cd15e0d75c92eca5
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 27 21:39:35 2013 -0700
+
+    client: use put_inode on MetaRequest inode refs
+    
+    When we drop the request inode refs, we need to use put_inode() to ensure
+    they get cleaned up properly (removed from inode_map, caps released, etc.).
+    Do this explicitly here (as we do with all other inode put() paths that
+    matter).
+    
+    Fixes: #5381
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 81bee6487fb1ce9e090b030d61bda128a3cf4982)
+
+commit 62ae39ec8f208cb8f89e43ba844b9a20b4315c61
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 15:57:48 2013 -0700
+
+    mon: be smarter about calculating last_epoch_clean lower bound
+    
+    We need to take PGs whose mapping has not changed in a long time into
+    account.  For them, the pg state will indicate it was clean at the time of
+    the report, in which case we can use that as a lower-bound on their actual
+    latest epoch clean.  If they are not currently clean (at report time), use
+    the last_epoch_clean value.
+    
+    Fixes: #5519
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cc0006deee3153e06ddd220bf8a40358ba830135)
+
+commit da725852190245d2f91b7b21e72baee70e4342bd
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 13:27:58 2013 -0700
+
+    osd: report pg stats to mon at least every N (=500) epochs
+    
+    The mon needs a moderately accurate last_epoch_clean value in order to trim
+    old osdmaps.  To prevent a PG that hasn't peered or received IO in forever
+    from preventing this, send pg stats at some minimum frequency.  This will
+    increase the pg stat report workload for the mon over an idle pool, but
+    should be no worse that a cluster that is getting actual IO and sees these
+    updates from normal stat updates.
+    
+    This makes the reported update a bit more aggressive/useful in that the epoch
+    is the last map epoch processed by this PG and not just one that is >= the
+    currenting interval.  Note that the semantics of this field are pretty useless
+    at this point.
+    
+    See #5519
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit da81228cc73c95737f26c630e5c3eccf6ae1aaec)
+
+commit 757af91b2af0da6bbfeeb53551fa1ef4ef9118ea
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 10 11:32:34 2013 -0700
+
+    osd: fix warning
+    
+    From 653e04a79430317e275dd77a46c2b17c788b860b
+    
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bc291d3fc3fc1cac838565cbe0f25f71d855a6e3)
+
+commit 65af2538329472d2fd078bb961863c40cdabda12
+Merge: e537699 804314b
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 12 15:21:20 2013 -0700
+
+    Merge remote-tracking branch 'gh/wip-mon-sync-2' into cuttlefish
+    
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit e537699b33f84c14f027b56372fbcb0a99bbe88d
+Author: Sandon Van Ness <sandon@inktank.com>
+Date:   Wed Jul 10 14:55:52 2013 -0700
+
+    Get device-by-path by looking for it instead of assuming 3rd entry.
+    
+    On some systems (virtual machines so far) the device-by-path entry
+    from udevadm is not always in the same spot so instead actually
+    look for the right output instead of blindy assuming that its a
+    specific field in the output.
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    Reviewed-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 804314b8bfa5ec75cc9653e2928874c457395c92
+Merge: 6ad9fe1 78f2266
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 10 11:40:37 2013 -0700
+
+    Merge remote-tracking branch 'gh/cuttlefish' into wip-mon-sync-2
+
+commit 78f226634bd80f6678b1f74ccf785bc52fcd6b62
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 10 11:02:08 2013 -0700
+
+    osd: limit number of inc osdmaps send to peers, clients
+    
+    We should not send an unbounded number of inc maps to our peers or clients.
+    In particular, if a peer is not contacted for a while, we may think they
+    have a very old map (say, 10000 epochs ago) and send thousands of inc maps
+    when the distribution shifts and we need to peer.
+    
+    Note that if we do not send enough maps, the peers will make do by
+    requesting the map from somewhere else (currently the mon).  Regardless
+    of the source, however, we must limit the amount that we speculatively
+    share as it usually is not needed.
+    
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 653e04a79430317e275dd77a46c2b17c788b860b)
+
+commit 54ee2dc80ed032c286546da51442340ec9991cdf
+Author: Christophe Courtaut <christophe.courtaut@gmail.com>
+Date:   Mon Jul 1 14:57:17 2013 +0200
+
+    rgw: Fix return value for swift user not found
+    
+    http://tracker.ceph.com/issues/1779 fixes #1779
+    
+    Adjust the return value from rgw_get_user_info_by_swift call
+    in RGW_SWIFT_Auth_Get::execute() to have the correct
+    return code in response.
+    (cherry picked from commit 4089001de1f22d6acd0b9f09996b71c716235551)
+
+commit 47852c263831707fff1570317a7446b0700c5962
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 9 21:55:51 2013 -0700
+
+    mon/OSDMonitor: make 'osd crush rm ...' slightly more idempotent
+    
+    This is a manual backport of 18a624fd8b90d9959de51f07622cf0839e6bd9aa.
+    Do not return immediately if we are looking at uncommitted state.t
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit bfc26c656d183fbcc90a352391e47f9f51c96052
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 17:46:40 2013 -0700
+
+    mon/OSDMonitor: fix base case for loading full osdmap
+    
+    Right after cluster creation, first_committed is 1 and latest stashed in 0,
+    but we don't have the initial full map yet.  Thereafter, we do (because we
+    write it with trim).  Fixes afd6c7d8247075003e5be439ad59976c3d123218.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 43fa7aabf1f7e5deb844c1f52d451bab9e7d1006)
+
+commit 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 15:04:59 2013 -0700
+
+    mon: fix osdmap stash, trim to retain complete history of full maps
+    
+    The current interaction between sync and stashing full osdmaps only on
+    active mons means that a sync can result in an incomplete osdmap_full
+    history:
+    
+     - mon.c starts a full sync
+     - during sync, active osdmap service should_stash_full() is true and
+       includes a full in the txn
+     - mon.c sync finishes
+     - mon.c update_from_paxos gets "latest" stashed that it got from the
+       paxos txn
+     - mon.c does *not* walk to previous inc maps to complete it's collection
+       of full maps.
+    
+    To fix this, we disable the periodic/random stash of full maps by the
+    osdmap service.
+    
+    This introduces a new problem: we must have at least one full map (the first
+    one) in order for a mon that just synced to build it's full collection.
+    Extend the encode_trim() process to allow the osdmap service to include
+    the oldest full map with the trim txn.  This is more complex than just
+    writing the full maps in the txn, but cheaper--we only write the full
+    map at trim time.
+    
+    This *might* be related to previous bugs where the full osdmap was
+    missing, or case where leveldb keys seemed to 'disappear'.
+    
+    Fixes: #5512
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit afd6c7d8247075003e5be439ad59976c3d123218)
+
+commit 24f90b832c695ef13021db66a178c18369ac356d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 15:07:57 2013 -0700
+
+    mon: implement simple 'scrub' command
+    
+    Compare all keys within the sync'ed prefixes across members of the quorum
+    and compare the key counts and CRC for inconsistencies.
+    
+    Currently this is a one-shot inefficient hammer.  We'll want to make this
+    work in chunks before it is usable in production environments.
+    
+    Protect with a feature bit to avoid sending MMonScrub to mons who can't
+    decode it.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit a9906641a1dce150203b72682da05651e4d68ff5)
+    
+    Conflicts:
+    
+    	src/mon/MonCommands.h
+    	src/mon/Monitor.cc
+
+commit 926f723c12428a034545c6c4ff6641e1d5e05d24
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jul 3 11:18:33 2013 -0700
+
+    Elector.h: features are 64 bit
+    
+    Fixes: #5497
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit 3564e304e3f50642e4d9ff25e529d5fc60629093)
+
+commit c2b38291e706c9d1d4d337cee3a944f34bf66525
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jul 3 11:18:19 2013 -0700
+
+    ceph_features.h: declare all features as ULL
+    
+    Otherwise, the first 32 get |'d together as ints.  Then, the result
+    ((int)-1) is sign extended to ((long long int)-1) before being |'d
+    with the 1LL entries.  This results in ~((uint64_t)0).
+    
+    Fixes: #5497
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit 4255b5c2fb54ae40c53284b3ab700fdfc7e61748)
+
+commit 95ef961d8537fc369efd0634262ffb8f288d6e9e
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jul 2 21:09:36 2013 -0700
+
+    Pipe: use uint64_t not unsigned when setting features
+    
+    Fixes: #5497
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit bc3e2f09f8860555d8b3b49b2eea164b4118d817)
+
+commit 09d258b70a28e5cea555b9d7e215fe41d6b84577
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 11:24:48 2013 -0700
+
+    client: remove O_LAZY
+    
+    The once-upon-a-time unique O_LAZY value I chose forever ago is now
+    O_NOATIME, which means that some clients are choosing relaxed
+    consistency without meaning to.
+    
+    It is highly unlikely that a real O_LAZY will ever exist, and we can
+    select it in the ceph case with the ioctl or libcephfs call, so drop
+    any support for doing this via open(2) flags.
+    
+    Update doc/lazy_posix.txt file re: lazy io.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 94afedf02d07ad4678222aa66289a74b87768810)
+
+commit c3b684932bad31fc853ad556d16e1e4a9926486e
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 8 12:55:20 2013 -0700
+
+    osd/osd_types: fix pg_stat_t::dump for last_epoch_clean
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 69a55445439fce0dd6a3d32ff4bf436da42f1b11)
+
+commit a02f2510fcc800b9f2cf2a06401a7b97d5985409
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 5 16:03:49 2013 -0700
+
+    mon: remove bad assert about monmap version
+    
+    It is possible to start a sync when our newest monmap is 0.  Usually we see
+    e0 from probe, but that isn't always published as part of the very first
+    paxos transaction due to the way PaxosService::_active generates it's
+    first initial commit.
+    
+    In any case, having e0 here is harmless.
+    
+    Fixes: #5509
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 85a1d6cc5d3852c94d1287b566656c5b5024fa13)
+
+commit 6ad9fe17a674ba65bbeb4052cb1ac47f3113e7bf
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 4 19:33:06 2013 -0700
+
+    mon/Paxos: fix sync restart
+    
+    If we have a sync going, and an election intervenes, the client will
+    try to continue by sending a new start_chunks request.  In order to
+    ensure that we get all of the paxos commits from our original starting
+    point (and thus properly update the keys from which they started),
+    only pay attention if they *also* send their current last_committed
+    version.  Otherwise, start them at the beginning.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit c5812b1c893305a7d20f9eaec2695c8b1691f0c9
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 4 14:57:06 2013 -0700
+
+    mon: uninline _trim_enable and Paxos::trim_{enable,disable} so we can debug them
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 6fbcbd7fddf35a5be4b38e536871903bff4f9bf1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 4 14:55:34 2013 -0700
+
+    mon/Paxos: increase paxos max join drift
+    
+    A value of 10 is too aggressive for large, long-running syncs. 100 is
+    about 2 minutes of activity at most, which should be a more forgiving
+    buffer.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit f3a51fa30e5ce1656853b40d831409f195f6e4ca
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 4 14:21:04 2013 -0700
+
+    mon/Paxos: configure minimum paxos txns separately
+    
+    We were using paxos_max_join_drift to control the minimum number of
+    paxos transactions to keep around.  Instead, make this explicit, and
+    separate from the join drift.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 1156721f22f5f337241eef3d0276ca74fe6352d1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 4 17:09:07 2013 -0700
+
+    mon: include any new paxos commits in each sync CHUNK message
+    
+    We already take note of the paxos version when we begin the sync.  As
+    sync progresses and there are new paxos commits/txns, include those
+    and update last_committed, so that when sync completes we will have
+    a full view of everything that happened during sync.
+    
+    Note that this does not introduce any compatibility change.  This change
+    *only* affects the provider.  The key difference is that at the end
+    of the sync, the provide will set version to the latest version, and
+    not the version from the start of the sync (as was done previously).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 40672219a081f0dc2dd536977290ef05cfc9f097
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 4 12:17:28 2013 -0700
+
+    mon/MonitorDBStore: expose get_chunk_tx()
+    
+    Allow users get the transaction unencoded.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit db2bb270e93ed44f9252d65d1d4c9b36875d0ea5
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 3 17:15:56 2013 -0700
+
+    mon: enable leveldb cache by default
+    
+    256 is not as large as the upstream 512 MB, but will help signficiantly and
+    be less disruptive for existing cuttlefish clusters.
+    
+    Sort-of backport of e93730b7ffa48b53c8da2f439a60cb6805facf5a.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 123f676e3ae8154ca94cb076c4c4ec5389d2a643
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 3 16:56:06 2013 -0700
+
+    mon/Paxos: make 'paxos trim disabled max versions' much much larger
+    
+    108000 is about 3 hours if paxos is going full-bore (1 proposal/second).
+    That ought to be pretty safe.  Otherwise, we start trimming to soon and a
+    slow sync will just have to restart when it finishes.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 71ebfe7e1abe4795b46cf00dfe1b03d1893368b0)
+    
+    Conflicts:
+    
+    	src/common/config_opts.h
+
+commit 03393c0df9f54e4f1db60e1058ca5a7cd89f44e6
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 26 06:01:40 2013 -0700
+
+    mon: do not reopen MonitorDBStore during startup
+    
+    level doesn't seem to like this when it races with an internal compaction
+    attempt (see below).  Instead, let the store get opened by the ceph_mon
+    caller, and pull a bit of the logic into the caller to make the flow a
+    little easier to follow.
+    
+        -2> 2013-06-25 17:49:25.184490 7f4d439f8780 10 needs_conversion
+        -1> 2013-06-25 17:49:25.184495 7f4d4065c700  5 asok(0x13b1460) entry start
+         0> 2013-06-25 17:49:25.316908 7f4d3fe5b700 -1 *** Caught signal (Segmentation fault) **
+     in thread 7f4d3fe5b700
+    
+     ceph version 0.64-667-g089cba8 (089cba8fc0e8ae8aef9a3111cba7342ecd0f8314)
+     1: ceph-mon() [0x649f0a]
+     2: (()+0xfcb0) [0x7f4d435dccb0]
+     3: (leveldb::Table::BlockReader(void*, leveldb::ReadOptions const&, leveldb::Slice const&)+0x154) [0x806e54]
+     4: ceph-mon() [0x808840]
+     5: ceph-mon() [0x808b39]
+     6: ceph-mon() [0x806540]
+     7: (leveldb::DBImpl::DoCompactionWork(leveldb::DBImpl::CompactionState*)+0xdd) [0x7f363d]
+     8: (leveldb::DBImpl::BackgroundCompaction()+0x2c0) [0x7f4210]
+     9: (leveldb::DBImpl::BackgroundCall()+0x68) [0x7f4cc8]
+     10: ceph-mon() [0x80b3af]
+     11: (()+0x7e9a) [0x7f4d435d4e9a]
+     12: (clone()+0x6d) [0x7f4d4196bccd]
+     NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ea1f316e5de21487ae034a1aa929068ba23ac525)
+
+commit 0143acc49bc5834836afc2c5a9d8f67030bec85f
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 2 14:43:17 2013 -0700
+
+    sysvinit, upstart: handle symlinks to dirs in /var/lib/ceph/*
+    
+    Match a symlink to a dir, not just dirs.  This fixes the osd case of e.g.,
+    creating an osd in /data/osd$id in which ceph-disk makes a symlink from
+    /var/lib/ceph/osd/ceph-$id.
+    
+    Fix proposed by Matt Thompson <matt.thompson@mandiant.com>; extended to
+    include the upstart users too.
+    
+    Fixes: #5490
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 87c98e92d1375c8bc76196bbbf06f677bef95e64)
+
+commit 7e878bcc8c1b51538f3c05f854a9dac74c09b116
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 1 17:33:11 2013 -0700
+
+    rgw: add RGWFormatter_Plain allocation to sidestep cranky strlen()
+    
+    Valgrind complains about an invalid read when we don't pad the allocation,
+    and because it is inlined we can't whitelist it for valgrind.  Workaround
+    the warning by just padding our allocations a bit.
+    
+    Fixes: #5346
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 49ff63b1750789070a8c6fef830c9526ae0f6d9f)
+
+commit ca61402855966210ba1598239eaf454eaad0f5f2
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Wed May 15 11:24:36 2013 +0800
+
+    mds: warn on unconnected snap realms
+    
+    When there are more than one active MDS, restarting MDS triggers
+    assertion "reconnected_snaprealms.empty()" quite often. If there
+    is no snapshot in the FS, the items left in reconnected_snaprealms
+    should be other MDS' mdsdir. I think it's harmless.
+    
+    If there are snapshots in the FS, the assertion probably can catch
+    real bugs. But at present, snapshot feature is broken, fixing it is
+    non-trivial. So replace the assertion with a warning.
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit 26effc0e583b0a3dade6ec81ef26dec1c94ac8b2)
+
+commit e11f258831e14dc3755e09c0fd4f9bfdf79022a7
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 26 06:53:08 2013 -0700
+
+    mon/PGMonitor: use post_paxos_update, not init, to refresh from osdmap
+    
+    We do two things here:
+     - make init an one-time unconditional init method, which is what the
+       health service expects/needs.
+     - switch PGMonitor::init to be post_paxos_update() which is called after
+       the other services update, which is what PGMonitor really needs.
+    
+    This is a new version of the fix originally in commit
+    a2fe0137946541e7b3b537698e1865fbce974ca6 (and those around it).  That is,
+    this re-fixes a problem where osds do not see pg creates from their
+    subscribe due to map_pg_creates() not getting called.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e635c47851d185eda557e36bdc4bf3775f7b87a2)
+    
+    Conflicts:
+    	src/mon/PGMonitor.cc
+    	src/mon/PGMonitor.h
+
+commit 4d07fb014178da3c88edeb8765e1aaacb8cb8ffa
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 26 06:52:01 2013 -0700
+
+    mon/PaxosService: add post_paxos_update() hook
+    
+    Some services need to update internal state based on other service's
+    state, and thus need to be run after everyone has pulled their info out of
+    paxos.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 131686980f0a930d5de7cbce8234fead5bd438b6)
+
+commit 90f5c448abeb127ae5a5528a79bd7bdbc74cb497
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu Jun 27 14:58:14 2013 -0700
+
+    ceph-disk: s/else if/elif/
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Joao Luis <joao.luis@inktank.com>
+    (cherry picked from commit bd8255a750de08c1b8ee5e9c9a0a1b9b16171462)
+    (cherry picked from commit 9e604ee6943fdb131978afbec51321050faddfc6)
+
+commit 5c4bb463dca5aa61ea5f02f7592d5a3cc82cf6f4
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jun 26 11:28:57 2013 -0700
+
+    rgw: fix radosgw-admin buckets list
+    
+    Fixes: #5455
+    Backport: cuttlefish
+    This commit fixes a regression, where radosgw-admin buckets list
+    operation wasn't returning any data.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e1f9fe58d2860fcbb18c92d3eb3946236b49a6ce)
+
+commit b2fb48762f32279e73feb83b220339fea31275e9
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 19 17:27:49 2013 -0700
+
+    ceph-disk: use unix lock instead of lockfile class
+    
+    The lockfile class relies on file system trickery to get safe mutual
+    exclusion.  However, the unix syscalls do this for us.  More
+    importantly, the unix locks go away when the owning process dies, which
+    is behavior that we want here.
+    
+    Fixes: #5387
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 2a4953b697a3464862fd3913336edfd7eede2487)
+
+commit 26e7a6fffde4abcb685f34247e8491c05ee2a68d
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 26 18:27:49 2013 -0700
+
+    ceph-disk: do not mount over an osd directly in /var/lib/ceph/osd/$cluster-$id
+    
+    If we see a 'ready' file in the target OSD dir, do not mount our device
+    on top of it.
+    
+    Among other things, this prevents ceph-disk activate on stray disks from
+    stepping on teuthology osds.
+    
+    Fixes: #5445
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8a17f33b14d858235dfeaa42be1f4842dcfd66d2)
+
+commit ccb3dd5ad5533ca4e9b656b4e3df31025a5f2017
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Tue Apr 2 15:46:51 2013 +0800
+
+    mds: fix underwater dentry cleanup
+    
+    If the underwater dentry is a remove link, we shouldn't mark the
+    inode clean
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit 81d073fecb58e2294df12b71351321e6d2e69652)
+
+commit 3020c5ea07a91475a7261dc2b810f5b61a1ae1f2
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 24 18:51:07 2013 -0700
+
+    mon/Elector: cancel election timer if we bootstrap
+    
+    If we short-circuit and bootstrap, cancel our timer.  Otherwise it will
+    go off some time later when we are in who knows what state.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 9ae0ec83dabe37ac15e5165559debdfef7a5f91d)
+
+commit 305f0c50a5f0ffabc73e10bdf4590217d5d5d211
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 24 18:12:11 2013 -0700
+
+    mon: cancel probe timeout on reset
+    
+    If we are probing and get (say) an election timeout that calls reset(),
+    cancel the timer.  Otherwise, we assert later with a splat like
+    
+    2013-06-24 01:09:33.675882 7fb9627e7700  4 mon.b@0(leader) e1 probe_timeout 0x307a520
+    2013-06-24 01:09:33.676956 7fb9627e7700 -1 mon/Monitor.cc: In function 'void Monitor::probe_timeout(int)' thread 7fb9627e7700 time 2013-06-24 01:09:43.675904
+    mon/Monitor.cc: 1888: FAILED assert(is_probing() || is_synchronizing())
+    
+     ceph version 0.64-613-g134d08a (134d08a9654f66634b893d493e4a92f38acc63cf)
+     1: (Monitor::probe_timeout(int)+0x161) [0x56f5c1]
+     2: (Context::complete(int)+0xa) [0x574a2a]
+     3: (SafeTimer::timer_thread()+0x425) [0x7059a5]
+     4: (SafeTimerThread::entry()+0xd) [0x7065dd]
+     5: (()+0x7e9a) [0x7fb966f62e9a]
+     6: (clone()+0x6d) [0x7fb9652f9ccd]
+     NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
+    
+    Fixes: #5438
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 03d3be3eaa96a8e72754c36abd6f355c68d52d59)
+
+commit a8f601d543168f4cdbddf674479d8de4b8dfc732
+Author: Alexandre Maragone <alexandre.marangone@inktank.com>
+Date:   Tue Jun 18 16:18:01 2013 -0700
+
+    ceph-disk: make list_partition behave with unusual device names
+    
+    When you get device names like sdaa you do not want to mistakenly conclude that
+    sdaa is a partition of sda.  Use /sys/block/$device/$partition existence
+    instead.
+    
+    Fixes: #5211
+    Backport: cuttlefish
+    Signed-off-by: Alexandre Maragone <alexandre.maragone@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8c0daafe003935881c5192e0b6b59b949269e5ae)
+
+commit 1c890f5cdfc596588e54fffeb016b4a5e9e2124c
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 20:28:24 2013 -0700
+
+    client: fix warning
+    
+    client/Client.cc: In member function 'virtual void Client::ms_handle_remote_reset(Connection*)':
+    warning: client/Client.cc:7892:9: enumeration value 'STATE_NEW' not handled in switch [-Wswitch]
+    warning: client/Client.cc:7892:9: enumeration value 'STATE_OPEN' not handled in switch [-Wswitch]
+    warning: client/Client.cc:7892:9: enumeration value 'STATE_CLOSED' not handled in switch [-Wswitch]
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 8bd936f077530dfeb2e699164e4492b1c0973088)
+
+commit c3b97591fd8206825bcfe65bdb24fbc75a2a9b42
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 24 17:58:48 2013 -0700
+
+    mon/AuthMonitor: ensure initial rotating keys get encoded when create_initial called 2x
+    
+    The create_initial() method may get called multiple times; make sure it
+    will unconditionally generate new/initial rotating keys.  Move the block
+    up so that we can easily assert as much.
+    
+    Broken by commit cd98eb0c651d9ee62e19c2cc92eadae9bed678cd.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 521fdc2a4e65559b3da83283e6ca607b6e55406f)
+
+commit 0cc826c385edb2e327505696491d3ff1c3bfe8fd
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 24 17:42:04 2013 -0700
+
+    init-radosgw.sysv: remove -x debug mode
+    
+    Fixes: #5443
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 31d6062076fdbcd2691c07a23b381b26abc59f65)
+
+commit 4d57c12faceb7f591f10776c6850d98da55c667b
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 24 12:52:44 2013 -0700
+
+    common/pick_addresses: behave even after internal_safe_to_start_threads
+    
+    ceph-mon recently started using Preforker to working around forking issues.
+    As a result, internal_safe_to_start_threads got set sooner and calls to
+    pick_addresses() which try to set string config values now fail because
+    there are no config observers for them.
+    
+    Work around this by observing the change while we adjust the value.  We
+    assume pick_addresses() callers are smart enough to realize that their
+    result will be reflected by cct->_conf and not magically handled elsewhere.
+    
+    Fixes: #5195, #5205
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit eb86eebe1ba42f04b46f7c3e3419b83eb6fe7f9a)
+
+commit e1ac7c6c3ca673d08710829aa5a3c03735710486
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 20 15:39:23 2013 -0700
+
+    mon/PaxosService: allow paxos service writes while paxos is updating
+    
+    In commit f985de28f86675e974ac7842a49922a35fe24c6c I mistakenly made
+    is_writeable() false while paxos was updating due to a misread of
+    Paxos::propose_new_value() (I didn't see that it would queue).
+    This is problematic because it narrows the window during which each service
+    is writeable for no reason.
+    
+    Allow service to be writeable both when paxos is active and updating.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 11169693d086e67dcf168ce65ef6e13eebd1a1ab)
+
+commit 02b0b4a9acb439b2ee5deadc8b02492006492931
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 7 11:41:21 2013 -0700
+
+    mon/PaxosService: not active during paxos UPDATING_PREVIOUS
+    
+    Treat this as an extension of the recovery process, e.g.
+    
+     RECOVERING -> ACTIVE
+    or
+     RECOVERING -> UPDATING_PREVIOUS -> ACTIVE
+    
+    and we are not active until we get to "the end" in both cases.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 392a8e21f8571b410c85be2129ef62dd6fc52b54)
+
+commit c6d5dc4d47838c8c8f4d059b7d018dea3f9c4425
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 7 11:40:22 2013 -0700
+
+    mon: simplify states
+    
+    - make states mutually exclusive (an enum)
+    - rename locked -> updating_previous
+    - set state prior to begin() to simplify things a bit
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ee34a219605d1943740fdae0d84cfb9020302dd6)
+
+commit c43b1f4dff254df96144b0b4d569cc72421a8fff
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 7 11:14:58 2013 -0700
+
+    mon/Paxos: not readable when LOCKED
+    
+    If we are re-proposing a previously accepted value from a previous quorum,
+    we should not consider it readable, because it is possible it was exposed
+    to clients as committed (2/3 accepted) but not recored to be committed, and
+    we do not want to expose old state as readable when new state was
+    previously readable.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ec2ea86ed55e00265c2cc5ad0c94460b4c92865c)
+
+commit 10d41200622d76dbf276602828584e7153cb22b5
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 7 11:07:38 2013 -0700
+
+    mon/Paxos: cleanup: drop unused PREPARING state bit
+    
+    This is never set when we block, and nobody looks at it.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7b7ea8e30e20704caad9a841332ecb2e39819a41)
+
+commit 9d7c40e3f4ea2dd969aa0264ea8a6ad74f3e678a
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 6 15:20:05 2013 -0700
+
+    mon/PaxosService: simplify is_writeable
+    
+    Recast this in terms of paxos check + our conditions, and make it
+    match wait_for_writeable().
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f985de28f86675e974ac7842a49922a35fe24c6c)
+
+commit 35745cba8985c5f3238e3c28fd28b194fae043d9
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 4 17:03:15 2013 -0700
+
+    mon/PaxosService: simplify readable check
+    
+    Recast this in terms of the paxos check and our additional conditions,
+    which match wait_for_readable().
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3aa61a0beb540e48bf61ceded766d6ff52c95eb2)
+
+commit 57c89291a48c319907fb3029746d9f5a4bd9dd61
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 16:45:08 2013 -0700
+
+    mon: simplify Monitor::init_paxos()
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e832e76a4af04b091c806ad412bcfd0326d75a2d)
+
+commit fd1769cb2d61e8f2c7921a78760e8f12b28258fb
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 16:39:37 2013 -0700
+
+    mon/Paxos: go active *after* refreshing
+    
+    The update_from_paxos() methods occasionally like to trigger new activity.
+    As long as they check is_readable() and is_writeable(), they will defer
+    until we go active and that activity will happen in the normal callbacks.
+    
+    This fixes the problem where we active but is_writeable() is still false,
+    triggered by PGMonitor::check_osd_map().
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e68b1bd36ed285e38a558899f83cf224d3aa60ed)
+
+commit cf75478d027dfd377424988745230d096dae79ac
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 15:32:06 2013 -0700
+
+    mon: safely signal bootstrap from MonmapMonitor::update_from_paxos()
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit dc83430124a5fd37573202a4cc0986c3c03739ef)
+
+commit 6ac58cd9c1f9c80c5f3cbe97e19cfcd8427db46d
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 16:57:11 2013 -0700
+
+    mon/Paxos: do paxos refresh in finish_proposal; and refactor
+    
+    Do the paxos refresh inside finish_proposal, ordered *after* the leader
+    assertion so that MonmapMonitor::update_from_paxos() calling bootstrap()
+    does not kill us.
+    
+    Also, remove unnecessary finish_queued_proposal() and move the logic inline
+    where the bad leader assertion is obvious.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a42d7582f816b45f5d19c393fd45447555e78fdd)
+
+commit 054e96d96533b1c4078402e43184f13b97329905
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Sun Jun 2 16:15:02 2013 -0700
+
+    mon/PaxosService: cache {first,last}_committed
+    
+    Refresh the in-memory values when we are told the on-disk paxos state
+    may have changed.
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 2fccb300bdf6ffd44db3462eb05115da11322ed4)
+
+commit 265212a7384399bf85e15e6978bc7543824c0e92
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 14:30:48 2013 -0700
+
+    mon: no need to refresh from _active
+    
+    The refresh is done explicitly by the monitor, independent of the more
+    fragile PaxosService callbacks.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d941363d6e4249e97b64faff0e573f75e918ac0c)
+
+commit 1d8662504299babec22c714662cefbb86a0acb8b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 16:10:57 2013 -0700
+
+    mon: remove unnecessary update_from_paxos calls
+    
+    The refresh() will do this when the state changes; no need to
+    opportunistically call this method all of the time.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 03014a4ecc06cde420fad0c6c2a0177ebd7b839d)
+
+commit 34acc5a3161b6bcda2b9f7ce18d89a8618fff1c5
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 16:14:01 2013 -0700
+
+    mon: explicitly refresh_from_paxos() when leveldb state changes
+    
+    Instead of opportunistically calling each service's update_from_paxos(),
+    instead explicitly refresh all in-memory state whenever we know the
+    paxos state may have changed.  This is simpler and less fragile.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cc339c07312006e65854207523f50542d00ecf87)
+
+commit 4474a0cc6c009a566ecf46efadb39d80343a7c68
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 23 09:25:55 2013 -0700
+
+    mon/AuthMonitor: make initial auth include rotating keys
+    
+    This closes a very narrow race during mon creation where there are no
+    service keys.
+    
+    Fixes: #5427
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cd98eb0c651d9ee62e19c2cc92eadae9bed678cd)
+
+commit d572cf6f77418f217a5a8e37f1124dc566e24d0b
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 21 11:53:29 2013 -0700
+
+    mds: fix iterator invalidation for backtrace removal
+    
+    - Don't increment before we dereference!
+    - We need to update the iterator before we delete the item.
+    
+    This code is changed in master, so this fix is for cuttlefish only.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 50957772c3582290331f69ba4a985b1cdf86834d
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 9 09:44:20 2013 -0700
+
+    osd: init test_ops_hook
+    
+    CID 1019628 (#1 of 1): Uninitialized pointer field (UNINIT_CTOR)
+    2. uninit_member: Non-static class member "test_ops_hook" is not initialized in this constructor nor in any functions that it calls.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e30a03210c3efb768b1653df5ae58917ef26e579)
+
+commit 17d2745f095e7bb640dece611d7824d370ea3b81
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 9 09:45:51 2013 -0700
+
+    osd: initialize OSDService::next_notif_id
+    
+    CID 1019627 (#1 of 1): Uninitialized scalar field (UNINIT_CTOR)
+    2. uninit_member: Non-static class member "next_notif_id" is not initialized in this constructor nor in any functions that it calls.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 499edd8bfc355c2d590f5fa1ef197d1ea5680351)
+
+commit ffdb7236a994aa20b5f75860b9c81dac0f131f9a
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 20 09:46:42 2013 -0700
+
+    mon: more fix dout use in sync_requester_abort()
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d60534b8f59798feaeeaa17adba2a417d7777cbf)
+
+commit 38ddae04bb974a93f1718c509363f1afbe6b612d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 10 11:48:25 2013 -0700
+
+    mon: fix raw use of *_dout in sync_requester_abort()
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8a4ed58e39b287fd8667c62b45848487515bdc80)

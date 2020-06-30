@@ -1,0 +1,163 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="configForm"
+        #formDir="ngForm"
+        [formGroup]="configForm"
+        novalidate>
+    <div class="card">
+      <div class="card-header">
+        <ng-container i18>Edit</ng-container> {{ configForm.getValue('name') }}
+      </div>
+
+      <div class="card-body">
+        <!-- Name -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label">Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   id="name"
+                   formControlName="name"
+                   readonly>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group row"
+             *ngIf="configForm.getValue('desc')">
+          <label i18n
+                 class="cd-col-form-label">Description</label>
+          <div class="cd-col-form-input">
+            <textarea class="form-control resize-vertical"
+                      id="desc"
+                      formControlName="desc"
+                      readonly>
+            </textarea>
+          </div>
+        </div>
+
+        <!-- Long description -->
+        <div class="form-group row"
+             *ngIf="configForm.getValue('long_desc')">
+          <label i18n
+                 class="cd-col-form-label">Long description</label>
+          <div class="cd-col-form-input">
+            <textarea class="form-control resize-vertical"
+                      id="long_desc"
+                      formControlName="long_desc"
+                      readonly>
+            </textarea>
+          </div>
+        </div>
+
+        <!-- Default -->
+        <div class="form-group row"
+             *ngIf="configForm.getValue('default') !== ''">
+          <label i18n
+                 class="cd-col-form-label">Default</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   id="default"
+                   formControlName="default"
+                   readonly>
+          </div>
+        </div>
+
+        <!-- Daemon default -->
+        <div class="form-group row"
+             *ngIf="configForm.getValue('daemon_default') !== ''">
+          <label i18n
+                 class="cd-col-form-label">Daemon default</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   id="daemon_default"
+                   formControlName="daemon_default"
+                   readonly>
+          </div>
+        </div>
+
+        <!-- Services -->
+        <div class="form-group row"
+             *ngIf="configForm.getValue('services').length > 0">
+          <label i18n
+                 class="cd-col-form-label">Services</label>
+          <div class="cd-col-form-input">
+            <span *ngFor="let service of configForm.getValue('services')"
+                  class="form-component-badge">
+              <span class="badge badge-dark">{{ service }}</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Values -->
+        <div formGroupName="values">
+          <h2 i18n
+              class="cd-header">Values</h2>
+          <ng-container *ngFor="let section of availSections">
+            <div class="form-group row"
+                 *ngIf="type === 'bool'">
+              <label class="cd-col-form-label"
+                     [for]="section">{{ section }}
+              </label>
+              <div class="cd-col-form-input">
+                <select id="pool"
+                        name="pool"
+                        class="form-control custom-select"
+                        [formControlName]="section">
+                  <option [ngValue]="null"
+                          i18n>-- Default --</option>
+                  <option [ngValue]="true"
+                          i18n>true</option>
+                  <option [ngValue]="false"
+                          i18n>false</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group row"
+                 *ngIf="type !== 'bool'">
+              <label class="cd-col-form-label"
+                     [for]="section">{{ section }}
+              </label>
+              <div class="cd-col-form-input">
+                <input class="form-control"
+                       [type]="inputType"
+                       [id]="section"
+                       [placeholder]="humanReadableType"
+                       [formControlName]="section"
+                       [step]="getStep(type, this.configForm.getValue(section))">
+                <span class="invalid-feedback"
+                      *ngIf="configForm.showError(section, formDir, 'pattern')">
+                  {{ patternHelpText }}
+                </span>
+                <span class="invalid-feedback"
+                      *ngIf="configForm.showError(section, formDir, 'invalidUuid')">
+                  {{ patternHelpText }}
+                </span>
+                <span class="invalid-feedback"
+                      *ngIf="configForm.showError(section, formDir, 'max')"
+                      i18n>The entered value is too high! It must not be greater than {{ maxValue }}.</span>
+                <span class="invalid-feedback"
+                      *ngIf="configForm.showError(section, formDir, 'min')"
+                      i18n>The entered value is too low! It must not be lower than {{ minValue }}.</span>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+      <!-- Footer -->
+      <div class="card-footer">
+        <div class="text-right">
+          <cd-submit-button [form]="formDir"
+                            (submitAction)="submit()">
+            <span i18n>Save</span>
+          </cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

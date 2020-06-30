@@ -1,0 +1,25 @@
+<div ngbDropdown
+     placement="bottom-right"
+     *ngIf="isDropdown">
+  <a ngbDropdownToggle
+     i18n-title
+     title="Select a Language">
+    {{ supportedLanguages[selectedLanguage] }}
+  </a>
+  <div ngbDropdownMenu>
+    <ng-container *ngFor="let lang of supportedLanguages | keyvalue">
+      <button ngbDropdownItem
+              (click)="changeLanguage(lang.key)">
+        {{ lang.value }}
+      </button>
+    </ng-container>
+  </div>
+</div>
+
+<select *ngIf="!isDropdown"
+        (change)="changeLanguage($event.target.value)"
+        [(ngModel)]="selectedLanguage"
+        class="form-control custom-select">
+  <option *ngFor="let lang of supportedLanguages | keyvalue"
+          [value]="lang.key">{{ lang.value }}</option>
+</select>

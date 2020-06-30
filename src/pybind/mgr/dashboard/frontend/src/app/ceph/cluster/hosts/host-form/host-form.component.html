@@ -1,0 +1,46 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="hostForm"
+        #formDir="ngForm"
+        [formGroup]="hostForm"
+        novalidate>
+    <div class="card">
+      <div i18n="form title|Example: Create Pool@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+
+      <div class="card-body">
+
+        <!-- Hostname -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="hostname"
+                 i18n>Hostname</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="mon-123"
+                   id="hostname"
+                   name="hostname"
+                   formControlName="hostname"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="hostForm.showError('hostname', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="hostForm.showError('hostname', formDir, 'uniqueName')"
+                  i18n>The chosen hostname is already in use.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-footer">
+        <div class="text-right">
+          <cd-submit-button [form]="formDir"
+                            i18n="form action button|Example: Create Pool@@formActionButton"
+                            (submitAction)="submit()">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

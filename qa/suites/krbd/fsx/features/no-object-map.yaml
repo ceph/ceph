@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        # layering, deep-flatten
+        rbd default features: 33

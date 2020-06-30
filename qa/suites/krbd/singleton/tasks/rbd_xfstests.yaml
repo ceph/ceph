@@ -1,0 +1,37 @@
+roles:
+- [mon.a, mon.c, osd.0, osd.1, osd.2]
+- [mon.b, mgr.x, mds.a, osd.3, osd.4, osd.5]
+- [client.0]
+- [client.1]
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB
+tasks:
+- install:
+- ceph:
+- rbd.xfstests:
+    client.0: &ref
+        test_image: 'test_image-0'
+        test_size: 5120  # MB
+        scratch_image: 'scratch_image-0'
+        scratch_size: 5120  # MB
+        fs_type: ext4
+        tests: '-g auto -g blockdev -x clone'
+        exclude:
+        - generic/042
+        - generic/392
+        - generic/044
+        - generic/045
+        - generic/046
+        - generic/223
+        - ext4/304
+        - generic/388
+        - generic/405
+        - generic/422
+        - shared/298  # lockdep false positive
+        randomize: true
+    client.1:
+        <<: *ref
+        test_image: 'test_image-1'
+        scratch_image: 'scratch_image-1'

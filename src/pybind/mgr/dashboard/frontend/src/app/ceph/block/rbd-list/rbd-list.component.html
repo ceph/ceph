@@ -1,0 +1,65 @@
+<cd-rbd-tabs></cd-rbd-tabs>
+
+<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+               [status]="viewCacheStatus.status"
+               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+
+<cd-table #table
+          [data]="images"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="unique_id"
+          [searchableObjects]="true"
+          forceIdentifier="true"
+          selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-rbd-details cdTableDetail
+                  [selection]="expandedRow">
+  </cd-rbd-details>
+</cd-table>
+
+<ng-template #usageNotAvailableTooltipTpl>
+  <div i18n
+       [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
+</ng-template>
+
+<ng-template #parentTpl
+             let-value="value">
+  <span *ngIf="value">{{ value.pool_name }}<span
+          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
+  <span *ngIf="!value">-</span>
+</ng-template>
+
+<ng-template #flattenTpl
+             let-value>
+  You are about to flatten
+  <strong>{{ value.child }}</strong>.
+  <br>
+  <br> All blocks will be copied from parent
+  <strong>{{ value.parent }}</strong> to child
+  <strong>{{ value.child }}</strong>.
+</ng-template>
+
+<ng-template #deleteTpl
+             let-hasSnapshots="hasSnapshots"
+             let-snapshots="snapshots">
+  <div class="alert alert-warning"
+       *ngIf="hasSnapshots"
+       role="alert">
+    <span i18n>Deleting this image will also delete all its snapshots.</span>
+    <br>
+    <ng-container *ngIf="snapshots.length > 0">
+      <span i18n>The following snapshots are currently protected and will be removed:</span>
+      <ul>
+        <li *ngFor="let snapshot of snapshots">{{ snapshot }}</li>
+      </ul>
+    </ng-container>
+  </div>
+</ng-template>

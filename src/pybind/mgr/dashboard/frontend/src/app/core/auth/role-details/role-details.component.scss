@@ -1,0 +1,12 @@
+@import 'defaults.scss';
+
+thead {
+  background-color: $color-table-header-bg;
+}
+
+.fa {
+  font-size: large;
+  &.fa-square-o {
+    color: $color-light-gray;
+  }
+}

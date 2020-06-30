@@ -1,0 +1,29 @@
+.grafana {
+  width: 100%;
+  height: 600px;
+  z-index: 0;
+}
+
+.grafana_one {
+  height: 400px;
+}
+
+.grafana_two {
+  height: 750px;
+}
+
+.grafana_three {
+  height: 900px;
+}
+
+.timepicker {
+  label {
+    font-weight: 700;
+  }
+}
+
+.dropdown-menu {
+  top: 20px;
+  right: 20px;
+  left: auto;
+}

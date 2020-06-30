@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<project name="cephfs-java" default="main" basedir=".">
+
+  <description>CephFS Java Bindings</description>
+
+  <property name="src.dir" location="java" />
+  <property name="doc.dir" location="doc" />
+  <property name="test.dir" location="test" />
+
+  <property environment="env"/>
+
+  <target name="clean">
+    <delete dir="${doc.dir}" />
+    <delete>
+      <fileset dir="${test.dir}" includes="**/*.class" />
+    </delete>
+    <delete file="./libcephfs-test.jar" />
+  </target>
+
+  <target name="makedir">
+    <mkdir dir="${doc.dir}" />
+  </target>
+
+  <target name="docs" depends="makedir">
+    <javadoc packagenames="src" sourcepath="${src.dir}" destdir="${doc.dir}">
+      <fileset dir="${src.dir}">
+        <include name="**/*.java" />
+      </fileset>
+    </javadoc>
+  </target>
+
+  <target name="compile-tests-jar">
+    <javac srcdir="${test.dir}" destdir="${test.dir}"
+      includeantruntime="false" source="1.5" target="1.5"> 
+      <classpath>
+        <pathelement location="${env.CEPHFS_JAR}"/>
+        <pathelement location="libcephfs.jar"/>
+        <pathelement location="${env.CLASSPATH}" />
+      </classpath>
+    </javac>
+    <jar destfile="./libcephfs-test.jar"> 
+      <fileset dir="${test.dir}" includes="**/*.class"/>  
+    </jar>
+  </target>
+
+  <target name="test" depends="compile-tests-jar">
+    <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
+      <sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../../build/lib/"/>
+      <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
+      <jvmarg value="-Xcheck:jni"/>
+      <classpath>
+        <pathelement location="${env.CEPHFS_JAR}"/>
+        <pathelement location="libcephfs.jar"/>
+        <pathelement location="libcephfs-test.jar"/>
+      </classpath>
+      <formatter type="plain"/>
+      <test name="com.ceph.fs.CephAllTests" haltonerror="true" />
+    </junit>
+  </target>
+
+  <target name="test-compat" depends="compile-tests-jar">
+    <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
+      <sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../../build/lib/"/>
+      <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
+      <classpath>
+        <pathelement location="${env.CEPHFS_JAR}"/>
+        <pathelement location="libcephfs.jar"/>
+        <pathelement location="libcephfs-test.jar"/>
+      </classpath>
+      <formatter type="plain"/>
+      <test name="com.ceph.fs.CephAllTests" haltonerror="true" />
+    </junit>
+  </target>
+
+</project>

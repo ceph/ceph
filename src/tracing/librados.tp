@@ -1,0 +1,4022 @@
+#include "tracing/tracing-common.h"
+#include "include/rados/librados.h"
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(librados, rados_create_enter,
+    TP_ARGS(
+        const char*, id),
+    TP_FIELDS(
+        ceph_ctf_string(id, id)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create_exit,
+    TP_ARGS(
+        int, retval,
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create2_enter,
+    TP_ARGS(
+        const char*, clustername,
+        const char*, name,
+        uint64_t, flags),
+    TP_FIELDS(
+        ceph_ctf_string(clustername, clustername)
+        ceph_ctf_string(name, name)
+        ctf_integer_hex(uint64_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create2_exit,
+    TP_ARGS(
+        int, retval,
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create_with_context_enter,
+    TP_ARGS(
+        rados_config_t, cct),
+    TP_FIELDS(
+        ctf_integer_hex(rados_config_t, cct, cct)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create_with_context_exit,
+    TP_ARGS(
+        int, retval,
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cct_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cct_exit,
+    TP_ARGS(
+        rados_config_t, retval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_config_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_connect_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_connect_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_shutdown_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_shutdown_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_get_instance_id_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_get_instance_id_exit,
+    TP_ARGS(
+        uint64_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_version_enter,
+    TP_ARGS(
+        int*, pmajor,
+        int*, pminor,
+        int*, pextra),
+    TP_FIELDS(
+        ctf_integer_hex(int*, pmajor, pmajor)
+        ctf_integer_hex(int*, pminor, pminor)
+        ctf_integer_hex(int*, pextra, pextra)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_version_exit,
+    TP_ARGS(
+        int, major,
+        int, minor,
+        int, extra),
+    TP_FIELDS(
+        ctf_integer(int, major, major)
+        ctf_integer(int, minor, minor)
+        ctf_integer(int, extra, extra)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_read_file_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, path_list),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ceph_ctf_string(path_list, path_list)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_read_file_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int, argc),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int, argc, argc)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_arg,
+    TP_ARGS(
+        const char*, arg),
+    TP_FIELDS(
+        ceph_ctf_string(arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_remainder_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int, argc),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int, argc, argc)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_remainder_arg,
+    TP_ARGS(
+        const char*, arg),
+    TP_FIELDS(
+        ceph_ctf_string(arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_remainder_remarg,
+    TP_ARGS(
+        const char*, remarg),
+    TP_FIELDS(
+        ceph_ctf_string(remarg, remarg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_argv_remainder_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_env_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, env),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(env, env)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_parse_env_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_set_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, option,
+        const char*, value),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ceph_ctf_string(option, option)
+        ceph_ctf_string(value, value)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_set_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cluster_stat_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cluster_stat_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, kb,
+        uint64_t, kb_used,
+        uint64_t, kb_avail,
+        uint64_t, num_objects),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, kb, kb)
+        ctf_integer(uint64_t, kb_used, kb_used)
+        ctf_integer(uint64_t, kb_avail, kb_avail)
+        ctf_integer(uint64_t, num_objects, num_objects)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_get_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, option,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(option, option)
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_conf_get_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, value),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(value, value)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_lookup_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_lookup_exit,
+    TP_ARGS(
+        int64_t, retval),
+    TP_FIELDS(
+        ctf_integer(int64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_reverse_lookup_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int64_t, id,
+        size_t, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int64_t, id, id)
+        ctf_integer(size_t, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_reverse_lookup_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cluster_fsid_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        size_t, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(size_t, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cluster_fsid_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, fsid),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(fsid, fsid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_wait_for_latest_osdmap_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_wait_for_latest_osdmap_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_list_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        size_t, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(size_t, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_list_pool,
+    TP_ARGS(
+        const char*, buf),
+    TP_FIELDS(
+        ctf_string(buf, buf)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_list_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ping_monitor_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, mon_id),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(mon_id, mon_id)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ping_monitor_exit,
+    TP_ARGS(
+        int, retval,
+        char const* const*, buf,
+        size_t*, len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_sequencep(unsigned char, buf, buf, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mon_command_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mon_command_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mon_command_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mon_command_target_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mon_command_target_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mon_command_target_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_osd_command_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int, osdid,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int, osdid, osdid)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_osd_command_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_osd_command_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_target_enter,
+    TP_ARGS(
+        rados_t, cluster,
+	const char *, name,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+	ctf_string(name, name)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_target_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_target_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pg_command_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, pg,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(pg, pg)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pg_command_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pg_command_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_buffer_free_enter,
+    TP_ARGS(
+        void*, buf),
+    TP_FIELDS(
+        ctf_integer_hex(void*, buf, buf)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_buffer_free_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_monitor_log_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, level,
+        rados_log_callback_t, callback,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ceph_ctf_string(level, level)
+        ctf_integer_hex(rados_log_callback_t, callback, callback)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_monitor_log_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_monitor_log2_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, level,
+        rados_log_callback2_t, callback,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ceph_ctf_string(level, level)
+        ctf_integer_hex(rados_log_callback2_t, callback, callback)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_monitor_log2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_create_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_create_exit,
+    TP_ARGS(
+        int, retval,
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_create2_enter,
+    TP_ARGS(
+        rados_t, cluster,
+	int64_t, pool_id),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+	ctf_integer(int64_t, pool_id, pool_id)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_create2_exit,
+    TP_ARGS(
+        int, retval,
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_destroy_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_destroy_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_stat_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_stat_exit,
+    TP_ARGS(
+        int, retval,
+        struct rados_pool_stat_t*, stats),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, num_kb, stats->num_kb)
+        ctf_integer(uint64_t, num_bytes, stats->num_bytes)
+        ctf_integer(uint64_t, num_objects, stats->num_objects)
+        ctf_integer(uint64_t, num_object_clones, stats->num_object_clones)
+        ctf_integer(uint64_t, num_object_copies, stats->num_object_copies)
+        ctf_integer(uint64_t, num_objects_missing_on_primary, stats->num_objects_missing_on_primary)
+        ctf_integer(uint64_t, num_objects_unfound, stats->num_objects_unfound)
+        ctf_integer(uint64_t, num_objects_degraded, stats->num_objects_degraded)
+        ctf_integer(uint64_t, num_rd, stats->num_rd)
+        ctf_integer(uint64_t, num_rd_kb, stats->num_rd_kb)
+        ctf_integer(uint64_t, num_wr, stats->num_wr)
+        ctf_integer(uint64_t, num_wr_kb, stats->num_wr_kb)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_cct_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_cct_exit,
+    TP_ARGS(
+        rados_config_t, retval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_config_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_set_read_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, snapid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, snapid, snapid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_set_read_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_set_write_ctx_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, seq,
+        uint64_t*, snaps,
+        int, num_snaps),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, seq, seq)
+        ctf_sequence(uint64_t, snaps, snaps,
+                     uint32_t, num_snaps)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_set_write_ctx_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const void*, buf,
+        size_t, len,
+        uint64_t, off),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
+        ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_append_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const void*, buf,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_append_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_full_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const void*, buf,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_full_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_writesame_enter,
+    TP_ARGS(
+	rados_ioctx_t, ioctx,
+	const char*, oid,
+	const void*, buf,
+	size_t, data_len,
+	size_t, write_len,
+	uint64_t, off),
+    TP_FIELDS(
+	ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+	ctf_string(oid, oid)
+	ceph_ctf_sequence(unsigned char, buf, buf, size_t, data_len)
+	ctf_integer(size_t, write_len, write_len)
+	ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_writesame_exit,
+    TP_ARGS(
+	int, retval),
+    TP_FIELDS(
+	ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_trunc_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, size),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, size, size)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_trunc_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_remove_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        void*, buf,
+        size_t, len,
+        uint64_t, off),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(void*, buf, buf)
+        ctf_integer(size_t, len, len)
+        ctf_integer(size_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_exit,
+    TP_ARGS(
+        int, retval,
+        void*, buf),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_sequence(unsigned char, buf, buf, uint64_t, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_checksum_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+	int, type,
+	const char*, init_value,
+	size_t, init_value_len,
+        size_t, len,
+        uint64_t, off,
+	size_t, chunk_size),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(int, type, type)
+        ceph_ctf_sequence(unsigned char, init_value, init_value, size_t, init_value_len)
+        ctf_integer(size_t, len, len)
+        ctf_integer(uint64_t, off, off)
+        ctf_integer(size_t, chunk_size, chunk_size)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_checksum_exit,
+    TP_ARGS(
+        int, retval,
+	const char*, checksum,
+	size_t, checksum_len
+        ),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+	ceph_ctf_sequence(unsigned char, checksum, checksum, size_t, checksum_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_get_last_version_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_get_last_version_exit,
+    TP_ARGS(
+        uint64_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_with_auid_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name,
+        uint64_t, auid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+        ctf_integer(uint64_t, auid, auid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_with_auid_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_with_crush_rule_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name,
+        uint8_t, crush_rule_num),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+        ctf_integer(uint8_t, crush_rule_num, crush_rule_num)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_with_crush_rule_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_with_all_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name,
+        uint64_t, auid,
+        uint8_t, crush_rule_num),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+        ctf_integer(uint64_t, auid, auid)
+        ctf_integer(uint8_t, crush_rule_num, crush_rule_num)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_create_with_all_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_get_base_tier_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int64_t, pool_id),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int64_t, pool_id, pool_id)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_get_base_tier_exit,
+    TP_ARGS(
+        int, retval,
+        int64_t, base_tier),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int64_t, base_tier, base_tier)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_delete_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_delete_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_set_auid_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, auid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, auid, auid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_set_auid_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_get_auid_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_get_auid_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, auid),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, auid, auid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_enter2,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_exit2,
+    TP_ARGS(
+        int, retval,
+        int, requires),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int, requires, requires)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_exit,
+    TP_ARGS(
+        uint64_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_enter2,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_exit2,
+    TP_ARGS(
+        int, retval,
+        uint64_t, alignment),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, alignment, alignment)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_locator_set_key_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, key),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ceph_ctf_string(key, key)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_locator_set_key_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_set_namespace_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, nspace),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ceph_ctf_string(nspace, nspace)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_set_namespace_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_namespace_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        unsigned, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(unsigned, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_namespace_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_cluster_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_cluster_exit,
+    TP_ARGS(
+        rados_t, retval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_id_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_id_exit,
+    TP_ARGS(
+        int64_t, retval),
+    TP_FIELDS(
+        ctf_integer_hex(int64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_pool_name_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        unsigned, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(unsigned, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_get_pool_name_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_create_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, snapname),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(snapname, snapname)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_create_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_remove_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, snapname),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(snapname, snapname)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_rollback_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, snapname),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_string(snapname, snapname)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_rollback_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_create_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_create_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, snapid),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, snapid, snapid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_remove_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, snapid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, snapid, snapid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_rollback_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, snapid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snapid, snapid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_selfmanaged_snap_rollback_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_list_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        int, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(int, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_list_exit,
+    TP_ARGS(
+        int, retval,
+        rados_snap_t*, snaps,
+        int, num_snaps),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_sequence(rados_snap_t, snaps, snaps, uint32_t, num_snaps)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_lookup_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_lookup_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, snapid),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, snapid, snapid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_get_name_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, snapid,
+        int, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, snapid, snapid)
+        ctf_integer(int, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_get_name_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_get_stamp_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, snapid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, snapid, snapid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_snap_get_stamp_exit,
+    TP_ARGS(
+        int, retval,
+        time_t, time),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_time_t(time, time)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cmpext_enter,
+    TP_ARGS(
+	rados_ioctx_t, ioctx,
+	const char*, oid,
+	const char*, cmp_buf,
+	size_t, cmp_len,
+	uint64_t, off),
+    TP_FIELDS(
+	ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+	ctf_string(oid, oid)
+	ceph_ctf_sequence(unsigned char, cmp_buf, cmp_buf, size_t, cmp_len)
+	ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cmpext_exit,
+    TP_ARGS(
+	int, retval),
+    TP_FIELDS(
+	ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattr_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, aname,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_string(aname, aname)
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattr_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, value,
+        int, len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_sequence(unsigned char, value, value, uint64_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattrs_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattrs_exit,
+    TP_ARGS(
+        int, retval,
+        rados_xattrs_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_xattrs_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattrs_next_enter,
+    TP_ARGS(
+        rados_xattrs_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_xattrs_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattrs_next_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, aname,
+        const char*, value,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_string(aname, aname)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattrs_end_enter,
+    TP_ARGS(
+        rados_xattrs_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_xattrs_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_getxattrs_end_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_setxattr_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, aname,
+        const char*, value,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_string(aname, aname)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_setxattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_rmxattr_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, aname),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_string(aname, aname)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_rmxattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_stat_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_stat_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t*, size,
+        time_t*, mtime),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_integerp(uint64_t, size, size)
+        ceph_ctf_time_tp(mtime, mtime)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_exec_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, cls,
+        const char*, method,
+        const char*, inbuf,
+        size_t, in_len,
+        size_t, out_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_string(cls, cls)
+        ctf_string(method, method)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, in_len)
+        ctf_integer(size_t, out_len, out_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_exec_exit,
+    TP_ARGS(
+        int, retval,
+        char*, outbuf,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_sequence(unsigned char, outbuf, outbuf, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_open_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_open_exit,
+    TP_ARGS(
+        int, retval,
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_close_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_close_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx,
+        uint32_t, pos),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+        ctf_integer(uint32_t, pos, pos)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint32_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_cursor_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_cursor_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_get_cursor_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_get_cursor_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_get_pg_hash_position_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_get_pg_hash_position_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint32_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_next_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_next_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, entry,
+        char const* const*, key,
+        char const* const*, nspace),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_string(entry, entry)
+        ceph_ctf_stringp(key, key)
+        ceph_ctf_stringp(nspace, nspace)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_open_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_open_exit,
+    TP_ARGS(
+        int, retval,
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_close_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_close_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_seek_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx,
+        uint32_t, pos),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+        ctf_integer(uint32_t, pos, pos)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_seek_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint32_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_get_pg_hash_position_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_get_pg_hash_position_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint32_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_next_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_objects_list_next_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, entry,
+        char const* const*, key),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_string(entry, entry)
+        ceph_ctf_stringp(key, key)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion_enter,
+    TP_ARGS(
+        void*, cb_arg,
+        rados_callback_t, cb_complete,
+        rados_callback_t, cb_safe),
+    TP_FIELDS(
+        ctf_integer_hex(void*, cb_arg, cb_arg)
+        ctf_integer_hex(rados_callback_t, cb_complete, cb_complete)
+        ctf_integer_hex(rados_callback_t, cb_safe, cb_safe)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion_exit,
+    TP_ARGS(
+        int, retval,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion2_enter,
+    TP_ARGS(
+        void*, cb_arg,
+        rados_callback_t, cb_complete),
+    TP_FIELDS(
+        ctf_integer_hex(void*, cb_arg, cb_arg)
+        ctf_integer_hex(rados_callback_t, cb_complete, cb_complete)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion2_exit,
+    TP_ARGS(
+        int, retval,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_complete_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_complete_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_safe_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_safe_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_complete_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_complete_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_safe_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_safe_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_complete_and_cb_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_complete_and_cb_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_safe_and_cb_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_wait_for_safe_and_cb_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_complete_and_cb_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_complete_and_cb_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_safe_and_cb_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_is_safe_and_cb_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_get_return_value_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_get_return_value_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_get_version_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_get_version_exit,
+    TP_ARGS(
+        uint64_t, retval),
+    TP_FIELDS(
+        ctf_integer(uint64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_release_enter,
+    TP_ARGS(
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_release_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_read_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        size_t, len,
+        uint64_t, off),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_integer(size_t, len, len)
+        ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_read_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_write_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, buf,
+        size_t, len,
+        uint64_t, off),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_sequence(unsigned char, buf, buf, size_t, CEPH_MIN(len, CEPH_TRACE_BUF_TRUNC_LEN))
+        ctf_integer(size_t, len, len)
+        ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_write_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_append_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, buf,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_sequence(unsigned char, buf, buf, size_t, CEPH_MIN(len, CEPH_TRACE_BUF_TRUNC_LEN))
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_append_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_write_full_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, buf,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_sequence(unsigned char, buf, buf, size_t, CEPH_MIN(len, CEPH_TRACE_BUF_TRUNC_LEN))
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_write_full_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_writesame_enter,
+    TP_ARGS(
+	rados_ioctx_t, ioctx,
+	const char*, oid,
+	rados_completion_t, completion,
+	const char*, buf,
+	size_t, data_len,
+	size_t, write_len,
+	uint64_t, off),
+    TP_FIELDS(
+	ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+	ctf_string(oid, oid)
+	ctf_integer_hex(rados_completion_t, completion, completion)
+	ctf_sequence(unsigned char, buf, buf, size_t, CEPH_MIN(data_len, CEPH_TRACE_BUF_TRUNC_LEN))
+	ctf_integer(size_t, data_len, data_len)
+	ctf_integer(size_t, write_len, write_len)
+	ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_writesame_exit,
+    TP_ARGS(
+	int, retval),
+    TP_FIELDS(
+	ctf_integer(int, retval, retval)
+    )
+)
+
+
+TRACEPOINT_EVENT(librados, rados_aio_remove_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_flush_async_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_flush_async_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_flush_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_flush_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_getxattr_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, aname,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_string(aname, aname)
+        ctf_integer(size_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_getxattr_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, value,
+        int, len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_sequence(unsigned char, value, value, uint64_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_getxattrs_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_getxattrs_exit,
+    TP_ARGS(
+        int, retval,
+        rados_xattrs_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_xattrs_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_setxattr_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, aname,
+        const char*, value,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_string(aname, aname)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_setxattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_rmxattr_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, aname),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_string(aname, aname)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_rmxattr_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_stat_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_stat_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_exec_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_exec_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_cmpext_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+	const char*, cmp_buf,
+	size_t, cmp_len,
+	uint64_t, off),
+    TP_FIELDS(
+	ceph_ctf_sequence(unsigned char, cmp_buf, cmp_buf, size_t, cmp_len)
+	ctf_integer(uint64_t, off, off)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_cmpext_exit,
+    TP_ARGS(
+	int, retval),
+    TP_FIELDS(
+	ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, version,
+        rados_watchcb_t, callback,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, version, version)
+        ctf_integer_hex(rados_watchcb_t, callback, callback)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch3_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t*, phandle,
+        rados_watchcb2_t, callback,
+        uint32_t, timeout,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(uint64_t, phandle, phandle)
+        ctf_integer_hex(rados_watchcb2_t, callback, callback)
+        ctf_integer(uint32_t, timeout, timeout)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch3_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        uint64_t*, phandle,
+        rados_watchcb2_t, callback,
+        uint32_t, timeout,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_integer_hex(uint64_t, phandle, phandle)
+        ctf_integer_hex(rados_watchcb2_t, callback, callback)
+        ctf_integer(uint32_t, timeout, timeout)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch2_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_unwatch_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_unwatch_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_unwatch2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_unwatch2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_unwatch_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, handle,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, handle, handle)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_unwatch_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_check_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_check_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, version,
+        const char*, buf,
+        int, buf_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, version, version)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, buf_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, buf,
+        int, buf_len,
+	uint64_t, timeout_ms),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, buf_len)
+        ctf_integer(uint64_t, timeout_ms, timeout_ms)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_notify_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        rados_completion_t, completion,
+        const char*, buf,
+        int, buf_len,
+	uint64_t, timeout_ms),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, buf_len)
+        ctf_integer(uint64_t, timeout_ms, timeout_ms)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_notify_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify_ack_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+	uint64_t, notify_id,
+	uint64_t, handle,
+        const char*, buf,
+        int, buf_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, notify_id, notify_id)
+        ctf_integer(uint64_t, handle, handle)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, buf_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify_ack_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_flush_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_flush_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch_flush_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_watch_flush_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_set_alloc_hint_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_set_alloc_hint_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_set_alloc_hint2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size,
+	uint32_t, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+        ctf_integer(uint32_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_set_alloc_hint2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_lock_exclusive_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, name,
+        const char*, cookie,
+        const char*, description,
+        struct timeval*, duration,
+        uint8_t, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_string(name, name)
+        ceph_ctf_string(cookie, cookie)
+        ceph_ctf_string(description, description)
+        ceph_ctf_timevalp(duration, duration)
+        ctf_integer(uint8_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_lock_exclusive_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_lock_shared_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, name,
+        const char*, cookie,
+        const char*, tag,
+        const char*, description,
+        struct timeval*, duration,
+        uint8_t, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_string(name, name)
+        ceph_ctf_string(cookie, cookie)
+        ceph_ctf_string(tag, tag)
+        ceph_ctf_string(description, description)
+        ceph_ctf_timevalp(duration, duration)
+        ctf_integer(uint8_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_lock_shared_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_unlock_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, name,
+        const char*, cookie),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_string(name, name)
+        ceph_ctf_string(cookie, cookie)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_unlock_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_unlock_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, name,
+        const char*, cookie,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_string(name, name)
+        ceph_ctf_string(cookie, cookie)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_unlock_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_list_lockers_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, name,
+        size_t, tag_len,
+        size_t, clients_len,
+        size_t, cookies_len,
+        size_t, addrs_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_string(name, name)
+        ctf_integer(size_t, tag_len, tag_len)
+        ctf_integer(size_t, clients_len, clients_len)
+        ctf_integer(size_t, cookies_len, cookies_len)
+        ctf_integer(size_t, addrs_len, addrs_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_list_lockers_locker,
+    TP_ARGS(
+        const char*, client,
+        const char*, cookie,
+        const char*, addr),
+    TP_FIELDS(
+        ctf_string(client, client)
+        ctf_string(cookie, cookie)
+        ctf_string(addr, addr)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_list_lockers_exit,
+    TP_ARGS(
+        int, retval,
+        int, exclusive,
+        const char*, tag,
+        size_t, tag_len,
+        size_t, clients_len,
+        size_t, cookies_len,
+        size_t, addrs_len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int, exclusive, exclusive)
+        ctf_string(tag, tag)
+        ctf_integer(size_t, tag_len, tag_len)
+        ctf_integer(size_t, clients_len, clients_len)
+        ctf_integer(size_t, cookies_len, cookies_len)
+        ctf_integer(size_t, addrs_len, addrs_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_break_lock_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, name,
+        const char*, client,
+        const char*, cookie),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_string(name, name)
+        ceph_ctf_string(client, client)
+        ceph_ctf_string(cookie, cookie)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_break_lock_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create_write_op_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_create_write_op_exit,
+    TP_ARGS(
+        rados_write_op_t, retval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_release_write_op_enter,
+    TP_ARGS(
+        rados_write_op_t, op),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_release_write_op_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_flags_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_flags_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_assert_version_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+	uint64_t, ver),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+	ctf_integer(uint64_t, ver, ver)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_assert_version_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_assert_exists_enter,
+    TP_ARGS(
+        rados_write_op_t, op),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_assert_exists_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_cmpext_enter,
+    TP_ARGS(
+	rados_write_op_t, op,
+	const char*, cmp_buffer,
+	size_t, cmp_len,
+	uint64_t, offset,
+	int*, prval),
+    TP_FIELDS(
+	ctf_integer_hex(rados_write_op_t, op, op)
+	ceph_ctf_sequence(unsigned char, cmp_buffer, cmp_buffer, size_t, cmp_len)
+	ctf_integer(size_t, cmp_len, cmp_len)
+	ctf_integer(uint64_t, offset, offset)
+	ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_cmpext_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_cmpxattr_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, aname,
+        uint8_t, comparison_operator,
+        const char*, value,
+        size_t, value_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(aname, aname)
+        ctf_integer(uint8_t, comparison_operator, comparison_operator)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, value_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_cmpxattr_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_cmp_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, name,
+        uint8_t, comparison_operator,
+        const char*, value,
+        size_t, value_len,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(name, name)
+        ctf_integer(uint8_t, comparison_operator, comparison_operator)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, value_len)
+        ctf_integer_hex(int*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_cmp_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_setxattr_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, name,
+        const char*, value,
+        size_t, value_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(name, name)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, value_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_setxattr_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_rmxattr_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_rmxattr_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_create_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        int, exclusive),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(int, exclusive, exclusive)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_create_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_write_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, buffer,
+        size_t, len,
+        uint64_t, offset),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_sequence(unsigned char, buffer, buffer, size_t, len)
+        ctf_integer(uint64_t, offset, offset)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_write_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_write_full_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, buffer,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_sequence(unsigned char, buffer, buffer, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_write_full_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_writesame_enter,
+    TP_ARGS(
+	rados_write_op_t, op,
+	const char*, buffer,
+	size_t, data_len,
+	size_t, write_len,
+	uint64_t, offset),
+    TP_FIELDS(
+	ctf_integer_hex(rados_write_op_t, op, op)
+	ceph_ctf_sequence(unsigned char, buffer, buffer, size_t, data_len)
+	ctf_integer(size_t, write_len, write_len)
+	ctf_integer(uint64_t, offset, offset)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_writesame_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_append_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, buffer,
+        size_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_sequence(unsigned char, buffer, buffer, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_append_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_remove_enter,
+    TP_ARGS(
+        rados_write_op_t, op),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_remove_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_truncate_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        uint64_t, offset),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(uint64_t, offset, offset)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_truncate_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_zero_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        uint64_t, offset,
+        uint64_t, len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, len, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_zero_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_exec_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, cls,
+        const char*, method,
+        const char*, in_buf,
+        size_t, in_len,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(cls, cls)
+        ceph_ctf_string(method, method)
+        ceph_ctf_sequence(unsigned char, in_buf, in_buf, size_t, in_len)
+        ctf_integer_hex(int*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_exec_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_set_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        size_t, num),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(size_t, num, num)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_set_entry,
+    TP_ARGS(
+        const char*, key,
+        const char*, value,
+        size_t, value_len),
+    TP_FIELDS(
+        ceph_ctf_string(key, key)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, value_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_set_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_keys_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        size_t, num),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(size_t, num, num)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_keys_entry,
+    TP_ARGS(
+        const char*, key),
+    TP_FIELDS(
+        ceph_ctf_string(key, key)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_keys_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_range_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, key_begin,
+        const char*, key_end),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(key_begin, key_begin)
+        ceph_ctf_string(key_end, key_end)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_range_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_clear_enter,
+    TP_ARGS(
+        rados_write_op_t, op),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_clear_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint2_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size,
+        uint32_t, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+        ctf_integer(uint32_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint2_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_operate_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        time_t*, mtime,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_time_tp(mtime, mtime)
+        ctf_integer_hex(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_operate2_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        struct timespec*, ts,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_timespecp(ts, ts)
+        ctf_integer_hex(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_operate_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_write_op_operate_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        rados_ioctx_t, ioctx,
+        rados_completion_t, completion,
+        const char*, oid,
+        time_t*, mtime,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ctf_string(oid, oid)
+        ceph_ctf_time_tp(mtime, mtime)
+        ctf_integer_hex(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_write_op_operate_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_create_read_op_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_create_read_op_exit,
+    TP_ARGS(
+        rados_read_op_t, retval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_release_read_op_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_release_read_op_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_set_flags_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer_hex(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_set_flags_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_assert_version_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+	uint64_t, ver),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer(uint64_t, ver, ver)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_assert_version_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_assert_exists_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_assert_exists_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_cmpext_enter,
+    TP_ARGS(
+	rados_read_op_t, op,
+	const char*, cmp_buffer,
+	size_t, cmp_len,
+	uint64_t, offset,
+	int*, prval),
+    TP_FIELDS(
+	ctf_integer_hex(rados_read_op_t, op, op)
+	ceph_ctf_sequence(unsigned char, cmp_buffer, cmp_buffer, size_t, cmp_len)
+	ctf_integer(size_t, cmp_len, cmp_len)
+	ctf_integer(uint64_t, offset, offset)
+	ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_cmpext_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_cmpxattr_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        const char*, name,
+        uint8_t, comparison_operator,
+        const char*, value,
+        size_t, value_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_string(name, name)
+        ctf_integer(uint8_t, comparison_operator, comparison_operator)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, value_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_cmpxattr_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_cmp_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        const char*, name,
+        uint8_t, comparison_operator,
+        const char*, value,
+        size_t, value_len,
+        void*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_string(name, name)
+        ctf_integer(uint8_t, comparison_operator, comparison_operator)
+        ceph_ctf_sequence(unsigned char, value, value, size_t, value_len)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_cmp_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_stat_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        void*, psize,
+        void*, pmtime,
+        void*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer_hex(void*, psize, psize)
+        ctf_integer_hex(void*, pmtime, pmtime)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_stat_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_read_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        uint64_t, offset,
+        size_t, len,
+        char*, buf,
+        size_t*, bytes_read,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(size_t, len, len)
+        ctf_integer_hex(void*, buf, buf)
+        ctf_integer_hex(void*, bytes_read, bytes_read)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_read_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_checksum_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+	int, type,
+	const char*, init_value,
+	size_t, init_value_len,
+        uint64_t, offset,
+        size_t, len,
+	size_t, chunk_size),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer(int, type, type)
+        ceph_ctf_sequence(unsigned char, init_value, init_value, size_t, init_value_len)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(size_t, len, len)
+        ctf_integer(size_t, chunk_size, chunk_size)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_checksum_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_exec_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        const char*, cls,
+        const char*, method,
+        const char*, in_buf,
+        size_t, in_len,
+        char**, out_buf,
+        size_t*, out_len,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ceph_ctf_string(cls, cls)
+        ceph_ctf_string(method, method)
+        ceph_ctf_sequence(unsigned char, in_buf, in_buf, size_t, in_len)
+        ctf_integer_hex(void*, out_buf, out_buf)
+        ctf_integer_hex(void*, out_len, out_len)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_exec_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_exec_user_buf_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        const char*, cls,
+        const char*, method,
+        const char*, in_buf,
+        size_t, in_len,
+        char*, out_buf,
+        size_t, out_len,
+        size_t*, used_len,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ceph_ctf_string(cls, cls)
+        ceph_ctf_string(method, method)
+        ceph_ctf_sequence(unsigned char, in_buf, in_buf, size_t, in_len)
+        ctf_integer_hex(void*, out_buf, out_buf)
+        ctf_integer(size_t, out_len, out_len)
+        ctf_integer_hex(void*, used_len, used_len)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_exec_user_buf_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_getxattrs_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_getxattrs_exit,
+    TP_ARGS(
+        rados_xattrs_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_xattrs_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_get_vals_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        const char*, start_after,
+        const char*, filter_prefix,
+        uint64_t, max_return,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ceph_ctf_string(start_after, start_after)
+        ceph_ctf_string(filter_prefix, filter_prefix)
+        ctf_integer(uint64_t, max_return, max_return)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_get_vals_exit,
+    TP_ARGS(
+        rados_omap_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_omap_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_get_keys_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        const char*, start_after,
+        uint64_t, max_return,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ceph_ctf_string(start_after, start_after)
+        ctf_integer(uint64_t, max_return, max_return)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_get_keys_exit,
+    TP_ARGS(
+        rados_omap_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_omap_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_get_vals_by_keys_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        char const* const*, keys,
+        size_t, keys_len,
+        rados_omap_iter_t*, piter,
+        int*, prval),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer_hex(void*, keys, keys)
+        ctf_integer(size_t, keys_len, keys_len)
+        ctf_integer_hex(void*, piter, piter)
+        ctf_integer_hex(void*, prval, prval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_omap_get_vals_by_keys_exit,
+    TP_ARGS(
+        rados_omap_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_omap_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_omap_get_next_enter,
+    TP_ARGS(
+        rados_omap_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_omap_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_omap_get_next_exit,
+    TP_ARGS(
+        int, retval,
+        char**, key,
+        char**, val,
+        size_t*, len),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(key, key)
+        ceph_ctf_sequencep(unsigned char, val, val, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_omap_get_end_enter,
+    TP_ARGS(
+        rados_omap_iter_t, iter),
+    TP_FIELDS(
+        ctf_integer_hex(rados_omap_iter_t, iter, iter)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_omap_get_end_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_operate_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        rados_ioctx_t, ctx,
+        const char*, oid,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer_hex(rados_ioctx_t, ctx, ctx)
+        ctf_string(oid, oid)
+        ctf_integer(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_operate_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_read_op_operate_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+        rados_ioctx_t, ctx,
+        rados_completion_t, completion,
+        const char*, oid,
+        int, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer_hex(rados_ioctx_t, ctx, ctx)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+        ceph_ctf_string(oid, oid)
+        ctf_integer(int, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_read_op_operate_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_pin_enter,
+    TP_ARGS(
+        rados_ioctx_t, io,
+	const char*, o),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, io, io)
+        ceph_ctf_string(o, o)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_pin_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_unpin_enter,
+    TP_ARGS(
+        rados_ioctx_t, io,
+	const char*, o),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, io, io)
+        ceph_ctf_string(o, o)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_unpin_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int64_t, id,
+        size_t, maxlen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int64_t, id, id)
+        ctf_integer(size_t, maxlen, maxlen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_pg,
+    TP_ARGS(
+        const char*, buf),
+    TP_FIELDS(
+        ctf_string(buf, buf)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

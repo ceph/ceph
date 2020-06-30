@@ -1,0 +1,141 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+export DH_VERBOSE=1
+export DESTDIR=$(CURDIR)/debian/tmp
+
+export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
+  # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
+  # which makes the application aborts when the shared library throws
+  # exception, so strip this linker option,
+  # see http://tracker.ceph.com/issues/25209
+  export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
+endif
+ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
+  export CEPH_OSD_BASENAME = ceph-osd
+else
+  export CEPH_OSD_BASENAME = crimson-osd
+endif
+
+extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
+extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
+extraopts += -DWITH_PYTHON3=3
+extraopts += -DWITH_CEPHFS_JAVA=ON
+extraopts += -DWITH_CEPHFS_SHELL=ON
+extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
+extraopts += -DWITH_GRAFANA=ON
+# assumes that ceph is exmpt from multiarch support, so we override the libdir.
+extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
+extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec
+extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
+extraopts += -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=/lib/systemd/system
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  extraopts += -DBOOST_J=$(NUMJOBS)
+endif
+
+ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
+  # libboost_context only support the archs above
+  extraopts += -DWITH_BOOST_CONTEXT=ON
+else
+  extraopts += -DWITH_BOOST_CONTEXT=OFF
+endif
+
+%:
+	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
+
+override_dh_auto_configure:
+	env | sort
+	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
+
+override_dh_auto_build:
+	dh_auto_build --buildsystem=cmake
+	cp src/init-radosgw debian/radosgw.init
+
+override_dh_auto_clean:
+	dh_auto_clean --buildsystem=cmake
+	rm -f debian/radosgw.init debian/ceph.logrotate
+
+override_dh_auto_install:
+	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
+	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
+	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
+	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
+	install -D -m 600 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
+	install -D -m 600 sudoers.d/cephadm $(DESTDIR)/etc/sudoers.d/cephadm
+	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/lib/rbd-nbd/rbd-nbd_quiesce
+
+	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
+
+	install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
+
+# doc/changelog is a directory, which confuses dh_installchangelogs
+override_dh_installchangelogs:
+	dh_installchangelogs --exclude doc/changelog
+
+override_dh_installdocs:
+
+override_dh_installlogrotate:
+	cp src/logrotate.conf debian/ceph-common.logrotate
+	dh_installlogrotate -pceph-common
+
+override_dh_installinit:
+	# install the systemd stuff manually since we have funny service names
+	install -d -m0755 debian/ceph-common/etc/default
+	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
+	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
+	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
+
+	dh_installinit -p ceph-base --name ceph --no-start
+	dh_installinit -p radosgw --no-start
+
+	# NOTE: execute systemd helpers so they pickup dh_install'ed units and targets
+	dh_systemd_enable
+	dh_systemd_start --no-restart-on-upgrade
+
+override_dh_systemd_enable:
+	# systemd enable done as part of dh_installinit
+
+override_dh_systemd_start:
+	# systemd start done as part of dh_installinit
+
+override_dh_strip:
+	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
+	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
+	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
+	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
+	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
+	dh_strip -pceph-base --dbg-package=ceph-base-dbg
+	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
+	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
+	dh_strip -pceph-immutable-object-cache --dbg-package=ceph-immutable-object-cache-dbg
+	dh_strip -prbd-nbd --dbg-package=rbd-nbd-dbg
+	dh_strip -pceph-common --dbg-package=ceph-common-dbg
+	dh_strip -plibrados2 --dbg-package=librados2-dbg
+	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
+	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
+	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
+	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
+	dh_strip -pradosgw --dbg-package=radosgw-dbg
+	dh_strip -pceph-test --dbg-package=ceph-test-dbg
+	dh_strip -ppython3-rados --dbg-package=python3-rados-dbg
+	dh_strip -ppython3-rbd --dbg-package=python3-rbd-dbg
+	dh_strip -ppython3-rgw --dbg-package=python3-rgw-dbg
+	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
+
+override_dh_shlibdeps:
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
+
+override_dh_python3:
+	for binding in rados cephfs rbd rgw; do \
+	  dh_python3 -p python3-$$binding;      \
+	done
+	dh_python3 -p python3-ceph-argparse
+	dh_python3 -p python3-ceph-common
+	dh_python3 -p cephfs-shell
+	dh_python3 -p cephadm
+
+# do not run tests
+override_dh_auto_test:
+
+.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_build override_dh_auto_clean override_dh_auto_install override_dh_installdocs override_dh_installlogrotate override_dh_installinit override_dh_systemd_start override_dh_strip override_dh_auto_test

@@ -1,0 +1,8 @@
+google-api-python-client==1.7.3
+google-auth==1.5.0
+google-auth-httplib2==0.0.3
+googleapis-common-protos==1.5.3
+grpc-google-logging-v2>=0.8.1
+grpc-google-pubsub-v1>=0.8.1
+grpcio>=1.14.1
+

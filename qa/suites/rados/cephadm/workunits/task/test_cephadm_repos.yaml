@@ -1,0 +1,8 @@
+roles:
+- [mon.a, mgr.x, osd.0, client.0]
+tasks:
+- workunit:
+    no_coverage_and_limits: true
+    clients:
+      client.0:
+        - cephadm/test_repos.sh

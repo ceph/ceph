@@ -1,0 +1,101 @@
+
+The AIX build will only build the librados library.
+
+Build Prerequisites
+===================
+
+The following AIX packages are required for developing and compilation, they have been installed via the AIX-rpm (rpm) packages:
+
+	AIX-rpm
+	tcl
+	tk
+	expect
+	curl
+	readline
+	libpng
+	mpfr
+	m4
+	autoconf
+	gettext
+	less
+	perl
+	gdbm
+	pcre
+	rsync
+	zlib
+	gcc-cpp
+	libffi
+	pkg-config
+	libiconv
+	glib2
+	info
+	libidn
+	openldap
+	python-tools
+	bzip2
+	python
+	sed
+	grep
+	libtool
+	nspr
+	nss-util
+	sqlite
+	nss-softokn
+	nss-softokn-freebl
+	libstdc++
+	gmp
+	coreutils
+	nss
+	nss-tools
+	nss-sysinit
+	nspr-devel
+	nss-util-devel
+	nss-softokn-devel
+	nss-softokn-freebl-devel
+	nss-devel
+	make
+	libsigsegv
+	automake
+	libmpc
+	libgcc
+	gcc
+	libstdc++-devel
+	gcc-c++
+	adns
+	tcsh
+	bash
+	getopt
+	db4
+	expat
+	tcl
+	freetype2
+	fontconfig
+	libXrender
+	libXft
+	tk
+	python-libs
+	tkinter
+	gdb
+	git
+
+
+Download and Compile Boost 1.59 (or higher)
+
+Building Ceph
+=============
+
+	export CXX="c++ -maix64"
+	export CFLAGS="-g -maix64"
+	export OBJECT_MODE=64
+	export LDFLAGS="-L/usr/lib64 -L/opt/freeware/lib64 -L<pathtoboost>/boost_1_59_0/stage/lib -Wl,-brtl -Wl,-bbigtoc"
+	export CXXFLAGS="-I/opt/freeware/include -I<pathtoboost>/boost_1_59_0"
+
+        ./autogen.sh
+	Then manually modify the config.guess
+	-    *:AIX:*:[456])
+	+    *:AIX:*:[4567])
+
+        ./configure --disable-server --without-fuse --without-tcmalloc --without-libatomic-ops --without-libaio --without-libxfs
+	cd src
+        gmake librados.la
+

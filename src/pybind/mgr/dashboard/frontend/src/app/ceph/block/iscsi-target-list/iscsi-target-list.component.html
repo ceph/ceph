@@ -1,0 +1,51 @@
+<cd-iscsi-tabs></cd-iscsi-tabs>
+
+<cd-alert-panel type="info"
+                *ngIf="available === false"
+                title="iSCSI Targets not available"
+                i18n-title>
+  <ng-container i18n>Please consult the <a href="{{docsUrl}}"
+       target="_blank">documentation</a>
+    on how to configure and enable the iSCSI Targets management functionality.</ng-container>
+
+  <ng-container *ngIf="status">
+    <br>
+    <span i18n>Available information:</span>
+    <pre>{{ status }}</pre>
+  </ng-container>
+</cd-alert-panel>
+
+<cd-table #table
+          *ngIf="available === true"
+          [data]="targets"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="target_iqn"
+          forceIdentifier="true"
+          selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions class="btn-group"
+                      [permission]="permission"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+
+    <button class="btn btn-light"
+            type="button"
+            (click)="configureDiscoveryAuth()">
+      <i [ngClass]="[icons.key]"
+         aria-hidden="true">
+      </i>
+      <ng-container i18n>Discovery authentication</ng-container>
+    </button>
+  </div>
+
+  <cd-iscsi-target-details cdTableDetail
+                           *ngIf="expandedRow"
+                           [cephIscsiConfigVersion]="cephIscsiConfigVersion"
+                           [selection]="expandedRow"
+                           [settings]="settings"></cd-iscsi-target-details>
+</cd-table>
