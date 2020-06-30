@@ -10,6 +10,7 @@
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/archive/iterators/remove_whitespace.hpp>
 #include <limits>
+#include <string>
 #include <string_view>
 
 namespace rgw {
