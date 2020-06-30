@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/api/Io.h"
+#include "include/intarith.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"
@@ -341,7 +342,13 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
     trace.event("init");
   }
 
-  aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_DISCARD);
+  auto io_type = io::AIO_TYPE_DISCARD;
+  if ((zero_flags & RBD_WRITE_ZEROES_FLAG_THICK_PROVISION) != 0) {
+    zero_flags &= ~RBD_WRITE_ZEROES_FLAG_THICK_PROVISION;
+    io_type = io::AIO_TYPE_WRITESAME;
+  }
+
+  aio_comp->init_time(util::get_image_ctx(&image_ctx), io_type);
   ldout(cct, 20) << "ictx=" << &image_ctx << ", "
                  << "completion=" << aio_comp << ", off=" << off << ", "
                  << "len=" << len << dendl;
@@ -357,6 +364,108 @@ void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
   }
 
   if (!is_valid_io(image_ctx, aio_comp)) {
+    return;
+  }
+
+  if (io_type == io::AIO_TYPE_WRITESAME) {
+    // write-same needs to be aligned to its buffer but librbd has never forced
+    // block alignment. Hide that requirement from the user by adding optional
+    // writes.
+    const uint64_t data_length = 512;
+    uint64_t write_same_offset = p2roundup(off, data_length);
+    uint64_t write_same_offset_end = p2align(off + len, data_length);
+    uint64_t write_same_length = 0;
+    if (write_same_offset_end > write_same_offset) {
+      write_same_length = write_same_offset_end - write_same_offset;
+    }
+
+    uint64_t prepend_offset = off;
+    uint64_t prepend_length = write_same_offset - off;
+    uint64_t append_offset = write_same_offset + write_same_length;
+    uint64_t append_length = len - prepend_length - write_same_length;
+    ldout(cct, 20) << "prepend_offset=" << prepend_offset << ", "
+                   << "prepend_length=" << prepend_length << ", "
+                   << "write_same_offset=" << write_same_offset << ", "
+                   << "write_same_length=" << write_same_length << ", "
+                   << "append_offset=" << append_offset << ", "
+                   << "append_length=" << append_length << dendl;
+    ceph_assert(prepend_length + write_same_length + append_length == len);
+
+    if (write_same_length <= data_length) {
+      // unaligned or small write-zeroes request -- use single write
+      bufferlist bl;
+      bl.append_zero(len);
+
+      aio_comp->aio_type = io::AIO_TYPE_WRITE;
+      auto req = io::ImageDispatchSpec<I>::create_write(
+        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
+        std::move(bl), op_flags, trace, 0);
+      req->send();
+      return;
+    } else if (prepend_length == 0 && append_length == 0) {
+      // fully aligned -- use a single write-same image request
+      bufferlist bl;
+      bl.append_zero(data_length);
+
+      auto req = io::ImageDispatchSpec<I>::create_write_same(
+        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
+        std::move(bl), op_flags, trace, 0);
+      req->send();
+      return;
+    }
+
+    // to reach this point, we need at least one prepend/append write along with
+    // a write-same -- therefore we will need to wrap the provided AioCompletion
+    auto request_count = 1;
+    if (prepend_length > 0) {
+      ++request_count;
+    }
+    if (append_length > 0) {
+      ++request_count;
+    }
+
+    ceph_assert(request_count > 1);
+    aio_comp->start_op();
+    aio_comp->set_request_count(request_count);
+
+    if (prepend_length > 0) {
+      bufferlist bl;
+      bl.append_zero(prepend_length);
+
+      Context* prepend_ctx = new io::C_AioRequest(aio_comp);
+      auto prepend_aio_comp = io::AioCompletion::create_and_start(
+        prepend_ctx, &image_ctx, io::AIO_TYPE_WRITE);
+      auto prepend_req = io::ImageDispatchSpec<I>::create_write(
+        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, prepend_aio_comp,
+        {{prepend_offset, prepend_length}}, std::move(bl), op_flags, trace,
+        0);
+      prepend_req->send();
+    }
+
+    if (append_length > 0) {
+      bufferlist bl;
+      bl.append_zero(append_length);
+
+      Context* append_ctx = new io::C_AioRequest(aio_comp);
+      auto append_aio_comp = io::AioCompletion::create_and_start(
+        append_ctx, &image_ctx, io::AIO_TYPE_WRITE);
+      auto append_req = io::ImageDispatchSpec<I>::create_write(
+        image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, append_aio_comp,
+        {{append_offset, append_length}}, std::move(bl), op_flags, trace, 0);
+      append_req->send();
+    }
+
+    bufferlist bl;
+    bl.append_zero(data_length);
+
+    Context* write_same_ctx = new io::C_AioRequest(aio_comp);
+    auto write_same_aio_comp = io::AioCompletion::create_and_start(
+      write_same_ctx, &image_ctx, io::AIO_TYPE_WRITESAME);
+    auto req = io::ImageDispatchSpec<I>::create_write_same(
+      image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, write_same_aio_comp,
+      write_same_offset, write_same_length, std::move(bl), op_flags, trace,
+      0);
+    req->send();
     return;
   }
 
