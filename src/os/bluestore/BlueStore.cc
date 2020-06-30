@@ -117,6 +117,8 @@ const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
+const string PREFIX_ZONED_META = "Z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_INFO = "z";  // (see ZonedFreelistManager)
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
@@ -4857,6 +4859,10 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0) {
     goto fail_close;
   }
+
+  if (bdev->is_smr()) {
+    freelist_type = "zoned";
+  }
   return 0;
 
  fail_close:
@@ -4910,7 +4916,13 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only)
     // being able to allocate in units less than bdev block size 
     // seems to be a bad idea.
     ceph_assert( cct->_conf->bdev_block_size <= (int64_t)min_alloc_size);
-    fm->create(bdev->get_size(), (int64_t)min_alloc_size, t);
+
+    uint64_t alloc_size = min_alloc_size;
+    if (bdev->is_smr()) {
+      alloc_size = _piggyback_zoned_device_parameters_onto(alloc_size);
+    }
+
+    fm->create(bdev->get_size(), alloc_size, t);
 
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
@@ -5041,7 +5053,9 @@ int BlueStore::_open_alloc()
 	     << dendl;
   }
 
+  uint64_t alloc_size = min_alloc_size;
   if (bdev->is_smr()) {
+    alloc_size = _piggyback_zoned_device_parameters_onto(alloc_size);
     if (cct->_conf->bluestore_allocator != "zoned") {
       dout(1) << __func__ << " The drive is HM-SMR but "
 	      << cct->_conf->bluestore_allocator << " allocator is specified. "
@@ -5067,31 +5081,21 @@ int BlueStore::_open_alloc()
 	      << "Please set to 0." << dendl;
       return -EINVAL;
     }
-
-    // For now, to avoid interface changes we piggyback zone_size (in MiB) and
-    // the first sequential zone number onto min_alloc_size and pass it to
-    // Allocator::create.
-    uint64_t zone_size = bdev->get_zone_size();
-    uint64_t zone_size_mb = zone_size / (1024 * 1024);
-    uint64_t first_seq_zone = bdev->get_conventional_region_size() / zone_size;
-
-    min_alloc_size |= (zone_size_mb << 32);
-    min_alloc_size |= (first_seq_zone << 48);
   }
 
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
-                            min_alloc_size, "block");
-
-  if (bdev->is_smr()) {
-    min_alloc_size &= 0x00000000ffffffff;
-  }
+                            alloc_size, "block");
 
   if (!alloc) {
     lderr(cct) << __func__ << " Allocator::unknown alloc type "
                << cct->_conf->bluestore_allocator
                << dendl;
     return -EINVAL;
+  }
+
+  if (bdev->is_smr()) {
+    alloc->set_zone_states(fm->get_zone_states(db));
   }
 
   uint64_t num = 0, bytes = 0;
@@ -5845,7 +5849,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
     return -EIO;
   }
 
-  FreelistManager::setup_merge_operators(db);
+  FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
   return 0;

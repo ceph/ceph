@@ -18,7 +18,8 @@
 #include "include/btree_map.h"
 #include "include/interval_set.h"
 #include "include/mempool.h"
-#include "os/bluestore/bluestore_types.h"
+#include "bluestore_types.h"
+#include "zoned_types.h"
 
 class ZonedAllocator : public Allocator {
   CephContext* cct;
@@ -33,34 +34,28 @@ class ZonedAllocator : public Allocator {
   uint64_t size;
   uint64_t block_size;
   uint64_t zone_size;
-  uint64_t starting_zone;
-  uint64_t nr_zones;
-  std::vector<uint64_t> write_pointers;
+  uint64_t starting_zone_num;
+  uint64_t num_zones;
+  std::vector<zone_state_t> zone_states;
 
-  inline uint64_t zone_offset(uint64_t zone) {
-    ceph_assert(zone < nr_zones);
-    return zone * zone_size + zone_wp(zone);
+  inline uint64_t get_offset(uint64_t zone_num) const {
+    return zone_num * zone_size + get_write_pointer(zone_num);
   }
 
-  inline uint64_t zone_wp(uint64_t zone) {
-    ceph_assert(zone < nr_zones);
-    return write_pointers[zone];
+  inline uint64_t get_write_pointer(uint64_t zone_num) const {
+    return zone_states[zone_num].get_write_pointer();
   }
 
-  inline uint64_t zone_free_space(uint64_t zone) {
-    ceph_assert(zone < nr_zones);
-    return zone_size - zone_wp(zone);
+  inline uint64_t get_remaining_space(uint64_t zone_num) const {
+    return zone_size - get_write_pointer(zone_num);
   }
 
-  inline void advance_wp(uint64_t zone, uint64_t size) {
-    ceph_assert(zone < nr_zones);
-    write_pointers[zone] += size;
-    ceph_assert(write_pointers[zone] <= zone_size);
+  inline void advance_write_pointer(uint64_t zone_num, uint64_t want_size) {
+    zone_states[zone_num].increment_write_pointer(want_size);
   }
 
-  inline bool fits(uint64_t want_size, uint64_t zone) {
-    ceph_assert(zone < nr_zones);
-    return want_size <= zone_free_space(zone);
+  inline bool fits(uint64_t want_size, uint64_t zone_num) const {
+    return want_size <= get_remaining_space(zone_num);
   }
 
 public:
@@ -80,6 +75,7 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
+  void set_zone_states(std::vector<zone_state_t> &&_zone_states) override;
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
 

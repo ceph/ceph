@@ -12,10 +12,11 @@
 #ifndef CEPH_OS_BLUESTORE_ALLOCATOR_H
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
+#include <functional>
 #include <ostream>
 #include "include/ceph_assert.h"
-#include "os/bluestore/bluestore_types.h"
-#include <functional>
+#include "bluestore_types.h"
+#include "zoned_types.h"
 
 class Allocator {
 public:
@@ -48,6 +49,7 @@ public:
   virtual void dump() = 0;
   virtual void dump(std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
+  virtual void set_zone_states(std::vector<zone_state_t> &&_zone_states) {}
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
