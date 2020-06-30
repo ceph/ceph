@@ -77,10 +77,10 @@ public:
                const rgw_user& rgw_user,
                optional_yield y) override;
 
-  int remove_user(RGWSI_MetaBackend::Context *ctx,
-  		  const std::string& account_id,
-  		  const rgw_user& rgw_user) override
-  { return -ERR_NOT_IMPLEMENTED; }
+  int remove_user(const DoutPrefixProvider *dpp,
+                  const std::string& account_id,
+                  const rgw_user& rgw_user,
+                  optional_yield y) override;
 
   rgw_raw_obj get_account_user_obj(const std::string& account_id) const;
 private:

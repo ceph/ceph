@@ -206,3 +206,41 @@ int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
   encode(hdr, header_bl);
   return sysobj.omap().set_header(dpp, header_bl, y);
 }
+
+int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
+                                     const std::string& account_id,
+                                     const rgw_user& user,
+                                     optional_yield y)
+{
+  auto obj = get_account_user_obj(account_id);
+  auto obj_ctx = svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+
+  bufferlist bl;
+  int ret = sysobj.omap().get_header(dpp, &bl, y);
+  if (ret < 0 && ret!= -ENOENT) {
+    return ret;
+  }
+
+  rgw_account_user_header hdr;
+  if (ret != -ENOENT) {
+    try {
+      auto bl_iter = bl.cbegin();
+      decode(hdr, bl_iter);
+    } catch (buffer::error) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode account user hdr" << dendl;
+      return -EIO;
+    }
+  }
+
+  ret = sysobj.omap().del(dpp, user.to_str(), y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  --hdr.current_users;
+  bufferlist header_bl;
+  encode(hdr, header_bl);
+  return sysobj.omap().set_header(dpp, header_bl, y);
+
+}

@@ -53,9 +53,10 @@ public:
 		       const rgw_user& rgw_user,
 		       optional_yield y) = 0;
 
-  virtual int remove_user(RGWSI_MetaBackend::Context *ctx,
-			  const std::string& account_id,
-			  const rgw_user& rgw_user) = 0;
+  virtual int remove_user(const DoutPrefixProvider *dpp,
+                          const std::string& account_id,
+                          const rgw_user& rgw_user,
+                          optional_yield y) = 0;
 
   virtual int store_account_info(const DoutPrefixProvider *dpp,
 				 RGWSI_MetaBackend::Context *ctx,
