@@ -18,6 +18,7 @@
 #include "rgw_crypt_sanitize.h"
 
 #include <boost/container/small_vector.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/trim_all.hpp>
 
 #define dout_context g_ceph_context
@@ -267,18 +268,18 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
   /* auth ships with req params ... */
 
   /* look for required params */
-  credential = info.args.get("X-Amz-Credential");
+  credential = info.args.get("x-amz-credential");
   if (credential.size() == 0) {
     return -EPERM;
   }
 
-  date = info.args.get("X-Amz-Date");
+  date = info.args.get("x-amz-date");
   struct tm date_t;
   if (!parse_iso8601(sview2cstr(date).data(), &date_t, nullptr, false)) {
     return -EPERM;
   }
 
-  std::string_view expires = info.args.get("X-Amz-Expires");
+  std::string_view expires = info.args.get("x-amz-expires");
   if (expires.empty()) {
     return -EPERM;
   }
@@ -298,18 +299,18 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
     return -EPERM;
   }
 
-  signedheaders = info.args.get("X-Amz-SignedHeaders");
+  signedheaders = info.args.get("x-amz-signedheaders");
   if (signedheaders.size() == 0) {
     return -EPERM;
   }
 
-  signature = info.args.get("X-Amz-Signature");
+  signature = info.args.get("x-amz-signature");
   if (signature.size() == 0) {
     return -EPERM;
   }
 
-  if (info.args.exists("X-Amz-Security-Token")) {
-    sessiontoken = info.args.get("X-Amz-Security-Token");
+  if (info.args.exists("x-amz-security-token")) {
+    sessiontoken = info.args.get("x-amz-security-token");
     if (sessiontoken.size() == 0) {
       return -EPERM;
     }
@@ -516,7 +517,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
       key = s;
     }
 
-    if (using_qs && key == "X-Amz-Signature") {
+    if (using_qs && boost::iequals(key, "X-Amz-Signature")) {
       /* Preserving the original behaviour of get_v4_canonical_qs() here. */
       continue;
     }
