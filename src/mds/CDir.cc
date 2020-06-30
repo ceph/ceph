@@ -2231,10 +2231,11 @@ void CDir::_omap_commit(int op_prio)
   };
 
   if (state_test(CDir::STATE_FRAGMENTING)) {
+    assert(committed_version == 0);
     for (auto p = items.begin(); p != items.end(); ) {
       CDentry *dn = p->second;
       ++p;
-      if (!dn->is_dirty() && dn->get_linkage()->is_null())
+      if (dn->get_linkage()->is_null())
 	continue;
       write_one(dn);
     }
