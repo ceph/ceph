@@ -2064,7 +2064,7 @@ bool MDSMonitor::check_health(FSMap& fsmap, bool* propose_osdmap)
   }
 
   for (const auto& gid : to_remove) {
-    auto& info = fsmap.get_info_gid(gid);
+    auto info = fsmap.get_info_gid(gid);
     const mds_info_t* rep_info = nullptr;
     if (info.rank >= 0) {
       auto fscid = fsmap.gid_fscid(gid);
