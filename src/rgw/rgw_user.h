@@ -960,12 +960,10 @@ public:
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
   int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
-
   int link_account(const rgw_user& user_id,
 		   const string& account_id,
 		   const PutParams& put_params,
 		   optional_yield y);
-
   int link_account(RGWUserInfo& uinfo,
 		   const string& account_id,
 		   const PutParams& put_params,
