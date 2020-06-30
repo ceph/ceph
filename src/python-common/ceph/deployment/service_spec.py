@@ -372,6 +372,7 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw'.split()
 
     @classmethod
     def _cls(cls, service_type):
@@ -414,7 +415,9 @@ class ServiceSpec(object):
 
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
         self.service_type = service_type
-        self.service_id = service_id
+        self.service_id = None
+        if self.service_type in self.REQUIRES_SERVICE_ID:
+            self.service_id = service_id
         self.unmanaged = unmanaged
         self.preview_only = preview_only
 
@@ -527,8 +530,12 @@ class ServiceSpec(object):
         if not self.service_type:
             raise ServiceSpecValidationError('Cannot add Service: type required')
 
-        if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
-            raise ServiceSpecValidationError('Cannot add Service: id required')
+        if self.service_type in self.REQUIRES_SERVICE_ID:
+            if not self.service_id:
+                raise ServiceSpecValidationError('Cannot add Service: id required')
+        elif self.service_id:
+            raise ServiceSpecValidationError(
+                    f'Service of type \'{self.service_type}\' should not contain a service id')
 
         if self.placement is not None:
             self.placement.validate()
