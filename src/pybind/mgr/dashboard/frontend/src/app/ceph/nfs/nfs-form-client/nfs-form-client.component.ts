@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -13,15 +13,25 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
   templateUrl: './nfs-form-client.component.html',
   styleUrls: ['./nfs-form-client.component.scss']
 })
-export class NfsFormClientComponent {
+export class NfsFormClientComponent implements OnInit {
   @Input()
   form: CdFormGroup;
+
+  @Input()
+  clients: any[];
 
   nfsSquash: any[] = this.nfsService.nfsSquash;
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   icons = Icons;
 
   constructor(private nfsService: NfsService, private i18n: I18n) {}
+
+  ngOnInit() {
+    _.forEach(this.clients, (client) => {
+      const fg = this.addClient();
+      fg.patchValue(client);
+    });
+  }
 
   getNoAccessTypeDescr() {
     if (this.form.getValue('access_type')) {
@@ -75,13 +85,6 @@ export class NfsFormClientComponent {
     const clients = this.form.get('clients') as FormArray;
     const client = clients.at(index) as CdFormGroup;
     return client.getValue(control);
-  }
-
-  resolveModel(clients: any[]) {
-    _.forEach(clients, (client) => {
-      const fg = this.addClient();
-      fg.patchValue(client);
-    });
   }
 
   trackByFn(index: number) {
