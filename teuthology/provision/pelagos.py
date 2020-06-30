@@ -6,6 +6,7 @@ import time
 
 from teuthology.config import config
 from teuthology.contextutil import safe_while
+from teuthology.misc import canonicalize_hostname
 from teuthology.util.compat import  HTTPError
 
 log = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class Pelagos(object):
 
     def __init__(self, name, os_type, os_version=""):
         #for service should be a hostname, not a user@host
-        split_uri = re.search(r'(\w*)@(.+)', name)
+        split_uri = re.search(r'(\w*)@(.+)', canonicalize_hostname(name))
         if split_uri is not None:
             self.name = split_uri.groups()[1]
         else:
