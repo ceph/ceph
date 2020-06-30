@@ -8513,6 +8513,65 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, WriteZeroes) {
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  // 1s from [0, 256) / length 256
+  char data[256];
+  memset(data, 1, sizeof(data));
+  bufferlist bl;
+  bl.append(data, 256);
+  ASSERT_EQ(256, image.write(0, 256, bl));
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  auto expected_diff = interval_set<uint64_t>{{{0, 256}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // writes zero passed the current end extents.
+  // Now 1s from [0, 192) / length 192
+  ASSERT_EQ(size - 192,
+            image.write_zeroes(192, size - 192, 0U, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 192}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // zero an existing extent and truncate some off the end
+  // Now 1s from [64, 192) / length 192
+  ASSERT_EQ(64, image.write_zeroes(0, 64, 0U, 0));
+
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 192}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  bufferlist expected_bl;
+  expected_bl.append_zero(64);
+  bufferlist sub_bl;
+  sub_bl.substr_of(bl, 0, 128);
+  expected_bl.claim_append(sub_bl);
+  expected_bl.append_zero(size - 192);
+
+  bufferlist read_bl;
+  EXPECT_EQ(size, image.read(0, size, read_bl));
+  EXPECT_EQ(expected_bl, read_bl);
+
+  ASSERT_EQ(0, image.close());
+}
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
