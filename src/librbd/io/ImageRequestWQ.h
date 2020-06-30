@@ -38,6 +38,8 @@ public:
   ssize_t discard(uint64_t off, uint64_t len,
                   uint32_t discard_granularity_bytes);
   ssize_t writesame(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
+  ssize_t write_zeroes(uint64_t off, uint64_t len, int zero_flags,
+                       int op_flags);
   ssize_t compare_and_write(uint64_t off, uint64_t len,
                             bufferlist &&cmp_bl, bufferlist &&bl,
                             uint64_t *mismatch_off, int op_flags);
@@ -52,6 +54,8 @@ public:
   void aio_flush(AioCompletion *c, bool native_async=true);
   void aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
                      bufferlist &&bl, int op_flags, bool native_async=true);
+  void aio_write_zeroes(AioCompletion *c, uint64_t off, uint64_t len,
+                        int zero_flags, int op_flags, bool native_async);
   void aio_compare_and_write(AioCompletion *c, uint64_t off,
                              uint64_t len, bufferlist &&cmp_bl,
                              bufferlist &&bl, uint64_t *mismatch_off,
