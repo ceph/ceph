@@ -1,4 +1,5 @@
 add_executable(unittest_transaction_manager
+  test_block.cc
   test_transaction_manager.cc
   ../gtest_seastar.cc)
 add_ceph_unittest(unittest_transaction_manager)
@@ -26,6 +27,7 @@ target_link_libraries(
   crimson-seastore)
 
 add_executable(unittest_seastore_cache
+  test_block.cc
   test_seastore_cache.cc)
 add_ceph_test(unittest_seastore_cache
   unittest_seastore_cache)

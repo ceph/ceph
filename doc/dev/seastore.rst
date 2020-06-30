@@ -266,7 +266,6 @@ Journal
 Cache
 -----
 
-- Support for replaying block types other than root
 - Support for rewriting dirty blocks
 
   - Need to add support to CachedExtent for finding/updating
@@ -278,7 +277,6 @@ LBAManager
 ----------
 
 - Add support for pinning
-- Fill in replay and misc todos
 - Add segment -> laddr for use in GC
 - Support for locating remaining used blocks in segments
 

@@ -7,6 +7,8 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager.h"
 
+#include "test/crimson/seastore/test_block.h"
+
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
@@ -15,24 +17,6 @@ namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
   }
-}
-
-struct test_extent_desc_t {
-  size_t len = 0;
-  unsigned checksum = 0;
-
-  bool operator==(const test_extent_desc_t &rhs) const {
-    return (len == rhs.len &&
-	    checksum == rhs.checksum);
-  }
-  bool operator!=(const test_extent_desc_t &rhs) const {
-    return !(*this == rhs);
-  }
-};
-
-std::ostream &operator<<(std::ostream &lhs, const test_extent_desc_t &rhs) {
-  return lhs << "test_extent_desc_t(len=" << rhs.len
-	     << ", checksum=" << rhs.checksum << ")";
 }
 
 struct test_extent_record_t {
@@ -59,40 +43,6 @@ std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
   return lhs << "test_extent_record_t(" << rhs.desc
 	     << ", refcount=" << rhs.refcount << ")";
 }
-
-
-struct TestBlock : LogicalCachedExtent {
-  using Ref = TCachedExtentRef<TestBlock>;
-
-  TestBlock(ceph::bufferptr &&ptr) : LogicalCachedExtent(std::move(ptr)) {}
-  TestBlock(const TestBlock &other) : LogicalCachedExtent(other) {}
-
-  CachedExtentRef duplicate_for_write() final {
-    return CachedExtentRef(new TestBlock(*this));
-  };
-
-  static constexpr extent_types_t TYPE = extent_types_t::TEST_BLOCK;
-  extent_types_t get_type() const final {
-    return TYPE;
-  }
-
-  ceph::bufferlist get_delta() final {
-    return ceph::bufferlist();
-  }
-
-  void set_contents(char c) {
-    ::memset(get_bptr().c_str(), c, get_length());
-  }
-
-  test_extent_desc_t get_desc() {
-    return { get_length(), get_crc32c(1) };
-  }
-
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
-    ceph_assert(0 == "TODO");
-  }
-};
-using TestBlockRef = TCachedExtentRef<TestBlock>;
 
 struct transaction_manager_test_t : public seastar_test_suite_t {
   std::unique_ptr<SegmentManager> segment_manager;
@@ -129,6 +79,7 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
       })
     );
   }
+
   struct test_extents_t : std::map<laddr_t, test_extent_record_t> {
   private:
     void check_available(laddr_t addr, extent_len_t len) {
@@ -195,6 +146,11 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
     return extent;
   }
 
+  void replay() {
+    tm.close().unsafe_get();
+    tm.mount().unsafe_get();
+  }
+
   void check_mappings() {
     auto t = create_transaction();
     check_mappings(t);
@@ -218,16 +174,16 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
     return ext;
   }
 
+  test_block_mutator_t mutator;
   TestBlockRef mutate_extent(
     test_transaction_t &t,
-    TestBlockRef ref,
-    char contents) {
+    TestBlockRef ref) {
     ceph_assert(t.mappings.count(ref->get_laddr()));
     ceph_assert(t.mappings[ref->get_laddr()].desc.len == ref->get_length());
     auto ext = tm.get_mutable_extent(*t.t, ref)->cast<TestBlock>();
     EXPECT_EQ(ext->get_laddr(), ref->get_laddr());
     EXPECT_EQ(ext->get_desc(), ref->get_desc());
-    ext->set_contents(contents);
+    mutator.mutate(*ext);
     t.mappings[ext->get_laddr()].update(ext->get_desc());
     return ext;
   }
@@ -304,18 +260,21 @@ TEST_F(transaction_manager_test_t, mutate)
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
     {
       auto t = create_transaction();
       auto ext = get_extent(
 	t,
 	ADDR,
 	SIZE);
-      auto mut = mutate_extent(t, ext, 'c');
+      auto mut = mutate_extent(t, ext);
       check_mappings(t);
       check_mappings();
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
+    check_mappings();
   });
 }
 
@@ -337,6 +296,7 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
     {
       auto t = create_transaction();
       inc_ref(t, ADDR);
@@ -353,6 +313,7 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
     {
       auto t = create_transaction();
       dec_ref(t, ADDR);
