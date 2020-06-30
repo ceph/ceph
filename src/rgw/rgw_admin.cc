@@ -10529,8 +10529,10 @@ next:
         cerr << "ERROR: User id was not provided (via --uid)" << std::endl;
         return EINVAL;
       }
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->add_user(
-          dpp(), account_id, user->get_id(), null_yield);
+      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user->link_account(
+          dpp(), user->get_id(), account_id,
+          RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
+          null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not add user" << cpp_strerror(-ret) << std::endl;
         return -ret;
