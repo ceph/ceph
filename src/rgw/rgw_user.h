@@ -881,14 +881,12 @@ public:
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
   int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user, RGWGetUserStats_CB *ctx);
-
   int link_account(const DoutPrefixProvider *dpp, 
 		   const rgw_user& user,
 		   const std::string& account_id,
 		   const PutParams& put_params,
 		   optional_yield y);
-
-  int link_account(const DoutPrefixProvider *dpp, 
+  int link_account(const DoutPrefixProvider *dpp,
 		   RGWUserInfo& uinfo,
 		   const std::string& account_id,
 		   const PutParams& put_params,
