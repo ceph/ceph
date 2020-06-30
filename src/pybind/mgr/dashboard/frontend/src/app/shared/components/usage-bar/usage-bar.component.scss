@@ -10,18 +10,18 @@
 
 .progress {
   height: 20px;
-  position: relative;
   margin-bottom: 0;
+  position: relative;
 
   div.progress-bar {
     position: static;
   }
 
   span {
-    position: absolute;
-    display: block;
-    width: 100%;
     color: $color-progress-text;
+    display: block;
     font-weight: normal;
+    position: absolute;
+    width: 100%;
   }
 }

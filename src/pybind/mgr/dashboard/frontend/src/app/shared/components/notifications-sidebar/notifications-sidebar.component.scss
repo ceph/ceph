@@ -1,17 +1,17 @@
 @import 'defaults.scss';
 
 :host {
-  position: fixed;
-  top: $navbar-height + 10px;
   bottom: 10px;
-  right: -350px;
-
-  width: 350px;
   max-width: 90vw;
-
-  z-index: 9;
+  position: fixed;
+  right: -350px;
+  top: $navbar-height + 10px;
 
   transition: all 0.6s;
+
+  width: 350px;
+
+  z-index: 9;
 }
 
 :host.active {
@@ -27,10 +27,10 @@ ngx-simplebar {
 }
 
 .separator {
-  padding: 5px 12px;
-  color: $color-popover-seperator-text;
   background-color: $color-popover-seperator-bg;
+  color: $color-popover-seperator-text;
   font-size: 12px;
+  padding: 5px 12px;
 }
 
 .btn-link .fa-trash-o {

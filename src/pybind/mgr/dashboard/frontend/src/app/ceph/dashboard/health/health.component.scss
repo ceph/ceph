@@ -1,23 +1,23 @@
 @import 'defaults.scss';
 
 cd-info-card {
-  padding: 0 0.5vw 0 0.5vw;
+  padding: 0 0.5vw;
 }
 
 ::ng-deep .pg-status-popover-wrapper {
   position: relative;
 
   .popover {
+    max-height: 20vh;
+    max-width: unset !important;
+    min-width: unset !important;
     position: absolute;
     width: 116%;
-    max-height: 20vh;
-    min-width: unset !important;
-    max-width: unset !important;
 
     .popover-body {
-      max-width: 100%;
-      max-height: 19vh;
       font-size: 12px;
+      max-height: 19vh;
+      max-width: 100%;
     }
   }
 }
@@ -27,11 +27,11 @@ cd-info-card {
 }
 
 .card-text-error {
-  display: inline;
   color: $color-solid-red;
+  display: inline;
 }
 
-.card-text-line-break:after {
+.card-text-line-break::after {
   content: '\A';
   white-space: pre;
 }

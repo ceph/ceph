@@ -8,9 +8,10 @@
 }
 
 .quota-origin {
+  color: $color-brand-teal;
+  cursor: pointer;
+
   &:hover {
     color: $color-gray13;
   }
-  cursor: pointer;
-  color: $color-brand-teal;
 }
