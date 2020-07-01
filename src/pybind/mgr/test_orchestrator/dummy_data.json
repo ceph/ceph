@@ -340,6 +340,36 @@
         "running": 1,
         "size": 1
       }
+    },
+    {
+      "api_password": "api_password",
+      "api_user": "api_user",
+      "placement": {
+        "hosts": [
+          {
+            "hostname": "mgr0",
+            "name": "",
+            "network": ""
+          },
+          {
+            "hostname": "osd0",
+            "name": "",
+            "network": ""
+          }
+        ]
+      },
+      "pool": "pool",
+      "service_id": "iscsi",
+      "service_name": "iscsi.iscsi",
+      "service_type": "iscsi",
+      "status": {
+        "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "created": "2020-04-16T03:39:39.512721",
+        "last_refresh": "2020-04-16T06:51:42.412980",
+        "running": 1,
+        "size": 1
+      }
     }
   ],
   "daemons": [
@@ -412,6 +442,20 @@
       "status": 1,
       "status_desc": "running",
       "version": "3.2"
+    },
+    {
+      "container_id": "e695cd698d8a",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T05:44:41.551646",
+      "daemon_id": "iscsi.osd0.abc123",
+      "daemon_type": "iscsi",
+      "hostname": "osd0",
+      "last_refresh": "2020-04-16T06:51:43.182937",
+      "started": "2020-04-16T05:44:41.606514",
+      "status": 1,
+      "status_desc": "running",
+      "version": "3.4"
     }
   ]
 }
