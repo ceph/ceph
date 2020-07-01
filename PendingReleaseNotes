@@ -50,8 +50,8 @@
   verify that the specification is correct, before applying it.
 
 * RGW: The ``radosgw-admin`` sub-commands dealing with orphans --
-  ``radosgw-admin orphans find``, ``radosgw-admin orphans find``,
-  ``radosgw-admin orphans find`` -- have been deprecated. They have
+  ``radosgw-admin orphans find``, ``radosgw-admin orphans finish``, and
+  ``radosgw-admin orphans list-jobs`` -- have been deprecated. They have
   not been actively maintained and they store intermediate results on
   the cluster, which could fill a nearly-full cluster.  They have been
   replaced by a tool, currently considered experimental,
