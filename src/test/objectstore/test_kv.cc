@@ -1242,22 +1242,35 @@ TEST_F(RocksDBResharding, change_reshard) {
   data_to_db();
   check_db();
   db->close();
-  RocksDBStore::resharding_ctrl ctrl;
-  ctrl.unittest_fail_after_first_batch = true;
-  ASSERT_EQ(db->reshard("C(5) D(3)", &ctrl), -1000);
-  ASSERT_NE(db->open(cout), 0);
-  ctrl.unittest_fail_after_first_batch = false;
-  ctrl.unittest_fail_after_processing_column = true;
-  ASSERT_EQ(db->reshard("C(5) Evade(2)", &ctrl), -1001);
-  ASSERT_NE(db->open(cout), 0);
-  ctrl.unittest_fail_after_processing_column = false;
-  ctrl.unittest_fail_after_successful_processing = true;
-  ASSERT_EQ(db->reshard("Evade(2) D(3)", &ctrl), -1002);
-  ASSERT_NE(db->open(cout), 0);
-  ASSERT_EQ(db->reshard("Ad(1) Evade(5)"), 0);
-  ASSERT_EQ(db->open(cout), 0);
-  check_db();
-  db->close();
+  {
+    RocksDBStore::resharding_ctrl ctrl;
+    ctrl.unittest_fail_after_first_batch = true;
+    ASSERT_EQ(db->reshard("C(5) D(3)", &ctrl), -1000);
+  }
+  {
+    RocksDBStore::resharding_ctrl ctrl;
+    ASSERT_NE(db->open(cout), 0);
+    ctrl.unittest_fail_after_first_batch = false;
+    ctrl.unittest_fail_after_processing_column = true;
+    ASSERT_EQ(db->reshard("C(5) Evade(2)", &ctrl), -1001);
+  }
+  {
+    RocksDBStore::resharding_ctrl ctrl;
+    ASSERT_NE(db->open(cout), 0);
+    ctrl.unittest_fail_after_processing_column = false;
+    ctrl.unittest_fail_after_successful_processing = true;
+    ASSERT_EQ(db->reshard("Evade(2) D(3)", &ctrl), -1002);
+  }
+  {
+    RocksDBStore::resharding_ctrl ctrl;
+    ASSERT_NE(db->open(cout), 0);
+    ASSERT_EQ(db->reshard("Ad(1) Evade(5)"), 0);
+  }
+  {
+    ASSERT_EQ(db->open(cout), 0);
+    check_db();
+    db->close();
+  }
 }
 
 

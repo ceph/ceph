@@ -22,6 +22,7 @@
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "include/common_fwd.h"
+#include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
@@ -2701,8 +2702,7 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator()
 }
 
 int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
-				      std::vector<std::string>& to_process_columns,
-				      std::vector<rocksdb::ColumnFamilyHandle*>& to_process_handles)
+				      RocksDBStore::columns_t& to_process_columns)
 {
   //0. lock db from opening
   //1. list existing columns
@@ -2879,6 +2879,9 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
     if (rocksdb::kDefaultColumnFamilyName == base_name) {
       default_cf = handles[i];
       must_close_default_cf = true;
+      std::unique_ptr<rocksdb::ColumnFamilyHandle, cf_deleter_t> ptr{
+        cf, [](rocksdb::ColumnFamilyHandle*) {}};
+      to_process_columns.emplace(full_name, std::move(ptr));
     } else {
       for (const auto& nsd : new_sharding_def) {
 	if (nsd.name == base_name) {
@@ -2890,6 +2893,11 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
 	  break;
 	}
       }
+      std::unique_ptr<rocksdb::ColumnFamilyHandle, cf_deleter_t> ptr{
+        cf, [this](rocksdb::ColumnFamilyHandle* handle) {
+	  db->DestroyColumnFamilyHandle(handle);
+	}};
+      to_process_columns.emplace(full_name, std::move(ptr));
     }
   }
 
@@ -2902,51 +2910,41 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
       }
     }
   }
-  to_process_columns = existing_columns;
-  to_process_handles = handles;
   return 0;
 }
 
-int RocksDBStore::reshard_cleanup(const std::vector<std::string>& current_columns,
-				  const std::vector<rocksdb::ColumnFamilyHandle*>& current_handles)
+int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns)
 {
   std::vector<std::string> new_sharding_columns;
-  for (const auto& col: cf_handles) {
-    if (col.second.handles.size() == 1) {
-      new_sharding_columns.push_back(col.first);
+  for (const auto& [name, handle] : cf_handles) {
+    if (handle.handles.size() == 1) {
+      new_sharding_columns.push_back(name);
     } else {
-      for (size_t i = 0; i < col.second.handles.size(); i++) {
-	new_sharding_columns.push_back(col.first + "-" + to_string(i));
+      for (size_t i = 0; i < handle.handles.size(); i++) {
+	new_sharding_columns.push_back(name + "-" + to_string(i));
       }
     }
   }
 
-  for (size_t i = 0; i < current_columns.size(); i++) {
-    bool found = false;
-    for (size_t j = 0; j < new_sharding_columns.size(); j++) {
-      if (current_columns[i] == new_sharding_columns[j]) {
-	found = true;
-	break;
-      }
-    }
-    if (found || current_columns[i] == rocksdb::kDefaultColumnFamilyName) {
-      dout(5) << "Column " << current_columns[i] << " is part of new sharding." << dendl;
+  for (auto& [name, handle] : current_columns) {
+    auto found = std::find(new_sharding_columns.begin(),
+			   new_sharding_columns.end(),
+			   name) != new_sharding_columns.end();
+    if (found || name == rocksdb::kDefaultColumnFamilyName) {
+      dout(5) << "Column " << name << " is part of new sharding." << dendl;
       continue;
     }
-    dout(5) << "Column " << current_columns[i] << " not part of new sharding. Deleting." << dendl;
+    dout(5) << "Column " << name << " not part of new sharding. Deleting." << dendl;
 
     // verify that column is empty
-    rocksdb::Iterator* it;
-    it = db->NewIterator(rocksdb::ReadOptions(), current_handles[i]);
+    std::unique_ptr<rocksdb::Iterator> it{
+      db->NewIterator(rocksdb::ReadOptions(), handle.get())};
     ceph_assert(it);
     it->SeekToFirst();
     ceph_assert(!it->Valid());
-    delete it;
-    rocksdb::Status status;
-    status = db->DropColumnFamily(current_handles[i]);
-    if (!status.ok()) {
-      derr << __func__ << " Failed to delete column: "
-	   << current_columns[i] << dendl;
+
+    if (rocksdb::Status status = db->DropColumnFamily(handle.get()); !status.ok()) {
+      derr << __func__ << " Failed to drop column: "  << name << dendl;
       return -EINVAL;
     }
   }
@@ -2955,10 +2953,6 @@ int RocksDBStore::reshard_cleanup(const std::vector<std::string>& current_column
 
 int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::resharding_ctrl* ctrl_in)
 {
-  rocksdb::Status status;
-  int r;
-  std::vector<std::string> to_process_columns;
-  std::vector<rocksdb::ColumnFamilyHandle*> to_process_handles;
 
   resharding_ctrl ctrl = ctrl_in ? *ctrl_in : resharding_ctrl();
   size_t bytes_in_batch = 0;
@@ -2968,33 +2962,27 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
   size_t keys_processed = 0;
   size_t keys_moved = 0;
 
-  rocksdb::WriteBatch* bat = nullptr;
-
-  auto flush_batch = [&]() {
+  auto flush_batch = [&](rocksdb::WriteBatch* batch) {
     dout(10) << "flushing batch, " << keys_in_batch << " keys, for "
              << bytes_in_batch << " bytes" << dendl;
     rocksdb::WriteOptions woptions;
     woptions.sync = true;
-    rocksdb::Status s = db->Write(woptions, bat);
+    rocksdb::Status s = db->Write(woptions, batch);
     ceph_assert(s.ok());
     bytes_in_batch = 0;
     keys_in_batch = 0;
-    delete bat;
-    bat = new rocksdb::WriteBatch();
-    ceph_assert(bat);
+    batch->Clear();
   };
 
   auto process_column = [&](rocksdb::ColumnFamilyHandle* handle,
 			    const std::string& fixed_prefix)
   {
-    int r = 0;
     dout(5) << " column=" << (void*)handle << " prefix=" << fixed_prefix << dendl;
-    rocksdb::Iterator* it;
-    it = db->NewIterator(rocksdb::ReadOptions(), handle);
+    std::unique_ptr<rocksdb::Iterator> it{
+      db->NewIterator(rocksdb::ReadOptions(), handle)};
     ceph_assert(it);
-    bat = new rocksdb::WriteBatch();
-    ceph_assert(bat);
 
+    rocksdb::WriteBatch bat;
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
       rocksdb::Slice raw_key = it->key();
       dout(30) << "key=" << pretty_binary_string(raw_key.ToString()) << dendl;
@@ -3005,8 +2993,7 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 	bytes_per_iterator = 0;
 	keys_per_iterator = 0;
 	std::string raw_key_str = raw_key.ToString();
-	delete it;
-	it = db->NewIterator(rocksdb::ReadOptions(), handle);
+	it.reset(db->NewIterator(rocksdb::ReadOptions(), handle));
 	ceph_assert(it);
 	it->Seek(raw_key_str);
 	ceph_assert(it->Valid());
@@ -3024,7 +3011,6 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
       if ((keys_processed % 10000) == 0) {
 	dout(10) << "processed " << keys_processed << " keys, moved " << keys_moved << dendl;
       }
-      std::string new_raw_key;
       rocksdb::ColumnFamilyHandle* new_handle = get_cf_handle(prefix, key);
       if (new_handle == nullptr) {
 	new_handle = default_cf;
@@ -3032,13 +3018,14 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
       if (handle == new_handle) {
 	continue;
       }
+      std::string new_raw_key;
       if (new_handle == default_cf) {
 	new_raw_key = combine_strings(prefix, key);
       } else {
 	new_raw_key = key;
       }
-      bat->Delete(handle, raw_key);
-      bat->Put(new_handle, new_raw_key, value);
+      bat.Delete(handle, raw_key);
+      bat.Put(new_handle, new_raw_key, value);
       dout(25) << "moving " << (void*)handle << "/" << pretty_binary_string(raw_key.ToString()) <<
 	" to " << (void*)new_handle << "/" << pretty_binary_string(new_raw_key) <<
 	" size " << value.size() << dendl;
@@ -3051,74 +3038,65 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
       //check if need to write batch
       if (bytes_in_batch >= ctrl.bytes_per_batch ||
 	  keys_in_batch >= ctrl.keys_per_batch) {
-	flush_batch();
+	flush_batch(&bat);
 	if (ctrl.unittest_fail_after_first_batch) {
-	  r = -1000;
-	  goto out;
+	  return -1000;
 	}
       }
     }
-    flush_batch();
-  out:
-    delete it;
-    delete bat;
-    return r;
+    if (bat.Count() > 0) {
+      flush_batch(&bat);
+    }
+    return 0;
   };
 
-  r = prepare_for_reshard(new_sharding, to_process_columns, to_process_handles);
+  auto close_column_handles = make_scope_guard([this] {
+    cf_handles.clear();
+    close();
+  });
+  columns_t to_process_columns;
+  int r = prepare_for_reshard(new_sharding, to_process_columns);
   if (r != 0) {
     dout(1) << "failed to prepare db for reshard" << dendl;
-    goto cleanup;
+    return r;
   }
 
-  ceph_assert(to_process_columns.size() == to_process_handles.size());
-  for (size_t idx = 0; idx < to_process_columns.size(); idx++) {
-    dout(5) << "Processing column=" << to_process_columns[idx] <<
-      " handle=" << to_process_handles[idx] << dendl;
-    if (to_process_columns[idx] == rocksdb::kDefaultColumnFamilyName) {
-      ceph_assert(to_process_handles[idx] == default_cf);
+  for (auto& [name, handle] : to_process_columns) {
+    dout(5) << "Processing column=" << name
+	    << " handle=" << handle.get() << dendl;
+    if (name == rocksdb::kDefaultColumnFamilyName) {
+      ceph_assert(handle.get() == default_cf);
       r = process_column(default_cf, std::string());
     } else {
-      std::string fixed_prefix = to_process_columns[idx].substr(0, to_process_columns[idx].find('-'));
+      std::string fixed_prefix = name.substr(0, name.find('-'));
       dout(10) << "Prefix: " << fixed_prefix << dendl;
-      r = process_column(to_process_handles[idx], fixed_prefix);
+      r = process_column(handle.get(), fixed_prefix);
     }
     if (r != 0) {
-      derr << "Error processing column " << to_process_columns[idx] << dendl;
-      goto cleanup;
+      derr << "Error processing column " << name << dendl;
+      return r;
     }
     if (ctrl.unittest_fail_after_processing_column) {
-      r = -1001;
-      goto cleanup;
+      return -1001;
     }
   }
 
-  r = reshard_cleanup(to_process_columns, to_process_handles);
+  r = reshard_cleanup(to_process_columns);
   if (r != 0) {
     dout(5) << "failed to cleanup after reshard" << dendl;
-    goto cleanup;
+    return r;
   }
 
   if (ctrl.unittest_fail_after_successful_processing) {
-    r = -1002;
-    goto cleanup;
+    return -1002;
   }
   env->CreateDir(sharding_def_dir);
-  status = rocksdb::WriteStringToFile(env, new_sharding,
-				      sharding_def_file, true);
-  if (!status.ok()) {
+  if (auto status = rocksdb::WriteStringToFile(env, new_sharding,
+					       sharding_def_file, true);
+      !status.ok()) {
     derr << __func__ << " cannot write to " << sharding_def_file << dendl;
-    r = -EIO;
+    return -EIO;
   }
 
-  cleanup:
-  //close column handles
-  for (const auto& col: cf_handles) {
-    for (size_t i = 0; i < col.second.handles.size(); i++) {
-      db->DestroyColumnFamilyHandle(col.second.handles[i]);
-    }
-  }
-  cf_handles.clear();
-  close();
   return r;
 }
