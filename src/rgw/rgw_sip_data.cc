@@ -4,7 +4,7 @@
 #include "common/Formatter.h"
 
 #include "rgw_sip_data.h"
-#include "rgw_metadata.h"
+#include "rgw_bucket.h"
 #include "rgw_b64.h"
 #include "rgw_datalog.h"
 
@@ -13,11 +13,12 @@
 void siprovider_data_info::dump(Formatter *f) const
 {
   encode_json("id", id, f);
+  encode_json("timestamp", timestamp, f);
 }
 
 int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
 {
-  if (shard_id > 0) {
+  if (shard_id != 0) {
     return -ERANGE;
   }
 
@@ -53,7 +54,7 @@ int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fet
       m = entries.back().marker;
 
       for (auto& k : entries) {
-        auto e = create_entry(k.key, rgw::to_base64(k.marker));
+        auto e = siprovider_data_create_entry(k.key, std::nullopt, rgw::to_base64(k.marker));
         result->entries.push_back(e);
       }
     }
@@ -69,59 +70,54 @@ int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fet
   return 0;
 }
 
-#if 0
 SIProvider_DataInc::SIProvider_DataInc(CephContext *_cct,
-				       RGWSI_MDLog *_mdlog,
-				       const string& _period_id) : SIProvider_SingleStage(_cct,
-                                                                                          "data.inc",
-                                                                                          SIProvider::StageType::INC,
-                                                                                          _cct->_conf->rgw_md_log_max_shards),
-                                                                   mdlog(_mdlog),
-                                                                   period_id(_period_id) {}
+				       RGWSI_DataLog *_datalog_svc) : SIProvider_SingleStage(_cct,
+                                                                                             "data.inc",
+                                                                                             SIProvider::StageType::INC,
+                                                                                             _cct->_conf->rgw_data_log_num_shards) {
+  svc.datalog = _datalog_svc;
+}
 
 int SIProvider_DataInc::init()
 {
-  meta_log = mdlog->get_log(period_id);
+  data_log = svc.datalog;
   return 0;
 }
 
 int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
 {
-  if (shard_id >= stage_info.num_shards) {
+  if (shard_id >= stage_info.num_shards ||
+      shard_id < 0) {
     return -ERANGE;
   }
 
   utime_t start_time;
   utime_t end_time;
 
-  void *handle;
-
-  meta_log->init_list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
   bool truncated;
   do {
-    list<cls_log_entry> entries;
-    int ret = meta_log->list_entries(handle, max, entries, NULL, &truncated);
+    list<rgw_data_change_log_entry> entries;
+    int ret = data_log->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(),
+                                     max, entries, marker, &marker, &truncated);
+    if (ret == -ENOENT) {
+      truncated = false;
+      break;
+    }
     if (ret < 0) {
-      lderr(cct) << "ERROR: meta_log->list_entries() failed: ret=" << ret << dendl;
+      lderr(cct) << "ERROR: data_log->list_entries() failed: ret=" << ret << dendl;
       return -ret;
     }
 
     max -= entries.size();
 
     for (auto& entry : entries) {
-      siprovider_meta_info meta_info(entry.section, entry.name);
-
-      SIProvider::Entry e;
-      e.key = entry.id;
-      meta_info.encode(e.data);
+      auto e = siprovider_data_create_entry(entry.entry.key, entry.entry.timestamp, rgw::to_base64(entry.log_id));
       result->entries.push_back(e);
     }
   } while (truncated && max > 0);
 
   result->done = false; /* FIXME */
   result->more = truncated;
-
-  meta_log->complete_list_entries(handle);
 
   return 0;
 }
@@ -145,13 +141,11 @@ int SIProvider_DataInc::do_trim(int shard_id, const std::string& marker)
   int ret;
   // trim until -ENODATA
   do {
-    ret = meta_log->trim(shard_id, start_time.to_real_time(),
-                         end_time.to_real_time(), string(), marker);
+    ret = data_log->trim_entries(shard_id, marker);
   } while (ret == 0);
   if (ret < 0 && ret != -ENODATA) {
-    ldout(cct, 20) << "ERROR: meta_log->trim(): returned ret=" << ret << dendl;
+    ldout(cct, 20) << "ERROR: data_log->trim(): returned ret=" << ret << dendl;
     return ret;
   }
   return 0;
 }
-#endif

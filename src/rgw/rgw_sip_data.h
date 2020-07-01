@@ -13,25 +13,40 @@ class RGWMetadataManager;
 
 struct siprovider_data_info : public SIProvider::EntryInfoBase {
   std::string id;
+  std::optional<ceph::real_time> timestamp;
 
   siprovider_data_info() {}
-  siprovider_data_info(const string& _id) : id(_id) {}
+  siprovider_data_info(const string& _id,
+                       std::optional<ceph::real_time> _ts) : id(_id), timestamp(_ts) {}
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(id, bl);
+    encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
      DECODE_START(1, bl);
      decode(id, bl);
+     decode(timestamp, bl);
      DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const override;
 };
 WRITE_CLASS_ENCODER(siprovider_data_info)
+
+static inline SIProvider::Entry siprovider_data_create_entry(const std::string& k,
+                                                             std::optional<ceph::real_time> timestamp,
+                                                             const std::string& m)
+{
+  siprovider_data_info data_info = { k, timestamp };
+  SIProvider::Entry e;
+  e.key = m;
+  data_info.encode(e.data);
+  return e;
+}
 
 class RGWDatadataManager;
 
@@ -73,20 +88,19 @@ public:
     return 0;
   }
 
-  SIProvider::Entry create_entry(const std::string& k,
-                                 const std::string& m) const {
-    siprovider_data_info data_info = { k };
-    SIProvider::Entry e;
-    e.key = m;
-    data_info.encode(e.data);
-    return e;
-  }
 };
 
-#if 0
+class RGWDataChangesLog;
+
 class SIProvider_DataInc : public SIProvider_SingleStage,
                            public SITypedProviderDefaultHandler<siprovider_data_info>
 {
+  struct {
+    RGWDataChangesLog *datalog;
+  } svc;
+
+  RGWDataChangesLog *data_log{nullptr};
+
 protected:
   int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
@@ -96,9 +110,7 @@ protected:
   int do_trim( int shard_id, const std::string& marker) override;
 public:
   SIProvider_DataInc(CephContext *_cct,
-                     RGWSI_MDLog *_mdlog,
-                     const string& _period_id);
+                     RGWSI_DataLog *_datalog_svc);
 
   int init();
 };
-#endif

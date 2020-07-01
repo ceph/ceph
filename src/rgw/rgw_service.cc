@@ -466,6 +466,14 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
   }
   si.mgr->register_sip("data.full", std::make_shared<RGWSIPGen_Single>(data_full_sip));
 
+  auto data_inc_sip = new SIProvider_DataInc(cct, svc->datalog_rados);
+  r = data_inc_sip->init();
+  if (r < 0) {
+    lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
+    return r;
+  }
+  si.mgr->register_sip("data.inc", std::make_shared<RGWSIPGen_Single>(data_inc_sip));
+
   return 0;
 }
 
