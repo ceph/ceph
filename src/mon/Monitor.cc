@@ -6532,7 +6532,8 @@ void Monitor::do_stretch_mode_election_work()
   }
   dout(20) << "new dead_mon_buckets " << dead_mon_buckets << dendl;
 
-  if (dead_mon_buckets != old_dead_buckets) {
+  if (dead_mon_buckets != old_dead_buckets &&
+      dead_mon_buckets.size() >= old_dead_buckets.size()) {
     maybe_go_degraded_stretch_mode();
   }
 }
@@ -6544,6 +6545,38 @@ struct CMonGoDegraded : public Context {
     m->maybe_go_degraded_stretch_mode();
   }
 };
+
+struct CMonGoRecovery : public Context {
+  Monitor *m;
+  CMonGoRecovery(Monitor *mon) : m(mon) {}
+  void finish(int r) {
+    m->go_recovery_stretch_mode();
+  }
+};
+void Monitor::go_recovery_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  if (!is_leader()) return;
+  if (!is_degraded_stretch_mode()) return;
+  if (is_recovering_stretch_mode()) return;
+
+  if (dead_mon_buckets.size()) {
+    ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
+    // we can't recover if we are missing monitors in a zone!
+    return;
+  }
+  
+  if (!osdmon()->is_readable()) {
+    osdmon()->wait_for_readable_ctx(new CMonGoRecovery(this));
+    return;
+  }
+
+  if (!osdmon()->is_writeable()) {
+    osdmon()->wait_for_writeable_ctx(new CMonGoRecovery(this));
+  }
+  recovering_stretch_mode = true;
+  osdmon()->trigger_recovery_stretch_mode();  
+}
 
 void Monitor::maybe_go_degraded_stretch_mode()
 {

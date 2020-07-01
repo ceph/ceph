@@ -1619,6 +1619,12 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("Issue a health warning if we are in degraded stretch mode"),
 
+    Option("mon_stretch_cluster_recovery_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.6)
+    .add_service("mon")
+    .set_description("the ratio of up OSDs at which a degraded stretch cluster enters recovery")
+    .set_min_max(0.51, 1.0),
+
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.050)
     .add_service("mon")

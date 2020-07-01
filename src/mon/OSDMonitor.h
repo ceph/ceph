@@ -828,6 +828,10 @@ public:
    */
   void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
 				     const set<string>& live_zones);
+  /**
+   * Set recovery stretch mode in the OSDMap, resetting pool size back to normal
+   */
+  void trigger_recovery_stretch_mode();
 };
 
 #endif

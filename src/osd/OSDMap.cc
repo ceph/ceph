@@ -698,6 +698,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
       encode(change_stretch_mode, bl);
       encode(new_stretch_bucket_count, bl);
       encode(new_degraded_stretch_mode, bl);
+      encode(new_recovering_stretch_mode, bl);
       encode(new_stretch_mode_bucket, bl);
       encode(stretch_mode_enabled, bl);
     }
@@ -975,6 +976,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
       decode(change_stretch_mode, bl);
       decode(new_stretch_bucket_count, bl);
       decode(new_degraded_stretch_mode, bl);
+      decode(new_recovering_stretch_mode, bl);
       decode(new_stretch_mode_bucket, bl);
       decode(stretch_mode_enabled, bl);
     }
@@ -2341,6 +2343,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     stretch_mode_enabled = inc.stretch_mode_enabled;
     stretch_bucket_count = inc.new_stretch_bucket_count;
     degraded_stretch_mode = inc.new_degraded_stretch_mode;
+    recovering_stretch_mode = inc.new_recovering_stretch_mode;
     stretch_mode_bucket = inc.new_stretch_mode_bucket;
   }
 
@@ -3077,6 +3080,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       encode(stretch_mode_enabled, bl);
       encode(stretch_bucket_count, bl);
       encode(degraded_stretch_mode, bl);
+      encode(recovering_stretch_mode, bl);
       encode(stretch_mode_bucket, bl);
     }
     ENCODE_FINISH_NEW_COMPAT(bl, new_compat_v); // osd-only data
@@ -3409,11 +3413,13 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
       decode(stretch_mode_enabled, bl);
       decode(stretch_bucket_count, bl);
       decode(degraded_stretch_mode, bl);
+      decode(recovering_stretch_mode, bl);
       decode(stretch_mode_bucket, bl);
     } else {
       stretch_mode_enabled = false;
       stretch_bucket_count = 0;
       degraded_stretch_mode = 0;
+      recovering_stretch_mode = 0;
       stretch_mode_bucket = 0;
     }
     DECODE_FINISH(bl); // osd-only data
@@ -6065,11 +6071,17 @@ void OSDMap::check_health(CephContext *cct,
 
   // DEGRADED STRETCH MODE
   if (cct->_conf.get_val<bool>("mon_warn_on_degraded_stretch_mode")) {
-    if (degraded_stretch_mode) {
+    if (recovering_stretch_mode) {
+      stringstream ss;
+      ss << "We are recovering stretch mode buckets, only requiring "
+	 << degraded_stretch_mode << " of " << stretch_bucket_count << " buckets to peer" ;
+      checks->add("RECOVERING_STRETCH_MODE", HEALTH_WARN, // TODO: HEALTH_ERR?
+			    ss.str(), 0);
+    } else if (degraded_stretch_mode) {
       stringstream ss;
       ss << "We are missing stretch mode buckets, only requiring "
 	 << degraded_stretch_mode << " of " << stretch_bucket_count << " buckets to peer" ;
-      auto& d = checks->add("DEGRADED_STRETCH_MODE", HEALTH_WARN, // TODO: HEALTH_ERR?
+      checks->add("DEGRADED_STRETCH_MODE", HEALTH_WARN, // TODO: HEALTH_ERR?
 			    ss.str(), 0);
     }
   }
