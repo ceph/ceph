@@ -10156,13 +10156,29 @@ next:
 
    auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
 
+   SIProvider::StageInfo stage_info;
+   int r = provider->get_stage_info(stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+
 #define MAX_FETCH_CHUNK 1000
    if (!max_entries_specified) {
      max_entries = MAX_FETCH_CHUNK;
    }
 
    SIProvider::fetch_result result;
-   int r = provider->fetch(stage_id, shard_id, marker,  max_entries, &result);
+   r = provider->fetch(stage_id, shard_id, marker,  max_entries, &result);
    if (r < 0) {
      cerr << "ERROR: failed to fetch entries: " << cpp_strerror(-r) << std::endl;
      return -r;
