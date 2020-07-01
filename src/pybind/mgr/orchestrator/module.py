@@ -1241,21 +1241,31 @@ Usage:
 
     @_cli_read_command(
         'orch status',
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false',
         desc='Report configured backend and its status')
-    def _status(self):
+    def _status(self, format='plain'):
         o = self._select_orchestrator()
         if o is None:
             raise NoOrchestrator()
 
         avail, why = self.available()
-        if avail is None:
-            # The module does not report its availability
-            return HandleCommandResult(stdout="Backend: {0}".format(o))
+        result = {
+            "backend": o
+        }
+        if avail is not None:
+            result['available'] = avail
+            if not avail:
+                result['reason'] = why
+
+        if format != 'plain':
+            output = to_format(result, format, many=False, cls=None)
         else:
-            return HandleCommandResult(stdout="Backend: {0}\nAvailable: {1}{2}".format(
-                                           o, avail,
-                                           " ({0})".format(why) if not avail else ""
-                                       ))
+            output = "Backend: {0}".format(result['backend'])
+            if 'available' in result:
+                output += "\nAvailable: {0}".format(result['available'])
+                if 'reason' in result:
+                    output += ' ({0})'.format(result['reason'])
+        return HandleCommandResult(stdout=output)
 
     def self_test(self):
         old_orch = self._select_orchestrator()
