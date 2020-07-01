@@ -2584,10 +2584,16 @@ public:
     RGWSI_User *user{nullptr};
   } svc;
 
-  RGWUserMetadataHandler(RGWSI_User *user_svc) {
+  struct Ctl {
+    RGWAccountCtl *account{nullptr};
+  } ctl;
+
+  RGWUserMetadataHandler(RGWSI_User *user_svc, RGWAccountCtl *account_ctl) {
     base_init(user_svc->ctx(), user_svc->get_be_handler());
     svc.user = user_svc;
+    ctl.account = account_ctl;
   }
+
 
   string get_type() override { return "user"; }
 
@@ -2651,6 +2657,7 @@ class RGWMetadataHandlerPut_User : public RGWMetadataHandlerPut_SObj
 {
   RGWUserMetadataHandler *uhandler;
   RGWUserMetadataObject *uobj;
+  RGWUserMetadataObject *orig_obj;
 public:
   RGWMetadataHandlerPut_User(RGWUserMetadataHandler *_handler,
                              RGWSI_MetaBackend_Handler::Op *op, string& entry,
@@ -2662,6 +2669,7 @@ public:
   }
 
   int put_checked(const DoutPrefixProvider *dpp) override;
+  int put_post(const DoutPrefixProvider *dpp) override;
 };
 
 int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
@@ -2674,9 +2682,42 @@ int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& en
   return do_put_operate(&put_op, dpp);
 }
 
+int RGWMetadataHandlerPut_User::put_post(const DoutPrefixProvider *dpp)
+{
+  if (uhandler->ctl.account == nullptr) {
+    return 0;
+  }
+
+  auto new_account_id = uobj->get_uci().info.account_id;
+  std::string orig_account_id;
+  if (orig_obj != nullptr) {
+    orig_account_id = orig_obj->get_uci().info.account_id;
+  }
+
+  RGWUserInfo uinfo = uobj->get_uci().info;
+  int ret;
+
+  if (orig_account_id == new_account_id) {
+    return 0;
+  }
+
+  if (!orig_account_id.empty()) {
+    ret = uhandler->ctl.account->add_user(dpp, orig_account_id, uinfo.user_id, y);
+    if (ret < 0 && ret != -ENOENT) {
+      return ret;
+    }
+  }
+
+  if (!new_account_id.empty()) {
+    ret = uhandler->ctl.account->remove_user(dpp, new_account_id, uinfo.user_id, y);
+  }
+  return ret;
+
+}
+
 int RGWMetadataHandlerPut_User::put_checked(const DoutPrefixProvider *dpp)
 {
-  RGWUserMetadataObject *orig_obj = static_cast<RGWUserMetadataObject *>(old_obj);
+  orig_obj = static_cast<RGWUserMetadataObject *>(old_obj);
   RGWUserCompleteInfo& uci = uobj->get_uci();
 
   map<string, bufferlist> *pattrs{nullptr};
@@ -3022,12 +3063,11 @@ int RGWUserCtl::unlink_account(const DoutPrefixProvider *dpp,
   return store_info(dpp, user_info, y, put_params);
 }
 
-RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
-  return new RGWUserMetadataHandler(user_svc);
+RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc, RGWAccountCtl *account_ctl) {
+  return new RGWUserMetadataHandler(user_svc, account_ctl);
 }
 
 void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
 }
-

@@ -28,6 +28,7 @@
 
 class RGWUserCtl;
 class RGWBucketCtl;
+class RGWAccountCtl;
 class RGWUserBuckets;
 
 class RGWGetUserStats_CB;
@@ -905,7 +906,7 @@ public:
 
 class RGWUserMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_User *user_svc);
+  static RGWMetadataHandler *alloc(RGWSI_User *user_svc, RGWAccountCtl *account_ctl);
 };
 
 
