@@ -633,7 +633,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self._ssh_options = None
 
         if self.mode == 'root':
-            self.ssh_user = 'root'
+            self.ssh_user = self.get_store('ssh_user', default='root')
         elif self.mode == 'cephadm-package':
             self.ssh_user = 'cephadm'
 
@@ -811,6 +811,30 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return 0, self.ssh_user, ''
 
     @orchestrator._cli_read_command(
+        'cephadm set-user',
+        'name=user,type=CephString',
+        'Set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
+    def set_ssh_user(self, user):
+        current_user = self.ssh_user
+
+        self.set_store('ssh_user', user)
+        self._reconfig_ssh()
+
+        host = self.cache.get_hosts()[0]
+        r = self._check_host(host)
+        if r is not None:
+            #connection failed reset user
+            self.set_store('ssh_user', current_user)
+            self._reconfig_ssh()
+            return -errno.EINVAL, '', 'ssh connection %s@%s failed' % (user, host)
+
+        msg = 'ssh user set to %s' % user
+        if user != 'root':
+            msg += ' sudo will be used'
+        self.log.info(msg)
+        return 0, msg, ''
+
+    @orchestrator._cli_read_command(
         'cephadm check-host',
         'name=host,type=CephString '
         'name=addr,type=CephString,req=false',
@@ -869,7 +893,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         conn = remoto.Connection(
             n,
             logger=child_logger,
-            ssh_options=self._ssh_options)
+            ssh_options=self._ssh_options,
+            sudo=True if self.ssh_user != 'root' else False)
 
         r = conn.import_module(remotes)
         self._cons[host] = conn, r
@@ -919,7 +944,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.offline_hosts.add(host)
             self._reset_con(host)
 
-            user = 'root' if self.mode == 'root' else 'cephadm'
+            user = self.ssh_user if self.mode == 'root' else 'cephadm'
             msg = f'''Failed to connect to {host} ({addr}).
 Check that the host is reachable and accepts connections using the cephadm SSH key
 
@@ -1004,9 +1029,9 @@ you may want to run:
                             host, remotes.PYTHONS, remotes.PATH))
                 try:
                     out, err, code = remoto.process.check(
-                        conn,
-                        [python, '-u'],
-                        stdin=script.encode('utf-8'))
+                    conn,
+                    [python, '-u'],
+                    stdin=script.encode('utf-8'))
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
