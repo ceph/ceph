@@ -430,9 +430,16 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
             return [HostSpec(h) for h in hosts]
         return hosts
 
+    service_id = None
+    if service_type == 'rgw':
+        service_id = 'realm.zone'
+
+    spec = ServiceSpec(service_type=service_type,
+                       service_id=service_id,
+                       placement=placement)
 
     hosts = HostAssignment(
-        spec=ServiceSpec(service_type, placement=placement),
+        spec=spec,
         get_hosts_func=get_hosts_func,
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) == sorted(expected)
