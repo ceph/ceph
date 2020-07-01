@@ -139,7 +139,7 @@ void ElectionLogic::start()
   if (strategy == CONNECTIVITY) {
     stable_peer_tracker->encode(bl);
   }
-    elector->propose_to_peers(epoch, bl);
+  elector->propose_to_peers(epoch, bl);
   elector->_start();
 }
 

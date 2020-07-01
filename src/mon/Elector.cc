@@ -152,7 +152,8 @@ void Elector::propose_to_peers(epoch_t e, bufferlist& logic_bl)
     if ((int)i == mon->rank) continue;
     MMonElection *m =
       new MMonElection(MMonElection::OP_PROPOSE, e,
-		       peer_tracker.get_encoded_bl(), mon->monmap);
+		       peer_tracker.get_encoded_bl(),
+		       logic.strategy, mon->monmap);
     m->sharing_bl = logic_bl;
     m->mon_features = ceph::features::mon::get_supported();
     m->mon_release = ceph_release();
@@ -174,7 +175,7 @@ void Elector::_defer_to(int who)
 {
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, get_epoch(),
 				     peer_tracker.get_encoded_bl(),
-				     mon->monmap);
+				     logic.strategy, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
   m->mon_release = ceph_release();
   mon->collect_metadata(&m->metadata);
@@ -254,7 +255,7 @@ void Elector::message_victory(const std::set<int>& quorum)
     if (*p == mon->rank) continue;
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, get_epoch(),
 				       peer_tracker.get_encoded_bl(),
-				       mon->monmap);
+				       logic.strategy, mon->monmap);
     m->quorum = quorum;
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
@@ -410,7 +411,7 @@ void Elector::nak_old_peer(MonOpRequestRef op)
 	   << dendl;
   MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
                                          peer_tracker.get_encoded_bl(),
-					 mon->monmap);
+					 logic.strategy, mon->monmap);
   reply->quorum_features = required_features;
   reply->mon_features = required_mon_features;
   reply->mon_release = mon->monmap->min_mon_release;
@@ -639,6 +640,13 @@ void Elector::dispatch(MonOpRequestRef op)
 	dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap.epoch
 		<< " < my epoch " << mon->monmap->epoch 
 		<< dendl;
+      }
+
+      if (em->strategy != logic.strategy) {
+	dout(5) << __func__ << " somehow got an Election message with different strategy "
+		<< em->strategy << " from local " << logic.strategy
+		<< "; dropping for now to let race resolve" << dendl;
+	return;
       }
 
       if (em->scoring_bl.length()) {
