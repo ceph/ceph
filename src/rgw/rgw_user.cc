@@ -2950,7 +2950,7 @@ int RGWUserCtl::link_account(RGWUserInfo& user_info,
   if (!user_info.account_id.empty()) {
     ret = unlink_account(user_info, account_id, put_params, y);
     if (ret < 0) {
-      ldout(svc.user->ctx(),0) << "Failed unlinking previous account: "
+      ldout(svc.user->ctx(),0) << "Error: Failed unlinking previous account: "
 			       << user_info.account_id << " error: "
 			       << cpp_strerror(ret) << dendl;
       return ret;
@@ -2991,6 +2991,9 @@ int RGWUserCtl::unlink_account(RGWUserInfo& user_info,
 
   int ret = ctl.account->remove_user(account_id, user_info.user_id, y);
   if (ret < 0) {
+    ldout(svc.user->ctx(),0) << "ERROR: failed to remove user from account="
+			     << account_id << "user" << user_info.user_id
+			     << cpp_strerror(ret) << dendl;
     return ret;
   }
 
