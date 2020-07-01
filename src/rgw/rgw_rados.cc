@@ -4762,7 +4762,9 @@ int RGWRados::Object::complete_atomic_modification()
   }
 
   string tag = (state->tail_tag.length() > 0 ? state->tail_tag.to_str() : state->obj_tag.to_str());
+
   auto ret = store->gc->send_chain(chain, tag); // do it synchronously
+  ldout(store->ctx(), 0) << "ret= " << ret << dendl;
   if (ret < 0) {
     //Delete objects inline if send chain to gc fails
     store->delete_objs_inline(chain, tag);

@@ -72,16 +72,23 @@ int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag)
   gc_log_enqueue2(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   int i = tag_index(tag);
-
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
-
-  auto ret = store->gc_operate(obj_names[i], &op);
+  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
+  auto ret = store->gc_aio_operate(obj_names[i], c, &op);
   if (ret != -ECANCELED && ret != -EPERM) {
+    return ret;
+  }
+  if(ret == 0)
+    c->release();
+  else {
     return ret;
   }
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(obj_names[i], &set_entry_op);
+  ret = store->gc_aio_operate(obj_names[i], c, &set_entry_op);
+  if(ret == 0)
+    c->release();
+  return ret;
 }
 
 struct defer_chain_state {
