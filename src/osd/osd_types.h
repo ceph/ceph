@@ -1353,7 +1353,12 @@ public:
   map<string,string> properties;  ///< OBSOLETE
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
-
+  // If non-zero, require OSDs in at least this many different instances...
+  uint32_t peering_crush_bucket_count = 0;
+  // of this bucket type...
+  uint32_t peering_crush_bucket_barrier = 0;
+  // including this one
+  int32_t peering_crush_mandatory_member = 0;
   /// last epoch that forced clients to resend
   epoch_t last_force_op_resend = 0;
   /// last epoch that forced clients to resend (pre-nautilus clients only)

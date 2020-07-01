@@ -363,6 +363,11 @@ public:
     int64_t new_pool_max; //incremented by the OSDMonitor on each pool create
     int32_t new_flags;
     int8_t new_require_osd_release = -1;
+    uint32_t new_stretch_bucket_count{0};
+    uint32_t new_degraded_stretch_mode{0};
+    int32_t new_stretch_mode_bucket{0};
+    bool stretch_mode_enabled{false};
+    bool change_stretch_mode{false};
 
     // full (rare)
     bufferlist fullmap;  // in lieu of below.
@@ -538,6 +543,7 @@ private:
     CEPH_FEATUREMASK_SERVER_LUMINOUS |
     CEPH_FEATUREMASK_SERVER_MIMIC |
     CEPH_FEATUREMASK_SERVER_NAUTILUS;
+  // TODO: add a SIGNIFICANT_FEATURE for stretch mode...
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -604,6 +610,10 @@ private:
   uint32_t get_crc() const { return crc; }
 
   std::shared_ptr<CrushWrapper> crush;       // hierarchical map
+  bool stretch_mode_enabled; // we are in stretch mode, requiring multiple sites
+  uint32_t stretch_bucket_count; // number of sites we expect to be in
+  uint32_t degraded_stretch_mode; // 0 if not degraded; else count of up sites
+  int32_t stretch_mode_bucket; // the bucket type we're stretched across
 private:
   uint32_t crush_version = 1;
 
@@ -623,7 +633,9 @@ private:
 	     new_blacklist_entries(false),
 	     cached_up_osd_features(0),
 	     crc_defined(false), crc(0),
-	     crush(std::make_shared<CrushWrapper>()) {
+	     crush(std::make_shared<CrushWrapper>()),
+	     stretch_mode_enabled(false), stretch_bucket_count(0),
+	     degraded_stretch_mode(0), stretch_mode_bucket(0) {
   }
 
 private:
