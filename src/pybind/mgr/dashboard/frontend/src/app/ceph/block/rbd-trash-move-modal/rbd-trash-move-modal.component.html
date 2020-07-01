@@ -21,16 +21,19 @@
 
         <div class="form-group">
           <label class="col-form-label"
-                 for="expires"
+                 for="expiresAt"
                  i18n>Protection expires at</label>
           <input type="text"
                  placeholder="NOT PROTECTED"
                  i18n-placeholder
                  class="form-control"
-                 [minDate]="minDate"
-                 [bsConfig]="bsConfig"
                  formControlName="expiresAt"
-                 bsDatepicker>
+                 [ngbPopover]="popContent"
+                 triggers="manual"
+                 #p="ngbPopover"
+                 (click)="p.open()"
+                 (keypress)="p.close()">
+
           <span class="invalid-feedback"
                 *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
                 i18n>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span>
@@ -52,3 +55,7 @@
     </form>
   </ng-container>
 </cd-modal>
+
+<ng-template #popContent>
+  <cd-date-time-picker [control]="moveForm.get('expiresAt')"></cd-date-time-picker>
+</ng-template>

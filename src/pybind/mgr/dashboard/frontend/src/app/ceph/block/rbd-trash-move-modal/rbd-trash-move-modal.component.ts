@@ -29,11 +29,6 @@ export class RbdTrashMoveModalComponent implements OnInit {
   executingTasks: ExecutingTask[];
 
   moveForm: CdFormGroup;
-  minDate = new Date();
-  bsConfig = {
-    dateInputFormat: 'YYYY-MM-DD HH:mm:ss',
-    containerClass: 'theme-default'
-  };
   pattern: string;
 
   constructor(
@@ -74,7 +69,7 @@ export class RbdTrashMoveModalComponent implements OnInit {
     const expiresAt = this.moveForm.getValue('expiresAt');
 
     if (expiresAt) {
-      delay = moment(expiresAt).diff(moment(), 'seconds', true);
+      delay = moment(expiresAt, 'YYYY-MM-DD HH:mm:ss').diff(moment(), 'seconds', true);
     }
 
     if (delay < 0) {

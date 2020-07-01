@@ -39,12 +39,8 @@ p {
   }
 }
 
-::ng-deep timepicker table tbody tr td {
-  input.bs-timepicker-field {
-    font-size: 1rem;
-    padding: 4px 6px;
-    width: 3.5rem !important;
-  }
+::ng-deep ngb-timepicker input.ngb-tp-input {
+  width: 3.5rem !important;
 }
 
 .middle {
