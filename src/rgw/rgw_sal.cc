@@ -84,41 +84,33 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
 int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y)
 {
   int ret;
-  map<RGWObjCategory, RGWStorageStats> stats;
-  std::vector<rgw_bucket_dir_entry> objs;
-  map<string, bool> common_prefixes;
-  string bucket_ver, master_ver;
 
+  // Refresh info
   ret = get_bucket_info(y);
   if (ret < 0)
     return ret;
 
-  ret = get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats);
-  if (ret < 0)
-    return ret;
+  ListParams params;
+  params.list_versions = true;
+  params.allow_unordered = true;
 
-  RGWRados::Bucket target(store->getRados(), info);
-  RGWRados::Bucket::List list_op(&target);
-  int max = 1000;
-
-  list_op.params.list_versions = true;
-  list_op.params.allow_unordered = true;
+  ListResults results;
 
   bool is_truncated = false;
   do {
-    objs.clear();
+    results.objs.clear();
 
-    ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, null_yield);
-    if (ret < 0)
-      return ret;
+      ret = list(params, 1000, results, y);
+      if (ret < 0)
+	return ret;
 
-    if (!objs.empty() && !delete_children) {
+    if (!results.objs.empty() && !delete_children) {
       lderr(store->ctx()) << "ERROR: could not remove non-empty bucket " << info.bucket.name <<
 	dendl;
       return -ENOTEMPTY;
     }
 
-    for (const auto& obj : objs) {
+    for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
       /* xxx dang */
       ret = rgw_remove_object(store, info, info.bucket, key);
@@ -303,6 +295,29 @@ int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
 std::unique_ptr<RGWObject> RGWRadosBucket::get_object(const rgw_obj_key& k)
 {
   return std::unique_ptr<RGWObject>(new RGWRadosObject(this->store, k, this));
+}
+
+int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, optional_yield y)
+{
+  RGWRados::Bucket target(store->getRados(), get_info());
+  if (params.shard_id >= 0) {
+    target.set_shard_id(params.shard_id);
+  }
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.prefix = params.prefix;
+  list_op.params.delim = params.delim;
+  list_op.params.marker = params.marker;
+  list_op.params.end_marker = params.end_marker;
+  list_op.params.list_versions = params.list_versions;
+  list_op.params.allow_unordered = params.allow_unordered;
+
+  int ret = list_op.list_objects(max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
+  if (ret >= 0) {
+    results.next_marker = list_op.get_next_marker();
+  }
+
+  return ret;
 }
 
 std::unique_ptr<RGWUser> RGWRadosStore::get_user(const rgw_user &u)

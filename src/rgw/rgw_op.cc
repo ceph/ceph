@@ -1640,7 +1640,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        rgw::sal::RGWRadosStore * const store,
                                        const off_t ofs,
                                        const off_t end,
-                                       RGWBucketInfo *pbucket_info,
+                                       rgw::sal::RGWBucket* bucket,
                                        const string& obj_prefix,
                                        RGWAccessControlPolicy * const bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
@@ -1657,30 +1657,26 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                                  bool swift_slo),
                                        void * const cb_param)
 {
-  rgw_bucket& bucket = pbucket_info->bucket;
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false, handled_end = false;
   string delim;
-  bool is_truncated;
-  vector<rgw_bucket_dir_entry> objs;
 
   utime_t start_time = ceph_clock_now();
 
-  RGWRados::Bucket target(store->getRados(), *pbucket_info);
-  RGWRados::Bucket::List list_op(&target);
+  rgw::sal::RGWBucket::ListParams params;
+  params.prefix = obj_prefix;
+  params.delim = delim;
 
-  list_op.params.prefix = obj_prefix;
-  list_op.params.delim = delim;
-
+  rgw::sal::RGWBucket::ListResults results;
   MD5 etag_sum;
   do {
 #define MAX_LIST_OBJS 100
-    int r = list_op.list_objects(MAX_LIST_OBJS, &objs, NULL, &is_truncated, null_yield);
+    int r = bucket->list(params, MAX_LIST_OBJS, results, null_yield);
     if (r < 0) {
       return r;
     }
 
-    for (rgw_bucket_dir_entry& ent : objs) {
+    for (rgw_bucket_dir_entry& ent : results.objs) {
       const uint64_t cur_total_len = obj_ofs;
       const uint64_t obj_size = ent.meta.accounted_size;
       uint64_t start_ofs = 0, end_ofs = obj_size;
@@ -1708,7 +1704,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
         len_count += end_ofs - start_ofs;
 
         if (cb) {
-          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
+          r = cb(bucket->get_bi(), ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
 		 cb_param, false /* swift_slo */);
           if (r < 0) {
             return r;
@@ -1719,7 +1715,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       handled_end = found_end;
       start_time = ceph_clock_now();
     }
-  } while (is_truncated);
+  } while (results.is_truncated);
 
   if (ptotal_len) {
     *ptotal_len = len_count;
@@ -1856,31 +1852,30 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   boost::optional<Policy> _bucket_policy;
   boost::optional<Policy>* bucket_policy;
   RGWBucketInfo bucket_info;
-  RGWBucketInfo *pbucket_info;
+  std::unique_ptr<rgw::sal::RGWBucket> ubucket;
+  rgw::sal::RGWBucket *pbucket = NULL;
+  int r = 0;
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    int r = store->getRados()->get_bucket_info(store->svc(), s->user->get_tenant(),
-				  bucket_name, bucket_info, NULL,
-				  s->yield, &bucket_attrs);
+    r = store->get_bucket(s->user, s->user->get_tenant(), bucket_name, &ubucket);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 		       << bucket_name << dendl;
       return r;
     }
-    pbucket_info = &bucket_info;
     bucket_acl = &_bucket_acl;
-    r = read_bucket_policy(store, s, bucket_info, bucket_attrs, bucket_acl, bucket_info.bucket);
+    r = read_bucket_policy(store, s, ubucket->get_info(), bucket_attrs, bucket_acl, ubucket->get_bi());
     if (r < 0) {
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
     }
     _bucket_policy = get_iam_policy_from_attr(s->cct, store, bucket_attrs,
-					      bucket_info.bucket.tenant);
+					      s->user->get_tenant());
     bucket_policy = &_bucket_policy;
+    pbucket = ubucket.get();
   } else {
-    pbucket_info = &s->bucket->get_info();
+    pbucket = s->bucket.get();
     bucket_acl = s->bucket_acl.get();
     bucket_policy = &s->iam_policy;
   }
@@ -1889,8 +1884,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
    * - total length (of the parts we are going to send to client),
    * - overall DLO's content size,
    * - md5 sum of overall DLO's content (for etag of Swift API). */
-  int r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        pbucket_info, obj_prefix, bucket_acl, *bucket_policy,
+  r = iterate_user_manifest_parts(s->cct, store, ofs, end,
+        pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, &s->obj_size, &lo_etag,
         nullptr /* cb */, nullptr /* cb arg */);
   if (r < 0) {
@@ -1904,7 +1899,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        pbucket_info, obj_prefix, bucket_acl, *bucket_policy,
+        pbucket, obj_prefix, bucket_acl, *bucket_policy,
         &total_len, nullptr, nullptr,
         nullptr, nullptr);
   if (r < 0) {
@@ -1918,7 +1913,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   r = iterate_user_manifest_parts(s->cct, store, ofs, end,
-        pbucket_info, obj_prefix, bucket_acl, *bucket_policy,
+        pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, nullptr, nullptr,
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
@@ -1930,7 +1925,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     send_response_data(bl, 0, 0);
   }
 
-  return 0;
+  return r;
 }
 
 int RGWGetObj::handle_slo_manifest(bufferlist& bl)
@@ -2885,22 +2880,23 @@ void RGWListBucket::execute()
     op_ret = s->bucket->update_container_stats();
   }
 
-  RGWRados::Bucket target(store->getRados(), s->bucket->get_info());
-  if (shard_id >= 0) {
-    target.set_shard_id(shard_id);
-  }
-  RGWRados::Bucket::List list_op(&target);
+  rgw::sal::RGWBucket::ListParams params;
+  params.prefix = prefix;
+  params.delim = delimiter;
+  params.marker = marker;
+  params.end_marker = end_marker;
+  params.list_versions = list_versions;
+  params.allow_unordered = allow_unordered;
+  params.shard_id = shard_id;
 
-  list_op.params.prefix = prefix;
-  list_op.params.delim = delimiter;
-  list_op.params.marker = marker;
-  list_op.params.end_marker = end_marker;
-  list_op.params.list_versions = list_versions;
-  list_op.params.allow_unordered = allow_unordered;
+  rgw::sal::RGWBucket::ListResults results;
 
-  op_ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, s->yield);
+  op_ret = s->bucket->list(params, max, results, s->yield);
   if (op_ret >= 0) {
-    next_marker = list_op.get_next_marker();
+    next_marker = results.next_marker;
+    is_truncated = results.is_truncated;
+    objs = std::move(results.objs);
+    common_prefixes = std::move(results.common_prefixes);
   }
 }
 
