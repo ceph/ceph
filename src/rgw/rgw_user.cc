@@ -2736,7 +2736,7 @@ int RGWMetadataHandlerPut_User::put_checked(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  return STATUS_APPLIED;
+  return 0;
 }
 
 
