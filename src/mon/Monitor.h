@@ -266,6 +266,7 @@ public:
   void trigger_degraded_stretch_mode(const set<string>& dead_mons,
 				     const set<int>& dead_buckets);
   void set_degraded_stretch_mode();
+  void go_recovery_stretch_mode();
   void enable_stretch_mode();
 
   

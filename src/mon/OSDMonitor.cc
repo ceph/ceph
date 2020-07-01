@@ -712,6 +712,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
 
+  int prev_num_up_osd = osdmap.num_up_osd;
+
   if (mapping_job) {
     if (!mapping_job->is_done()) {
       dout(1) << __func__ << " mapping job "
@@ -940,8 +942,21 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->maybe_engage_stretch_mode();
     if (osdmap.degraded_stretch_mode) {
       dout(20) << "Degraded stretch mode set in this map" << dendl;
-      mon->set_degraded_stretch_mode();
-    } else if (marked_osd_down) {
+      if (!osdmap.recovering_stretch_mode) {
+	mon->set_degraded_stretch_mode();
+	if (prev_num_up_osd < osdmap.num_up_osd &&
+	    (osdmap.num_up_osd / (double)osdmap.num_osd) >
+	    cct->_conf.get_val<double>("mon_stretch_cluster_recovery_ratio")) {
+	  // TODO: This works for 2-site clusters when the OSD maps are appropriately
+	  // trimmed and everything is "normal" but not if you have a lot of out OSDs
+	  // you're ignoring or in some really degenerate failure cases
+	  dout(10) << "Enabling recovery stretch mode in this map" << dendl;
+	  mon->go_recovery_stretch_mode();
+	}
+      }
+    }
+    if (marked_osd_down &&
+	(!osdmap.degraded_stretch_mode || osdmap.recovering_stretch_mode)) {
       dout(20) << "Checking degraded stretch mode due to osd changes" << dendl;
       mon->maybe_go_degraded_stretch_mode();
     }
@@ -14286,6 +14301,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
   int new_site_count = osdmap.stretch_bucket_count - dead_buckets.size();
   ceph_assert(new_site_count == 1); // stretch count 2!
   pending_inc.new_degraded_stretch_mode = new_site_count;
+  pending_inc.new_recovering_stretch_mode = 0;
   pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
 
   // and then apply them to all the pg_pool_ts
@@ -14300,6 +14316,29 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       newp.peering_crush_mandatory_member = remaining_site;
       newp.min_size = 1;
       newp.size = pgi.second.size / 2; // only support 2 zones now
+      pending_inc.new_pools[pgi.first] = newp;
+    }
+  }
+  propose_pending();
+}
+
+void OSDMonitor::trigger_recovery_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
+  pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+  pending_inc.new_degraded_stretch_mode = osdmap.degraded_stretch_mode;
+  pending_inc.new_recovering_stretch_mode = 1;
+  pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+
+  for (auto pgi : osdmap.pools) {
+    if (pgi.second.peering_crush_bucket_count) {
+      pg_pool_t newp(pgi.second);
+      // bump up the min_size since we have extra replicas available...
+      newp.min_size = 2;
+      // ...and the target size to try and get back to normal!
+      newp.size = pgi.second.size * 2; // only support 2 zones now
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
