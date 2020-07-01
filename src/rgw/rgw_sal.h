@@ -112,6 +112,26 @@ class RGWBucket {
     ceph::real_time mtime;
 
   public:
+
+    struct ListParams {
+      std::string prefix;
+      std::string delim;
+      rgw_obj_key marker;
+      rgw_obj_key end_marker;
+      std::string ns;
+      bool enforce_ns{true};
+      RGWAccessListFilter *filter{nullptr};
+      bool list_versions{false};
+      bool allow_unordered{false};
+      int shard_id{0};
+    };
+    struct ListResults {
+      vector<rgw_bucket_dir_entry> objs;
+      map<std::string, bool> common_prefixes;
+      bool is_truncated;
+      rgw_obj_key next_marker;
+    };
+
     RGWBucket() : ent(), info(), owner(nullptr), attrs(), bucket_version() {}
     RGWBucket(const rgw_bucket& _b) :
       ent(), info(), owner(nullptr), attrs(), bucket_version() { ent.bucket = _b; info.bucket = _b; }
@@ -129,7 +149,7 @@ class RGWBucket {
 
     virtual int load_by_name(const std::string& tenant, const std::string& bucket_name, const std::string bucket_instance_id, RGWSysObjectCtx *rctx, optional_yield y) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& key) = 0;
-    virtual RGWBucketList* list(void) = 0;
+    virtual int list(ListParams&, int, ListResults&, optional_yield y) = 0;
     virtual RGWObject* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual RGWAttrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(RGWAttrs a) { attrs = a; return 0; }
@@ -441,6 +461,7 @@ class RGWRadosBucket : public RGWBucket {
     virtual int load_by_name(const std::string& tenant, const std::string& bucket_name, const std::string bucket_instance_id, RGWSysObjectCtx *rctx, optional_yield y) override;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) override;
     RGWBucketList* list(void) { return new RGWBucketList(); }
+    virtual int list(ListParams&, int, ListResults&, optional_yield y) override;
     RGWObject* create_object(const rgw_obj_key& key /* Attributes */) override;
     virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
