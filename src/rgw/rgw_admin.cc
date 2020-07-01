@@ -813,6 +813,7 @@ enum class OPT {
   SCRIPT_PACKAGE_RM,
   SCRIPT_PACKAGE_LIST
   SI_PROVIDER_LIST,
+  SI_PROVIDER_INFO,
   SI_PROVIDER_FETCH,
   SI_PROVIDER_TRIM,
 };
@@ -1047,6 +1048,10 @@ static SimpleCmd::Commands all_cmds = {
   { "si provider list", OPT::SI_PROVIDER_LIST },
   { "si provider fetch", OPT::SI_PROVIDER_FETCH },
   { "si provider trim", OPT::SI_PROVIDER_TRIM },
+  { "sip list", OPT::SI_PROVIDER_LIST },
+  { "sip info", OPT::SI_PROVIDER_INFO },
+  { "sip fetch", OPT::SI_PROVIDER_FETCH },
+  { "sip trim", OPT::SI_PROVIDER_TRIM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -4247,6 +4252,7 @@ int main(int argc, const char **argv)
 			 OPT::PUBSUB_SUB_PULL,
 			 OPT::SCRIPT_GET,
 			 OPT::SI_PROVIDER_LIST,
+			 OPT::SI_PROVIDER_INFO,
 			 OPT::SI_PROVIDER_FETCH,
   };
 
@@ -10114,6 +10120,25 @@ next:
    {
      Formatter::ObjectSection top_section(*formatter, "result");
      encode_json("providers", providers, formatter.get());
+   }
+   formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_INFO) {
+   if (!opt_sip) {
+     cerr << "ERROR: --sip not specified" << std::endl;
+     return EINVAL;
+   }
+
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
+   if (!provider) {
+     cerr << "ERROR: sync info provider not found" << std::endl;
+     return ENOENT;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("info", provider->get_info(), formatter.get());
    }
    formatter->flush(cout);
  }

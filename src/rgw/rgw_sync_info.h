@@ -33,6 +33,17 @@ public:
     stage_id_t sid;
     StageType type{UNKNOWN};
     int num_shards{0};
+
+    void dump(Formatter *f) const;
+  };
+
+  struct Info {
+    std::string name;
+    stage_id_t first_stage;
+    stage_id_t last_stage;
+    std::vector<StageInfo> stages;
+
+    void dump(Formatter *f) const;
   };
 
   struct EntryInfoBase {
@@ -57,17 +68,19 @@ public:
 
   virtual ~SIProvider() {}
 
+  virtual Info get_info() const = 0;
+
   virtual stage_id_t get_first_stage() const = 0;
   virtual stage_id_t get_last_stage() const = 0;
   virtual int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) = 0;
-  virtual std::vector<stage_id_t> get_stages() = 0;
+  virtual std::vector<stage_id_t> get_stages() const = 0;
 
   virtual int get_stage_info(const stage_id_t& sid, StageInfo *stage_info) const = 0;
   virtual int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
   virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
 
-  virtual const std::string& get_name() = 0;
+  virtual const std::string& get_name() const = 0;
 
   virtual int handle_entry(const stage_id_t& sid,
                            Entry& entry,
@@ -88,7 +101,9 @@ public:
   SIProviderCommon(CephContext *_cct, const std::string& _name) : cct(_cct),
                                                                   name(_name) {}
 
-  const std::string& get_name() override {
+  SIProvider::Info get_info() const override;
+
+  const std::string& get_name() const override {
     return name;
   }
 };
@@ -119,7 +134,7 @@ public:
   int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override {
     return -ENOENT;
   }
-  std::vector<stage_id_t> get_stages() override {
+  std::vector<stage_id_t> get_stages() const override {
     return { stage_info.sid };
   }
 
@@ -164,7 +179,7 @@ public:
   stage_id_t get_last_stage() const override;
 
   int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override;
-  std::vector<SIProvider::stage_id_t> get_stages() override;
+  std::vector<SIProvider::stage_id_t> get_stages() const override;
 
   int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) const override;
 

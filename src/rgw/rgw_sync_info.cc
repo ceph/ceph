@@ -1,9 +1,59 @@
 #include "rgw_sync_info.h"
 
 #include "common/dout.h"
+#include "common/ceph_json.h"
 
 
 #define dout_subsys ceph_subsys_rgw
+
+static inline string stage_type_to_str(SIProvider::StageType st)
+{
+  switch  (st) {
+    case SIProvider::StageType::FULL:
+      return "full";
+    case SIProvider::StageType::INC:
+      return "inc";
+    default:
+      return "unknown";
+  }
+}
+
+
+void SIProvider::StageInfo::dump(Formatter *f) const
+{
+  encode_json("sid", sid, f);
+  encode_json("type", stage_type_to_str(type), f);
+  encode_json("num_shards", num_shards, f);
+}
+
+void SIProvider::Info::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("first_stage", first_stage, f);
+  encode_json("last_stage", last_stage, f);
+  encode_json("stages", stages, f);
+}
+
+
+SIProvider::Info SIProviderCommon::get_info() const
+{
+  vector<SIProvider::StageInfo> stages;
+
+  for (auto& sid : get_stages()) {
+    SIProvider::StageInfo si;
+    int r = get_stage_info(sid, &si);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to retrieve stage info for sip=" << get_name() << ", sid=" << sid << ": r=" << r << dendl;
+      /* continuing */
+    }
+    stages.push_back(si);
+  }
+
+  return { get_name(),
+           get_first_stage(),
+           get_last_stage(),
+           stages };
+}
 
 int SIProvider_SingleStage::fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result)
 {
@@ -142,7 +192,7 @@ int SIProvider_Container::get_next_stage(const stage_id_t& sid, stage_id_t *next
   return 0;
 }
 
-std::vector<SIProvider::stage_id_t> SIProvider_Container::get_stages()
+std::vector<SIProvider::stage_id_t> SIProvider_Container::get_stages() const
 {
   std::vector<stage_id_t> result;
 
