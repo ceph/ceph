@@ -73,7 +73,7 @@ Therefore, we need to read_log and rebuild pg_missing_set. For example, pg_log i
 
     object aa: 28'108 {[0~12288, 16384~MAX], true}
 
-Orignally, if bb,cc,dd is recovered, and aa is not.
+Originally, if bb,cc,dd is recovered, and aa is not.
 So we need to rebuild pg_missing_set for object aa,
 and find aa is modified on version 28'108.
 If version in object_info is 26'96 < 28'108,
