@@ -51,19 +51,21 @@ public:
   ceph_release_t mon_release{ceph_release_t::unknown};
   ceph::buffer::list sharing_bl;
   ceph::buffer::list scoring_bl;
+  uint8_t strategy;
   std::map<std::string,std::string> metadata;
   
   MMonElection() : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
     op(0), epoch(0),
     quorum_features(0),
-    mon_features(0)
+    mon_features(0),
+    strategy(0)
   { }
 
-  MMonElection(int o, epoch_t e, const bufferlist& bl, MonMap *m)
+  MMonElection(int o, epoch_t e, const bufferlist& bl, uint8_t s, MonMap *m)
     : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
-      mon_features(0), scoring_bl(bl)
+      mon_features(0), scoring_bl(bl), strategy(s)
   {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
@@ -102,6 +104,7 @@ public:
     encode(metadata, payload);
     encode(mon_release, payload);
     encode(scoring_bl, payload);
+    encode(strategy, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -126,8 +129,12 @@ public:
       decode(mon_release, p);
     else
       mon_release = infer_ceph_release_from_mon_features(mon_features);
-    if (header.version >= 9)
+    if (header.version >= 9) {
       decode(scoring_bl, p);
+      decode(strategy, p);
+    } else {
+      strategy = MonMap::election_strategy::CLASSIC;
+    }
   }
 private:
   template<class T, typename... Args>
