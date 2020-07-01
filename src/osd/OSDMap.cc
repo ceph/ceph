@@ -646,7 +646,8 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9;
+    uint8_t target_v = 10;
+    uint8_t new_compat_v = 0;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -693,7 +694,18 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     if (target_v >= 9) {
       encode(new_device_class_flags, bl);
     }
-    ENCODE_FINISH(bl); // osd-only data
+    if (target_v >= 10) {
+      encode(change_stretch_mode, bl);
+      encode(new_stretch_bucket_count, bl);
+      encode(new_degraded_stretch_mode, bl);
+      encode(new_stretch_mode_bucket, bl);
+      encode(stretch_mode_enabled, bl);
+    }
+    if (change_stretch_mode) {
+      ceph_assert(target_v >= 10);
+      new_compat_v = 10;
+    }
+    ENCODE_FINISH_NEW_COMPAT(bl, new_compat_v); // osd-only data
   }
 
   crc_offset = bl.length();
@@ -902,7 +914,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(9, bl); // extended, osd-only data
+    DECODE_START(10, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -959,6 +971,14 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     if (struct_v >= 9) {
       decode(new_device_class_flags, bl);
     }
+    if (struct_v >= 10) {
+      decode(change_stretch_mode, bl);
+      decode(new_stretch_bucket_count, bl);
+      decode(new_degraded_stretch_mode, bl);
+      decode(new_stretch_mode_bucket, bl);
+      decode(stretch_mode_enabled, bl);
+    }
+
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -2317,6 +2337,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  if (inc.change_stretch_mode) {
+    stretch_mode_enabled = inc.stretch_mode_enabled;
+    stretch_bucket_count = inc.new_stretch_bucket_count;
+    degraded_stretch_mode = inc.new_degraded_stretch_mode;
+    stretch_mode_bucket = inc.new_stretch_mode_bucket;
+  }
+
   calc_num_osds();
   _calc_up_osd_features();
   return 0;
@@ -2985,7 +3012,8 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9;
+    uint8_t target_v = 10;
+    uint8_t new_compat_v = 0;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3041,7 +3069,17 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     if (target_v >= 9) {
       encode(device_class_flags, bl);
     }
-    ENCODE_FINISH(bl); // osd-only data
+    if (stretch_mode_enabled) {
+      ceph_assert(target_v >= 10);
+      new_compat_v = 10;
+    }
+    if (target_v >= 10) {
+      encode(stretch_mode_enabled, bl);
+      encode(stretch_bucket_count, bl);
+      encode(degraded_stretch_mode, bl);
+      encode(stretch_mode_bucket, bl);
+    }
+    ENCODE_FINISH_NEW_COMPAT(bl, new_compat_v); // osd-only data
   }
 
   crc_offset = bl.length();
@@ -3301,7 +3339,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(9, bl); // extended, osd-only data
+    DECODE_START(10, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blacklist, bl);
@@ -3366,6 +3404,17 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
       decode(device_class_flags, bl);
     } else {
       device_class_flags.clear();
+    }
+    if (struct_v >= 10) {
+      decode(stretch_mode_enabled, bl);
+      decode(stretch_bucket_count, bl);
+      decode(degraded_stretch_mode, bl);
+      decode(stretch_mode_bucket, bl);
+    } else {
+      stretch_mode_enabled = false;
+      stretch_bucket_count = 0;
+      degraded_stretch_mode = 0;
+      stretch_mode_bucket = 0;
     }
     DECODE_FINISH(bl); // osd-only data
   }
