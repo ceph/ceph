@@ -22,6 +22,7 @@ roles:
   - osd.7
   - client.2
   - client.3
+- - host.c
 overrides:
   ceph:
     log-whitelist:
