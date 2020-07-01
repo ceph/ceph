@@ -2697,7 +2697,7 @@ int RGWMetadataHandlerPut_User::put_checked()
     return ret;
   }
 
-  return STATUS_APPLIED;
+  return 0;
 }
 
 
