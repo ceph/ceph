@@ -1308,6 +1308,16 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_object_section("stretch_mode");
+  {
+    f->dump_bool("change_stretch_mode", change_stretch_mode);
+    f->dump_bool("stretch_mode_enabled", stretch_mode_enabled);
+    f->dump_unsigned("new_stretch_bucket_count", new_stretch_bucket_count);
+    f->dump_unsigned("new_degraded_stretch_mode", new_degraded_stretch_mode);
+    f->dump_unsigned("new_recovering_stretch_mode", new_recovering_stretch_mode);
+    f->dump_int("new_stretch_mode_bucket", new_stretch_mode_bucket);
+  }
+  f->close_section();
   f->close_section();
 }
 
@@ -3708,6 +3718,15 @@ void OSDMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_object_section("stretch_mode");
+  {
+    f->dump_bool("stretch_mode_enabled", stretch_mode_enabled);
+    f->dump_unsigned("stretch_bucket_count", stretch_bucket_count);
+    f->dump_unsigned("degraded_stretch_mode", degraded_stretch_mode);
+    f->dump_unsigned("recovering_stretch_mode", recovering_stretch_mode);
+    f->dump_int("stretch_mode_bucket", stretch_mode_bucket);
+  }
+  f->close_section();
 }
 
 void OSDMap::generate_test_instances(list<OSDMap*>& o)
@@ -6075,13 +6094,13 @@ void OSDMap::check_health(CephContext *cct,
       stringstream ss;
       ss << "We are recovering stretch mode buckets, only requiring "
 	 << degraded_stretch_mode << " of " << stretch_bucket_count << " buckets to peer" ;
-      checks->add("RECOVERING_STRETCH_MODE", HEALTH_WARN, // TODO: HEALTH_ERR?
+      checks->add("RECOVERING_STRETCH_MODE", HEALTH_WARN,
 			    ss.str(), 0);
     } else if (degraded_stretch_mode) {
       stringstream ss;
       ss << "We are missing stretch mode buckets, only requiring "
 	 << degraded_stretch_mode << " of " << stretch_bucket_count << " buckets to peer" ;
-      checks->add("DEGRADED_STRETCH_MODE", HEALTH_WARN, // TODO: HEALTH_ERR?
+      checks->add("DEGRADED_STRETCH_MODE", HEALTH_WARN,
 			    ss.str(), 0);
     }
   }
