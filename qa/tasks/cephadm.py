@@ -236,6 +236,7 @@ def ceph_log(ctx, config):
                         'sudo',
                         'find',
                         '/var/log/ceph',   # all logs, not just for the cluster
+                        '/var/log/rbd-target-api', # ceph-iscsi
                         '-name',
                         '*.log',
                         '-print0',
