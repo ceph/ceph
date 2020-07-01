@@ -23,7 +23,7 @@ from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
 
 # these items we use from ceph.py should probably eventually move elsewhere
-from tasks.ceph import get_mons, healthy
+from tasks.ceph import get_mons, healthy, cephfs_setup
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
@@ -992,6 +992,21 @@ def crush_setup(ctx, config):
     yield
 
 @contextlib.contextmanager
+def create_rbd_pool(ctx, config):
+    cluster_name = config['cluster']
+    bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
+    if config.get('create_rbd_pool', True):
+        log.info('Creating RBD pool')
+        _shell(ctx, cluster_name, bootstrap_remote,
+            args=['sudo', 'ceph', 'osd', 'pool', 'create', 'rbd', '8'])
+        _shell(ctx, cluster_name, bootstrap_remote,
+            args=[
+                'ceph', 'osd', 'pool', 'application', 'enable',
+                'rbd', 'rbd', '--yes-i-really-mean-it'
+            ])
+    yield
+
+@contextlib.contextmanager
 def _bypass():
     yield
 
@@ -1192,6 +1207,9 @@ def task(ctx, config):
             lambda: ceph_monitoring('alertmanager', ctx=ctx, config=config),
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
+            lambda: create_rbd_pool(ctx=ctx, config=config),
+            lambda: cephfs_setup(ctx=ctx, config=config),
+
     ):
         ctx.managers[cluster_name] = CephManager(
             ctx.ceph[cluster_name].bootstrap_remote,
