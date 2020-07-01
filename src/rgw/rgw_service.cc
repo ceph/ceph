@@ -356,7 +356,11 @@ int RGWCtlDef::init(RGWServices& svc)
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
-  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user));
+  meta.account = std::make_unique<RGWAccountMetadataHandler>(svc.account);
+  account = std::make_unique<RGWAccountCtl>(svc.zone, svc.account,
+					    (RGWAccountMetadataHandler *)meta.account.get());
+
+  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user, account.get()));
 
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
@@ -375,10 +379,6 @@ int RGWCtlDef::init(RGWServices& svc)
                                 svc.bucket_sync,
                                 svc.bi));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
-
-  meta.account = std::make_unique<RGWAccountMetadataHandler>(svc.account);
-  account = std::make_unique<RGWAccountCtl>(svc.zone, svc.account,
-					    (RGWAccountMetadataHandler *)meta.account.get());
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
