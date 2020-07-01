@@ -45,6 +45,15 @@ Delete NFS Ganesha Cluster
 
 This deletes the deployed cluster.
 
+List NFS Ganesha Cluster
+========================
+
+.. code:: bash
+
+    $ ceph nfs cluster ls
+
+This lists deployed clusters.
+
 Create CephFS Export
 ====================
 
@@ -63,6 +72,25 @@ Delete CephFS Export
     $ ceph nfs export delete <clusterid> <binding>
 
 It deletes an export in cluster based on pseudo root name (binding).
+
+List CephFS Export
+==================
+
+.. code:: bash
+
+    $ ceph nfs export ls <clusterid> [--detailed]
+
+It lists export for a cluster. With detailed option enabled it shows entire
+export block.
+
+Get CephFS Export
+=================
+
+.. code:: bash
+
+    $ ceph nfs export get <clusterid> <binding>
+
+It displays export block for a cluster based on pseudo root name (binding).
 
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================
