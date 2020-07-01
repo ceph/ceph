@@ -78,7 +78,6 @@ export class OsdService {
     interface OsdData {
       osd_map: { [key: string]: any };
       osd_metadata: { [key: string]: any };
-      histogram: { [key: string]: object };
       smart: { [device_identifier: string]: any };
     }
     return this.http.get<OsdData>(`${this.path}/${id}`);
