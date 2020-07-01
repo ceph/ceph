@@ -365,6 +365,7 @@ public:
     int8_t new_require_osd_release = -1;
     uint32_t new_stretch_bucket_count{0};
     uint32_t new_degraded_stretch_mode{0};
+    uint32_t new_recovering_stretch_mode{0};
     int32_t new_stretch_mode_bucket{0};
     bool stretch_mode_enabled{false};
     bool change_stretch_mode{false};
@@ -613,6 +614,7 @@ private:
   bool stretch_mode_enabled; // we are in stretch mode, requiring multiple sites
   uint32_t stretch_bucket_count; // number of sites we expect to be in
   uint32_t degraded_stretch_mode; // 0 if not degraded; else count of up sites
+  uint32_t recovering_stretch_mode; // 0 if not recovering; else 1
   int32_t stretch_mode_bucket; // the bucket type we're stretched across
 private:
   uint32_t crush_version = 1;
@@ -635,7 +637,7 @@ private:
 	     crc_defined(false), crc(0),
 	     crush(std::make_shared<CrushWrapper>()),
 	     stretch_mode_enabled(false), stretch_bucket_count(0),
-	     degraded_stretch_mode(0), stretch_mode_bucket(0) {
+	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
   }
 
 private:
