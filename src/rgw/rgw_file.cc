@@ -1609,9 +1609,7 @@ namespace rgw {
       return -EIO;
     }
 
-    op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(),
-				      s->bucket->get_bi(), user_quota, bucket_quota,
-				      real_ofs, true);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, real_ofs, true);
     /* max_size exceed */
     if (op_ret < 0)
       return -EIO;
@@ -1653,9 +1651,7 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(),
-				      s->bucket->get_bi(), user_quota, bucket_quota,
-				      s->obj_size, true);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size, true);
     /* max_size exceed */
     if (op_ret < 0) {
       goto done;

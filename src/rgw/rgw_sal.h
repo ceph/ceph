@@ -172,7 +172,7 @@ class RGWBucket {
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
     virtual int check_empty(optional_yield y) = 0;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size) = 0;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) = 0;
 
     bool empty() const { return info.bucket.name.empty(); }
     const std::string& get_name() const { return info.bucket.name; }
@@ -482,7 +482,7 @@ class RGWRadosBucket : public RGWBucket {
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(RGWUser* user) override;
     virtual int check_empty(optional_yield y) override;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size) override;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) override;
     virtual std::unique_ptr<RGWBucket> clone() {
       return std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this));
     }

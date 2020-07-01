@@ -3769,8 +3769,7 @@ void RGWPutObj::execute()
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
-				user_quota, bucket_quota, s->content_length);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -3972,8 +3971,7 @@ void RGWPutObj::execute()
     return;
   }
 
-  op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
-                              user_quota, bucket_quota, s->obj_size);
+  op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
@@ -4151,11 +4149,7 @@ void RGWPostObj::execute()
     ceph::buffer::list bl, aclbl;
     int len = 0;
 
-    op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(),
-                                s->bucket->get_bi(),
-                                user_quota,
-                                bucket_quota,
-                                s->content_length);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length);
     if (op_ret < 0) {
       return;
     }
@@ -4260,8 +4254,7 @@ void RGWPostObj::execute()
     s->object->set_obj_size(ofs);
 
 
-    op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
-                                user_quota, bucket_quota, s->obj_size);
+    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size);
     if (op_ret < 0) {
       return;
     }
@@ -7102,8 +7095,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = store->getRados()->check_quota(s->user->get_id(), bucket->get_bi(),
-                              user_quota, bucket_quota, size);
+  op_ret = bucket->check_quota(user_quota, bucket_quota, size);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -7183,8 +7175,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = store->getRados()->check_quota(bowner.get_id(), bucket->get_bi(),
-			      user_quota, bucket_quota, size);
+  op_ret = bucket->check_quota(user_quota, bucket_quota, size);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "quota exceeded for path=" << path << dendl;
     return op_ret;
