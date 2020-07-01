@@ -639,7 +639,11 @@ void Elector::dispatch(MonOpRequestRef op)
 	dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap.epoch
 		<< " < my epoch " << mon->monmap->epoch 
 		<< dendl;
-      } 
+      }
+
+      if (em->scoring_bl.length()) {
+	assimilate_connection_reports(em->scoring_bl);
+      }
 
       begin_peer_ping(mon->monmap->get_rank(em->get_source_addr()));
       switch (em->op) {
