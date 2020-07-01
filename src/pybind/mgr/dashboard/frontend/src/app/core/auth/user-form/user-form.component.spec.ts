@@ -5,8 +5,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ButtonsModule } from 'ngx-bootstrap/buttons';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -55,7 +55,7 @@ describe('UserFormComponent', () => {
         ToastrModule.forRoot(),
         SharedModule,
         ButtonsModule.forRoot(),
-        BsDatepickerModule.forRoot()
+        NgbPopoverModule
       ],
       declarations: [UserFormComponent, FakeComponent],
       providers: i18nProviders

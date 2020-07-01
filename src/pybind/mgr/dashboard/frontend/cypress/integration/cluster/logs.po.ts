@@ -16,18 +16,18 @@ export class LogsPageHelper extends PageHelper {
     cy.contains('.nav-link', 'Audit Logs').click();
 
     // Enter an earliest time so that no old messages with the same pool name show up
-    cy.get('.bs-timepicker-field').its(0).clear();
+    cy.get('.ngb-tp-input').its(0).clear();
 
     if (hour < 10) {
-      cy.get('.bs-timepicker-field').its(0).type('0');
+      cy.get('.ngb-tp-input').its(0).type('0');
     }
-    cy.get('.bs-timepicker-field').its(0).type(`${hour}`);
+    cy.get('.ngb-tp-input').its(0).type(`${hour}`);
 
-    cy.get('.bs-timepicker-field').its(1).clear();
+    cy.get('.ngb-tp-input').its(1).clear();
     if (minute < 10) {
-      cy.get('.bs-timepicker-field').its(1).type('0');
+      cy.get('.ngb-tp-input').its(1).type('0');
     }
-    cy.get('.bs-timepicker-field').its(1).type(`${minute}`);
+    cy.get('.ngb-tp-input').its(1).type(`${minute}`);
 
     // Enter the pool name into the filter box
     cy.get('input.form-control.ng-valid').first().clear().type(poolname);
@@ -46,17 +46,17 @@ export class LogsPageHelper extends PageHelper {
     cy.contains('.nav-link', 'Audit Logs').click();
 
     // Enter an earliest time so that no old messages with the same config name show up
-    cy.get('.bs-timepicker-field').its(0).clear();
+    cy.get('.ngb-tp-input').its(0).clear();
     if (hour < 10) {
-      cy.get('.bs-timepicker-field').its(0).type('0');
+      cy.get('.ngb-tp-input').its(0).type('0');
     }
-    cy.get('.bs-timepicker-field').its(0).type(`${hour}`);
+    cy.get('.ngb-tp-input').its(0).type(`${hour}`);
 
-    cy.get('.bs-timepicker-field').its(1).clear();
+    cy.get('.ngb-tp-input').its(1).clear();
     if (minute < 10) {
-      cy.get('.bs-timepicker-field').its(1).type('0');
+      cy.get('.ngb-tp-input').its(1).type('0');
     }
-    cy.get('.bs-timepicker-field').its(1).type(`${minute}`);
+    cy.get('.ngb-tp-input').its(1).type(`${minute}`);
 
     // Enter the config name into the filter box
     cy.get('input.form-control.ng-valid').first().clear().type(configname);

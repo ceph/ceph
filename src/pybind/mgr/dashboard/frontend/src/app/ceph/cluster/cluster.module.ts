@@ -3,11 +3,16 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbDatepickerModule,
+  NgbNavModule,
+  NgbPopoverModule,
+  NgbTimepickerModule,
+  NgbTooltipModule,
+  NgbTypeaheadModule
+} from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -56,15 +61,15 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     RouterModule,
     FormsModule,
     ReactiveFormsModule,
-    BsDatepickerModule.forRoot(),
     NgbTooltipModule,
     MgrModulesModule,
     NgbTypeaheadModule,
-    TimepickerModule.forRoot(),
+    NgbTimepickerModule,
     TreeModule.forRoot(),
-    BsDatepickerModule.forRoot(),
     NgBootstrapFormValidationModule,
-    CephSharedModule
+    CephSharedModule,
+    NgbDatepickerModule,
+    NgbPopoverModule
   ],
   declarations: [
     HostsComponent,

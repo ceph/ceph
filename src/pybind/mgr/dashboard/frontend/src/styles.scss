@@ -145,11 +145,11 @@ option {
 
 /* Buttons */
 .btn-light {
-  background-color: $color-solid-white !important;
+  background-color: $color-solid-white;
   border-color: $color-input-border !important;
 
   &:hover {
-    background-color: $color-soft-gray !important;
+    background-color: $color-soft-gray;
     border-color: $color-input-border-hover !important;
   }
 }

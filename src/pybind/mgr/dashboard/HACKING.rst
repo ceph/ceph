@@ -804,11 +804,6 @@ All our supported languages should be registered in both exports in
 
 The ``SupportedLanguages`` enum will provide the list for the default language selection.
 
-The ``languageBootstrapMapping`` variable will provide the
-`language support <https://github.com/valor-software/ngx-bootstrap/tree/development/src/chronos/i18n>`_
-for ngx-bootstrap components like the
-`date picker <https://valor-software.com/ngx-bootstrap/#/datepicker#locales>`_.
-
 Translating process
 ~~~~~~~~~~~~~~~~~~~
 

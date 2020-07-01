@@ -5,9 +5,11 @@ import { RouterModule } from '@angular/router';
 
 import {
   NgbAlertModule,
+  NgbDatepickerModule,
   NgbDropdownModule,
   NgbPopoverModule,
   NgbProgressbarModule,
+  NgbTimepickerModule,
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
@@ -22,6 +24,7 @@ import { BackButtonComponent } from './back-button/back-button.component';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
+import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { FormModalComponent } from './form-modal/form-modal.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
@@ -58,7 +61,9 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     NgBootstrapFormValidationModule,
     ClickOutsideModule,
     SimplebarAngularModule,
-    RouterModule
+    RouterModule,
+    NgbDatepickerModule,
+    NgbTimepickerModule
   ],
   declarations: [
     ViewCacheComponent,
@@ -83,7 +88,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
-    OrchestratorDocModalComponent
+    OrchestratorDocModalComponent,
+    DateTimePickerComponent
   ],
   providers: [],
   exports: [
@@ -105,7 +111,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     AlertPanelComponent,
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
-    OrchestratorDocPanelComponent
+    OrchestratorDocPanelComponent,
+    DateTimePickerComponent
   ]
 })
 export class ComponentsModule {}
