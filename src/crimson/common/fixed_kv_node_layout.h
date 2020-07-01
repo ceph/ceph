@@ -206,7 +206,6 @@ public:
 
 public:
   class delta_buffer_t {
-    friend class FixedKVNode;
     std::vector<delta_t> buffer;
   public:
     bool empty() const {
