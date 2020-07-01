@@ -18,7 +18,6 @@ export class OsdDetailsComponent implements OnChanges {
   osd: {
     id?: number;
     details?: any;
-    histogram_failed?: string;
     tree?: any;
   };
   grafanaPermission: Permission;
@@ -40,11 +39,6 @@ export class OsdDetailsComponent implements OnChanges {
   refresh() {
     this.osdService.getDetails(this.osd.id).subscribe((data) => {
       this.osd.details = data;
-      this.osd.histogram_failed = '';
-      if (!_.isObject(data.histogram)) {
-        this.osd.histogram_failed = data.histogram;
-        this.osd.details.histogram = undefined;
-      }
     });
   }
 }
