@@ -357,7 +357,23 @@ int RGWRadosObject::read_attrs(RGWRados::Object::Read &read_op, optional_yield y
   return read_op.prepare(y);
 }
 
-int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj)
+int RGWRadosObject::set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj)
+{
+  map<string, bufferlist> empty;
+  rgw_obj target = get_obj();
+
+  if (!target_obj)
+    target_obj = &target;
+
+  return store->getRados()->set_attrs(rctx,
+			bucket->get_info(),
+			*target_obj,
+			setattrs ? setattrs->attrs : empty,
+			delattrs ? &delattrs->attrs : nullptr,
+			y);
+}
+
+int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj* target_obj)
 {
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rctx, get_obj());
   RGWRados::Object::Read read_op(&op_target);
@@ -367,14 +383,24 @@ int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj 
 
 int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y)
 {
-  rgw_obj target_obj;
-  int r = get_obj_attrs(rctx, y, &target_obj);
+  rgw_obj target = get_obj();
+  int r = get_obj_attrs(rctx, y, &target);
   if (r < 0) {
     return r;
   }
   set_atomic(rctx);
   attrs.attrs[attr_name] = attr_val;
-  return store->getRados()->set_attrs(rctx, bucket->get_info(), target_obj, attrs.attrs, NULL, y);
+  return set_obj_attrs(rctx, &attrs, nullptr, y, &target);
+}
+
+int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y)
+{
+  RGWAttrs rmattr;
+  bufferlist bl;
+
+  set_atomic(rctx);
+  rmattr.attrs[attr_name] = bl;
+  return set_obj_attrs(rctx, nullptr, &rmattr, y);
 }
 
 int RGWRadosObject::copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket,
@@ -398,21 +424,9 @@ int RGWRadosObject::copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket,
   attrset.erase(RGW_ATTR_TAIL_TAG);
 
   return store->getRados()->copy_obj_data(rctx, dest_bucket,
-					   dest_bucket->get_info().placement_rule, read_op,
-					   obj_size - 1, dest_obj, NULL, mtime, attrset, 0, real_time(), NULL,
-					   dpp, y);
-}
-
-int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y)
-{
-  map <string, bufferlist> attrs;
-  map <string, bufferlist> rmattr;
-  bufferlist bl;
-
-  set_atomic(rctx);
-  rmattr[attr_name] = bl;
-  rgw_obj obj = get_obj();
-  return store->getRados()->set_attrs(rctx, bucket->get_info(), obj, attrs, &rmattr, y);
+					  dest_bucket->get_info().placement_rule, read_op,
+					  obj_size - 1, dest_obj, NULL, mtime, attrset, 0,
+					  real_time(), NULL, dpp, y);
 }
 
 void RGWRadosObject::set_atomic(RGWObjectCtx *rctx) const

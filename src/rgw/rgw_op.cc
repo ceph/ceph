@@ -4556,7 +4556,7 @@ void RGWPutMetadataObject::pre_exec()
 void RGWPutMetadataObject::execute()
 {
   rgw_obj target_obj;
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+  rgw::sal::RGWAttrs attrs, rmattrs;
 
   s->object->set_atomic(s->obj_ctx);
 
@@ -4565,7 +4565,7 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs.attrs);
   if (op_ret < 0) {
     return;
   }
@@ -4575,30 +4575,28 @@ void RGWPutMetadataObject::execute()
   if (op_ret < 0) {
     return;
   }
-  orig_attrs = s->object->get_attrs().attrs;
 
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
-  if (need_object_expiration() && object_is_expired(orig_attrs)) {
+  if (need_object_expiration() && object_is_expired(s->object->get_attrs().attrs)) {
     op_ret = -ENOENT;
     return;
   }
 
   /* Filter currently existing attributes. */
-  prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
-  populate_with_generic_attrs(s, attrs);
-  encode_delete_at_attr(delete_at, attrs);
+  prepare_add_del_attrs(s->object->get_attrs().attrs, attrs.attrs, rmattrs.attrs);
+  populate_with_generic_attrs(s, attrs.attrs);
+  encode_delete_at_attr(delete_at, attrs.attrs);
 
   if (dlo_manifest) {
-    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs.attrs);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
     }
   }
 
-  op_ret = store->getRados()->set_attrs(s->obj_ctx, s->bucket->get_info(), target_obj,
-    attrs, &rmattrs, s->yield);
+  op_ret = s->object->set_obj_attrs(s->obj_ctx, &attrs, &rmattrs, s->yield, &target_obj);
 }
 
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
@@ -6015,6 +6013,7 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
+  /* XXX dang fix this and remove function */
   op_ret = get_obj_attrs(store, s, meta_obj, attrs);
 
   if (op_ret < 0) {
@@ -7377,7 +7376,7 @@ void RGWSetAttrs::execute()
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
     rgw::sal::RGWAttrs a(attrs);
-    op_ret = s->object->set_attrs(a);
+    op_ret = s->object->set_obj_attrs(s->obj_ctx, &a, nullptr, s->yield);
   } else {
     for (auto& iter : attrs) {
       s->bucket_attrs[iter.first] = std::move(iter.second);
@@ -7977,16 +7976,15 @@ void RGWGetObjLegalHold::execute()
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
-  rgw_obj obj = s->object->get_obj();
   map<string, bufferlist> attrs;
-  op_ret = get_obj_attrs(store, s, obj, attrs);
+  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield);
   if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << obj
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
                        << " ret=" << op_ret << dendl;
     return;
   }
-  auto aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-  if (aiter == attrs.end()) {
+  auto aiter = s->object->get_attrs().attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (aiter == s->object->get_attrs().attrs.end()) {
     op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
     return;
   }
