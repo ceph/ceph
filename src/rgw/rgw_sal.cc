@@ -276,10 +276,10 @@ int RGWRadosBucket::check_empty(optional_yield y)
   return store->getRados()->check_bucket_empty(info, y);
 }
 
-int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size)
+int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
 {
     return store->getRados()->check_quota(owner->get_user(), get_bi(),
-					  user_quota, bucket_quota, obj_size);
+					  user_quota, bucket_quota, obj_size, check_size_only);
 }
 
 int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
