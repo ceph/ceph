@@ -3,6 +3,7 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
+import { TableStatusViewCache } from '../../../../shared/classes/table-status-view-cache';
 import { CephShortVersionPipe } from '../../../../shared/pipes/ceph-short-version.pipe';
 
 @Component({
@@ -18,6 +19,8 @@ export class DaemonListComponent implements OnInit, OnDestroy {
 
   data: [];
   columns: {};
+
+  tableStatus = new TableStatusViewCache();
 
   constructor(
     private rbdMirroringService: RbdMirroringService,
@@ -45,6 +48,7 @@ export class DaemonListComponent implements OnInit, OnDestroy {
 
     this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.data = data.content_data.daemons;
+      this.tableStatus = new TableStatusViewCache(data.status);
     });
   }
 

@@ -6,7 +6,8 @@
           [autoReload]="-1"
           (fetchData)="refresh()"
           selectionType="single"
-          (updateSelection)="updateSelection($event)">
+          (updateSelection)="updateSelection($event)"
+          [status]="tableStatus">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
                     [selection]="selection"

@@ -2,7 +2,8 @@
           columnMode="flex"
           [columns]="columns"
           [autoReload]="-1"
-          (fetchData)="refresh()">
+          (fetchData)="refresh()"
+          [status]="tableStatus">
 </cd-table>
 
 <ng-template #healthTmpl

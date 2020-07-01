@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
 
@@ -44,7 +44,8 @@ describe('TableComponent', () => {
       ComponentsModule,
       RouterTestingModule,
       NgbDropdownModule,
-      PipesModule
+      PipesModule,
+      NgbTooltipModule
     ]
   });
 
@@ -531,7 +532,7 @@ describe('TableComponent', () => {
       component.data = createFakeData(5);
       component.fetchData.subscribe((context: any) => {
         context.error();
-        expect(component.loadingError).toBeTruthy();
+        expect(component.status.type).toBe('danger');
         expect(component.data.length).toBe(0);
         expect(component.loadingIndicator).toBeFalsy();
         expect(component['updating']).toBeFalsy();
@@ -545,7 +546,7 @@ describe('TableComponent', () => {
         context.errorConfig.resetData = false;
         context.errorConfig.displayError = false;
         context.error();
-        expect(component.loadingError).toBeFalsy();
+        expect(component.status.type).toBe('danger');
         expect(component.data.length).toBe(10);
         expect(component.loadingIndicator).toBeFalsy();
         expect(component['updating']).toBeFalsy();
