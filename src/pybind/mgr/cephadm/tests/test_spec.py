@@ -102,6 +102,7 @@ def test_spec_octopus(spec_json):
             spec = j_c.pop('spec')
             j_c.update(spec)
         j_c.pop('objectstore', None)
+        j_c.pop('filter_logic', None)
         return j_c
     assert spec_json == convert_to_old_style_json(spec.to_json())
 
