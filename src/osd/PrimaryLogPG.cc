@@ -2510,6 +2510,11 @@ int PrimaryLogPG::start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bo
     return r;
   }
 
+  // all clean
+  if (manifest_fop->io_tids.empty()) {
+    return 0;
+  }
+
   flush_ops[obc->obs.oi.soid] = manifest_fop;
   return -EINPROGRESS;
 }
@@ -2555,6 +2560,20 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
 		     CEPH_OSD_FLAG_RWORDERED;
     tgt_length = chunk_data.length();
+
+    /* 
+     * TODO:
+     * set_chunk will not imply that flush eventually re-write 
+     * the chunk if it becomes overwritten. So, we need to remove this part
+     * entirely and rework the dedup procedure based on thw following scenarios.
+     * 
+     * 1. An external agent runs a CDC and explicitly sends set-chunk commands for 
+     * each chunk it chooses to dedup.
+     * 2. The osd internally runs a CDC on the extents of the object that are not yet 
+     * dedup'd and performs the dedup directly.
+     *
+     */
+
     if (is_dedup_chunk(obc->obs.oi, iter->second)) {
       pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
       object_t fp_oid = [&fp_algo, &chunk_data]() -> string {
@@ -2572,6 +2591,18 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       }();
       tgt_soid.oid = fp_oid;
       iter->second.oid = tgt_soid;
+      // skip if the same content exits in prev snap at same offset
+      if (obc->ssc->snapset.clones.size()) {
+	ObjectContextRef cobc = get_prev_clone_obc(obc);
+	if (cobc) {
+	  auto c = cobc->obs.oi.manifest.chunk_map.find(iter->first);
+	  if (c != cobc->obs.oi.manifest.chunk_map.end()) {
+	    if (iter->second == cobc->obs.oi.manifest.chunk_map[iter->first]) {
+	      continue;
+	    }
+	  }
+	}
+      }
       {
 	bufferlist t;
 	cls_cas_chunk_create_or_get_ref_op get_call;

@@ -106,6 +106,51 @@ void manifest_set_chunk(Rados& cluster, librados::IoCtx& src_ioctx,
   completion->release();
 }
 
+#include "common/ceph_crypto.h"
+using ceph::crypto::SHA1;
+#include "rgw/rgw_common.h"
+
+void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t count,
+			   std::string fp_algo = NULL)
+{
+  bufferlist t;
+  int size = foid.length();
+  if (fp_algo == "sha1") {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    sha1_gen.Update((const unsigned char *)foid.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+  } else if (!fp_algo.empty()) {
+    ceph_assert(0 == "unrecognized fingerprint algorithm");
+  }
+
+  chunk_refs_t refs;
+  try {
+    auto iter = t.cbegin();
+    decode(refs, iter);
+  } catch (buffer::error& err) {
+    ASSERT_TRUE(0);
+  }
+  ASSERT_EQ(count, refs.count());
+}
+
+void do_manifest_flush(librados::Rados& cluster, librados::IoCtx& ioctx,
+		       std::string oid, int expect_ret)
+{
+  ObjectReadOperation op;
+  op.tier_flush();
+  librados::AioCompletion *completion = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate(
+    oid, completion, &op,
+    librados::OPERATION_IGNORE_CACHE, NULL));
+  completion->wait_for_complete();
+  ASSERT_EQ(expect_ret, completion->get_return_value());
+  completion->release();
+}
+
 class LibRadosTwoPoolsPP : public RadosTestPP
 {
 public:
@@ -4660,6 +4705,104 @@ TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
     int r = cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
     ASSERT_EQ(-ENOENT, r);
   }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "bar", "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "bar", "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "bar", "foo");
+
+  // foo head: [er] [hi] [HI]
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("There hi");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  // foo head: [bb] [hi] [HI]
+  {
+    bufferlist bl;
+    bl.append("Thbbe hi");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  // foo head: [bb] [hi] [HI]
+  {
+    bufferlist bl;
+    bl.append("Thbbe hi");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // foo snap[1]: [er] [hi] [HI]
+  // foo snap[0]: [bb] [hi] [HI]
+  // foo head   : [bb] [hi] [HI]
+
+  //flush on oldest snap
+  ioctx.snap_set_read(my_snaps[1]);
+  do_manifest_flush(cluster, ioctx, "foo", 0);
+
+  // flush on oldest snap
+  ioctx.snap_set_read(my_snaps[0]);
+  do_manifest_flush(cluster, ioctx, "foo", 0);
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  do_manifest_flush(cluster, ioctx, "foo", 0);
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "hi", 1u, "sha1");
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "bb", 1u, "sha1");
 }
 
 class LibRadosTwoPoolsECPP : public RadosTestECPP
