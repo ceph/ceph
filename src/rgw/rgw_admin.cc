@@ -763,6 +763,7 @@ enum class OPT {
   ACCOUNT_GET,
   ACCOUNT_RM,
   ACCOUNT_USER_ADD,
+  ACCOUNT_USER_RM,
 };
 
 }
@@ -979,6 +980,7 @@ static SimpleCmd::Commands all_cmds = {
   { "account get", OPT::ACCOUNT_GET },
   { "account rm", OPT::ACCOUNT_RM },
   { "account user add", OPT::ACCOUNT_USER_ADD },
+  { "account user rm", OPT::ACCOUNT_USER_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3740,7 +3742,8 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
                           && opt_cmd != OPT::RESHARD_STATUS
-	                  && opt_cmd != OPT::ACCOUNT_USER_ADD) {
+	                  && opt_cmd != OPT::ACCOUNT_USER_ADD
+	                  && opt_cmd != OPT::ACCOUNT_USER_RM) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -9207,7 +9210,8 @@ next:
  if (opt_cmd == OPT::ACCOUNT_CREATE ||
      opt_cmd == OPT::ACCOUNT_GET ||
      opt_cmd == OPT::ACCOUNT_RM ||
-     opt_cmd == OPT::ACCOUNT_USER_ADD) {
+     opt_cmd == OPT::ACCOUNT_USER_ADD ||
+     opt_cmd == OPT::ACCOUNT_USER_RM) {
    if (account_id.empty()) {
      cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
    }
@@ -9268,6 +9272,18 @@ next:
      }
 
    }
+
+   if (opt_cmd == OPT::ACCOUNT_USER_RM) {
+     ret = store->ctl()->user->unlink_account(user_id, account_id,
+					      RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
+					      null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not rm user" << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+   }
+
  }
 
   return 0;
