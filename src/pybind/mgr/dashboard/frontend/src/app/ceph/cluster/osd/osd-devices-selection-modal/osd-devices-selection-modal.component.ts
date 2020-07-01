@@ -54,7 +54,10 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
     const cols = _.filter(this.inventoryDevices.columns, (col) => {
       return this.filterColumns.includes(col.prop) && col.prop !== 'hostname';
     });
-    this.requiredFilters = _.map(cols, 'name');
+    // Fixes 'ExpressionChangedAfterItHasBeenCheckedError'
+    setTimeout(() => {
+      this.requiredFilters = _.map(cols, 'name');
+    }, 0);
   }
 
   createForm() {
