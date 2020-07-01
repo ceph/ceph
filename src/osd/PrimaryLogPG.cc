@@ -2602,8 +2602,31 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 	  flags, NULL);
 	in.clear();
       }
+
       tgt_soid.oid = fp_oid;
       iter->second.oid = tgt_soid;
+      // skip if the same content exits in prev snap at same offset
+      if (obc->ssc->snapset.clones.size()) {
+	auto s = std::find(obc->ssc->snapset.clones.begin(), obc->ssc->snapset.clones.end(), 
+			   obc->obs.oi.soid.snap);
+	if (s != obc->ssc->snapset.clones.begin()) {
+	  auto s_iter = s - 1;
+	  hobject_t cid = obc->obs.oi.soid;
+	  object_ref_delta_t refs;
+	  cid.snap = *s_iter;
+	  ObjectContextRef cobc = get_object_context(cid, false, NULL);
+	  ceph_assert(cobc);
+	  ceph_assert(cobc->obs.oi.has_manifest());
+	  ceph_assert(cobc->obs.oi.manifest.is_chunked());
+	  auto c = cobc->obs.oi.manifest.chunk_map.find(iter->first);
+	  if (c != cobc->obs.oi.manifest.chunk_map.end()) {
+	    if (iter->second == cobc->obs.oi.manifest.chunk_map[iter->first]) {
+	      continue;
+	    }
+	  }
+	}
+      }
+
       {
 	bufferlist t;
 	cls_cas_chunk_create_or_get_ref_op get_call;
@@ -2634,6 +2657,10 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     if (last_offset < iter->first) {
       break;
     }
+  }
+
+  if (manifest_fop->io_tids.empty()) {
+    try_flush_mark_clean(manifest_fop);
   }
 
   return 0;
@@ -10449,7 +10476,8 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
     } else {
       for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
 	if (p.second.is_dirty()) {
-	  dout(20) << __func__ << " offset: " << p.second.offset 
+	  dout(20) << __func__ << " src_offset: " << p.first
+		  << " tgt_offset: " << p.second.offset 
 		  << " length: " << p.second.length << dendl;
 	  p.second.clear_flag(chunk_info_t::FLAG_DIRTY);
 	  p.second.clear_flag(chunk_info_t::FLAG_MISSING); // CLEAN
