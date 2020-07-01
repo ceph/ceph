@@ -14,7 +14,6 @@ target_link_libraries(libneorados PRIVATE
 #   add_library(libneorados ${CEPH_SHARED}
 #     $<TARGET_OBJECTS:neorados_api_obj>
 #     $<TARGET_OBJECTS:neorados_objs>
-#     $<TARGET_OBJECTS:common_buffer_obj>)
 #   set_target_properties(libneorados PROPERTIES
 #     OUTPUT_NAME RADOS
 #     VERSION 0.0.1

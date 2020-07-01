@@ -384,7 +384,6 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common-auth-objs>
   $<TARGET_OBJECTS:common-common-objs>
   $<TARGET_OBJECTS:common-msg-objs>
-  $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
