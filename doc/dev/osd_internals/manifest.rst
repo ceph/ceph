@@ -47,12 +47,12 @@ basic operations:
 * Demote cold rbd chunk to slow pool:
 
   1. Read object, noting current user_version.
-  2. In memory, run CDC implemenation to fingerprint object.
+  2. In memory, run CDC implementation to fingerprint object.
   3. Write out each resulting extent to an object in the cold pool
      using the CAS class.
   4. Submit operation to base pool:
 
-     * ASSERT_VER with the user verion from the read to fail if the
+     * ASSERT_VER with the user version from the read to fail if the
        object has been mutated since the read.
      * SET_CHUNK for each of the extents to the corresponding object
        in the base pool.
@@ -174,7 +174,7 @@ Testing
 
 We rely really heavily on randomized failure testing.  As such, we need
 to extend that testing to include dedup/manifest support as well.  Here's
-a short list of the the touchpoints:
+a short list of the touchpoints:
 
 * Thrasher tests like qa/suites/rados/thrash/workloads/cache-snaps.yaml
 
@@ -372,7 +372,7 @@ Operations:
   The purpose of set_redirect is two.
 
   1. Redirect all operation to the target object (like proxy)
-  2. Cache when tier_promote is called (rediect will be cleared at this time).
+  2. Cache when tier_promote is called (redirect will be cleared at this time).
 
 * set-chunk 
 
@@ -383,7 +383,7 @@ Operations:
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
   
         rados -p base_pool set-chunk <source_object> <offset> <length> --target-pool 
-         <caspool> <target_object> <taget-offset> 
+         <caspool> <target_object> <target-offset> 
 
   Returns ENOENT if the object does not exist (TODO: why?)
   Returns EINVAL if the object already is a redirect.
