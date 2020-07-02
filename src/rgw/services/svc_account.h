@@ -17,6 +17,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include "rgw/rgw_service.h"
 #include "svc_meta_be.h"
 
@@ -66,4 +67,12 @@ public:
 				 bool exclusive,
 				 std::map<std::string, bufferlist> * const pattrs,
 				 optional_yield y) = 0;
+
+  virtual int list_users(const DoutPrefixProvider *dpp,
+                         const RGWAccountInfo& info,
+                         const std::string& marker,
+                         bool* more,
+                         std::vector<rgw_user>& results,
+                         optional_yield y) = 0;
+
 };
