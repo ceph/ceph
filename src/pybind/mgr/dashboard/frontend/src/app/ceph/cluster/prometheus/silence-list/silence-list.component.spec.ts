@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -18,6 +19,7 @@ import { NotificationType } from '../../../../shared/enum/notification-type.enum
 import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
+import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
 import { SilenceListComponent } from './silence-list.component';
 
 describe('SilenceListComponent', () => {
@@ -31,9 +33,10 @@ describe('SilenceListComponent', () => {
       SharedModule,
       ToastrModule.forRoot(),
       RouterTestingModule,
-      HttpClientTestingModule
+      HttpClientTestingModule,
+      NgbNavModule
     ],
-    declarations: [SilenceListComponent],
+    declarations: [SilenceListComponent, PrometheusTabsComponent],
     providers: [i18nProviders]
   });
 

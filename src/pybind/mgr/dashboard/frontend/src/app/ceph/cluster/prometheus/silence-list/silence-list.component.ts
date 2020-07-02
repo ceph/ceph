@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -6,7 +6,6 @@ import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import { Observable, Subscriber } from 'rxjs';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
-import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import {
   ActionLabelsI18n,
@@ -21,12 +20,15 @@ import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
+import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
+import { SummaryService } from '../../../../shared/services/summary.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+import { PrometheusListHelper } from '../prometheus-list-helper';
 
-const BASE_URL = 'monitoring/silence';
+const BASE_URL = 'monitoring/silences';
 
 @Component({
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
@@ -34,7 +36,7 @@ const BASE_URL = 'monitoring/silence';
   templateUrl: './silence-list.component.html',
   styleUrls: ['./silence-list.component.scss']
 })
-export class SilenceListComponent extends ListWithDetails {
+export class SilenceListComponent extends PrometheusListHelper {
   silences: AlertmanagerSilence[] = [];
   columns: CdTableColumn[];
   tableActions: CdTableAction[];
@@ -52,14 +54,16 @@ export class SilenceListComponent extends ListWithDetails {
     private authStorageService: AuthStorageService,
     private i18n: I18n,
     private cdDatePipe: CdDatePipe,
-    private prometheusService: PrometheusService,
     private modalService: ModalService,
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
-    private succeededLabels: SucceededActionLabelsI18n
+    private succeededLabels: SucceededActionLabelsI18n,
+    @Inject(PrometheusService) prometheusService: PrometheusService,
+    @Inject(SummaryService) summaryService: SummaryService,
+    @Inject(CephReleaseNamePipe) cephReleaseNamePipe: CephReleaseNamePipe
   ) {
-    super();
+    super(prometheusService, summaryService, cephReleaseNamePipe);
     this.permission = this.authStorageService.getPermissions().prometheus;
     const selectionExpired = (selection: CdTableSelection) =>
       selection.first() && selection.first().status && selection.first().status.state === 'expired';
@@ -68,7 +72,6 @@ export class SilenceListComponent extends ListWithDetails {
         permission: 'create',
         icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),
-        preserveFragment: true,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.CREATE
       },
@@ -83,7 +86,6 @@ export class SilenceListComponent extends ListWithDetails {
           !selectionExpired(selection),
         icon: Icons.copy,
         routerLink: () => this.urlBuilder.getRecreate(this.selection.first().id),
-        preserveFragment: true,
         name: this.actionLabels.RECREATE
       },
       {
@@ -97,7 +99,6 @@ export class SilenceListComponent extends ListWithDetails {
           (selection.first().cdExecuting && !selectionExpired(selection)) ||
           selectionExpired(selection),
         routerLink: () => this.urlBuilder.getEdit(this.selection.first().id),
-        preserveFragment: true,
         name: this.actionLabels.EDIT
       },
       {

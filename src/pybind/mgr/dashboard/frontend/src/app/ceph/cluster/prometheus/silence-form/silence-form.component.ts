@@ -96,8 +96,8 @@ export class SilenceFormComponent {
   }
 
   private chooseMode() {
-    this.edit = this.router.url.startsWith('/monitoring/silence/edit');
-    this.recreate = this.router.url.startsWith('/monitoring/silence/recreate');
+    this.edit = this.router.url.startsWith('/monitoring/silences/edit');
+    this.recreate = this.router.url.startsWith('/monitoring/silences/recreate');
     if (this.edit) {
       this.action = this.actionLabels.EDIT;
     } else if (this.recreate) {
@@ -298,7 +298,7 @@ export class SilenceFormComponent {
     }
     this.prometheusService.setSilence(this.getSubmitData()).subscribe(
       (resp) => {
-        this.router.navigate(['/monitoring'], { fragment: 'silences' });
+        this.router.navigate(['/monitoring/silences']);
         this.notificationService.show(
           NotificationType.success,
           this.getNotificationTile(resp.body['silenceId']),
