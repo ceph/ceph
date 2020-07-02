@@ -110,7 +110,8 @@ The procedure is as follows:
 
 
 #. Create a Ceph configuration file. By default, Ceph uses
-   ``ceph.conf``, where ``ceph`` reflects the cluster name. ::
+   ``ceph.conf``, where ``ceph`` reflects the cluster name. Add a line
+   containing "[global]" to the configuration file. ::
 
 	sudo vim /etc/ceph/ceph.conf
 
