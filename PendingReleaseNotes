@@ -96,3 +96,7 @@
 * OSD: A new configuration option ``osd_compact_on_start`` has been added which triggers
   an OSD compaction on start. Setting this option to ``true`` and restarting an OSD
   will result in an offline compaction of the OSD prior to booting.
+
+* Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
+  scheduled scrubs of the type disabled will be aborted. All user initiated
+  scrubs are NOT interrupted.

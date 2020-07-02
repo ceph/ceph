@@ -213,6 +213,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pg_stats_publish_valid(false),
   finish_sync_event(NULL),
   scrub_after_recovery(false),
+  save_req_scrub(false),
   active_pushes(0),
   recovery_state(
     o->cct,
@@ -365,6 +366,7 @@ void PG::clear_primary_state()
 
   scrubber.reserved_peers.clear();
   scrub_after_recovery = false;
+  save_req_scrub = false;
 
   agent_clear();
 }
@@ -375,7 +377,7 @@ PG::Scrubber::Scrubber()
    active(false),
    shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
-   need_auto(false), time_for_deep(false),
+   need_auto(false), req_scrub(false), time_for_deep(false),
    auto_repair(false),
    check_repair(false),
    deep_scrub_on_error(false),
@@ -529,6 +531,8 @@ void PG::_finish_recovery(Context *c)
       scrub_after_recovery = false;
       scrubber.must_deep_scrub = true;
       scrubber.check_repair = true;
+      // We remember whether req_scrub was set when scrub_after_recovery set to true
+      scrubber.req_scrub = save_req_scrub;
       queue_scrub();
     }
   } else {
@@ -1564,6 +1568,7 @@ void PG::scrub_requested(bool deep, bool repair, bool need_auto)
     scrubber.must_repair = repair;
     // User might intervene, so clear this
     scrubber.need_auto = false;
+    scrubber.req_scrub = true;
   }
   reg_next_scrub();
 }
@@ -2566,6 +2571,12 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
   chunky_scrub(handle);
 }
 
+void PG::abort_scrub()
+{
+  scrub_clear_state();
+  scrub_unreserve_replicas();
+}
+
 /*
  * Chunky scrub scrubs objects one chunk at a time with writes blocked for that
  * chunk.
@@ -2646,12 +2657,29 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
  */
 void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 {
+  // Since repair is only by request and we need to scrub afterward
+  // treat the same as req_scrub.
+  if (!scrubber.req_scrub) {
+    if (state_test(PG_STATE_DEEP_SCRUB)) {
+      if (get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+	  pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
+           dout(10) << "nodeep_scrub set, aborting" << dendl;
+	abort_scrub();
+        return;
+      }
+    } else if (state_test(PG_STATE_SCRUBBING)) {
+      if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) || pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) {
+         dout(10) << "noscrub set, aborting" << dendl;
+	 abort_scrub();
+         return;
+      }
+    }
+  }
   // check for map changes
   if (scrubber.is_chunky_scrub_active()) {
     if (scrubber.epoch_start != info.history.same_interval_since) {
-      dout(10) << "scrub  pg changed, aborting" << dendl;
-      scrub_clear_state();
-      scrub_unreserve_replicas();
+      dout(10) << "scrub pg changed, aborting" << dendl;
+      abort_scrub();
       return;
     }
   }
@@ -3036,6 +3064,7 @@ void PG::scrub_clear_state(bool has_error)
   state_clear(PG_STATE_DEEP_SCRUB);
   publish_stats_to_osd();
 
+  scrubber.req_scrub = false;
   // local -> nothing.
   if (scrubber.local_reserved) {
     osd->dec_scrubs_local();
@@ -3268,7 +3297,8 @@ void PG::scrub_finish()
     } else if (has_error) {
       // Deep scrub in order to get corrected error counts
       scrub_after_recovery = true;
-      dout(20) << __func__ << " Set scrub_after_recovery" << dendl;
+      save_req_scrub = scrubber.req_scrub;
+      dout(20) << __func__ << " Set scrub_after_recovery, req_scrub=" << save_req_scrub << dendl;
     } else if (scrubber.shallow_errors || scrubber.deep_errors) {
       // We have errors but nothing can be fixed, so there is no repair
       // possible.
@@ -3414,6 +3444,8 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " TIME_FOR_DEEP";
   if (pg.scrubber.need_auto)
     out << " NEED_AUTO";
+  if (pg.scrubber.req_scrub)
+    out << " REQ_SCRUB";
 
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
