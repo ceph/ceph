@@ -141,30 +141,13 @@ int main(int args, char **argv)
     return 1;
   }
 
-  char *id = getenv("CEPH_CLIENT_ID");
-  if (id) std::cerr << "Client id is: " << id << std::endl;
   Rados cluster;
-  int ret;
-  ret = cluster.init(id);
-  if (ret) {
-    std::cerr << "Error " << ret << " in cluster.init" << std::endl;
-    return ret;
+  std::string err = connect_cluster_pp(cluster);
+  if (err.length()) {
+      std::cerr << "Error " << err << std::endl;
+      return 1;
   }
-  ret = cluster.conf_read_file(NULL);
-  if (ret) {
-    std::cerr << "Error " << ret << " in cluster.conf_read_file" << std::endl;
-    return ret;
-  }
-  ret = cluster.conf_parse_env(NULL);
-  if (ret) {
-    std::cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
-    return ret;
-  }
-  ret = cluster.connect();
-  if (ret) {
-    std::cerr << "Error " << ret << " in cluster.connect" << std::endl;
-    return ret;
-  }
+
   if (type == "rep")
     test_replicated(cluster, pool_name, obj_name);
   else if (type == "ec")
