@@ -124,7 +124,11 @@ public:
 	       optional_yield);
   int add_role(const RGWRole& role);
 
-  int list_users();
+  int list_users(const std::string& account_id,
+                 const std::string& marker,
+                 bool *more,
+                 vector<rgw_user>& results,
+                 optional_yield y);
 
   int remove_user(const std::string& account_id,
                   const rgw_user& user,

@@ -105,6 +105,24 @@ int RGWAccountCtl::remove_user(const std::string& account_id,
   return svc.account->remove_user(info, user_id, y);
 }
 
+int RGWAccountCtl::list_users(const std::string& account_id,
+                              const std::string& marker,
+                              bool *more,
+                              vector<rgw_user>& results,
+                              optional_yield y)
+{
+  RGWAccountInfo info;
+  RGWObjVersionTracker objv_tracker;
+  real_time mtime;
+
+  int ret = read_info(account_id, &info, &objv_tracker, &mtime, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return svc.account->list_users(info, marker, more, results, y);
+}
+
 
 RGWMetadataObject* RGWAccountMetadataHandler::get_meta_obj(JSONObj *jo,
                                                             const obj_version& objv,
