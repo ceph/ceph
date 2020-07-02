@@ -66,7 +66,15 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   g_ceph_context = cct.get();
   cct->_conf.set_config_values(values);
   store = std::make_unique<BlueStore>(cct.get(), path);
-  tp = std::make_unique<crimson::os::ThreadPool>(1, 128, seastar::this_shard_id() + 10);
+
+  long cpu_id = 0;
+  if (long nr_cpus = sysconf(_SC_NPROCESSORS_ONLN); nr_cpus != -1) {
+    cpu_id = nr_cpus - 1;
+  } else {
+    logger().error("{}: unable to get nproc: {}", __func__, errno);
+    cpu_id = -1;
+  }
+  tp = std::make_unique<crimson::os::ThreadPool>(1, 128, cpu_id);
 }
 
 seastar::future<> AlienStore::start()
