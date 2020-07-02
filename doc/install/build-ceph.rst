@@ -67,9 +67,9 @@ Debian/Ubuntu or ``rpmbuild`` for the RPM Package Manager.
 Advanced Package Tool (APT)
 ---------------------------
 
-To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the 
-`Ceph`_ repository, installed the `Build Prerequisites`_ and installed 
-``debhelper``::
+To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the
+`Ceph`_ repository, installed the `Build Prerequisites`_, run do_cmake.sh, and
+installed ``debhelper``::
 
 	sudo apt-get install debhelper
 
@@ -84,8 +84,8 @@ RPM Package Manager
 -------------------
 
 To create ``.rpm`` packages, ensure that you have cloned the `Ceph`_ repository,
-installed the `Build Prerequisites`_ and installed ``rpm-build`` and 
-``rpmdevtools``::
+installed the `Build Prerequisites`_ , run do_cmake.sh, and installed
+``rpm-build`` and ``rpmdevtools``::
 
 	yum install rpm-build rpmdevtools
 
