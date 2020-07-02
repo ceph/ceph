@@ -764,6 +764,7 @@ enum class OPT {
   ACCOUNT_RM,
   ACCOUNT_USER_ADD,
   ACCOUNT_USER_RM,
+  ACCOUNT_USER_LIST,
 };
 
 }
@@ -981,6 +982,7 @@ static SimpleCmd::Commands all_cmds = {
   { "account rm", OPT::ACCOUNT_RM },
   { "account user add", OPT::ACCOUNT_USER_ADD },
   { "account user rm", OPT::ACCOUNT_USER_RM },
+  { "account user list", OPT::ACCOUNT_USER_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -9211,7 +9213,8 @@ next:
      opt_cmd == OPT::ACCOUNT_GET ||
      opt_cmd == OPT::ACCOUNT_RM ||
      opt_cmd == OPT::ACCOUNT_USER_ADD ||
-     opt_cmd == OPT::ACCOUNT_USER_RM) {
+     opt_cmd == OPT::ACCOUNT_USER_RM ||
+     opt_cmd == OPT::ACCOUNT_USER_LIST) {
    if (account_id.empty()) {
      cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
    }
@@ -9284,6 +9287,23 @@ next:
 
    }
 
+   if (opt_cmd == OPT::ACCOUNT_USER_LIST) {
+     std::string marker;
+     vector <rgw_user> users;
+     bool more;
+     ret = store->ctl()->account->list_users(account_id,
+                                             marker,
+                                             &more,
+                                             users,
+                                             null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not list users" << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+     encode_json("account_user_list", users, formatter);
+     formatter->flush(cout);
+   }
  }
 
   return 0;
