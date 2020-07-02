@@ -364,11 +364,12 @@ def ceph_bootstrap(ctx, config, registry):
             '--output-keyring',
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--output-pub-ssh-key', '{}/{}.pub'.format(testdir, cluster_name),
+            '--mon-id', first_mon,
+            '--mgr-id', first_mgr,
+
         ]
         if not ctx.ceph[cluster_name].roleless:
             cmd += [
-                '--mon-id', first_mon,
-                '--mgr-id', first_mgr,
                 '--orphan-initial-daemons',   # we will do it explicitly!
                 '--skip-monitoring-stack',    # we'll provision these explicitly
             ]
