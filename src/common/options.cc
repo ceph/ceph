@@ -1625,6 +1625,12 @@ std::vector<Option> get_global_options() {
     .set_description("the ratio of up OSDs at which a degraded stretch cluster enters recovery")
     .set_min_max(0.51, 1.0),
 
+    Option("mon_stretch_recovery_min_wait", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(15.0)
+    .add_service("mon")
+    .set_description("how long the monitors wait before considering fully-healthy PGs as evidence the stretch mode is repaired")
+    .set_min(1.0),
+
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.050)
     .add_service("mon")

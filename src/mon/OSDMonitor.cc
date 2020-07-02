@@ -960,6 +960,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       dout(20) << "Checking degraded stretch mode due to osd changes" << dendl;
       mon->maybe_go_degraded_stretch_mode();
     }
+    if (osdmap.recovering_stretch_mode && stretch_recovery_triggered.is_zero()) {
+      stretch_recovery_triggered = ceph_clock_now();
+    }
   }
 }
 
@@ -14295,6 +14298,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
 					       const set<string>& live_zones)
 {
   dout(20) << __func__ << dendl;
+  stretch_recovery_triggered.set_from_double(0); // reset this; we can't go clean now!
   // update the general OSDMap changes
   pending_inc.change_stretch_mode = true;
   pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
@@ -14325,6 +14329,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
 void OSDMonitor::trigger_recovery_stretch_mode()
 {
   dout(20) << __func__ << dendl;
+  stretch_recovery_triggered.set_from_double(0); // reset this so we don't go full-active prematurely
   pending_inc.change_stretch_mode = true;
   pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
   pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
@@ -14337,6 +14342,74 @@ void OSDMonitor::trigger_recovery_stretch_mode()
       pg_pool_t newp(pgi.second);
       // bump up the min_size since we have extra replicas available...
       newp.min_size = 2;
+      pending_inc.new_pools[pgi.first] = newp;
+    }
+  }
+  propose_pending();
+}
+
+void OSDMonitor::notify_new_pg_digest()
+{
+  dout(20) << __func__ << dendl;
+  if (!stretch_recovery_triggered.is_zero()) {
+    try_end_recovery_stretch_mode(false);
+  }
+}
+
+struct CMonExitRecovery : public Context {
+  OSDMonitor *m;
+  bool force;
+  CMonExitRecovery(OSDMonitor *mon, bool f) : m(mon), force(f) {}
+  void finish(int r) {
+    m->try_end_recovery_stretch_mode(force);
+  }
+};
+
+void OSDMonitor::try_end_recovery_stretch_mode(bool force)
+{
+  dout(20) << __func__ << dendl;
+  if (!mon->is_leader()) return;
+  if (!mon->is_degraded_stretch_mode()) return;
+  if (!mon->is_recovering_stretch_mode()) return;
+  if (!is_readable()) {
+    wait_for_readable_ctx(new CMonExitRecovery(this, force));
+    return;
+  }
+  if (!mon->mgrstatmon()->is_readable()) {
+    mon->mgrstatmon()->wait_for_readable_ctx(new CMonExitRecovery(this, force));
+    return;
+  }
+
+  if (osdmap.recovering_stretch_mode &&
+      ((!stretch_recovery_triggered.is_zero() &&
+	ceph_clock_now() - g_conf().get_val<double>("mon_stretch_recovery_min_wait") >
+	stretch_recovery_triggered) ||
+       force)) {
+    const PGMapDigest& pgd = mon->mgrstatmon()->get_digest();
+    double misplaced, degraded, inactive, unknown;
+    pgd.get_recovery_stats(&misplaced, &degraded, &inactive, &unknown);
+    if (force || (degraded == 0.0 && inactive == 0.0 && unknown == 0.0)) {
+      // we can exit degraded stretch mode!
+      mon->trigger_healthy_stretch_mode();
+    }
+  }
+}
+
+void OSDMonitor::trigger_healthy_stretch_mode()
+{
+  ceph_assert(is_writeable());
+  stretch_recovery_triggered.set_from_double(0);
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
+  pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+  pending_inc.new_degraded_stretch_mode = 0; // turn off degraded mode...
+  pending_inc.new_recovering_stretch_mode = 0; //...and recovering mode!
+  pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+  for (auto pgi : osdmap.pools) {
+    if (pgi.second.peering_crush_bucket_count) {
+      pg_pool_t newp(pgi.second);
+      newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
+      newp.peering_crush_mandatory_member = 0;
       pending_inc.new_pools[pgi.first] = newp;
     }
   }

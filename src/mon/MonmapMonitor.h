@@ -100,6 +100,11 @@ public:
    * the MonMap.
    */
   void trigger_degraded_stretch_mode(const set<string>& dead_mons);
+  /**
+   * Set us to healthy stretch mode: clear out the
+   * down list to allow any non-tiebreaker mon to be the leader again.
+   */
+  void trigger_healthy_stretch_mode();
 };
 
 

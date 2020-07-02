@@ -93,6 +93,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   }
   check_subs();
   update_logger();
+  mon->osdmon()->notify_new_pg_digest();
 }
 
 void MgrStatMonitor::update_logger()
