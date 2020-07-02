@@ -14167,7 +14167,6 @@ void OSDMonitor::convert_pool_priorities(void)
 
 void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 					       int *errcode,
-					       const vector<string>& poolnames,
 					       set<pg_pool_t*>* pools,
 					       const string& new_crush_rule)
 {
@@ -14180,16 +14179,11 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
     return;
   }
   __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
-  for (auto poolname : poolnames) {
-    int64_t poolid = osdmap.lookup_pg_pool_name(poolname.c_str());
-    if (poolid < 0) {
-      ss << "unrecognized pool '" << poolname << "'";
-      *errcode = -ENOENT;
-      return;
-    }
-    const pg_pool_t *p = osdmap.get_pg_pool(poolid);
+  for (const auto& pooli : osdmap.pools) {
+    int64_t poolid = pooli.first;
+    const pg_pool_t *p = &pooli.second;
     if (!p->is_replicated()) {
-      ss << "stretched pools must be replicated; '" << poolname << "' is erasure-coded";
+      ss << "stretched pools must be replicated; '" << osdmap.pool_name[poolid] << "' is erasure-coded";
       *errcode = -EINVAL;
       return;
     }
@@ -14198,7 +14192,7 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 	 (p->get_min_size() != g_conf().get_osd_pool_default_min_size(default_size))) &&
 	(p->get_crush_rule() != new_rule)) {
       ss << "we currently require stretch mode pools start out with the"
-	" default size/min_size, which '" << poolname << "' does not";
+	" default size/min_size, which '" << osdmap.pool_name[poolid] << "' does not";
       *errcode = -EINVAL;
       return;
     }

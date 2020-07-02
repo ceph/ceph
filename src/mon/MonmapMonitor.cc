@@ -1014,18 +1014,12 @@ n     *
 	err = -EINVAL;
 	goto reply;
       }
-      vector<string> poolnames;
-      if (!cmd_getval(cmdmap, "pools", poolnames)) {
-	ss << "must specify at least one pool to apply stretch mode to!";
-	err = -EINVAL;
-	goto reply;
-      }
       set<pg_pool_t*> pools;
       bool okay = false;
       int errcode = 0;
       //okay, initial arguments make sense, check pools and cluster state
       mon->osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
-						   poolnames, &pools, new_crush_rule);
+						   &pools, new_crush_rule);
       if (!okay) {
 	err = errcode;
 	goto reply;
