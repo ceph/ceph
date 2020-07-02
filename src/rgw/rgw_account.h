@@ -16,6 +16,7 @@
 #pragma once
 
 #include <atomic>
+#include <vector>
 
 #include "include/types.h"
 #include "rgw_metadata.h"
@@ -125,7 +126,12 @@ public:
 	       optional_yield);
   int add_role(const RGWRole& role);
 
-  int list_users();
+  int list_users(const DoutPrefixProvider* dpp,
+                 const std::string& account_id,
+                 const std::string& marker,
+                 bool *more,
+                 std::vector<rgw_user>& results,
+                 optional_yield y);
 
   int remove_user(const DoutPrefixProvider* dpp,
                   const std::string& account_id,
