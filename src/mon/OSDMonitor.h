@@ -832,6 +832,23 @@ public:
    * Set recovery stretch mode in the OSDMap, resetting pool size back to normal
    */
   void trigger_recovery_stretch_mode();
+  /**
+   * Tells the OSD there's a new pg digest, in case it's interested.
+   * (It's interested when in recovering stretch mode.)
+   */
+  void notify_new_pg_digest();
+  /**
+   * Check if we can exit recovery stretch mode and go back to normal.
+   * @param force If true, we will force the exit through once it is legal,
+   * without regard to the reported PG status.
+   */
+  void try_end_recovery_stretch_mode(bool force);
+  /**
+   * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
+   */
+  void trigger_healthy_stretch_mode();
+private:
+  utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };
 
 #endif

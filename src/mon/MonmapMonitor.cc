@@ -1111,6 +1111,13 @@ void MonmapMonitor::trigger_degraded_stretch_mode(const set<string>& dead_mons)
   propose_pending();
 }
 
+void MonmapMonitor::trigger_healthy_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  pending_map.stretch_marked_down_mons.clear();
+  propose_pending();
+}
+
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   auto join = op->get_req<MMonJoin>();
