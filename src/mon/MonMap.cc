@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "common/dout.h"
 #include "common/Clock.h"
+#include "mon/health_check.h"
 
 using std::list;
 using std::map;
@@ -694,6 +695,28 @@ int MonMap::init_with_config_file(const ConfigProxy& conf,
     _add_ambiguous_addr(mon_name, addr, priority, weight, false);
   }
   return 0;
+}
+
+void MonMap::check_health(health_check_map_t *checks) const
+{
+  if (stretch_mode_enabled) {
+    list<string> detail;
+    for (auto& p : mon_info) {
+      if (p.second.crush_loc.empty()) {
+	ostringstream ss;
+	ss << "mon " << p.first << " has no location set while in stretch mode";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " monitor(s) have no location set while in stretch mode"
+	 << "; this may cause issues with failover, OSD connections, netsplit handling, etc";
+      auto& d = checks->add("MON_LOCATION_NOT_SET", HEALTH_WARN,
+			    ss.str(), detail.size());
+      d.detail.swap(detail);
+    }
+  }
 }
 
 #ifdef WITH_SEASTAR

@@ -148,6 +148,11 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.epoch == 1) {
     mon->prepare_new_fingerprint(t);
   }
+
+  //health
+  health_check_map_t next;
+  pending_map.check_health(&next);
+  encode_health(next, t);
 }
 
 class C_ApplyFeatures : public Context {
@@ -566,6 +571,23 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
+    vector<string> locationvec;
+    map<string, string> loc;
+    cmd_getval(cmdmap, "location", locationvec);
+    CrushWrapper::parse_loc_map(locationvec, &loc);
+
+    dout(10) << "mon add setting location for " << name << " to " << loc << dendl;
+
+    // TODO: validate location in crush map
+    if (monmap.stretch_mode_enabled && !loc.size()) {
+      ss << "We are in stretch mode and new monitors must have a location, but "
+	 << "could not parse your input location to anything real; " << locationvec
+	 << " turned into an empty map!";
+      err = -EINVAL;
+      goto reply;
+    }
+    // TODO: validate location against any existing stretch config
+
     entity_addrvec_t addrs;
     if (monmap.persistent_features.contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
@@ -631,6 +653,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     } while (false);
 
+    if (pending_map.stretch_mode_enabled) {
+      
+    }
+    
     /* Given there's no delay between proposals on the MonmapMonitor (see
      * MonmapMonitor::should_propose()), there is no point in checking for
      * a mismatch between name and addr on pending_map.
@@ -640,6 +666,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      */
 
     pending_map.add(name, addrs);
+    pending_map.mon_info[name].crush_loc = loc;
     pending_map.last_changed = ceph_clock_now();
     ss << "adding mon." << name << " at " << addrs;
     propose = true;
@@ -677,7 +704,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * the proposal delay being 0.0 seconds. This is key for PaxosService to
      * trigger the proposal immediately.
      * 0.0 seconds of delay.
-n     *
+     *
      * From the above, there's no point in performing further checks on the
      * pending_map, as we don't ever have multiple proposals in-flight in
      * this service. As we've established the committed state contains the
@@ -963,18 +990,17 @@ n     *
 
     CrushWrapper crush;
     mon->osdmon()->_get_pending_crush(crush); // TODO check this is safe without is_readable checks
-    string args;
     vector<string> argvec;
     map<string, string> loc;
     cmd_getval(cmdmap, "args", argvec);
     CrushWrapper::parse_loc_map(argvec, &loc);
 
-    dout(0) << "mon set_location for " << name << " to " << loc << dendl;
+    dout(10) << "mon set_location for " << name << " to " << loc << dendl;
 
     // TODO: validate location in crush map
     if (!loc.size()) {
-      ss << "We could not parse your input location to anything real; " << args
-	 << " turned into an empty list!";
+      ss << "We could not parse your input location to anything real; " << argvec
+	 << " turned into an empty map!";
       err = -EINVAL;
       goto reply;
     }
@@ -1141,11 +1167,16 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   auto join = op->get_req<MMonJoin>();
   dout(0) << "adding/updating " << join->name
 	  << " at " << join->addrs << " to monitor cluster" << dendl;
+  map<string,string> existing_loc;
+  if (pending_map.contains(join->addrs)) {
+    string name = pending_map.get_name(join->addrs);
+    existing_loc = pending_map.mon_info[name].crush_loc;
+    pending_map.remove(name);
+  }
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
-  if (pending_map.contains(join->addrs))
-    pending_map.remove(pending_map.get_name(join->addrs));
   pending_map.add(join->name, join->addrs);
+  pending_map.mon_info[join->name].crush_loc = existing_loc;
   pending_map.last_changed = ceph_clock_now();
   return true;
 }
