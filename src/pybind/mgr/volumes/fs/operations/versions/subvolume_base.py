@@ -20,11 +20,22 @@ class SubvolumeFeatures(Enum):
     FEATURE_SNAPSHOT_CLONE       = "snapshot-clone"
     FEATURE_SNAPSHOT_AUTOPROTECT = "snapshot-autoprotect"
 
+@unique
+class SubvolumeTypes(Enum):
+    TYPE_NORMAL  = "subvolume"
+    TYPE_CLONE   = "clone"
+
+    @staticmethod
+    def from_value(value):
+        if value == "subvolume":
+            return SubvolumeTypes.TYPE_NORMAL
+        if value == "clone":
+            return SubvolumeTypes.TYPE_CLONE
+
+        raise VolumeException(-errno.EINVAL, "invalid subvolume type '{0}'".format(value))
+
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
-
-    SUBVOLUME_TYPE_NORMAL = "subvolume"
-    SUBVOLUME_TYPE_CLONE  = "clone"
 
     def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
         self.fs = fs
@@ -210,7 +221,7 @@ class SubvolumeBase(object):
         return pin(self.fs, self.base_path, pin_type, pin_setting)
 
     def init_config(self, version, subvolume_type, subvolume_path, subvolume_state):
-        self.metadata_mgr.init(version, subvolume_type, subvolume_path, subvolume_state)
+        self.metadata_mgr.init(version, subvolume_type.value, subvolume_path, subvolume_state.value)
         self.metadata_mgr.flush()
 
     def discover(self):
@@ -248,7 +259,7 @@ class SubvolumeBase(object):
 
     def info (self):
         subvolpath = self.metadata_mgr.get_global_option('path')
-        etype = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
+        etype = SubvolumeTypes.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE))
         st = self.fs.statx(subvolpath, cephfs.CEPH_STATX_BTIME | cephfs.CEPH_STATX_SIZE |
                                        cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID |
                                        cephfs.CEPH_STATX_MODE | cephfs.CEPH_STATX_ATIME |
@@ -266,7 +277,7 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-        return {'path': subvolpath, 'type': etype, 'uid': int(st["uid"]), 'gid': int(st["gid"]),
+        return {'path': subvolpath, 'type': etype.value, 'uid': int(st["uid"]), 'gid': int(st["gid"]),
             'atime': str(st["atime"]), 'mtime': str(st["mtime"]), 'ctime': str(st["ctime"]),
             'mode': int(st["mode"]), 'data_pool': data_pool, 'created_at': str(st["btime"]),
             'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
