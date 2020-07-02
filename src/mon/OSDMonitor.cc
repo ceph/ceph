@@ -13410,6 +13410,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
+  } else if (prefix == "osd force_healthy_stretch_mode") {
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
+      ss << "This command will require peering across multiple CRUSH buckets "
+	"(probably two data centers or availability zones?) and may result in PGs "
+	"going inactive until backfilling is complete. Pass --yes-i-really-mean-it to proceed.";
+      err = -EPERM;
+      goto reply;
+    }
+    try_end_recovery_stretch_mode(true);
+    ss << "Triggering healthy stretch mode";
+    err = 0;
+    goto reply;
   } else {
     err = -EINVAL;
   }
@@ -14375,16 +14389,16 @@ void OSDMonitor::try_end_recovery_stretch_mode(bool force)
     wait_for_readable_ctx(new CMonExitRecovery(this, force));
     return;
   }
-  if (!mon->mgrstatmon()->is_readable()) {
-    mon->mgrstatmon()->wait_for_readable_ctx(new CMonExitRecovery(this, force));
-    return;
-  }
 
   if (osdmap.recovering_stretch_mode &&
       ((!stretch_recovery_triggered.is_zero() &&
 	ceph_clock_now() - g_conf().get_val<double>("mon_stretch_recovery_min_wait") >
 	stretch_recovery_triggered) ||
        force)) {
+    if (!mon->mgrstatmon()->is_readable()) {
+      mon->mgrstatmon()->wait_for_readable_ctx(new CMonExitRecovery(this, force));
+      return;
+    }
     const PGMapDigest& pgd = mon->mgrstatmon()->get_digest();
     double misplaced, degraded, inactive, unknown;
     pgd.get_recovery_stats(&misplaced, &degraded, &inactive, &unknown);
