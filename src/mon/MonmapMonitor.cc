@@ -1019,11 +1019,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       return false;
     }
     {
-      struct Plugger {
-	Paxos *p;
-	Plugger(Paxos *p) : p(p) { p->plug(); }
-	~Plugger() { p->unplug(); }
-      } plugger(paxos);
       if (monmap.stretch_mode_enabled) {
 	ss << "stretch mode is already engaged";
 	err = -EINVAL;
@@ -1052,10 +1047,20 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 	err = -EINVAL;
 	goto reply;
       }
+      //okay, initial arguments make sense, check pools and cluster state
+      err = mon->osdmon()->check_cluster_features(CEPH_FEATUREMASK_STRETCH_MODE, ss);
+      if (err)
+	goto reply;
+      struct Plugger {
+	Paxos *p;
+	Plugger(Paxos *p) : p(p) { p->plug(); }
+	~Plugger() { p->unplug(); }
+      } plugger(paxos);
+
       set<pg_pool_t*> pools;
       bool okay = false;
       int errcode = 0;
-      //okay, initial arguments make sense, check pools and cluster state
+
       mon->osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
 						   &pools, new_crush_rule);
       if (!okay) {
