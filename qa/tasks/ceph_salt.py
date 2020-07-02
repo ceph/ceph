@@ -274,7 +274,8 @@ class CephSalt(Task):
         self.master_remote.sh("sudo ceph-salt config "
                               "/system_update/reboot disable")
         self.master_remote.sh("sudo ceph-salt config /ssh/ generate")
-        self.master_remote.sh("sudo ceph-salt config /containers/registries "
+        self.master_remote.sh("sudo ceph-salt config /containers/"
+                              "registries_conf/registries "
                               "add  prefix={name}"
                               " location={loc} insecure={insec}"
                               .format(name=ceph_salt_ctx['registry_name'],
