@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from typing import Any, cast, Dict, Iterable, List, Optional, Union
 
 import time
 import cherrypy
 
-from . import ApiController, RESTController, Endpoint, ReadPermission, Task, UiApiController
+from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, Task, \
+    UiApiController
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -27,7 +29,7 @@ class Pool(RESTController):
 
         crush_rules = {r['rule_id']: r["rule_name"] for r in mgr.get('osd_map_crush')['rules']}
 
-        res = {}
+        res: Dict[Union[int, str], Union[str, List[Any]]] = {}
         for attr in attrs:
             if attr not in pool:
                 continue
@@ -60,16 +62,14 @@ class Pool(RESTController):
         return self._pool_list(attrs, stats)
 
     @classmethod
-    def _get(cls, pool_name, attrs=None, stats=False):
-        # type: (str, str, bool) -> dict
+    def _get(cls, pool_name: str, attrs: Optional[str] = None, stats: bool = False) -> dict:
         pools = cls._pool_list(attrs, stats)
         pool = [p for p in pools if p['pool_name'] == pool_name]
         if not pool:
             raise cherrypy.NotFound('No such pool')
         return pool[0]
 
-    def get(self, pool_name, attrs=None, stats=False):
-        # type: (str, str, bool) -> dict
+    def get(self, pool_name: str, attrs: Optional[str] = None, stats: bool = False) -> dict:
         pool = self._get(pool_name, attrs, stats)
         pool['configuration'] = RbdConfiguration(pool_name).list()
         return pool
@@ -114,7 +114,7 @@ class Pool(RESTController):
                                          yes_i_really_mean_it=True)
             if update_existing:
                 original_app_metadata = set(
-                    current_pool.get('application_metadata'))
+                    cast(Iterable[Any], current_pool.get('application_metadata')))
             else:
                 original_app_metadata = set()
 
@@ -207,6 +207,7 @@ class Pool(RESTController):
 
 
 @UiApiController('/pool', Scope.POOL)
+@ControllerDoc("Dashboard UI helper function; not part of the public API", "PoolUi")
 class PoolUi(Pool):
     @Endpoint()
     @ReadPermission
@@ -230,8 +231,8 @@ class PoolUi(Pool):
                     if o['name'] == conf_name][0]
 
         profiles = CephService.get_erasure_code_profiles()
-        used_rules = {}
-        used_profiles = {}
+        used_rules: Dict[str, List[str]] = {}
+        used_profiles: Dict[str, List[str]] = {}
         pool_names = []
         for p in self._pool_list():
             name = p['pool_name']
