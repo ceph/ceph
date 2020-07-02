@@ -101,7 +101,7 @@ public:
    * @note each @c Task has its own crimson::thread::Condition, which possesses
    * an fd, so we should keep the size of queue under a reasonable limit.
    */
-  ThreadPool(size_t n_threads, size_t queue_sz, unsigned cpu);
+  ThreadPool(size_t n_threads, size_t queue_sz, long cpu);
   ~ThreadPool();
   seastar::future<> start();
   seastar::future<> stop();
