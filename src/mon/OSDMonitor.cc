@@ -7561,16 +7561,33 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  ostream *ss)
 {
   int err = 0;
+  bool set_min_size = false;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
+    if (osdmap.stretch_mode_enabled) {
+      if (repl_size == 0)
+	repl_size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
+      if (repl_size != g_conf().get_val<uint64_t>("mon_stretch_pool_size")) {
+	*ss << "prepare_pool_size: we are in stretch mode but size "
+	   << repl_size << " does not match!";
+	return -EINVAL;
+      }
+      *min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      set_min_size = true;
+    }
     if (repl_size == 0) {
       repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
     }
     *size = repl_size;
-    *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
+    if (!set_min_size)
+      *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
+      if (osdmap.stretch_mode_enabled) {
+	*ss << "prepare_pool_size: we are in stretch mode; cannot create EC pools!";
+	return -EINVAL;
+      }
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
@@ -7907,6 +7924,21 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
+  if (osdmap.stretch_mode_enabled) {
+    pi->peering_crush_bucket_count = osdmap.stretch_bucket_count;
+    pi->peering_crush_bucket_target = osdmap.stretch_bucket_count;
+    pi->peering_crush_bucket_barrier = osdmap.stretch_mode_bucket;
+    pi->peering_crush_mandatory_member = 0;
+    if (osdmap.degraded_stretch_mode) {
+      pi->peering_crush_bucket_count = osdmap.degraded_stretch_mode;
+      pi->peering_crush_bucket_target = osdmap.degraded_stretch_mode;
+      // pi->peering_crush_bucket_mandatory_member = 0;
+      // TODO: drat, we don't record this ^ anywhere, though given that it
+      // necessarily won't exist elsewhere it likely doesn't matter
+      pi->min_size = pi->min_size / 2;
+      pi->size = pi->size / 2; // only support 2 zones now
+    }
+  }
 
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
         g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
@@ -14276,8 +14308,8 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       pool->peering_crush_bucket_target = bucket_count;
       pool->peering_crush_bucket_barrier = dividing_id;
       pool->peering_crush_mandatory_member = 0;
-      pool->size = 4; // TODO: make configurable
-      pool->min_size = 2; // TODO: make configurable
+      pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
+      pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
     }
     pending_inc.change_stretch_mode = true;
     pending_inc.stretch_mode_enabled = true;
@@ -14342,7 +14374,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       pg_pool_t newp(pgi.second);
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
-      newp.min_size = 1;
+      newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
@@ -14364,7 +14396,6 @@ void OSDMonitor::trigger_recovery_stretch_mode()
     if (pgi.second.peering_crush_bucket_count) {
       pg_pool_t newp(pgi.second);
       // bump up the min_size since we have extra replicas available...
-      newp.min_size = 2;
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
@@ -14433,6 +14464,7 @@ void OSDMonitor::trigger_healthy_stretch_mode()
       pg_pool_t newp(pgi.second);
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
       newp.peering_crush_mandatory_member = 0;
+      newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
