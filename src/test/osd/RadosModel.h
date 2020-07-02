@@ -2296,7 +2296,7 @@ class SetChunkOp : public TestOp {
 public:
   string oid, oid_tgt, tgt_pool_name;
   ObjectDesc src_value, tgt_value;
-  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation op;
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   std::shared_ptr<int> in_use;
@@ -2350,7 +2350,7 @@ public:
     comp = context->rados.aio_create_completion((void*) cb_arg,
 						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
-				librados::OPERATION_ORDER_READS_WRITES);
+				librados::OPERATION_ORDER_READS_WRITES, NULL);
   }
 
   void _finish(CallbackInfo *info) override

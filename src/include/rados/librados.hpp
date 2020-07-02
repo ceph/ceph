@@ -516,11 +516,8 @@ inline namespace v14_2_0 {
      */
     void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
 		      uint64_t tgt_version, int flag = 0);
-    void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
-                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
-
 
     friend class IoCtx;
   };
@@ -735,6 +732,22 @@ inline namespace v14_2_0 {
      */
     void cache_evict();
 
+    /**
+     * Extensible tier
+     *
+     * set_chunk: make a chunk pointing a part of the source object at the target 
+     * 		  object
+     *
+     * @param src_offset [in] source offset to indicate the start position of 
+     * 				a chunk in the source object
+     * @param src_length [in] source length to set the length of the chunk
+     * @param tgt_oid    [in] target object's id to set a chunk
+     * @param tgt_offset [in] the start position of the target object
+     * @param flag       [in] flag for the source object
+     *
+     */
+    void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
+                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     /**
      * flush a manifest tier object to backing tier; will block racing
      * updates.
@@ -1340,6 +1353,7 @@ inline namespace v14_2_0 {
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
     friend class libradosstriper::RadosStriper; // Striper needs to see our IoCtxImpl
     friend class ObjectWriteOperation;  // copy_from needs to see our IoCtxImpl
+    friend class ObjectReadOperation;  // set_chunk needs to see our IoCtxImpl
 
     IoCtxImpl *io_ctx_impl;
   };
