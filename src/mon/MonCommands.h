@@ -1105,6 +1105,12 @@ COMMAND("osd pool application get "
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r")
+COMMAND("osd force_healthy_stretch_mode " \
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"force a healthy stretch mode, requiring the full number of CRUSH buckets "
+	"to peer and letting all non-tiebreaker monitors be elected leader ",
+	"osd", "rw")
+
 
 // tiering
 COMMAND("osd tier add "
