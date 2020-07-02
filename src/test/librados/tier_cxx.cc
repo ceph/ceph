@@ -90,6 +90,51 @@ static string _get_required_osd_release(Rados& cluster)
   return "";
 }
 
+#include "common/ceph_crypto.h"
+using ceph::crypto::SHA1;
+#include "rgw/rgw_common.h"
+
+void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t count, 
+			   std::string fp_algo = NULL)
+{
+  bufferlist t;
+  int size = foid.length();
+  if (fp_algo == "sha1") {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    sha1_gen.Update((const unsigned char *)foid.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+  } else if (!fp_algo.empty()) {
+    ceph_assert(0 == "unrecognized fingerprint algorithm");
+  }
+
+  chunk_refs_t refs;
+  try {
+    auto iter = t.cbegin();
+    decode(refs, iter);
+  } catch (buffer::error& err) {
+    ASSERT_TRUE(0);
+  }
+  ASSERT_EQ(count, refs.count());
+}
+
+void do_manifest_flush(librados::Rados& cluster, librados::IoCtx& ioctx,
+		       std::string oid, int expect_ret)
+{
+  ObjectReadOperation op;
+  op.tier_flush();
+  librados::AioCompletion *completion = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate(
+    oid, completion, &op,
+    librados::OPERATION_IGNORE_CACHE, NULL));
+  completion->wait_for_complete();
+  ASSERT_EQ(expect_ret, completion->get_return_value());
+  completion->release();
+}
+
 class LibRadosTwoPoolsPP : public RadosTestPP
 {
 public:
@@ -3383,9 +3428,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   cluster.wait_for_latest_osdmap();
 }
 
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-#include "rgw/rgw_common.h"
+
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
@@ -3489,25 +3532,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   // chunk's refcount 
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("There hi");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"There hi", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(2u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "There hi", 2u, "sha1");
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -3575,17 +3600,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
     ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo-chunk", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo-chunk", 0);
+
   // read and verify the chunked object
   {
     bufferlist bl;
@@ -3670,38 +3686,10 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("er");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"er", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "er", 1u, "sha1");
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
@@ -3717,17 +3705,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // and another
   my_snaps.resize(2);
@@ -3744,38 +3722,10 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("er");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"er", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(2u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "er", 2u, "sha1");
 
   // and another
   my_snaps.resize(3);
@@ -3793,17 +3743,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   /*
    *  snap[2]: [er] [hi]
@@ -3813,46 +3753,10 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
    */
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("hi");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"hi", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "hi", 1u, "sha1");
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("er");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"er", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(2u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "er", 2u, "sha1");
 
   // remove snap
   ioctx.selfmanaged_snap_remove(my_snaps[2]);
@@ -3866,25 +3770,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
   sleep(10);
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("hi");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"hi", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "hi", 1u, "sha1");
 
   // remove snap
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
@@ -3897,25 +3783,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
   sleep(10);
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("bb");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"bb", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "bb", 1u, "sha1");
 
   // remove snap
   ioctx.selfmanaged_snap_remove(my_snaps[1]);
@@ -3927,46 +3795,10 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
   sleep(10);
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("bb");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"bb", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "bb", 1u, "sha1");
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("hi");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"hi", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "hi", 1u, "sha1");
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
@@ -4048,17 +3880,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
@@ -4074,17 +3896,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // and another
   my_snaps.resize(2);
@@ -4101,17 +3913,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   /*
    *  snap[1]: [ab] [cd] [ef]
@@ -4120,67 +3922,13 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
    */
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("ab");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"ab", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(2u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "ab", 2u, "sha1");
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("cd");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"cd", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(2u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "cd", 2u, "sha1");
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("BB");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"BB", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(2u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "BB", 2u, "sha1");
 
   // remove snap
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
@@ -4304,136 +4052,31 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
   // flush on head (should fail)
   ioctx.snap_set_read(librados::SNAP_HEAD);
   // flush
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(-EBUSY, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", -EBUSY);
 
   // flush on recent snap (should fail)
   ioctx.snap_set_read(my_snaps[0]);
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(-EBUSY, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", -EBUSY);
 
   // flush on oldest snap
   ioctx.snap_set_read(my_snaps[1]);
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // flush on oldest snap
   ioctx.snap_set_read(my_snaps[0]);
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   ioctx.snap_set_read(librados::SNAP_HEAD);
-  {
-    ObjectReadOperation op;
-    op.tier_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-
+  do_manifest_flush(cluster, ioctx, "foo", 0);
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("er");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"er", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "er", 1u, "sha1");
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("bb");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"bb", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "bb", 1u, "sha1");
 
   // check chunk's refcount
-  {
-    bufferlist t;
-    SHA1 sha1_gen;
-    int size = strlen("cc");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"cc", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_refs_t refs;
-    try {
-      auto iter = t.cbegin();
-      decode(refs, iter);
-    } catch (buffer::error& err) {
-      ASSERT_TRUE(0);
-    }
-    ASSERT_EQ(1u, refs.count());
-  }
+  check_fp_oid_refcount(cache_ioctx, "cc", 1u, "sha1");
 
   ioctx.snap_set_read(librados::SNAP_HEAD);
   {
