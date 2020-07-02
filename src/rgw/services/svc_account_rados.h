@@ -78,7 +78,7 @@ public:
                optional_yield y) override;
 
   int remove_user(const DoutPrefixProvider *dpp,
-                  const std::string& account_id,
+                  const RGWAccountInfo& info,
                   const rgw_user& rgw_user,
                   optional_yield y) override;
 

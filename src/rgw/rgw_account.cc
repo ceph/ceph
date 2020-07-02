@@ -131,7 +131,7 @@ int RGWAccountCtl::remove_user(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  return svc.account->remove_user(dpp, info.get_id(), user_id, y);
+  return svc.account->remove_user(dpp, info, user_id, y);
 }
 
 
