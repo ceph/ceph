@@ -34,6 +34,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
+  clients: any[] = [];
+
   permission: Permission;
   nfsForm: CdFormGroup;
   isEdit = false;
@@ -266,7 +268,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     this.nfsForm.patchValue(res);
     this.setPathValidation();
-    this.nfsClients.resolveModel(res.clients);
+    this.clients = res.clients;
   }
 
   resolveDaemons(daemons: Record<string, any>) {
