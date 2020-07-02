@@ -988,8 +988,11 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
+    if (!mon->osdmon()->is_readable()) {
+      mon->osdmon()->wait_for_readable(op, new Monitor::C_RetryMessage(mon, op));
+    }
     CrushWrapper crush;
-    mon->osdmon()->_get_pending_crush(crush); // TODO check this is safe without is_readable checks
+    mon->osdmon()->_get_pending_crush(crush);
     vector<string> argvec;
     map<string, string> loc;
     cmd_getval(cmdmap, "args", argvec);
@@ -1020,8 +1023,17 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 	Paxos *p;
 	Plugger(Paxos *p) : p(p) { p->plug(); }
 	~Plugger() { p->unplug(); }
-      } plugger(paxos); // TODO: I think I need to do this with the concurrent OSDMap/MonMap changes?
-      // TODO: check that we aren't already in stretch mode
+      } plugger(paxos);
+      if (monmap.stretch_mode_enabled) {
+	ss << "stretch mode is already engaged";
+	err = -EINVAL;
+	goto reply;
+      }
+      if (pending_map.stretch_mode_enabled) {
+	ss << "stretch mode currently committing";
+	err = 0;
+	goto reply;
+      }
       string tiebreaker_mon;
       if (!cmd_getval(cmdmap, "tiebreaker_mon", tiebreaker_mon)) {
 	ss << "must specify a tiebreaker monitor";
@@ -1105,19 +1117,58 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     ceph_assert(!commit);
     return;
   }
+  map<string,string> buckets;
   for (const auto&mii : mon->monmap->mon_info) {
-    const auto&mi = mii.second;
-    if (mi.crush_loc.find(dividing_bucket) == mi.crush_loc.end()) {
+    const auto& mi = mii.second;
+    const auto& bi = mi.crush_loc.find(dividing_bucket);
+    if (bi == mi.crush_loc.end()) {
       ss << "Could not find location entry for " << dividing_bucket
 	 << " on monitor " << mi.name;
       *errcode = -EINVAL;
       ceph_assert(!commit);
       return;
     }
+    buckets[mii.first] = bi->second;
   }
-  // TODO: make sure all monitors have locations that match the given split point
-  // TODO: and that there are only 2 such locations (besides tiebreaker)
-  // TODO: and that tiebreaker has a different one
+  string bucket1, bucket2, tiebreaker_bucket;
+  for (auto& i : buckets) {
+    if (i.first == tiebreaker_mon) {
+      tiebreaker_bucket = i.second;
+      continue;
+    }
+    if (bucket1.empty()) {
+      bucket1 = i.second;
+    }
+    if (bucket1 != i.second &&
+	bucket2.empty()) {
+      bucket2 = i.second;
+    }
+    if (bucket1 != i.second &&
+	bucket2 != i.second) {
+      ss << "There are too many monitor buckets for stretch mode, found "
+	 << bucket1 << "," << bucket2 << "," << i.second;
+      *errcode = -EINVAL;
+      ceph_assert(!commit);
+      return;
+    }
+  }
+  if (bucket1.empty() || bucket2.empty()) {
+    ss << "There are not enough monitor buckets for stretch mode;"
+       << " must have at least 2 plus the tiebreaker but only found "
+       << (bucket1.empty() ? bucket1 : bucket2);
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
+  if (tiebreaker_bucket == bucket1 ||
+      tiebreaker_bucket == bucket2) {
+    ss << "The named tiebreaker monitor " << tiebreaker_mon
+       << " is in the same CRUSH bucket " << tiebreaker_bucket
+       << " as other monitors";
+    *errcode = -EINVAL;
+    ceph_assert(!commit);
+    return;
+  }
   pending_map.disallowed_leaders.insert(tiebreaker_mon);
   pending_map.tiebreaker_mon = tiebreaker_mon;
   pending_map.stretch_mode_enabled = true;
