@@ -242,3 +242,30 @@ int RGWSI_Account_RADOS::remove_user(const RGWAccountInfo& info,
   return sysobj.omap().set_header(header_bl, y);
 
 }
+
+
+int RGWSI_Account_RADOS::list_users(const RGWAccountInfo& info,
+                                    const std::string& marker,
+                                    bool *more,
+                                    vector<rgw_user>& users,
+                                    optional_yield y)
+{
+  auto obj = get_account_user_obj(info.get_id());
+  auto obj_ctx = svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+
+  static constexpr uint64_t MAX_ACCOUNT_USER_LIST_RESULTS = 1000;
+
+  std::map<std::string, bufferlist> m;
+  int ret = sysobj.omap().get_vals(marker, MAX_ACCOUNT_USER_LIST_RESULTS,
+                         &m, more, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (auto& kv: m) {
+    users.emplace_back(rgw_user(kv.first));
+  }
+
+  return ret;
+}

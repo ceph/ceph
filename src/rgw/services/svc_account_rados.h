@@ -77,6 +77,12 @@ public:
                   const rgw_user& rgw_user,
                   optional_yield y) override;
 
+  int list_users(const RGWAccountInfo& info,
+                 const std::string& marker,
+                 bool *more,
+                 vector<rgw_user>& results,
+                 optional_yield y) override;
+
   rgw_raw_obj get_account_user_obj(const std::string& account_id) const;
 private:
   RGWSI_MetaBackend_Handler *be_handler;

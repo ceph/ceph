@@ -59,4 +59,11 @@ public:
 				 bool exclusive,
 				 map<std::string, bufferlist> * const pattrs,
 				 optional_yield y) = 0;
+
+  virtual int list_users(const RGWAccountInfo& info,
+                         const std::string& marker,
+                         bool* more,
+                         vector<rgw_user>& results,
+                         optional_yield y) = 0;
+
 };
