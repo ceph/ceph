@@ -17,7 +17,6 @@ export class OsdDetailsComponent implements OnChanges {
 
   osd: {
     id?: number;
-    loaded?: boolean;
     details?: any;
     histogram_failed?: string;
     tree?: any;
@@ -29,11 +28,11 @@ export class OsdDetailsComponent implements OnChanges {
   }
 
   ngOnChanges() {
-    this.osd = {
-      loaded: false
-    };
-    if (this.selection) {
+    if (this.osd?.id !== this.selection?.id) {
       this.osd = this.selection;
+    }
+
+    if (_.isNumber(this.osd?.id)) {
       this.refresh();
     }
   }
@@ -46,7 +45,6 @@ export class OsdDetailsComponent implements OnChanges {
         this.osd.histogram_failed = data.histogram;
         this.osd.details.histogram = undefined;
       }
-      this.osd.loaded = true;
     });
   }
 }
