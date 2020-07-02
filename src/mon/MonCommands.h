@@ -432,8 +432,9 @@ COMMAND("mon getmap "
 	"get monmap", "mon", "r")
 COMMAND("mon add "
 	"name=name,type=CephString "
-	"name=addr,type=CephIPAddr",
-	"add new monitor named <name> at <addr>", "mon", "rw")
+	"name=addr,type=CephIPAddr "
+	"name=location,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=],req=false",
+	"add new monitor named <name> at <addr>, possibly with CRUSH location <location>", "mon", "rw")
 COMMAND("mon rm "
 	"name=name,type=CephString",
 	"remove monitor named <name>", "mon", "rw")

@@ -28,6 +28,7 @@
 #include "mon/mon_types.h"
 #include "msg/Message.h"
 
+class health_check_map_t;
 
 #ifdef WITH_SEASTAR
 namespace ceph::common {
@@ -480,6 +481,8 @@ public:
   void print_summary(std::ostream& out) const;
   void dump(ceph::Formatter *f) const;
   void dump_summary(ceph::Formatter *f) const;
+
+  void check_health(health_check_map_t *checks) const;
 
   static void generate_test_instances(std::list<MonMap*>& o);
 protected:
