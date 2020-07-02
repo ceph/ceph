@@ -7018,7 +7018,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    goto fail;
 	  }
 	}
-
         if (!oi.manifest.is_chunked()) {
           oi.manifest.clear();
         }
