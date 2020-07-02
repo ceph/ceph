@@ -11,6 +11,7 @@ import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CdTableColumnFilter } from '../../models/cd-table-column-filter';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
+import { CdTableSelection } from '../../models/cd-table-selection';
 import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from './table.component';
 
@@ -102,6 +103,16 @@ describe('TableComponent', () => {
       expect(eventName).toBe('mouseenter');
       expect(wasCalled).toBe(true);
       done();
+    });
+    component.ngOnInit();
+  });
+
+  it('should call updateSelection on init', () => {
+    component.updateSelection.subscribe((selection: CdTableSelection) => {
+      expect(selection.hasSelection).toBeFalsy();
+      expect(selection.hasSingleSelection).toBeFalsy();
+      expect(selection.hasMultiSelection).toBeFalsy();
+      expect(selection.selected.length).toBe(0);
     });
     component.ngOnInit();
   });
