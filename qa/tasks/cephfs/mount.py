@@ -8,7 +8,7 @@ from six import StringIO
 from textwrap import dedent
 import os
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
 from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
@@ -196,6 +196,9 @@ class CephFSMount(object):
         p = self._run_python(pyscript, py_version)
         p.wait()
         return six.ensure_str(p.stdout.getvalue().strip())
+
+    def run_shell_payload(self, payload, **kwargs):
+        return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
                   omit_sudo=True):
