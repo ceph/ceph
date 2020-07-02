@@ -184,6 +184,10 @@ public:
     m_is_rev1 = is_rev1;
   }
 
+  bool get_is_rev1() {
+    return m_is_rev1;
+  }
+
   size_t get_num_segments() const {
     ceph_assert(!m_descs.empty());
     return m_descs.size();
