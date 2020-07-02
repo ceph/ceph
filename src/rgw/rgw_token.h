@@ -84,10 +84,17 @@ namespace rgw {
 	     const std::string& _key)
       : type(_type), id(_id), key(_key) {};
 
-    RGWToken(const string& json) {
+    explicit RGWToken(const string& json) {
       JSONParser p;
       p.parse(json.c_str(), json.length());
       JSONDecoder::decode_json(RGWToken::type_name, *this, &p);
+    }
+
+    RGWToken& operator=(const std::string& json) {
+      JSONParser p;
+      p.parse(json.c_str(), json.length());
+      JSONDecoder::decode_json(RGWToken::type_name, *this, &p);
+      return *this;
     }
 
     void encode(bufferlist& bl) const {
