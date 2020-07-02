@@ -13424,7 +13424,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "Triggering healthy stretch mode";
     err = 0;
     goto reply;
-  } else {
+  } else if (prefix == "osd force_recovery_stretch_mode") {
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
+      ss << "This command will increase pool sizes to try and spread them "
+	"across multiple CRUSH buckets (probably two data centers or "
+	"availability zones?) and should have happened automatically"
+	"Pass --yes-i-really-mean-it to proceed.";
+      err = -EPERM;
+      goto reply;
+    }
+    mon->go_recovery_stretch_mode();
+    ss << "Triggering recovery stretch mode";
+    err = 0;
+    goto reply;
+} else {
     err = -EINVAL;
   }
 

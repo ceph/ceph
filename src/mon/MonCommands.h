@@ -1110,6 +1110,12 @@ COMMAND("osd force_healthy_stretch_mode " \
 	"force a healthy stretch mode, requiring the full number of CRUSH buckets "
 	"to peer and letting all non-tiebreaker monitors be elected leader ",
 	"osd", "rw")
+COMMAND("osd force_recovery_stretch_mode " \
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"try and force a recovery stretch mode, increasing the "
+	"pool size to its non-failure value if currently degraded and "
+	"all monitor buckets are up",
+	"osd", "rw")
 
 
 // tiering
