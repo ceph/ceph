@@ -790,7 +790,6 @@ public:
    */
   void try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 				     int *errcode,
-				     const vector<string>& poolnames,
 				     set<pg_pool_t*>* pools, const string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
