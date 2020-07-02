@@ -1,8 +1,8 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
-import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
+import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
@@ -10,11 +10,14 @@ import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
+import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
+import { SummaryService } from '../../../../shared/services/summary.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+import { PrometheusListHelper } from '../prometheus-list-helper';
 
-const BASE_URL = 'silence'; // as only silence actions can be used
+const BASE_URL = 'silences'; // as only silence actions can be used
 
 @Component({
   selector: 'cd-active-alert-list',
@@ -22,7 +25,7 @@ const BASE_URL = 'silence'; // as only silence actions can be used
   templateUrl: './active-alert-list.component.html',
   styleUrls: ['./active-alert-list.component.scss']
 })
-export class ActiveAlertListComponent extends ListWithDetails implements OnInit {
+export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit {
   @ViewChild('externalLinkTpl', { static: true })
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
@@ -42,9 +45,12 @@ export class ActiveAlertListComponent extends ListWithDetails implements OnInit 
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
     private i18n: I18n,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    @Inject(PrometheusService) prometheusService: PrometheusService,
+    @Inject(SummaryService) summaryService: SummaryService,
+    @Inject(CephReleaseNamePipe) cephReleaseNamePipe: CephReleaseNamePipe
   ) {
-    super();
+    super(prometheusService, summaryService, cephReleaseNamePipe);
     this.permission = this.authStorageService.getPermissions().prometheus;
     this.tableActions = [
       {
@@ -61,6 +67,7 @@ export class ActiveAlertListComponent extends ListWithDetails implements OnInit 
   }
 
   ngOnInit() {
+    super.ngOnInit();
     this.columns = [
       {
         name: this.i18n('Name'),

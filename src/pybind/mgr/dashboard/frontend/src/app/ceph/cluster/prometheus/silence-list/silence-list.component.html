@@ -1,4 +1,15 @@
-<cd-table [data]="silences"
+<cd-prometheus-tabs></cd-prometheus-tabs>
+
+<cd-alert-panel *ngIf="!isAlertmanagerConfigured"
+                type="info"
+                i18n>To enable Silences, please provide the URL to the
+  API of the Prometheus' Alertmanager as described in
+  the <a href="{{docsUrl}}"
+         target="_blank">documentation</a>.
+</cd-alert-panel>
+
+<cd-table *ngIf="isAlertmanagerConfigured"
+          [data]="silences"
           [columns]="columns"
           [forceIdentifier]="true"
           [customCss]="customCss"
