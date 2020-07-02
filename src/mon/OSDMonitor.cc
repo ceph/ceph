@@ -3506,6 +3506,14 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
+  if (osdmap.stretch_mode_enabled &&
+      !(m->osd_features & CEPH_FEATUREMASK_STRETCH_MODE)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because stretch mode is on and OSD lacks support";
+    goto ignore;
+  }
+
   // already booted?
   if (osdmap.is_up(from) &&
       osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs()) &&

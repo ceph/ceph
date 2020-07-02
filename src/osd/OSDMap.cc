@@ -1654,6 +1654,11 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       features |= kraken_features;
     }
     mask |= kraken_features;
+
+    if (stretch_mode_enabled) {
+      features |= CEPH_FEATUREMASK_STRETCH_MODE;
+      mask |= CEPH_FEATUREMASK_STRETCH_MODE;
+    }
   }
 
   if (require_min_compat_client >= ceph_release_t::nautilus) {

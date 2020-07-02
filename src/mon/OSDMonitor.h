@@ -356,7 +356,6 @@ private:
   void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first) override;
 
   void update_msgr_features();
-  int check_cluster_features(uint64_t features, std::stringstream &ss);
   /**
    * check if the cluster supports the features required by the
    * given crush map. Outputs the daemons which don't support it
@@ -412,6 +411,12 @@ private:
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
 public:
+  /**
+   * Make sure the existing (up) OSDs support the given features
+   * @return 0 on success, or an error code if any OSDs re missing features.
+   * @param ss Filled in with ane explanation of failure, if any
+   */
+  int check_cluster_features(uint64_t features, std::stringstream &ss);
   // @param req an optional op request, if the osdmaps are replies to it. so
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
