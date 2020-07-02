@@ -205,11 +205,11 @@ int RGWSI_Account_RADOS::add_user(const RGWAccountInfo& info,
   return sysobj.omap().set_header(header_bl, y);
 }
 
-int RGWSI_Account_RADOS::remove_user(const std::string& account_id,
+int RGWSI_Account_RADOS::remove_user(const RGWAccountInfo& info,
                                      const rgw_user& user,
                                      optional_yield y)
 {
-  auto obj = get_account_user_obj(account_id);
+  auto obj = get_account_user_obj(info.get_id());
   auto obj_ctx = svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 

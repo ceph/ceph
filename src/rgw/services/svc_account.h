@@ -48,7 +48,7 @@ public:
 		       const rgw_user& rgw_user,
 		       optional_yield y) = 0;
 
-  virtual int remove_user(const std::string& account_id,
+  virtual int remove_user(const RGWAccountInfo& info,
                           const rgw_user& rgw_user,
                           optional_yield y) = 0;
 

@@ -102,7 +102,7 @@ int RGWAccountCtl::remove_user(const std::string& account_id,
     return ret;
   }
 
-  return svc.account->remove_user(info.get_id(), user_id, y);
+  return svc.account->remove_user(info, user_id, y);
 }
 
 
