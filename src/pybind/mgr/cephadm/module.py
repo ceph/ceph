@@ -706,6 +706,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return -errno.EINVAL, "", "empty ssh config provided"
         self.set_store("ssh_config", inbuf)
         self.log.info('Set ssh_config')
+        self._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_write_command(
@@ -718,6 +719,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
+        self._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_read_command(
