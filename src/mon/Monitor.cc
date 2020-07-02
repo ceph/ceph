@@ -6497,7 +6497,6 @@ void Monitor::maybe_engage_stretch_mode()
     stretch_bucket_divider = osdmon()->osdmap.
       crush->get_type_name(stretch_divider_id);
     disconnect_disallowed_stretch_sessions();
-    // TODO: more stuff, like booting off mis=connected OSDs
   }
 }
 
