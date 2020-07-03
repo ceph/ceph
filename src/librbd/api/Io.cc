@@ -134,6 +134,32 @@ ssize_t Io<I>::write_same(
 }
 
 template <typename I>
+ssize_t Io<I>::write_zeroes(I& image_ctx, uint64_t off, uint64_t len,
+                            int zero_flags, int op_flags) {
+  auto cct = image_ctx.cct;
+  ldout(cct, 20) << "ictx=" << &image_ctx << ", off=" << off << ", "
+                 << "len = " << len << dendl;
+
+  image_ctx.image_lock.lock_shared();
+  int r = clip_io(util::get_image_ctx(&image_ctx), off, &len);
+  image_ctx.image_lock.unlock_shared();
+  if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  C_SaferCond ctx;
+  auto aio_comp = io::AioCompletion::create(&ctx);
+  aio_write_zeroes(image_ctx, aio_comp, off, len, zero_flags, op_flags, false);
+
+  r = ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return len;
+}
+
+template <typename I>
 ssize_t Io<I>::compare_and_write(
     I &image_ctx, uint64_t off, uint64_t len, bufferlist &&cmp_bl,
     bufferlist &&bl, uint64_t *mismatch_off, int op_flags) {
@@ -300,6 +326,46 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
   auto req = io::ImageDispatchSpec<I>::create_write_same(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
     std::move(bl), op_flags, trace, 0);
+  req->send();
+}
+
+template <typename I>
+void Io<I>::aio_write_zeroes(I& image_ctx, io::AioCompletion *aio_comp,
+                             uint64_t off, uint64_t len, int zero_flags,
+                             int op_flags, bool native_async) {
+  auto cct = image_ctx.cct;
+  FUNCTRACE(cct);
+  ZTracer::Trace trace;
+  if (image_ctx.blkin_trace_all) {
+    trace.init("io: write_zeroes", &image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_DISCARD);
+  ldout(cct, 20) << "ictx=" << &image_ctx << ", "
+                 << "completion=" << aio_comp << ", off=" << off << ", "
+                 << "len=" << len << dendl;
+
+  if (native_async && image_ctx.event_socket.is_valid()) {
+    aio_comp->set_event_notify(true);
+  }
+
+  // validate the supported flags
+  if (zero_flags != 0U) {
+    aio_comp->fail(-EINVAL);
+    return;
+  }
+
+  if (!is_valid_io(image_ctx, aio_comp)) {
+    return;
+  }
+
+  // enable partial discard (zeroing) of objects
+  uint32_t discard_granularity_bytes = 0;
+
+  auto req = io::ImageDispatchSpec<I>::create_discard(
+    image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
+    discard_granularity_bytes, trace, 0);
   req->send();
 }
 

@@ -47,6 +47,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_IOVEC 1
 #define LIBRBD_SUPPORTS_WATCH 0
 #define LIBRBD_SUPPORTS_WRITESAME 1
+#define LIBRBD_SUPPORTS_WRITE_ZEROES 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API          __attribute__ ((visibility ("default")))
@@ -1100,10 +1101,15 @@ CEPH_RBD_API ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
                                 const char *buf, int op_flags);
 CEPH_RBD_API int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
 CEPH_RBD_API ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
-                                   const char *buf, size_t data_len, int op_flags);
+                                   const char *buf, size_t data_len,
+                                   int op_flags);
+CEPH_RBD_API ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs,
+                                      uint64_t len, int zero_flags,
+                                      int op_flags);
 CEPH_RBD_API ssize_t rbd_compare_and_write(rbd_image_t image, uint64_t ofs,
                                            size_t len, const char *cmp_buf,
-                                           const char *buf, uint64_t *mismatch_off,
+                                           const char *buf,
+                                           uint64_t *mismatch_off,
                                            int op_flags);
 
 CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
@@ -1131,10 +1137,15 @@ CEPH_RBD_API int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
 CEPH_RBD_API int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
                                    const char *buf, size_t data_len,
                                    rbd_completion_t c, int op_flags);
+CEPH_RBD_API int rbd_aio_write_zeroes(rbd_image_t image, uint64_t off,
+                                      size_t len, rbd_completion_t c,
+                                      int zero_flags, int op_flags);
 CEPH_RBD_API ssize_t rbd_aio_compare_and_write(rbd_image_t image,
                                                uint64_t off, size_t len,
-                                               const char *cmp_buf, const char *buf,
-                                               rbd_completion_t c, uint64_t *mismatch_off,
+                                               const char *cmp_buf,
+                                               const char *buf,
+                                               rbd_completion_t c,
+                                               uint64_t *mismatch_off,
                                                int op_flags);
 
 CEPH_RBD_API int rbd_aio_create_completion(void *cb_arg,

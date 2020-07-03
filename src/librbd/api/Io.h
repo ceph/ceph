@@ -24,6 +24,8 @@ struct Io {
                          uint32_t discard_granularity_bytes);
   static ssize_t write_same(ImageCtxT &image_ctx, uint64_t off, uint64_t len,
                             bufferlist &&bl, int op_flags);
+  static ssize_t write_zeroes(ImageCtxT &image_ctx, uint64_t off, uint64_t len,
+                              int zero_flags, int op_flags);
   static ssize_t compare_and_write(ImageCtxT &image_ctx, uint64_t off,
                                    uint64_t len, bufferlist &&cmp_bl,
                                    bufferlist &&bl, uint64_t *mismatch_off,
@@ -43,6 +45,9 @@ struct Io {
   static void aio_write_same(ImageCtxT &image_ctx, io::AioCompletion *c,
                              uint64_t off, uint64_t len, bufferlist &&bl,
                              int op_flags, bool native_async);
+  static void aio_write_zeroes(ImageCtxT &image_ctx, io::AioCompletion *c,
+                               uint64_t off, uint64_t len, int zero_flags,
+                               int op_flags, bool native_async);
   static void aio_compare_and_write(ImageCtxT &image_ctx, io::AioCompletion *c,
                                     uint64_t off, uint64_t len,
                                     bufferlist &&cmp_bl, bufferlist &&bl,
