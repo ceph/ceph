@@ -102,7 +102,11 @@ class OSD final : public crimson::net::Dispatcher,
   void ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
 
   // mgr::WithStats methods
-  MessageRef get_stats() final;
+  // pg statistics including osd ones
+  osd_stat_t osd_stat;
+  uint32_t osd_stat_seq = 0;
+  void update_stats() final;
+  MessageRef get_stats() const final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
