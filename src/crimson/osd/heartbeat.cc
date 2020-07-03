@@ -196,8 +196,7 @@ Heartbeat::osds_t Heartbeat::get_peers() const
 
 void Heartbeat::remove_peer(osd_id_t peer)
 {
-  auto found = peers.find(peer);
-  assert(found != peers.end());
+  assert(peers.count(peer) == 1);
   peers.erase(peer);
 }
 
