@@ -8,7 +8,7 @@
     "comment-format": [true, "check-space"],
     "curly": true,
     "deprecation": {
-      "severity": "warning"
+      "severity": "error"
     },
     "eofline": true,
     "forin": true,
@@ -44,7 +44,6 @@
     "no-trailing-whitespace": true,
     "no-unnecessary-initializer": true,
     "no-unused-expression": true,
-    "no-use-before-declare": true,
     "no-var-keyword": true,
     "object-literal-sort-keys": false,
     "one-line": [true, "check-open-brace", "check-catch", "check-else", "check-whitespace"],
