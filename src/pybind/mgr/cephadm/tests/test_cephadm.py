@@ -281,7 +281,7 @@ class TestCephadm(object):
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'prepare', '--bluestore', '--data', '/dev/sdb', '--no-systemd'],
-                env_vars=[], error_ok=True, stdin='{"config": "", "keyring": ""}')
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with('test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
 
 
