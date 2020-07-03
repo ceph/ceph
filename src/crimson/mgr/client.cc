@@ -76,9 +76,9 @@ void Client::ms_handle_connect(crimson::net::ConnectionRef c)
   });
 }
 
-void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool is_replace)
+void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace */)
 {
-  gate.dispatch_in_background(__func__, *this, [this, c, is_replace] {
+  gate.dispatch_in_background(__func__, *this, [this, c] {
     if (conn == c) {
       report_timer.cancel();
       return reconnect();
