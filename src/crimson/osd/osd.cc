@@ -684,7 +684,14 @@ void OSD::handle_authentication(const EntityName& name,
   // todo
 }
 
-MessageRef OSD::get_stats()
+void OSD::update_stats()
+{
+  osd_stat_seq++;
+  osd_stat.up_from = get_up_epoch();
+  osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
+}
+
+MessageRef OSD::get_stats() const
 {
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
