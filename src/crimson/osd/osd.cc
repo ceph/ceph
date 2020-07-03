@@ -451,7 +451,8 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<ConfigShowHook>()),
       asok->register_command(make_asok_hook<ConfigGetHook>()),
-      asok->register_command(make_asok_hook<ConfigSetHook>()));
+      asok->register_command(make_asok_hook<ConfigSetHook>()),
+      asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)));
   });
 }
 
@@ -706,6 +707,13 @@ MessageRef OSD::get_stats() const
     }
   }
   return m;
+}
+
+uint64_t OSD::send_pg_stats()
+{
+  // mgr client sends the report message in background
+  mgrc->report();
+  return osd_stat_seq;
 }
 
 OSD::cached_map_t OSD::get_map() const

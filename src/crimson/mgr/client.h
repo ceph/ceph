@@ -35,6 +35,8 @@ public:
 	 WithStats& with_stats);
   seastar::future<> start();
   seastar::future<> stop();
+  void report();
+
 private:
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				Ref<Message> m) override;
@@ -45,7 +47,6 @@ private:
   seastar::future<> handle_mgr_conf(crimson::net::Connection* conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
-  void report();
 
   void print(std::ostream&) const;
   friend std::ostream& operator<<(std::ostream& out, const Client& client);
