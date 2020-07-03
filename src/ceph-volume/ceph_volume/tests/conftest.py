@@ -166,22 +166,6 @@ def stub_vgs(monkeypatch, volume_groups):
     return apply
 
 
-# TODO: allow init-ing pvolumes to list we want
-@pytest.fixture
-def pvolumes(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    pvolumes = lvm_api.PVolumes()
-    pvolumes._purge()
-    return pvolumes
-
-@pytest.fixture
-def pvolumes_empty(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
-    pvolumes = lvm_api.PVolumes(populate=False)
-    return pvolumes
-
-
-
 @pytest.fixture
 def is_root(monkeypatch):
     """

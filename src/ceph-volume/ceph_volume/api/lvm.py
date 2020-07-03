@@ -11,7 +11,7 @@ from math import floor
 from ceph_volume import process, util
 from ceph_volume.exceptions import (
     MultipleLVsError, MultipleVGsError,
-    MultiplePVsError, SizeAllocationError
+    SizeAllocationError
 )
 
 logger = logging.getLogger(__name__)
@@ -347,7 +347,8 @@ class PVolume(object):
             self.set_tag(k, v)
         # after setting all the tags, refresh them for the current object, use the
         # pv_* identifiers to filter because those shouldn't change
-        pv_object = get_pv(pv_name=self.pv_name, pv_uuid=self.pv_uuid)
+        pv_object = self.get_first_pv(filter={'pv_name': self.pv_name,
+                                              'pv_uuid': self.pv_uuid})
         self.tags = pv_object.tags
 
     def set_tag(self, key, value):
@@ -373,100 +374,6 @@ class PVolume(object):
                 '--addtag', '%s=%s' % (key, value), self.pv_name
             ]
         )
-
-
-class PVolumes(list):
-    """
-    A list of all known (physical) volumes for the current system, with the ability
-    to filter them via keyword arguments.
-    """
-
-    def __init__(self, populate=True):
-        if populate:
-            self._populate()
-
-    def _populate(self):
-        # get all the pvs in the current system
-        for pv_item in get_api_pvs():
-            self.append(PVolume(**pv_item))
-
-    def _purge(self):
-        """
-        Deplete all the items in the list, used internally only so that we can
-        dynamically allocate the items when filtering without the concern of
-        messing up the contents
-        """
-        self[:] = []
-
-    def _filter(self, pv_name=None, pv_uuid=None, pv_tags=None):
-        """
-        The actual method that filters using a new list. Useful so that other
-        methods that do not want to alter the contents of the list (e.g.
-        ``self.find``) can operate safely.
-        """
-        filtered = [i for i in self]
-        if pv_name:
-            filtered = [i for i in filtered if i.pv_name == pv_name]
-
-        if pv_uuid:
-            filtered = [i for i in filtered if i.pv_uuid == pv_uuid]
-
-        # at this point, `filtered` has either all the physical volumes in self
-        # or is an actual filtered list if any filters were applied
-        if pv_tags:
-            tag_filtered = []
-            for pvolume in filtered:
-                matches = all(pvolume.tags.get(k) == str(v) for k, v in pv_tags.items())
-                if matches:
-                    tag_filtered.append(pvolume)
-            # return the tag_filtered pvolumes here, the `filtered` list is no
-            # longer usable
-            return tag_filtered
-
-        return filtered
-
-    def filter(self, pv_name=None, pv_uuid=None, pv_tags=None):
-        """
-        Filter out volumes on top level attributes like ``pv_name`` or by
-        ``pv_tags`` where a dict is required. For example, to find a physical
-        volume that has an OSD ID of 0, the filter would look like::
-
-            pv_tags={'ceph.osd_id': '0'}
-
-        """
-        if not any([pv_name, pv_uuid, pv_tags]):
-            raise TypeError('.filter() requires pv_name, pv_uuid, or pv_tags'
-                            '(none given)')
-
-        filtered_pvs = PVolumes(populate=False)
-        filtered_pvs.extend(self._filter(pv_name, pv_uuid, pv_tags))
-        return filtered_pvs
-
-    def get(self, pv_name=None, pv_uuid=None, pv_tags=None):
-        """
-        This is a bit expensive, since it will try to filter out all the
-        matching items in the list, filter them out applying anything that was
-        added and return the matching item.
-
-        This method does *not* alter the list, and it will raise an error if
-        multiple pvs are matched
-
-        It is useful to use ``tags`` when trying to find a specific logical volume,
-        but it can also lead to multiple pvs being found, since a lot of metadata
-        is shared between pvs of a distinct OSD.
-        """
-        if not any([pv_name, pv_uuid, pv_tags]):
-            return None
-        pvs = self._filter(
-            pv_name=pv_name,
-            pv_uuid=pv_uuid,
-            pv_tags=pv_tags
-        )
-        if not pvs:
-            return None
-        if len(pvs) > 1 and pv_tags:
-            raise MultiplePVsError(pv_name)
-        return pvs[0]
 
 
 def create_pv(device):
@@ -508,20 +415,6 @@ def remove_pv(pv_name):
         ],
         fail_msg=fail_msg,
     )
-
-
-def get_pv(pv_name=None, pv_uuid=None, pv_tags=None, pvs=None):
-    """
-    Return a matching pv (physical volume) for the current system, requiring
-    ``pv_name``, ``pv_uuid``, or ``pv_tags``. Raises an error if more than one
-    pv is found.
-    """
-    if not any([pv_name, pv_uuid, pv_tags]):
-        return None
-    if pvs is None or len(pvs) == 0:
-        pvs = PVolumes()
-
-    return pvs.get(pv_name=pv_name, pv_uuid=pv_uuid, pv_tags=pv_tags)
 
 
 ################################
