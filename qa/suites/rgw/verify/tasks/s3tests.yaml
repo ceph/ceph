@@ -1,5 +1,5 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: validate_test_setup
       rgw_server: client.0
