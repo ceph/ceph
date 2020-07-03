@@ -61,16 +61,6 @@ class MultipleLVsError(Exception):
         return msg
 
 
-class MultipleVGsError(Exception):
-
-    def __init__(self, vg_name):
-        self.vg_name = vg_name
-
-    def __str__(self):
-        msg = "Got more than 1 result looking for volume group: %s" % self.vg_name
-        return msg
-
-
 class SizeAllocationError(Exception):
 
     def __init__(self, requested, available):

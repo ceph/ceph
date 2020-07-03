@@ -118,7 +118,7 @@ class TestSingleType(object):
 
 class TestMixedType(object):
 
-    def test_minimum_size_is_not_met(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_minimum_size_is_not_met(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '120')
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
@@ -131,7 +131,7 @@ class TestMixedType(object):
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
         assert msg in str(error.value)
 
-    def test_ssd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_ssd_device_is_not_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '7120')
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
@@ -144,7 +144,7 @@ class TestMixedType(object):
         msg = "Not enough space in fast devices (5.66 GB) to create 1 x 6.95 GB journal LV"
         assert msg in str(error.value)
 
-    def test_hdd_device_is_lvm_member_fails(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_hdd_device_is_lvm_member_fails(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
@@ -205,7 +205,7 @@ class TestMixedType(object):
             filestore.MixedType.with_auto_devices(args, devices)
             assert 'Could not find a common VG between devices' in str(error.value)
 
-    def test_ssd_device_fails_multiple_osds(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_ssd_device_fails_multiple_osds(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '15120')
         args = factory(filtered_devices=[], osds_per_device=2,
                        journal_size=None, osd_ids=[])
