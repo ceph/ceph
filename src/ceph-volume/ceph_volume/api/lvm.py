@@ -10,8 +10,7 @@ from itertools import repeat
 from math import floor
 from ceph_volume import process, util
 from ceph_volume.exceptions import (
-    MultipleLVsError, MultipleVGsError,
-    SizeAllocationError
+    MultipleLVsError, SizeAllocationError
 )
 
 logger = logging.getLogger(__name__)
@@ -548,98 +547,6 @@ class VolumeGroup(object):
         return int(int(self.vg_extent_count) / slots)
 
 
-class VolumeGroups(list):
-    """
-    A list of all known volume groups for the current system, with the ability
-    to filter them via keyword arguments.
-    """
-
-    def __init__(self, populate=True):
-        if populate:
-            self._populate()
-
-    def _populate(self):
-        # get all the vgs in the current system
-        for vg_item in get_api_vgs():
-            self.append(VolumeGroup(**vg_item))
-
-    def _purge(self):
-        """
-        Deplete all the items in the list, used internally only so that we can
-        dynamically allocate the items when filtering without the concern of
-        messing up the contents
-        """
-        self[:] = []
-
-    def _filter(self, vg_name=None, vg_tags=None):
-        """
-        The actual method that filters using a new list. Useful so that other
-        methods that do not want to alter the contents of the list (e.g.
-        ``self.find``) can operate safely.
-
-        .. note:: ``vg_tags`` is not yet implemented
-        """
-        filtered = [i for i in self]
-        if vg_name:
-            filtered = [i for i in filtered if i.vg_name == vg_name]
-
-        # at this point, `filtered` has either all the volumes in self or is an
-        # actual filtered list if any filters were applied
-        if vg_tags:
-            tag_filtered = []
-            for volume in filtered:
-                matches = all(volume.tags.get(k) == str(v) for k, v in vg_tags.items())
-                if matches:
-                    tag_filtered.append(volume)
-            return tag_filtered
-
-        return filtered
-
-    def filter(self, vg_name=None, vg_tags=None):
-        """
-        Filter out groups on top level attributes like ``vg_name`` or by
-        ``vg_tags`` where a dict is required. For example, to find a Ceph group
-        with dmcache as the type, the filter would look like::
-
-            vg_tags={'ceph.type': 'dmcache'}
-
-        .. warning:: These tags are not documented because they are currently
-                     unused, but are here to maintain API consistency
-        """
-        if not any([vg_name, vg_tags]):
-            raise TypeError('.filter() requires vg_name or vg_tags (none given)')
-
-        filtered_vgs = VolumeGroups(populate=False)
-        filtered_vgs.extend(self._filter(vg_name, vg_tags))
-        return filtered_vgs
-
-    def get(self, vg_name=None, vg_tags=None):
-        """
-        This is a bit expensive, since it will try to filter out all the
-        matching items in the list, filter them out applying anything that was
-        added and return the matching item.
-
-        This method does *not* alter the list, and it will raise an error if
-        multiple VGs are matched
-
-        It is useful to use ``tags`` when trying to find a specific volume group,
-        but it can also lead to multiple vgs being found (although unlikely)
-        """
-        if not any([vg_name, vg_tags]):
-            return None
-        vgs = self._filter(
-            vg_name=vg_name,
-            vg_tags=vg_tags
-        )
-        if not vgs:
-            return None
-        if len(vgs) > 1:
-            # this is probably never going to happen, but it is here to keep
-            # the API code consistent
-            raise MultipleVGsError(vg_name)
-        return vgs[0]
-
-
 def create_vg(devices, name=None, name_prefix=None):
     """
     Create a Volume Group. Command looks like::
@@ -669,8 +576,7 @@ def create_vg(devices, name=None, name_prefix=None):
         name] + devices
     )
 
-    vg = get_vg(vg_name=name)
-    return vg
+    return get_first_vg(filters={'vg_name': name})
 
 
 def extend_vg(vg, devices):
@@ -694,8 +600,7 @@ def extend_vg(vg, devices):
         vg.name] + devices
     )
 
-    vg = get_vg(vg_name=vg.name)
-    return vg
+    return get_first_vg(filters={'vg_name': vg.name})
 
 
 def reduce_vg(vg, devices):
@@ -717,8 +622,7 @@ def reduce_vg(vg, devices):
         vg.name] + devices
     )
 
-    vg = get_vg(vg_name=vg.name)
-    return vg
+    return get_first_vg(filter={'vg_name': vg.name})
 
 
 def remove_vg(vg_name):
@@ -738,22 +642,6 @@ def remove_vg(vg_name):
         ],
         fail_msg=fail_msg,
     )
-
-
-def get_vg(vg_name=None, vg_tags=None, vgs=None):
-    """
-    Return a matching vg for the current system, requires ``vg_name`` or
-    ``tags``. Raises an error if more than one vg is found.
-
-    It is useful to use ``tags`` when trying to find a specific volume group,
-    but it can also lead to multiple vgs being found.
-    """
-    if not any([vg_name, vg_tags]):
-        return None
-    if vgs is None or len(vgs) == 0:
-        vgs = VolumeGroups()
-
-    return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
 
 
 def get_device_vgs(device, name_prefix=''):
