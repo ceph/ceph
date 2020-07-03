@@ -420,7 +420,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  DECODE_START(8, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -432,40 +432,17 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
   if (inode.is_dir()) {
     decode(dirfragtree, bl);
     decode(snapbl, bl);
-    if ((struct_v == 2) || (struct_v == 3)) {
-      bool dir_layout_exists;
-      decode(dir_layout_exists, bl);
-      if (dir_layout_exists) {
-	__u8 dir_struct_v;
-	decode(dir_struct_v, bl); // default_file_layout version
-	decode(inode.layout, bl); // and actual layout, that we care about
-      }
-    }
   }
-  if (struct_v >= 6) {
-    decode(state, bl);
-  } else {
-    bool dirty;
-    decode(dirty, bl);
-    state = dirty ? EMetaBlob::fullbit::STATE_DIRTY : 0;
-  }
-
-  if (struct_v >= 3) {
-    bool old_inodes_present;
-    decode(old_inodes_present, bl);
-    if (old_inodes_present) {
-      decode(old_inodes, bl);
-    }
+  decode(state, bl);
+  bool old_inodes_present;
+  decode(old_inodes_present, bl);
+  if (old_inodes_present) {
+    decode(old_inodes, bl);
   }
   if (!inode.is_dir()) {
-    if (struct_v >= 7)
-      decode(snapbl, bl);
+    decode(snapbl, bl);
   }
-  if (struct_v >= 8)
-    decode(oldest_snap, bl);
-  else
-    oldest_snap = CEPH_NOSNAP;
-
+  decode(oldest_snap, bl);
   DECODE_FINISH(bl);
 }
 
