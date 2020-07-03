@@ -184,6 +184,16 @@ void Heartbeat::update_peers(int whoami)
   }
 }
 
+Heartbeat::osds_t Heartbeat::get_peers() const
+{
+  osds_t osds;
+  osds.reserve(peers.size());
+  for (auto& peer : peers) {
+    osds.push_back(peer.first);
+  }
+  return osds;
+}
+
 void Heartbeat::remove_peer(osd_id_t peer)
 {
   auto found = peers.find(peer);
