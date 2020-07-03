@@ -179,6 +179,32 @@ public:
 template std::unique_ptr<AdminSocketHook> make_asok_hook<ConfigSetHook>();
 
 /**
+ * send the latest pg stats to mgr
+ */
+class FlushPgStatsHook : public AdminSocketHook {
+public:
+  explicit FlushPgStatsHook(crimson::osd::OSD& osd) :
+    AdminSocketHook("flush_pg_stats",
+		    "flush_pg_stats",
+		    "flush pg stats"),
+    osd{osd}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    uint64_t seq = osd.send_pg_stats();
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->dump_unsigned("stat_seq", seq);
+    return seastar::make_ready_future<tell_result_t>(tell_result_t(f.get()));
+  }
+
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<FlushPgStatsHook>(crimson::osd::OSD& osd);
+
+/**
  * A CephContext admin hook: calling assert (if allowed by
  * 'debug_asok_assert_abort')
  */

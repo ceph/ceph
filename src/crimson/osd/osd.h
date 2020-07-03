@@ -139,6 +139,10 @@ public:
 
   seastar::future<> send_incremental_map(crimson::net::Connection* conn,
 					 epoch_t first);
+
+  /// @return the seq id of the pg stats being sent
+  uint64_t send_pg_stats();
+
 private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
