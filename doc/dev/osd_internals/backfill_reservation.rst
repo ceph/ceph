@@ -41,7 +41,7 @@ to 253. Under ordinary circumstances a recovery is prioritized at 180 plus a
 value relative to the pool's recovery_priority.  The total priority is limited
 to 219.
 
-If a backfill is needed because the number of acting OSDs is less that min_size,
+If a backfill is needed because the number of acting OSDs is less than min_size,
 a priority of 220 is used.  The number of OSDs below min_size of the pool is
 added as well as a value relative to the pool's recovery_priority.  The total
 priority is limited to 253.  If a backfill is needed because a PG is undersized,
