@@ -2587,7 +2587,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 	}
       }();
       bufferlist in;
-      if (fp_oid != tgt_soid.oid && (!obc->ssc && !obc->ssc->snapset.clones.size())) {
+      if (fp_oid != tgt_soid.oid && !obc->ssc->snapset.clones.size()) {
 	// TODO: don't retain reference to dirty extents
 	// decrement old chunk's reference count
 	ObjectOperation dec_op;
