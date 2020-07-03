@@ -188,10 +188,22 @@ def need_to_install(ctx, role, version):
                                                                  want=version))
 
     if '.' in str(version):
-        # version is utsrelease, yay
         if cur_version == version:
             log.debug('utsrelease strings match, do not need to install')
             ret = False
+        os_type = teuthology.get_distro(ctx)
+        log.debug("Distro of this test job: {}".format(os_type))
+        if os_type in ['sle', 'opensuse']:
+            cur_version_match = re.search('(.*)-default$', cur_version)
+            if cur_version_match:
+                cur_version_rp = cur_version_match.group(1)
+                if cur_version_rp in version:
+                    log.debug('"{}" is a substring of "{}" - the latest {} kernel is running'
+                              .format(cur_version_rp, version, os_type))
+                    ret = False
+            else:
+                log.debug('failed to parse current kernel version {} (os_type is "{}")'
+                          .format(cur_version, os_type))
     else:
         # version is sha1, need to try to extract sha1 from cur_version
         match = re.search('[-_]g([0-9a-f]{6,40})', cur_version)
