@@ -36,7 +36,7 @@ describe('RgwBucketListComponent', () => {
   });
 
   beforeEach(() => {
-    rgwBucketService = TestBed.get(RgwBucketService);
+    rgwBucketService = TestBed.inject(RgwBucketService);
     rgwBucketServiceListSpy = spyOn(rgwBucketService, 'list');
     rgwBucketServiceListSpy.and.returnValue(of(null));
     fixture = TestBed.createComponent(RgwBucketListComponent);
