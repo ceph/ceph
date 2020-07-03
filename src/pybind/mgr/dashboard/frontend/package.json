@@ -45,7 +45,7 @@
       "<rootDir>/src/setupJest.ts"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!@ngrx|ngx-bootstrap|@progress|simplebar)"
+      "node_modules/(?!@ngrx|@progress|simplebar)"
     ],
     "transform": {
       "^.+\\.(ts|html)$": "ts-jest",
@@ -94,7 +94,6 @@
     "ng-bootstrap-form-validation": "5.0.0",
     "ng-click-outside": "6.0.0",
     "ng2-charts": "2.3.0",
-    "ngx-bootstrap": "5.6.1",
     "ngx-toastr": "12.1.0",
     "rxjs": "6.5.5",
     "simplebar-angular": "2.2.0",
