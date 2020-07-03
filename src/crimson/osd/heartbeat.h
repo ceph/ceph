@@ -36,9 +36,11 @@ public:
 			  entity_addrvec_t back);
   seastar::future<> stop();
 
+  using osds_t = std::vector<osd_id_t>;
   void add_peer(osd_id_t peer, epoch_t epoch);
   void update_peers(int whoami);
   void remove_peer(osd_id_t peer);
+  osds_t get_peers() const;
 
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
@@ -62,7 +64,6 @@ private:
 				 Ref<MOSDPing> m);
   seastar::future<> handle_you_died();
 
-  using osds_t = std::vector<osd_id_t>;
   /// remove down OSDs
   /// @return peers not needed in this epoch
   osds_t remove_down_peers();

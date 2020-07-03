@@ -689,6 +689,7 @@ void OSD::update_stats()
 {
   osd_stat_seq++;
   osd_stat.up_from = get_up_epoch();
+  osd_stat.hb_peers = heartbeat->get_peers();
   osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
 }
 
