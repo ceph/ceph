@@ -1155,6 +1155,16 @@ def task(ctx, config):
         ctx.ceph[cluster_name].image = config.get('image')
     ref = None
     if not ctx.ceph[cluster_name].image:
+        git_url = teuth_config.get_ceph_git_url()
+        if git_url.endswith('/ceph.git') or git_url.endswith('/ceph'):
+            # the user specified something like
+            # "--ceph-repo https://github.com/ceph/ceph" - i.e. to test
+            # a "named branch"
+            if container_image_name.endswith("/ceph-ci/ceph"):
+                # container images for named branches go to "ceph/ceph", not
+                # "ceph-ci/ceph" - see https://tracker.ceph.com/issues/46353
+                container_image_name = \
+                    container_image_name.split("/ceph-ci/ceph")[0] + "/ceph/ceph"
         sha1 = config.get('sha1')
         if sha1:
             ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
