@@ -6,7 +6,6 @@ import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import { ButtonsModule } from 'ngx-bootstrap/buttons';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -54,7 +53,6 @@ describe('UserFormComponent', () => {
         ComponentsModule,
         ToastrModule.forRoot(),
         SharedModule,
-        ButtonsModule.forRoot(),
         NgbPopoverModule
       ],
       declarations: [UserFormComponent, FakeComponent],
