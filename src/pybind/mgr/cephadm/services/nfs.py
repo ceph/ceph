@@ -1,7 +1,7 @@
 import logging
 
 import rados
-from typing import Dict, Optional, Tuple, Any, List, cast
+from typing import Dict, Optional, Tuple, Any, List, Set, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
 
@@ -76,14 +76,17 @@ class NFSService(CephadmService):
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         
         def get_set_cmd_dicts(out: str) -> List[dict]:
-            locations: List[str] = []
+            locations: Set[str] = set()
             for dd in daemon_descrs:
                 spec = cast(NFSServiceSpec,
                             self.mgr.spec_store.specs.get(dd.service_name(), None))
                 if not spec or not spec.service_id:
                     logger.warning('No ServiceSpec or service_id found for %s', dd)
                     continue
-                locations.append('{}:{}/{}'.format(spec.service_id, spec.pool, spec.namespace))
+                location = '{}:{}'.format(spec.service_id, spec.pool)
+                if spec.namespace:
+                    location = '{}/{}'.format(location, spec.namespace)
+                locations.add(location)
             new_value = ','.join(locations)
             if new_value and new_value != out:
                 return [{'prefix': 'dashboard set-ganesha-clusters-rados-pool-namespace',
