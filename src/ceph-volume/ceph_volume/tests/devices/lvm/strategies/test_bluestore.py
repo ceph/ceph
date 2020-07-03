@@ -62,7 +62,6 @@ class TestMixedType(object):
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
         monkeypatch.setattr(lvm, 'VolumeGroup', lambda x, **kw: [])
-        monkeypatch.setattr(lvm, 'get_vgs', lambda: [])
         bluestore.MixedType(args, [], [db_dev], [])
 
 
@@ -70,7 +69,7 @@ class TestMixedTypeConfiguredSize(object):
     # uses a block.db size that has been configured via ceph.conf, instead of
     # defaulting to 'as large as possible'
 
-    def test_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_hdd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         # 3GB block.db in ceph.conf
         conf_ceph(get_safe=lambda *a: 3147483640)
         args = factory(filtered_devices=[], osds_per_device=1,
@@ -88,7 +87,7 @@ class TestMixedTypeConfiguredSize(object):
         assert osd['block.db']['path'] == 'vg: vg/lv'
         assert osd['block.db']['percentage'] == 100
 
-    def test_ssd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_ssd_device_is_not_large_enough(self, fakedevice, factory, conf_ceph):
         # 7GB block.db in ceph.conf
         conf_ceph(get_safe=lambda *a: 7747483640)
         args = factory(filtered_devices=[], osds_per_device=1,
@@ -103,7 +102,7 @@ class TestMixedTypeConfiguredSize(object):
         expected = 'Not enough space in fast devices (5.66 GB) to create 1 x 7.22 GB block.db LV'
         assert expected in str(error.value)
 
-    def test_multi_hdd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_multi_hdd_device_is_not_large_enough(self, fakedevice, factory, conf_ceph):
         # 3GB block.db in ceph.conf
         conf_ceph(get_safe=lambda *a: 3147483640)
         args = factory(filtered_devices=[], osds_per_device=2,
@@ -121,7 +120,7 @@ class TestMixedTypeConfiguredSize(object):
 
 class TestMixedTypeLargeAsPossible(object):
 
-    def test_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_hdd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, block_wal_size=None,
@@ -139,7 +138,7 @@ class TestMixedTypeLargeAsPossible(object):
         # as large as possible
         assert osd['block.db']['percentage'] == 100
 
-    def test_multi_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_multi_hdd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
@@ -157,7 +156,7 @@ class TestMixedTypeLargeAsPossible(object):
         # as large as possible
         assert osd['block.db']['percentage'] == 50
 
-    def test_multi_hdd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_multi_hdd_device_is_not_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
@@ -174,7 +173,7 @@ class TestMixedTypeLargeAsPossible(object):
 
 class TestMixedTypeWithExplicitDevices(object):
 
-    def test_multi_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_multi_hdd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
@@ -191,7 +190,7 @@ class TestMixedTypeWithExplicitDevices(object):
         # as large as possible
         assert osd['block.wal']['percentage'] == 50
 
-    def test_wal_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+    def test_wal_device_is_not_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,

@@ -89,27 +89,6 @@ def volumes(monkeypatch):
     return volumes
 
 
-@pytest.fixture
-def volume_groups(monkeypatch):
-    monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
-    vgs = api.VolumeGroups()
-    vgs._purge()
-    return vgs
-
-
-class TestGetVG(object):
-
-    def test_nothing_is_passed_in(self):
-        # so we return a None
-        assert api.get_vg() is None
-
-    def test_single_vg_is_matched(self, volume_groups, monkeypatch):
-        FooVG = api.VolumeGroup(vg_name='foo')
-        volume_groups.append(FooVG)
-        monkeypatch.setattr(api, 'VolumeGroups', lambda: volume_groups)
-        assert api.get_vg(vg_name='foo') == FooVG
-
-
 class TestVolume(object):
 
     def test_is_ceph_device(self):
@@ -234,60 +213,6 @@ class TestVolumeGroup(object):
     def test_volume_group_no_empty_name(self):
         with pytest.raises(ValueError):
             api.VolumeGroup(vg_name='')
-
-
-class TestVolumeGroups(object):
-
-    def test_volume_get_has_no_volume_groups(self, volume_groups):
-        assert volume_groups.get() is None
-
-    def test_volume_get_filtered_has_no_volumes(self, volume_groups):
-        assert volume_groups.get(vg_name='ceph') is None
-
-    def test_volume_has_multiple_matches(self, volume_groups):
-        volume1 = volume2 = api.VolumeGroup(vg_name='foo', lv_path='/dev/vg/lv', lv_tags='')
-        volume_groups.append(volume1)
-        volume_groups.append(volume2)
-        with pytest.raises(exceptions.MultipleVGsError):
-            volume_groups.get(vg_name='foo')
-
-    def test_find_the_correct_one(self, volume_groups):
-        volume1 = api.VolumeGroup(vg_name='volume1', lv_tags='')
-        volume2 = api.VolumeGroup(vg_name='volume2', lv_tags='')
-        volume_groups.append(volume1)
-        volume_groups.append(volume2)
-        assert volume_groups.get(vg_name='volume1') == volume1
-
-    def test_filter_by_tag(self, volume_groups):
-        vg_tags = "ceph.group=dmcache"
-        osd = api.VolumeGroup(vg_name='volume1', vg_tags=vg_tags)
-        journal = api.VolumeGroup(vg_name='volume2', vg_tags='ceph.group=plain')
-        volume_groups.append(osd)
-        volume_groups.append(journal)
-        volume_groups = volume_groups.filter(vg_tags={'ceph.group': 'dmcache'})
-        assert len(volume_groups) == 1
-        assert volume_groups[0].vg_name == 'volume1'
-
-    def test_filter_by_tag_does_not_match_one(self, volume_groups):
-        vg_tags = "ceph.group=dmcache,ceph.disk_type=ssd"
-        osd = api.VolumeGroup(vg_name='volume1', vg_path='/dev/vg/lv', vg_tags=vg_tags)
-        volume_groups.append(osd)
-        volume_groups = volume_groups.filter(vg_tags={'ceph.group': 'data', 'ceph.disk_type': 'ssd'})
-        assert volume_groups == []
-
-    def test_filter_by_vg_name(self, volume_groups):
-        vg_tags = "ceph.type=data,ceph.fsid=000-aaa"
-        osd = api.VolumeGroup(vg_name='ceph_vg', vg_tags=vg_tags)
-        journal = api.VolumeGroup(vg_name='volume2', vg_tags='ceph.type=journal')
-        volume_groups.append(osd)
-        volume_groups.append(journal)
-        volume_groups = volume_groups.filter(vg_name='ceph_vg')
-        assert len(volume_groups) == 1
-        assert volume_groups[0].vg_name == 'ceph_vg'
-
-    def test_filter_requires_params(self, volume_groups):
-        with pytest.raises(TypeError):
-            volume_groups = volume_groups.filter()
 
 
 class TestVolumeGroupFree(object):
@@ -609,19 +534,19 @@ class TestExtendVG(object):
         self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
 
     def test_uses_single_device_in_list(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.extend_vg(self.foo_volume, ['/dev/sda'])
         expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda']
         assert fake_run.calls[0]['args'][0] == expected
 
     def test_uses_single_device(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.extend_vg(self.foo_volume, '/dev/sda')
         expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda']
         assert fake_run.calls[0]['args'][0] == expected
 
     def test_uses_multiple_devices(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.extend_vg(self.foo_volume, ['/dev/sda', '/dev/sdb'])
         expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda', '/dev/sdb']
         assert fake_run.calls[0]['args'][0] == expected
@@ -633,19 +558,19 @@ class TestReduceVG(object):
         self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
 
     def test_uses_single_device_in_list(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.reduce_vg(self.foo_volume, ['/dev/sda'])
         expected = ['vgreduce', '--force', '--yes', 'foo', '/dev/sda']
         assert fake_run.calls[0]['args'][0] == expected
 
     def test_uses_single_device(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.reduce_vg(self.foo_volume, '/dev/sda')
         expected = ['vgreduce', '--force', '--yes', 'foo', '/dev/sda']
         assert fake_run.calls[0]['args'][0] == expected
 
     def test_uses_multiple_devices(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.reduce_vg(self.foo_volume, ['/dev/sda', '/dev/sdb'])
         expected = ['vgreduce', '--force', '--yes', 'foo', '/dev/sda', '/dev/sdb']
         assert fake_run.calls[0]['args'][0] == expected
@@ -657,28 +582,28 @@ class TestCreateVG(object):
         self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
 
     def test_no_name(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.create_vg('/dev/sda')
         result = fake_run.calls[0]['args'][0]
         assert '/dev/sda' in result
         assert result[-2].startswith('ceph-')
 
     def test_devices_list(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.create_vg(['/dev/sda', '/dev/sdb'], name='ceph')
         result = fake_run.calls[0]['args'][0]
         expected = ['vgcreate', '--force', '--yes', 'ceph', '/dev/sda', '/dev/sdb']
         assert result == expected
 
     def test_name_prefix(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.create_vg('/dev/sda', name_prefix='master')
         result = fake_run.calls[0]['args'][0]
         assert '/dev/sda' in result
         assert result[-2].startswith('master-')
 
     def test_specific_name(self, monkeypatch, fake_run):
-        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        monkeypatch.setattr(api, 'get_first_vg', lambda **kw: True)
         api.create_vg('/dev/sda', name='master')
         result = fake_run.calls[0]['args'][0]
         assert '/dev/sda' in result
