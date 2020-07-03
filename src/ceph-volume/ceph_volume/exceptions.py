@@ -50,16 +50,6 @@ class SuperUserError(Exception):
         return 'This command needs to be executed with sudo or as root'
 
 
-class MultiplePVsError(Exception):
-
-    def __init__(self, pv_name):
-        self.pv_name = pv_name
-
-    def __str__(self):
-        msg = "Got more than 1 result looking for physical volume: %s" % self.pv_name
-        return msg
-
-
 class MultipleLVsError(Exception):
 
     def __init__(self, lv_name, lv_path):

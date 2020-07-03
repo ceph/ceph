@@ -99,23 +99,21 @@ class TestFullReport(object):
         result = lvm.listing.List([]).full_report()
         assert result == {}
 
-    def test_ceph_data_lv_reported(self, pvolumes, volumes, monkeypatch):
+    def test_ceph_data_lv_reported(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         pv = api.PVolume(pv_name='/dev/sda1', pv_tags={}, pv_uuid="0000",
                          vg_name='VolGroup', lv_uuid="aaaa")
         osd = api.Volume(lv_name='volume1', lv_uuid='y', lv_tags=tags,
                          lv_path='/dev/VolGroup/lv', vg_name='VolGroup')
-        pvolumes.append(pv)
         volumes.append(osd)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
+        monkeypatch.setattr(lvm.listing.api, 'get_first_pv', lambda **kwargs: pv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 
         result = lvm.listing.List([]).full_report()
         assert result['0'][0]['name'] == 'volume1'
 
-    def test_ceph_journal_lv_reported(self, pvolumes, volumes, monkeypatch):
+    def test_ceph_journal_lv_reported(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         journal_tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=journal'
         pv = api.PVolume(pv_name='/dev/sda1', pv_tags={}, pv_uuid="0000",
@@ -125,11 +123,9 @@ class TestFullReport(object):
         journal = api.Volume(
             lv_name='journal', lv_uuid='x', lv_tags=journal_tags,
             lv_path='/dev/VolGroup/journal', vg_name='VolGroup')
-        pvolumes.append(pv)
         volumes.append(osd)
         volumes.append(journal)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
+        monkeypatch.setattr(lvm.listing.api,'get_first_pv',lambda **kwargs:pv)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 
@@ -180,14 +176,12 @@ class TestSingleReport(object):
         result = lvm.listing.List([]).single_report('VolGroup/lv')
         assert result == {}
 
-    def test_report_a_ceph_lv(self, pvolumes, volumes, monkeypatch):
+    def test_report_a_ceph_lv(self, volumes, monkeypatch):
         # ceph lvs are detected by looking into its tags
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         lv = api.Volume(lv_name='lv', vg_name='VolGroup', lv_uuid='aaaa',
                         lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(lv)
-        monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
-                            pvolumes)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
                             volumes)
 
@@ -211,17 +205,21 @@ class TestSingleReport(object):
         assert result['0'][0]['type'] == 'journal'
         assert result['0'][0]['path'] == '/dev/sda1'
 
-    def test_report_a_ceph_lv_with_devices(self, volumes, pvolumes, monkeypatch):
+    def test_report_a_ceph_lv_with_devices(self, volumes, monkeypatch):
+        pvolumes = []
+
         tags = 'ceph.osd_id=0,ceph.type=data'
         pv1 = api.PVolume(vg_name="VolGroup", pv_name='/dev/sda1',
                           pv_uuid='', pv_tags={}, lv_uuid="aaaa")
         pv2 = api.PVolume(vg_name="VolGroup", pv_name='/dev/sdb1',
                           pv_uuid='', pv_tags={}, lv_uuid="aaaa")
-        lv = api.Volume(lv_name='lv', vg_name='VolGroup',lv_uuid='aaaa',
-                        lv_path='/dev/VolGroup/lv', lv_tags=tags)
         pvolumes.append(pv1)
         pvolumes.append(pv2)
+
+        lv = api.Volume(lv_name='lv', vg_name='VolGroup',lv_uuid='aaaa',
+                        lv_path='/dev/VolGroup/lv', lv_tags=tags)
         volumes.append(lv)
+
         monkeypatch.setattr(lvm.listing.api, 'get_pvs', lambda **kwargs:
                             pvolumes)
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
