@@ -78,17 +78,6 @@ class TestGetAPILvs(object):
         assert result[1]['lv_name'] == 'ceph_lv'
 
 
-@pytest.fixture
-def volumes(monkeypatch):
-    monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
-    volumes = api.Volumes()
-    volumes._purge()
-    # also patch api.Volumes so that when it is called, it will use the newly
-    # created fixture, with whatever the test method wants to append to it
-    monkeypatch.setattr(api, 'Volumes', lambda: volumes)
-    return volumes
-
-
 class TestVolume(object):
 
     def test_is_ceph_device(self):
@@ -109,103 +98,6 @@ class TestVolume(object):
     def test_no_empty_lv_name(self):
         with pytest.raises(ValueError):
             api.Volume(lv_name='', lv_tags='')
-
-
-class TestVolumes(object):
-
-    def test_volume_get_has_no_volumes(self, volumes):
-        assert volumes.get() is None
-
-    def test_volume_get_filtered_has_no_volumes(self, volumes):
-        assert volumes.get(lv_name='ceph') is None
-
-    def test_volume_has_multiple_matches(self, volumes):
-        volume1 = volume2 = api.Volume(lv_name='foo', lv_path='/dev/vg/lv', lv_tags='')
-        volumes.append(volume1)
-        volumes.append(volume2)
-        with pytest.raises(exceptions.MultipleLVsError):
-            volumes.get(lv_name='foo')
-
-    def test_as_dict_infers_type_from_tags(self, volumes):
-        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
-        volumes.append(osd)
-        result = volumes.get(lv_tags={'ceph.type': 'data'}).as_dict()
-        assert result['type'] == 'data'
-
-    def test_as_dict_populates_path_from_lv_api(self, volumes):
-        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
-        volumes.append(osd)
-        result = volumes.get(lv_tags={'ceph.type': 'data'}).as_dict()
-        assert result['path'] == '/dev/vg/lv'
-
-    def test_find_the_correct_one(self, volumes):
-        volume1 = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags='')
-        volume2 = api.Volume(lv_name='volume2', lv_path='/dev/vg/lv', lv_tags='')
-        volumes.append(volume1)
-        volumes.append(volume2)
-        assert volumes.get(lv_name='volume1') == volume1
-
-    def test_filter_by_tag(self, volumes):
-        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
-        journal = api.Volume(lv_name='volume2', lv_path='/dev/vg/lv', lv_tags='ceph.type=journal')
-        volumes.append(osd)
-        volumes.append(journal)
-        volumes.filter(lv_tags={'ceph.type': 'data'})
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
-
-    def test_filter_by_tag_does_not_match_one(self, volumes):
-        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/vg/lv', lv_tags=lv_tags)
-        journal = api.Volume(lv_name='volume2', lv_path='/dev/vg/lv', lv_tags='ceph.osd_id=1,ceph.type=journal')
-        volumes.append(osd)
-        volumes.append(journal)
-        # note the different osd_id!
-        volumes.filter(lv_tags={'ceph.type': 'data', 'ceph.osd_id': '2'})
-        assert volumes == []
-
-    def test_filter_by_vg_name(self, volumes):
-        lv_tags = "ceph.type=data,ceph.fsid=000-aaa"
-        osd = api.Volume(lv_name='volume1', vg_name='ceph_vg', lv_tags=lv_tags)
-        journal = api.Volume(lv_name='volume2', vg_name='system_vg', lv_tags='ceph.type=journal')
-        volumes.append(osd)
-        volumes.append(journal)
-        volumes.filter(vg_name='ceph_vg')
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
-
-    def test_filter_by_lv_path(self, volumes):
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/volume1', lv_tags='')
-        journal = api.Volume(lv_name='volume2', lv_path='/dev/volume2', lv_tags='')
-        volumes.append(osd)
-        volumes.append(journal)
-        volumes.filter(lv_path='/dev/volume1')
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
-
-    def test_filter_by_lv_uuid(self, volumes):
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/volume1', lv_uuid='1111', lv_tags='')
-        journal = api.Volume(lv_name='volume2', lv_path='/dev/volume2', lv_uuid='', lv_tags='')
-        volumes.append(osd)
-        volumes.append(journal)
-        volumes.filter(lv_uuid='1111')
-        assert len(volumes) == 1
-        assert volumes[0].lv_name == 'volume1'
-
-    def test_filter_by_lv_uuid_nothing_found(self, volumes):
-        osd = api.Volume(lv_name='volume1', lv_path='/dev/volume1', lv_uuid='1111', lv_tags='')
-        journal = api.Volume(lv_name='volume2', lv_path='/dev/volume2', lv_uuid='', lv_tags='')
-        volumes.append(osd)
-        volumes.append(journal)
-        volumes.filter(lv_uuid='22222')
-        assert volumes == []
-
-    def test_filter_requires_params(self, volumes):
-        with pytest.raises(TypeError):
-            volumes.filter()
 
 
 class TestVolumeGroup(object):
@@ -313,31 +205,6 @@ class TestVolumeGroupSizing(object):
             self.vg.sizing(size=2048)
 
 
-class TestGetLVFromArgument(object):
-
-    def setup(self):
-        self.foo_volume = api.Volume(
-            lv_name='foo', lv_path='/path/to/lv',
-            vg_name='foo_group', lv_tags=''
-        )
-
-    def test_non_absolute_path_is_not_valid(self, volumes):
-        volumes.append(self.foo_volume)
-        assert api.get_lv_from_argument('foo') is None
-
-    def test_too_many_slashes_is_invalid(self, volumes):
-        volumes.append(self.foo_volume)
-        assert api.get_lv_from_argument('path/to/lv') is None
-
-    def test_absolute_path_is_not_lv(self, volumes):
-        volumes.append(self.foo_volume)
-        assert api.get_lv_from_argument('/path') is None
-
-    def test_absolute_path_is_lv(self, volumes):
-        volumes.append(self.foo_volume)
-        assert api.get_lv_from_argument('/path/to/lv') == self.foo_volume
-
-
 class TestRemoveLV(object):
 
     def test_removes_lv(self, monkeypatch):
@@ -371,18 +238,18 @@ class TestCreateLV(object):
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_uses_size(self, m_get_lv, m_call, m_run, monkeypatch):
-        m_get_lv.return_value = self.foo_volume
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_uses_size(self, m_get_first_lv, m_call, m_run, monkeypatch):
+        m_get_first_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, size=5368709120, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '1280', '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_uses_extents(self, m_get_lv, m_call, m_run, monkeypatch):
-        m_get_lv.return_value = self.foo_volume
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_uses_extents(self, m_get_first_lv, m_call, m_run, monkeypatch):
+        m_get_first_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, extents='50', tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '50', '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
@@ -392,18 +259,18 @@ class TestCreateLV(object):
                               (3, 33),])
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_uses_slots(self, m_get_lv, m_call, m_run, monkeypatch, test_input, expected):
-        m_get_lv.return_value = self.foo_volume
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_uses_slots(self, m_get_first_lv, m_call, m_run, monkeypatch, test_input, expected):
+        m_get_first_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, slots=test_input, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', str(expected), '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_uses_all(self, m_get_lv, m_call, m_run, monkeypatch):
-        m_get_lv.return_value = self.foo_volume
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_uses_all(self, m_get_first_lv, m_call, m_run, monkeypatch):
+        m_get_first_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '100%FREE', '-n', 'foo-0', 'foo_group']
         m_run.assert_called_with(expected)
@@ -411,9 +278,9 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
     @patch('ceph_volume.api.lvm.Volume.set_tags')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_calls_to_set_tags_default(self, m_get_lv, m_set_tags, m_call, m_run, monkeypatch):
-        m_get_lv.return_value = self.foo_volume
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_calls_to_set_tags_default(self, m_get_first_lv, m_set_tags, m_call, m_run, monkeypatch):
+        m_get_first_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group)
         tags = {
             "ceph.osd_id": "null",
@@ -426,9 +293,9 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
     @patch('ceph_volume.api.lvm.Volume.set_tags')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_calls_to_set_tags_arg(self, m_get_lv, m_set_tags, m_call, m_run, monkeypatch):
-        m_get_lv.return_value = self.foo_volume
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_calls_to_set_tags_arg(self, m_get_first_lv, m_set_tags, m_call, m_run, monkeypatch):
+        m_get_first_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, tags={'ceph.type': 'data'})
         tags = {
             "ceph.type": "data",
@@ -440,10 +307,10 @@ class TestCreateLV(object):
     @patch('ceph_volume.api.lvm.process.call')
     @patch('ceph_volume.api.lvm.get_device_vgs')
     @patch('ceph_volume.api.lvm.create_vg')
-    @patch('ceph_volume.api.lvm.get_lv')
-    def test_create_vg(self, m_get_lv, m_create_vg, m_get_device_vgs, m_call,
+    @patch('ceph_volume.api.lvm.get_first_lv')
+    def test_create_vg(self, m_get_first_lv, m_create_vg, m_get_device_vgs, m_call,
                        m_run, monkeypatch):
-        m_get_lv.return_value = self.foo_volume
+        m_get_first_lv.return_value = self.foo_volume
         m_get_device_vgs.return_value = []
         api.create_lv('foo', 0, device='dev/foo', size='5G', tags={'ceph.type': 'data'})
         m_create_vg.assert_called_with('dev/foo', name_prefix='ceph')
@@ -769,30 +636,6 @@ class TestSplitNameParser(object):
         result = api._splitname_parser(line)
         assert '/dev/mapper' not in result['VG_NAME']
 
-
-class TestIsLV(object):
-
-    def test_is_not_an_lv(self, monkeypatch):
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: ('', '', 0))
-        monkeypatch.setattr(api, 'dmsetup_splitname', lambda x, **kw: {})
-        assert api.is_lv('/dev/sda1', lvs=[]) is False
-
-    def test_lvs_not_found(self, monkeypatch, volumes):
-        CephVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo', lv_tags="ceph.type=data")
-        volumes.append(CephVolume)
-        splitname = {'LV_NAME': 'data', 'VG_NAME': 'ceph'}
-        monkeypatch.setattr(api, 'dmsetup_splitname', lambda x, **kw: splitname)
-        assert api.is_lv('/dev/sda1', lvs=volumes) is False
-
-    def test_is_lv(self, monkeypatch, volumes):
-        CephVolume = api.Volume(
-            vg_name='ceph', lv_name='data',
-            lv_path='/dev/vg/foo', lv_tags="ceph.type=data"
-        )
-        volumes.append(CephVolume)
-        splitname = {'LV_NAME': 'data', 'VG_NAME': 'ceph'}
-        monkeypatch.setattr(api, 'dmsetup_splitname', lambda x, **kw: splitname)
-        assert api.is_lv('/dev/sda1', lvs=volumes) is True
 
 class TestGetDeviceVgs(object):
 

@@ -23,9 +23,10 @@ class TestActivate(object):
     # test the negative side effect with an actual functional run, so we must
     # setup a perfect scenario for this test to check it can really work
     # with/without osd_id
-    def test_no_osd_id_matches_fsid(self, is_root, volumes, monkeypatch, capture):
+    def test_no_osd_id_matches_fsid(self, is_root, monkeypatch, capture):
         FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo',
                                lv_tags="ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(FooVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: volumes)
         monkeypatch.setattr(activate, 'activate_filestore', capture)
@@ -33,9 +34,10 @@ class TestActivate(object):
         activate.Activate([]).activate(args)
         assert capture.calls[0]['args'][0] == [FooVolume]
 
-    def test_no_osd_id_matches_fsid_bluestore(self, is_root, volumes, monkeypatch, capture):
+    def test_no_osd_id_matches_fsid_bluestore(self, is_root, monkeypatch, capture):
         FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo',
                                lv_tags="ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(FooVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: volumes)
         monkeypatch.setattr(activate, 'activate_bluestore', capture)
@@ -43,9 +45,10 @@ class TestActivate(object):
         activate.Activate([]).activate(args)
         assert capture.calls[0]['args'][0] == [FooVolume]
 
-    def test_no_osd_id_no_matching_fsid(self, is_root, volumes, monkeypatch, capture):
+    def test_no_osd_id_no_matching_fsid(self, is_root, monkeypatch, capture):
         FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo',
                                lv_tags="ceph.osd_fsid=1111")
+        volumes = []
         volumes.append(FooVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: [])
         monkeypatch.setattr(api, 'get_first_lv', lambda **kwargs: [])
@@ -55,7 +58,7 @@ class TestActivate(object):
         with pytest.raises(RuntimeError):
             activate.Activate([]).activate(args)
 
-    def test_filestore_no_systemd(self, is_root, volumes, monkeypatch, capture):
+    def test_filestore_no_systemd(self, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
@@ -80,6 +83,7 @@ class TestActivate(object):
             lv_tags="ceph.cluster_name=ceph,ceph.journal_device=/dev/vg/" + \
                     "journal,ceph.journal_uuid=000,ceph.type=data," + \
                     "ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
@@ -89,7 +93,7 @@ class TestActivate(object):
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
 
-    def test_filestore_no_systemd_autodetect(self, is_root, volumes, monkeypatch, capture):
+    def test_filestore_no_systemd_autodetect(self, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
@@ -114,6 +118,7 @@ class TestActivate(object):
             lv_tags="ceph.cluster_name=ceph,ceph.journal_device=/dev/vg/" + \
                     "journal,ceph.journal_uuid=000,ceph.type=data," + \
                     "ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
@@ -124,7 +129,7 @@ class TestActivate(object):
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
 
-    def test_filestore_systemd_autodetect(self, is_root, volumes, monkeypatch, capture):
+    def test_filestore_systemd_autodetect(self, is_root, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
@@ -149,6 +154,7 @@ class TestActivate(object):
             lv_tags="ceph.cluster_name=ceph,ceph.journal_device=/dev/vg/" + \
                     "journal,ceph.journal_uuid=000,ceph.type=data," + \
                     "ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
@@ -159,7 +165,7 @@ class TestActivate(object):
         assert fake_enable.calls != []
         assert fake_start_osd.calls != []
 
-    def test_filestore_systemd(self, is_root, volumes, monkeypatch, capture):
+    def test_filestore_systemd(self, is_root, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
@@ -184,6 +190,7 @@ class TestActivate(object):
             lv_tags="ceph.cluster_name=ceph,ceph.journal_device=/dev/vg/" + \
                     "journal,ceph.journal_uuid=000,ceph.type=data," + \
                     "ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
@@ -194,7 +201,7 @@ class TestActivate(object):
         assert fake_enable.calls != []
         assert fake_start_osd.calls != []
 
-    def test_bluestore_no_systemd(self, is_root, volumes, monkeypatch, capture):
+    def test_bluestore_no_systemd(self, is_root, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda *a, **kw: True)
@@ -207,6 +214,7 @@ class TestActivate(object):
             lv_path='/dev/vg/data',
             lv_tags="ceph.cluster_name=ceph,,ceph.journal_uuid=000," + \
                     "ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
@@ -215,7 +223,7 @@ class TestActivate(object):
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
 
-    def test_bluestore_systemd(self, is_root, volumes, monkeypatch, capture):
+    def test_bluestore_systemd(self, is_root, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda *a, **kw: True)
@@ -228,6 +236,7 @@ class TestActivate(object):
             lv_path='/dev/vg/data',
             lv_tags="ceph.cluster_name=ceph,,ceph.journal_uuid=000," + \
                     "ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
@@ -237,7 +246,7 @@ class TestActivate(object):
         assert fake_enable.calls != []
         assert fake_start_osd.calls != []
 
-    def test_bluestore_no_systemd_autodetect(self, is_root, volumes, monkeypatch, capture):
+    def test_bluestore_no_systemd_autodetect(self, is_root, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda *a, **kw: True)
@@ -250,6 +259,7 @@ class TestActivate(object):
             lv_path='/dev/vg/data',
             lv_tags="ceph.cluster_name=ceph,,ceph.block_uuid=000," + \
                     "ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
@@ -259,7 +269,7 @@ class TestActivate(object):
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
 
-    def test_bluestore_systemd_autodetect(self, is_root, volumes, monkeypatch, capture):
+    def test_bluestore_systemd_autodetect(self, is_root, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted',
@@ -274,6 +284,7 @@ class TestActivate(object):
             lv_path='/dev/vg/data',
             lv_tags="ceph.cluster_name=ceph,,ceph.journal_uuid=000," + \
                     "ceph.type=block,ceph.osd_id=0,ceph.osd_fsid=1234")
+        volumes = []
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 

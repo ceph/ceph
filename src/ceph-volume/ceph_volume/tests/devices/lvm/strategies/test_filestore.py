@@ -159,7 +159,6 @@ class TestMixedType(object):
     @patch('ceph_volume.devices.lvm.strategies.strategies.MixedStrategy.get_common_vg')
     def test_ssd_is_lvm_member_doesnt_fail(self,
                                            patched_get_common_vg,
-                                           volumes,
                                            fakedevice,
                                            factory,
                                            conf_ceph):
@@ -186,7 +185,7 @@ class TestMixedType(object):
         assert result['journal']['human_readable_size'] == '5.00 GB'
 
     @patch('ceph_volume.api.lvm.get_device_vgs')
-    def test_no_common_vg(self, patched_get_device_vgs, volumes, fakedevice, factory, conf_ceph):
+    def test_no_common_vg(self, patched_get_device_vgs, fakedevice, factory, conf_ceph):
         patched_get_device_vgs.side_effect = lambda x: [lvm.VolumeGroup(vg_name='{}'.format(x[-1]), vg_tags='')]
         ssd1 = fakedevice(
             used_by_ceph=False, is_lvm_member=True, rotational=False, sys_api=dict(size=6073740000)

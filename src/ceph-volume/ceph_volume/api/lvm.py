@@ -9,9 +9,7 @@ import uuid
 from itertools import repeat
 from math import floor
 from ceph_volume import process, util
-from ceph_volume.exceptions import (
-    MultipleLVsError, SizeAllocationError
-)
+from ceph_volume.exceptions import SizeAllocationError
 
 logger = logging.getLogger(__name__)
 
@@ -806,113 +804,6 @@ class Volume(object):
         process.call(['lvchange', '-an', self.lv_path])
 
 
-class Volumes(list):
-    """
-    A list of all known (logical) volumes for the current system, with the ability
-    to filter them via keyword arguments.
-    """
-
-    def __init__(self):
-        self._populate()
-
-    def _populate(self):
-        # get all the lvs in the current system
-        for lv_item in get_api_lvs():
-            self.append(Volume(**lv_item))
-
-    def _purge(self):
-        """
-        Delete all the items in the list, used internally only so that we can
-        dynamically allocate the items when filtering without the concern of
-        messing up the contents
-        """
-        self[:] = []
-
-    def _filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
-        """
-        The actual method that filters using a new list. Useful so that other
-        methods that do not want to alter the contents of the list (e.g.
-        ``self.find``) can operate safely.
-        """
-        filtered = [i for i in self]
-        if lv_name:
-            filtered = [i for i in filtered if i.lv_name == lv_name]
-
-        if vg_name:
-            filtered = [i for i in filtered if i.vg_name == vg_name]
-
-        if lv_uuid:
-            filtered = [i for i in filtered if i.lv_uuid == lv_uuid]
-
-        if lv_path:
-            filtered = [i for i in filtered if i.lv_path == lv_path]
-
-        # at this point, `filtered` has either all the volumes in self or is an
-        # actual filtered list if any filters were applied
-        if lv_tags:
-            tag_filtered = []
-            for volume in filtered:
-                # all the tags we got need to match on the volume
-                matches = all(volume.tags.get(k) == str(v) for k, v in lv_tags.items())
-                if matches:
-                    tag_filtered.append(volume)
-            return tag_filtered
-
-        return filtered
-
-    def filter(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
-        """
-        Filter out volumes on top level attributes like ``lv_name`` or by
-        ``lv_tags`` where a dict is required. For example, to find a volume
-        that has an OSD ID of 0, the filter would look like::
-
-            lv_tags={'ceph.osd_id': '0'}
-
-        """
-        if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
-            raise TypeError('.filter() requires lv_name, vg_name, lv_path, lv_uuid, or tags (none given)')
-        # first find the filtered volumes with the values in self
-        filtered_volumes = self._filter(
-            lv_name=lv_name,
-            vg_name=vg_name,
-            lv_path=lv_path,
-            lv_uuid=lv_uuid,
-            lv_tags=lv_tags
-        )
-        # then purge everything
-        self._purge()
-        # and add the filtered items
-        self.extend(filtered_volumes)
-
-    def get(self, lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None):
-        """
-        This is a bit expensive, since it will try to filter out all the
-        matching items in the list, filter them out applying anything that was
-        added and return the matching item.
-
-        This method does *not* alter the list, and it will raise an error if
-        multiple LVs are matched
-
-        It is useful to use ``tags`` when trying to find a specific logical volume,
-        but it can also lead to multiple lvs being found, since a lot of metadata
-        is shared between lvs of a distinct OSD.
-        """
-        if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
-            return None
-        lvs = self._filter(
-            lv_name=lv_name,
-            vg_name=vg_name,
-            lv_path=lv_path,
-            lv_uuid=lv_uuid,
-            lv_tags=lv_tags
-        )
-        if not lvs:
-            return None
-        if len(lvs) > 1:
-            raise MultipleLVsError(lv_name, lv_path)
-        return lvs[0]
-
-
 def create_lv(name_prefix,
               uuid,
               vg=None,
@@ -985,7 +876,7 @@ def create_lv(name_prefix,
         ]
     process.run(command)
 
-    lv = get_lv(lv_name=name, vg_name=vg.vg_name)
+    lv = get_first_lv(filters={'lv_name': name, 'vg_name': vg.vg_name})
 
     if tags is None:
         tags = {
@@ -1043,21 +934,6 @@ def remove_lv(lv):
     return True
 
 
-def is_lv(dev, lvs=None):
-    """
-    Boolean to detect if a device is an LV or not.
-    """
-    splitname = dmsetup_splitname(dev)
-    # Allowing to optionally pass `lvs` can help reduce repetitive checks for
-    # multiple devices at once.
-    if lvs is None or len(lvs) == 0:
-        lvs = Volumes()
-
-    if splitname.get('LV_NAME'):
-        lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
-        return len(lvs) > 0
-    return False
-
 def get_lv_by_name(name):
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '-o', LV_FIELDS, '-S',
@@ -1075,42 +951,6 @@ def get_lvs_by_tag(lv_tag):
     )
     lvs = _output_parser(stdout, LV_FIELDS)
     return [Volume(**lv) for lv in lvs]
-
-def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None, lvs=None):
-    """
-    Return a matching lv for the current system, requiring ``lv_name``,
-    ``vg_name``, ``lv_path`` or ``tags``. Raises an error if more than one lv
-    is found.
-
-    It is useful to use ``tags`` when trying to find a specific logical volume,
-    but it can also lead to multiple lvs being found, since a lot of metadata
-    is shared between lvs of a distinct OSD.
-    """
-    if not any([lv_name, vg_name, lv_path, lv_uuid, lv_tags]):
-        return None
-    if lvs is None:
-        lvs = Volumes()
-    return lvs.get(
-        lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_uuid=lv_uuid,
-        lv_tags=lv_tags
-    )
-
-
-def get_lv_from_argument(argument):
-    """
-    Helper proxy function that consumes a possible logical volume passed in from the CLI
-    in the form of `vg/lv`, but with some validation so that an argument that is a full
-    path to a device can be ignored
-    """
-    if argument.startswith('/'):
-        lv = get_lv(lv_path=argument)
-        return lv
-    try:
-        vg_name, lv_name = argument.split('/')
-    except (ValueError, AttributeError):
-        return None
-    return get_lv(lv_name=lv_name, vg_name=vg_name)
-
 
 def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
     """

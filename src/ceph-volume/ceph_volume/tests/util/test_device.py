@@ -6,9 +6,10 @@ from ceph_volume.api import lvm as api
 
 class TestDevice(object):
 
-    def test_sys_api(self, volumes, monkeypatch, device_info):
+    def test_sys_api(self, monkeypatch, device_info):
         volume = api.Volume(lv_name='lv', lv_uuid='y', vg_name='vg',
                             lv_tags={}, lv_path='/dev/VolGroup/lv')
+        volumes = []
         volumes.append(volume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs:
                             deepcopy(volumes))
@@ -20,9 +21,10 @@ class TestDevice(object):
         assert disk.sys_api
         assert "foo" in disk.sys_api
 
-    def test_lvm_size(self, volumes, monkeypatch, device_info):
+    def test_lvm_size(self, monkeypatch, device_info):
         volume = api.Volume(lv_name='lv', lv_uuid='y', vg_name='vg',
                             lv_tags={}, lv_path='/dev/VolGroup/lv')
+        volumes = []
         volumes.append(volume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs:
                             deepcopy(volumes))
@@ -34,7 +36,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.lvm_size.gb == 4
 
-    def test_lvm_size_rounds_down(self, device_info, volumes):
+    def test_lvm_size_rounds_down(self, device_info):
         # 5.5GB in size
         data = {"/dev/sda": {"size": "5905580032"}}
         lsblk = {"TYPE": "disk"}
@@ -167,22 +169,19 @@ class TestDevice(object):
         assert not disk.is_mapper
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_is_ceph_disk_lsblk(self, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_is_ceph_disk_blkid(self, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_is_ceph_disk_member_not_available_lsblk(self, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
@@ -190,8 +189,7 @@ class TestDevice(object):
         assert "Used by ceph-disk" in disk.rejected_reasons
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_is_ceph_disk_member_not_available_blkid(self, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
@@ -249,7 +247,6 @@ class TestDevice(object):
         assert "Has BlueStore device label" in disk.rejected_reasons
 
     @pytest.mark.usefixtures("device_info_not_ceph_disk_member",
-                             "disable_lvm_queries",
                              "disable_kernel_queries")
     def test_is_not_ceph_disk_member_lsblk(self, patch_bluestore_label):
         disk = device.Device("/dev/sda")
@@ -294,7 +291,7 @@ class TestDevice(object):
         assert not disk.available_raw
 
     @pytest.mark.parametrize("ceph_type", ["data", "block"])
-    def test_used_by_ceph(self, device_info, volumes,
+    def test_used_by_ceph(self, device_info,
                           monkeypatch, ceph_type):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part"}
@@ -305,6 +302,7 @@ class TestDevice(object):
         lv_data = {"lv_name": "lv", "lv_path": "vg/lv", "vg_name": "vg",
                    "lv_uuid": "0000", "lv_tags":
                    "ceph.osd_id=0,ceph.type="+ceph_type}
+        volumes = []
         lv = api.Volume(**lv_data)
         volumes.append(lv)
         monkeypatch.setattr(api, 'get_pvs', lambda **kwargs: pvolumes)
@@ -507,16 +505,14 @@ class TestCephDiskDevice(object):
         assert disk.partlabel == 'ceph data'
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_is_member_blkid(self, monkeypatch, patch_bluestore_label):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_is_member_lsblk(self, patch_bluestore_label, device_info):
         lsblk = {"TYPE": "disk", "PARTLABEL": "ceph"}
         device_info(lsblk=lsblk)
@@ -534,8 +530,7 @@ class TestCephDiskDevice(object):
     ceph_types = ['data', 'wal', 'db', 'lockbox', 'journal', 'block']
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_type_blkid(self, monkeypatch, device_info, ceph_partlabel):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
@@ -543,8 +538,7 @@ class TestCephDiskDevice(object):
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "lsblk_ceph_disk_member",
-                             "disable_kernel_queries",
-                             "disable_lvm_queries")
+                             "disable_kernel_queries")
     def test_type_lsblk(self, device_info, ceph_partlabel):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
