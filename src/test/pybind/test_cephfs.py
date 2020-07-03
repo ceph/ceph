@@ -423,3 +423,12 @@ def test_futimens():
 
     cephfs.close(fd)
     cephfs.unlink(b'/file-1')
+
+@with_setup(setup_test)
+def test_disk_quota_exceeeded_error():
+    cephfs.mkdir("/dir-1", 0o755)
+    cephfs.setxattr("/dir-1", "ceph.quota.max_bytes", b"5", 0)
+    fd = cephfs.open(b'/dir-1/file-1', 'w', 0o755)
+    assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz", 0)
+    cephfs.close(fd)
+    cephfs.unlink(b"/dir-1/file-1")

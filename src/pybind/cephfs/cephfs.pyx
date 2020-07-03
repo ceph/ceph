@@ -260,6 +260,10 @@ class ObjectNotEmpty(OSError):
     pass
 
 
+class DiskQuotaExceeded(OSError):
+    pass
+
+
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
         errno.EPERM      : PermissionError,
@@ -273,6 +277,7 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
+        errno.EDQUOT     : DiskQuotaExceeded,
     }
 ELSE:
     cdef errno_to_exception =  {
@@ -287,6 +292,7 @@ ELSE:
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
+        errno.EDQUOT     : DiskQuotaExceeded,
     }
 
 
