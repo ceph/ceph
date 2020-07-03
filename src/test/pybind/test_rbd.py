@@ -603,6 +603,12 @@ class TestImage(object):
         self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
         self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_NOCACHE)
 
+    def test_write_zeroes(self):
+        data = rand_data(256)
+        self.image.write(data, 0)
+        self.image.write_zeroes(0, 256)
+        eq(self.image.read(256, 256), b'\0' * 256)
+
     def test_read(self):
         data = self.image.read(0, 20)
         eq(data, b'\0' * 20)
@@ -1196,6 +1202,20 @@ class TestImage(object):
         data = rand_data(256)
         self.image.write(data, 0)
         comp = self.image.aio_discard(0, 256, cb)
+        comp.wait_for_complete_and_cb()
+        eq(retval[0], 0)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(self.image.read(256, 256), b'\0' * 256)
+
+    def test_aio_write_zeroes(self):
+        retval = [None]
+        def cb(comp):
+            retval[0] = comp.get_return_value()
+
+        data = rand_data(256)
+        self.image.write(data, 0)
+        comp = self.image.aio_write_zeroes(0, 256, cb)
         comp.wait_for_complete_and_cb()
         eq(retval[0], 0)
         eq(comp.get_return_value(), 0)
