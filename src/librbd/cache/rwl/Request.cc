@@ -625,9 +625,9 @@ std::ostream &operator<<(std::ostream &os,
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::rwl::C_BlockIORequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_WriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_FlushRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_DiscardRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_WriteSameRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
-template class librbd::cache::rwl::C_CompAndWriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_BlockIORequest<librbd::cache::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_WriteRequest<librbd::cache::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_FlushRequest<librbd::cache::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_DiscardRequest<librbd::cache::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_WriteSameRequest<librbd::cache::AbstractWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_CompAndWriteRequest<librbd::cache::AbstractWriteLog<librbd::ImageCtx> >;
