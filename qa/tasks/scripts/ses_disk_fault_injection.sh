@@ -9,8 +9,12 @@ function health_ok() {
     done
 }
 
-storage_device_name=$(salt $disk_storage_minion cmd.run \
- "pvdisplay | grep -B 1 'VG Name .* ceph' | egrep -v 'ceph-block-dbs|nvme|--' | head -1 | cut -d / -f 3" --output=json | jq -r .[])
+minion=${disk_storage_minion%%.*} # target-ses-097.ecp.suse.de -> target-ses-097
+random_osd=$(ceph osd tree | grep -A 1 $minion | grep -Eo "osd\.[[:digit:]]+")
+osd_id=${random_osd##*.} # osd.0 -> 0
+disk_path=$(salt \* cephdisks.find_by_osd_id ${osd_id} --out json 2> /dev/null | jq -j '.[][].path')
+storage_device_name=${disk_path##\/dev\/} # /dev/vdb -> vdb
+
 salt $disk_storage_minion cmd.run "mkdir /debug; mount debugfs /debug -t debugfs; cd /debug/fail_make_request;\
     echo 10 > interval; echo 100 > probability; echo -1 > times; echo 1 > /sys/block/$storage_device_name/make-it-fail"
 

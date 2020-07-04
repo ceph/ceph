@@ -4,7 +4,7 @@ declare -a minion_fqdn="$1"
 
 echo "### Getting random minion and its random OSD ###"
 minion=${minion_fqdn%%.*}
-random_osd=$(ceph osd tree | grep -A 1 $minion | grep -o "osd\.".* | awk '{print$1}')
+random_osd=$(ceph osd tree | grep -A 1 $minion | grep -Eo "osd\.[[:digit:]]+")
 osd_id=${random_osd#*.}
 
 vg_name=$(salt $minion_fqdn cmd.run "find /var/lib/ceph/osd/ceph-$osd_id -type l -name block \

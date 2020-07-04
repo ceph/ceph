@@ -10,22 +10,21 @@ function wait_for_server () {
     done
 }
 
-minion=${minion_fqdn%%.*}
-random_osd=$(ceph osd tree | grep -A 1 $minion | grep -o "osd\.".* | awk '{print$1}')
+minion=${minion_fqdn%%.*} # target-ses-097.ecp.suse.de -> target-ses-097
+random_osd=$(ceph osd tree | grep -A 1 $minion | grep -Eo "osd\.[[:digit:]]+")
+osd_id=${random_osd##*.} # osd.0 -> 0
 
 ceph osd out $random_osd
 ceph osd tree
 ceph osd in $random_osd
-salt $minion_fqdn service.stop ceph-osd@${random_osd#*.} 2>/dev/null
+salt $minion_fqdn service.stop ceph-osd@${osd_id} 2>/dev/null
 ceph osd crush remove $random_osd
 ceph auth del $random_osd
 ceph osd down $random_osd
 ceph osd rm $random_osd
 ceph osd tree
 sleep 3
-osd_systemdisk=$(salt $minion_fqdn cmd.run "find /var/lib/ceph/osd/ceph-${random_osd#*.} \
-    -type l -exec readlink {} \; | cut -d / -f 3 | while read line; do pvdisplay | grep -B 1 \$line | head -1 \
-    | awk '{print \$3}'; done" | tail -1 | sed 's/\ //g')
+osd_systemdisk=$(salt \* cephdisks.find_by_osd_id ${osd_id} --out json 2> /dev/null | jq -j '.[][].path') # /dev/vdb
 
 salt $minion_fqdn cmd.run "sgdisk -Z $osd_systemdisk" 2>/dev/null
 

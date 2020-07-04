@@ -7,7 +7,7 @@ stopped_osd=()
 for i in ${!storage_minions[@]}
 do
     minion=${storage_minions[i]%%.*}
-    random_osd=$(ceph osd tree | grep -A 1 $minion | grep -o osd.* | awk '{print $1}')
+    random_osd=$(ceph osd tree | grep -A 1 $minion | grep -Eo "osd\.[[:digit:]]+")
     salt ${storage_minions[i]} service.stop ceph-osd@${random_osd#*.}
     sleep 5
     echo "Waiting till health is OK."
@@ -26,4 +26,3 @@ do
 done
 
 ceph osd pool rm stoposddeamon stoposddeamon --yes-i-really-really-mean-it
-
