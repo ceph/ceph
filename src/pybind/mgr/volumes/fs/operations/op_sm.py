@@ -14,6 +14,7 @@ class SubvolumeStates(Enum):
     STATE_FAILED        = 'failed'
     STATE_COMPLETE      = 'complete'
     STATE_CANCELED      = 'canceled'
+    STATE_RETAINED      = 'snapshot-retained'
 
     @staticmethod
     def from_value(value):
@@ -29,6 +30,8 @@ class SubvolumeStates(Enum):
             return SubvolumeStates.STATE_COMPLETE
         if value == "canceled":
             return SubvolumeStates.STATE_CANCELED
+        if value == "snapshot-retained":
+            return SubvolumeStates.STATE_RETAINED
 
         raise OpSmException(-errno.EINVAL, "invalid state '{0}'".format(value))
 
@@ -38,6 +41,7 @@ class SubvolumeActions(Enum):
     ACTION_SUCCESS      = 1
     ACTION_FAILED       = 2
     ACTION_CANCELLED    = 3
+    ACTION_RETAINED     = 4
 
 class TransitionKey(object):
     def __init__(self, subvol_type, state, action_type):
@@ -105,6 +109,10 @@ SubvolumeOpSm.transition_table = {
                   SubvolumeStates.STATE_INIT,
                   SubvolumeActions.ACTION_NONE) : SubvolumeStates.STATE_COMPLETE,
 
+    TransitionKey(SubvolumeTypes.TYPE_NORMAL,
+                  SubvolumeStates.STATE_COMPLETE,
+                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+
     # state transitions for state machine type TYPE_CLONE
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_INIT,
@@ -129,4 +137,16 @@ SubvolumeOpSm.transition_table = {
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_INPROGRESS,
                   SubvolumeActions.ACTION_FAILED) : SubvolumeStates.STATE_FAILED,
+
+    TransitionKey(SubvolumeTypes.TYPE_CLONE,
+                  SubvolumeStates.STATE_COMPLETE,
+                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+
+    TransitionKey(SubvolumeTypes.TYPE_CLONE,
+                  SubvolumeStates.STATE_CANCELED,
+                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+
+    TransitionKey(SubvolumeTypes.TYPE_CLONE,
+                  SubvolumeStates.STATE_FAILED,
+                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
 }

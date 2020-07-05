@@ -55,6 +55,28 @@ def open_at_group(volume_client, fs_handle, groupname, subvolname, op_type):
         with open_subvol(fs_handle, volume_client.volspec, group, subvolname, op_type) as subvolume:
             yield subvolume
 
+@contextmanager
+def open_at_group_unique(volume_client, fs_handle, s_groupname, s_subvolname, c_subvolume, c_groupname, c_subvolname, op_type):
+    # if a snapshot of a retained subvolume is being cloned to recreate the same subvolume, return
+    # the clone subvolume as the source subvolume
+    if s_groupname == c_groupname and s_subvolname == c_subvolname:
+        yield c_subvolume
+    else:
+        with open_at_group(volume_client, fs_handle, s_groupname, s_subvolname, op_type) as s_subvolume:
+            yield s_subvolume
+
+
+@contextmanager
+def open_clone_subvolume_pair(volume_client, fs_handle, volname, groupname, subvolname):
+    with open_at_group(volume_client, fs_handle, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as clone_subvolume:
+        s_volname, s_groupname, s_subvolname, s_snapname = get_clone_source(clone_subvolume)
+        if groupname == s_groupname and subvolname == s_subvolname:
+            # use the same subvolume to avoid metadata overwrites
+            yield (clone_subvolume, clone_subvolume, s_snapname)
+        else:
+            with open_at_group(volume_client, fs_handle, s_groupname, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as source_subvolume:
+                yield (clone_subvolume, source_subvolume, s_snapname)
+
 def get_clone_state(volume_client, volname, groupname, subvolname):
     with open_at_volume(volume_client, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
         return subvolume.state
@@ -166,12 +188,10 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
 
 def do_clone(volume_client, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(volume_client, volname) as fs_handle:
-        with open_at_group(volume_client, fs_handle, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as clone_subvolume:
-            s_volname, s_groupname, s_subvolname, s_snapname = get_clone_source(clone_subvolume)
-            with open_at_group(volume_client, fs_handle, s_groupname, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as source_subvolume:
-                src_path = source_subvolume.snapshot_path(s_snapname)
-                dst_path = clone_subvolume.path
-                bulk_copy(fs_handle, src_path, dst_path, should_cancel)
+        with open_clone_subvolume_pair(volume_client, fs_handle, volname, groupname, subvolname) as clone_volumes:
+            src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
+            dst_path = clone_volumes[0].path
+            bulk_copy(fs_handle, src_path, dst_path, should_cancel)
 
 def handle_clone_in_progress(volume_client, volname, index, groupname, subvolname, should_cancel):
     try:
@@ -187,12 +207,10 @@ def handle_clone_in_progress(volume_client, volname, index, groupname, subvolnam
 
 def handle_clone_failed(volume_client, volname, index, groupname, subvolname, should_cancel):
     try:
-        # detach source but leave the clone section intact for later inspection
         with open_volume(volume_client, volname) as fs_handle:
-            with open_at_group(volume_client, fs_handle, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as clone_subvolume:
-                s_volname, s_groupname, s_subvolname, s_snapname = get_clone_source(clone_subvolume)
-                with open_at_group(volume_client, fs_handle, s_groupname, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as source_subvolume:
-                    source_subvolume.detach_snapshot(s_snapname, index)
+            # detach source but leave the clone section intact for later inspection
+            with open_clone_subvolume_pair(volume_client, fs_handle, volname, groupname, subvolname) as clone_volumes:
+                clone_volumes[1].detach_snapshot(clone_volumes[2], index)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
@@ -200,11 +218,9 @@ def handle_clone_failed(volume_client, volname, index, groupname, subvolname, sh
 def handle_clone_complete(volume_client, volname, index, groupname, subvolname, should_cancel):
     try:
         with open_volume(volume_client, volname) as fs_handle:
-            with open_at_group(volume_client, fs_handle, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as clone_subvolume:
-                s_volname, s_groupname, s_subvolname, s_snapname = get_clone_source(clone_subvolume)
-                with open_at_group(volume_client, fs_handle, s_groupname, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as source_subvolume:
-                    source_subvolume.detach_snapshot(s_snapname, index)
-                    clone_subvolume.remove_clone_source(flush=True)
+            with open_clone_subvolume_pair(volume_client, fs_handle, volname, groupname, subvolname) as clone_volumes:
+                clone_volumes[1].detach_snapshot(clone_volumes[2], index)
+                clone_volumes[0].remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
@@ -268,7 +284,7 @@ class Cloner(AsyncJobs):
         with open_clone_index(fs_handle, self.vc.volspec) as index:
             return index.find_clone_entry_index(clone_subvolume.base_path)
 
-    def _cancel_pending_clone(self, fs_handle, clone_subvolume, status, track_idx):
+    def _cancel_pending_clone(self, fs_handle, clone_subvolume, clone_subvolname, clone_groupname, status, track_idx):
         clone_state = SubvolumeStates.from_value(status['state'])
         assert self.is_clone_cancelable(clone_state)
 
@@ -276,13 +292,13 @@ class Cloner(AsyncJobs):
         s_subvolname = status['source']['subvolume']
         s_snapname = status['source']['snapshot']
 
-        with open_group(fs_handle, self.vc.volspec, s_groupname) as s_group:
-            with open_subvol(fs_handle, self.vc.volspec, s_group, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as s_subvolume:
-                next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
-                                                      clone_state,
-                                                      SubvolumeActions.ACTION_CANCELLED)
-                clone_subvolume.state = (next_state, True)
-                s_subvolume.detach_snapshot(s_snapname, track_idx.decode('utf-8'))
+        with open_at_group_unique(self.vc, fs_handle, s_groupname, s_subvolname, clone_subvolume, clone_groupname,
+                                  clone_subvolname, SubvolumeOpType.CLONE_SOURCE) as s_subvolume:
+            next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
+                                                  clone_state,
+                                                  SubvolumeActions.ACTION_CANCELLED)
+            clone_subvolume.state = (next_state, True)
+            s_subvolume.detach_snapshot(s_snapname, track_idx.decode('utf-8'))
 
     def cancel_job(self, volname, job):
         """
@@ -306,7 +322,7 @@ class Cloner(AsyncJobs):
                             raise VolumeException(-errno.EINVAL, "error canceling clone")
                         if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state):
                             # clone has not started yet -- cancel right away.
-                            self._cancel_pending_clone(fs_handle, clone_subvolume, status, track_idx)
+                            self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
                             return
             # cancelling an on-going clone would persist "canceled" state in subvolume metadata.
             # to persist the new state, async cloner accesses the volume in exclusive mode.
