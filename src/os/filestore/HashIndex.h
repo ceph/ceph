@@ -402,17 +402,19 @@ private:
     return str;
   }
 
-  struct CmpPairBitwise {
-    bool operator()(const std::pair<std::string, ghobject_t>& l,
-		    const std::pair<std::string, ghobject_t>& r) const
-    {
-      if (l.first < r.first)
-	return true;
-      if (l.first > r.first)
-	return false;
-      if (cmp(l.second, r.second) < 0)
-	return true;
-      return false;
+  struct ObjectKey {
+    const std::string hash_prefix;
+    const std::string key;
+
+    ObjectKey(const std::string &hash_prefix, const std::string &key) :
+      hash_prefix(hash_prefix), key(key) {
+    }
+
+    bool operator<(const ObjectKey &rhs) const {
+      if (hash_prefix != rhs.hash_prefix) {
+        return hash_prefix < rhs.hash_prefix;
+      }
+      return key < rhs.key;
     }
   };
 
@@ -427,7 +429,7 @@ private:
     const std::vector<std::string> &path,             /// [in] Path to list
     const ghobject_t *next_object,          /// [in] list > *next_object
     std::set<std::string, CmpHexdigitStringBitwise> *hash_prefixes, /// [out] prefixes in dir
-    std::set<std::pair<std::string, ghobject_t>, CmpPairBitwise> *objects /// [out] objects
+    std::map<ObjectKey, ghobject_t> *objects /// [out] objects
     );
 
   /// List objects in collection in ghobject_t order

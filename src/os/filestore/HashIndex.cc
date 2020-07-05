@@ -15,6 +15,7 @@
 #include "include/compat.h"
 #include "include/types.h"
 #include "include/buffer.h"
+#include "os/kv.h"
 #include "osd/osd_types.h"
 #include <errno.h>
 
@@ -33,6 +34,116 @@ using std::vector;
 
 using ceph::bufferptr;
 using ceph::bufferlist;
+
+/*
+ * object name key structure
+ *
+ * encoded u8: shard + 2^7 (so that it sorts properly)
+ * encoded u64: poolid + 2^63 (so that it sorts properly)
+ * encoded u32: hash (bit reversed)
+ *
+ * escaped string: namespace
+ *
+ * escaped string: key or object name
+ * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
+ *         we are done.  otherwise, we are followed by the object name.
+ * escaped string: object name (unless '=' above)
+ *
+ * encoded u64: snap
+ * encoded u64: generation
+ * 'o'
+ */
+#define ONODE_KEY_SUFFIX 'o'
+
+/*
+ * extent shard key
+ *
+ * object prefix key
+ * u32
+ * 'x'
+ */
+#define EXTENT_SHARD_KEY_SUFFIX 'x'
+
+/*
+ * string encoding in the key
+ *
+ * Use the bluestore's method. After encoding the key string was
+ * supposed to lexicographically sort the same way that ghobject_t
+ * did, but due to a bug in the bluestore implementation the order is
+ * different. Nevertheless we use the same (buggy) implementation here
+ * to produce the same object list order.
+ *
+ */
+template<typename S>
+static void append_escaped(const string &in, S *out)
+{
+  char hexbyte[in.length() * 3 + 1];
+  char* ptr = &hexbyte[0];
+  for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
+    if (*i <= '#') {
+      *ptr++ = '#';
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
+    } else if (*i >= '~') {
+      *ptr++ = '~';
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
+    } else {
+      *ptr++  = *i;
+    }
+  }
+  *ptr++ = '!';
+  out->append(hexbyte, ptr - &hexbyte[0]);
+}
+
+template<typename T>
+static void _key_encode_shard(shard_id_t shard, T *key)
+{
+  key->push_back((char)((uint8_t)shard.id + (uint8_t)0x80));
+}
+
+template<typename S>
+static void get_object_key(const ghobject_t& oid, S *key)
+{
+  key->clear();
+
+  size_t max_len = 1 + 8 + 4 +
+                  (oid.hobj.nspace.length() * 3 + 1) +
+                  (oid.hobj.get_key().length() * 3 + 1) +
+                   1 + // for '<', '=', or '>'
+                  (oid.hobj.oid.name.length() * 3 + 1) +
+                   8 + 8 + 1;
+  key->reserve(max_len);
+
+  _key_encode_shard(oid.shard_id, key);
+  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
+  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+
+  append_escaped(oid.hobj.nspace, key);
+
+  if (oid.hobj.get_key().length()) {
+    // is a key... could be < = or >.
+    append_escaped(oid.hobj.get_key(), key);
+    // (ASCII chars < = and > sort in that order, yay)
+    int r = oid.hobj.get_key().compare(oid.hobj.oid.name);
+    if (r) {
+      key->append(r > 0 ? ">" : "<");
+      append_escaped(oid.hobj.oid.name, key);
+    } else {
+      // same as no key
+      key->append("=");
+    }
+  } else {
+    // no key
+    append_escaped(oid.hobj.oid.name, key);
+    key->append("=");
+  }
+
+  _key_encode_u64(oid.hobj.snap, key);
+  _key_encode_u64(oid.generation, key);
+
+  key->push_back(ONODE_KEY_SUFFIX);
+}
 
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::SETTINGS_ATTR = "settings";
@@ -1071,7 +1182,7 @@ int HashIndex::get_path_contents_by_hash_bitwise(
   const vector<string> &path,
   const ghobject_t *next_object,
   set<string, CmpHexdigitStringBitwise> *hash_prefixes,
-  set<pair<string, ghobject_t>, CmpPairBitwise> *objects)
+  map<ObjectKey, ghobject_t> *objects)
 {
   map<string, ghobject_t> rev_objects;
   int r;
@@ -1085,8 +1196,10 @@ int HashIndex::get_path_contents_by_hash_bitwise(
     if (next_object && i->second < *next_object)
       continue;
     string hash_prefix = get_path_str(i->second);
+    string key;
+    get_object_key(i->second, &key);
     hash_prefixes->insert(hash_prefix);
-    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
+    objects->insert({{hash_prefix, key}, i->second});
   }
   vector<string> subdirs;
   r = list_subdirs(path, &subdirs);
@@ -1145,7 +1258,7 @@ int HashIndex::list_by_hash_bitwise(
   vector<string> next_path = path;
   next_path.push_back("");
   set<string, CmpHexdigitStringBitwise> hash_prefixes;
-  set<pair<string, ghobject_t>, CmpPairBitwise> objects;
+  map<ObjectKey, ghobject_t> objects;
   int r = get_path_contents_by_hash_bitwise(path,
 					    next,
 					    &hash_prefixes,
@@ -1156,9 +1269,8 @@ int HashIndex::list_by_hash_bitwise(
        i != hash_prefixes.end();
        ++i) {
     dout(20) << __func__ << " prefix " << *i << dendl;
-    set<pair<string, ghobject_t>, CmpPairBitwise>::iterator j = objects.lower_bound(
-      make_pair(*i, ghobject_t()));
-    if (j == objects.end() || j->first != *i) {
+    auto j = objects.lower_bound({*i, {}});
+    if (j == objects.end() || j->first.hash_prefix != *i) {
       *(next_path.rbegin()) = *(i->rbegin());
       ghobject_t next_recurse;
       if (next)
@@ -1177,7 +1289,7 @@ int HashIndex::list_by_hash_bitwise(
 	return 0;
       }
     } else {
-      while (j != objects.end() && j->first == *i) {
+      while (j != objects.end() && j->first.hash_prefix == *i) {
 	if (max_count > 0 && out->size() == (unsigned)max_count) {
 	  if (next)
 	    *next = j->second;
