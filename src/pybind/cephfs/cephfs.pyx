@@ -357,7 +357,7 @@ ELSE:
 
 cdef make_ex(ret, msg):
     """
-    Translate a librados return code into an exception.
+    Translate a libcephfs return code into an exception.
 
     :param ret: the return code
     :type ret: int
@@ -369,7 +369,7 @@ cdef make_ex(ret, msg):
     if ret in errno_to_exception:
         return errno_to_exception[ret](ret, msg)
     else:
-        return Error(msg + ': {} [Errno {:d}]'.format(os.strerror(ret), ret))
+        return OSError(ret, msg)
 
 
 class DirEntry(namedtuple('DirEntry',
