@@ -741,6 +741,10 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals(os, osd_op);
     });
+  case CEPH_OSD_OP_OMAPGETHEADER:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.omap_get_header(os, osd_op);
+    });
   case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals_by_keys(os, osd_op);
@@ -754,6 +758,24 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       osd_op_params = osd_op_params_t();
       return backend.omap_set_vals(os, osd_op, txn, *osd_op_params);
+    }, true);
+  case CEPH_OSD_OP_OMAPSETHEADER:
+#if 0
+    if (!pg.get_pool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }
+#endif
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_set_header(os, osd_op, txn);
+    }, true);
+  case CEPH_OSD_OP_OMAPRMKEYRANGE:
+#if 0
+    if (!pg.get_pool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }
+#endif
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_remove_range(os, osd_op, txn);
     }, true);
 
   // watch/notify
