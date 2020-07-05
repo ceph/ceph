@@ -239,7 +239,7 @@ add_executable(unittest_interval_set
   test_interval_set.cc
 )
 add_ceph_unittest(unittest_interval_set)
-target_link_libraries(unittest_interval_set ceph-common)
+target_link_libraries(unittest_interval_set ceph-common GTest::Main)
 
 # unittest_weighted_priority_queue
 add_executable(unittest_weighted_priority_queue
