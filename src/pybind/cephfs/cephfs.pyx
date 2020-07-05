@@ -13,14 +13,7 @@ from collections import namedtuple
 from datetime import datetime
 import errno
 import os
-import sys
 import time
-
-# Are we running Python 2.x
-if sys.version_info[0] < 3:
-    str_type = basestring
-else:
-    str_type = str
 
 AT_NO_ATTR_SYNC = 0x4000
 AT_SYMLINK_NOFOLLOW = 0x100
@@ -634,7 +627,7 @@ cdef class LibCephFS(object):
                 conffile = None
             self.conf_read_file(conffile)
         if conf is not None:
-            for key, value in conf.iteritems():
+            for key, value in conf.items():
                 self.conf_set(key, value)
 
     def get_addrs(self):

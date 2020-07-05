@@ -7,7 +7,6 @@ import errno
 import json
 import math
 import random
-import six
 import time
 from mgr_module import MgrModule, CommandResult
 from threading import Event
@@ -35,13 +34,13 @@ class MappingState:
         self.pg_up_by_poolid = {}
         for poolid in self.poolids:
             self.pg_up_by_poolid[poolid] = osdmap.map_pool_pgs_up(poolid)
-            for a,b in six.iteritems(self.pg_up_by_poolid[poolid]):
+            for a,b in self.pg_up_by_poolid[poolid].items():
                 self.pg_up[a] = b
 
     def calc_misplaced_from(self, other_ms):
         num = len(other_ms.pg_up)
         misplaced = 0
-        for pgid, before in six.iteritems(other_ms.pg_up):
+        for pgid, before in other_ms.pg_up.items():
             if before != self.pg_up.get(pgid, []):
                 misplaced += 1
         if num > 0:
@@ -88,10 +87,10 @@ class MsPlan(Plan):
         if len(self.compat_ws) and \
            not CRUSHMap.have_default_choose_args(self.initial.crush_dump):
             ls.append('ceph osd crush weight-set create-compat')
-        for osd, weight in six.iteritems(self.compat_ws):
+        for osd, weight in self.compat_ws.items():
             ls.append('ceph osd crush weight-set reweight-compat %s %f' %
                       (osd, weight))
-        for osd, weight in six.iteritems(self.osd_weights):
+        for osd, weight in self.osd_weights.items():
             ls.append('ceph osd reweight osd.%d %f' % (osd, weight))
         incdump = self.inc.dump()
         for pgid in incdump.get('old_pg_upmap_items', []):
@@ -169,7 +168,7 @@ class Eval:
             score = 0.0
             sum_weight = 0.0
 
-            for k, v in six.iteritems(count[t]):
+            for k, v in count[t].items():
                 # adjust/normalize by weight
                 if target[k]:
                     adjusted = float(v) / target[k] / float(num)
@@ -762,12 +761,12 @@ class Module(MgrModule):
             weight_map = ms.crush.get_take_weight_osd_map(rootid)
             adjusted_map = {
                 osd: cw * osd_weight[osd]
-                for osd,cw in six.iteritems(weight_map) if osd in osd_weight and cw > 0
+                for osd,cw in weight_map.items() if osd in osd_weight and cw > 0
             }
             sum_w = sum(adjusted_map.values())
             assert len(adjusted_map) == 0 or sum_w > 0
             pe.target_by_root[root] = { osd: w / sum_w
-                                        for osd,w in six.iteritems(adjusted_map) }
+                                        for osd,w in adjusted_map.items() }
             actual_by_root[root] = {
                 'pgs': {},
                 'objects': {},
@@ -787,7 +786,7 @@ class Module(MgrModule):
         self.log.debug('target_by_root %s' % pe.target_by_root)
 
         # pool and root actual
-        for pool, pi in six.iteritems(pool_info):
+        for pool, pi in pool_info.items():
             poolid = pi['pool']
             pm = ms.pg_up_by_poolid[poolid]
             pgs = 0
@@ -796,7 +795,7 @@ class Module(MgrModule):
             pgs_by_osd = {}
             objects_by_osd = {}
             bytes_by_osd = {}
-            for pgid, up in six.iteritems(pm):
+            for pgid, up in pm.items():
                 for osd in [int(osd) for osd in up]:
                     if osd == CRUSHMap.ITEM_NONE:
                         continue
@@ -826,29 +825,29 @@ class Module(MgrModule):
             pe.count_by_pool[pool] = {
                 'pgs': {
                     k: v
-                    for k, v in six.iteritems(pgs_by_osd)
+                    for k, v in pgs_by_osd.items()
                 },
                 'objects': {
                     k: v
-                    for k, v in six.iteritems(objects_by_osd)
+                    for k, v in objects_by_osd.items()
                 },
                 'bytes': {
                     k: v
-                    for k, v in six.iteritems(bytes_by_osd)
+                    for k, v in bytes_by_osd.items()
                 },
             }
             pe.actual_by_pool[pool] = {
                 'pgs': {
                     k: float(v) / float(max(pgs, 1))
-                    for k, v in six.iteritems(pgs_by_osd)
+                    for k, v in pgs_by_osd.items()
                 },
                 'objects': {
                     k: float(v) / float(max(objects, 1))
-                    for k, v in six.iteritems(objects_by_osd)
+                    for k, v in objects_by_osd.items()
                 },
                 'bytes': {
                     k: float(v) / float(max(bytes, 1))
-                    for k, v in six.iteritems(bytes_by_osd)
+                    for k, v in bytes_by_osd.items()
                 },
             }
             pe.total_by_pool[pool] = {
@@ -860,29 +859,29 @@ class Module(MgrModule):
             pe.count_by_root[root] = {
                 'pgs': {
                     k: float(v)
-                    for k, v in six.iteritems(actual_by_root[root]['pgs'])
+                    for k, v in actual_by_root[root]['pgs'].items()
                 },
                 'objects': {
                     k: float(v)
-                    for k, v in six.iteritems(actual_by_root[root]['objects'])
+                    for k, v in actual_by_root[root]['objects'].items()
                 },
                 'bytes': {
                     k: float(v)
-                    for k, v in six.iteritems(actual_by_root[root]['bytes'])
+                    for k, v in actual_by_root[root]['bytes'].items()
                 },
             }
             pe.actual_by_root[root] = {
                 'pgs': {
                     k: float(v) / float(max(pe.total_by_root[root]['pgs'], 1))
-                    for k, v in six.iteritems(actual_by_root[root]['pgs'])
+                    for k, v in actual_by_root[root]['pgs'].items()
                 },
                 'objects': {
                     k: float(v) / float(max(pe.total_by_root[root]['objects'], 1))
-                    for k, v in six.iteritems(actual_by_root[root]['objects'])
+                    for k, v in actual_by_root[root]['objects'].items()
                 },
                 'bytes': {
                     k: float(v) / float(max(pe.total_by_root[root]['bytes'], 1))
-                    for k, v in six.iteritems(actual_by_root[root]['bytes'])
+                    for k, v in actual_by_root[root]['bytes'].items()
                 },
             }
         self.log.debug('actual_by_pool %s' % pe.actual_by_pool)
@@ -894,7 +893,7 @@ class Module(MgrModule):
                 b,
                 pe.target_by_root[a],
                 pe.total_by_root[a]
-            ) for a, b in six.iteritems(pe.count_by_root)
+            ) for a, b in pe.count_by_root.items()
         }
         self.log.debug('stats_by_root %s' % pe.stats_by_root)
 
@@ -913,8 +912,8 @@ class Module(MgrModule):
 
         # total score is just average of normalized stddevs
         pe.score = 0.0
-        for r, vs in six.iteritems(pe.score_by_root):
-            for k, v in six.iteritems(vs):
+        for r, vs in pe.score_by_root.items():
+            for k, v in vs.items():
                 if k in metrics:
                     pe.score += v
         pe.score /= len(metrics) * len(roots)
@@ -1065,14 +1064,14 @@ class Module(MgrModule):
         # get current osd reweights
         orig_osd_weight = { a['osd']: a['weight']
                             for a in ms.osdmap_dump.get('osds',[]) }
-        reweighted_osds = [ a for a,b in six.iteritems(orig_osd_weight)
+        reweighted_osds = [ a for a,b in orig_osd_weight.items()
                             if b < 1.0 and b > 0.0 ]
 
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights(ms)
         if not orig_ws:
             return -errno.EAGAIN, 'compat weight-set not available'
-        orig_ws = { a: b for a, b in six.iteritems(orig_ws) if a >= 0 }
+        orig_ws = { a: b for a, b in orig_ws.items() if a >= 0 }
 
         # Make sure roots don't overlap their devices.  If so, we
         # can't proceed.
@@ -1081,7 +1080,7 @@ class Module(MgrModule):
         visited = {}
         overlap = {}
         root_ids = {}
-        for root, wm in six.iteritems(pe.target_by_root):
+        for root, wm in pe.target_by_root.items():
             for osd in wm:
                 if osd in visited:
                     if osd not in overlap:
@@ -1162,7 +1161,7 @@ class Module(MgrModule):
 
                 # normalize weights under this root
                 root_weight = crush.get_item_weight(pe.root_ids[root])
-                root_sum = sum(b for a,b in six.iteritems(next_ws)
+                root_sum = sum(b for a,b in next_ws.items()
                                if a in target.keys())
                 if root_sum > 0 and root_weight > 0:
                     factor = root_sum / root_weight
@@ -1219,7 +1218,7 @@ class Module(MgrModule):
         if best_pe.score < pe.score + fudge:
             self.log.info('Success, score %f -> %f', pe.score, best_pe.score)
             plan.compat_ws = best_ws
-            for osd, w in six.iteritems(best_ow):
+            for osd, w in best_ow.items():
                 if w != orig_osd_weight[osd]:
                     self.log.debug('osd.%d reweight %f', osd, w)
                     plan.osd_weights[osd] = w
@@ -1306,7 +1305,7 @@ class Module(MgrModule):
                 self.log.error('Error creating compat weight-set')
                 return r, outs
 
-        for osd, weight in six.iteritems(plan.compat_ws):
+        for osd, weight in plan.compat_ws.items():
             self.log.info('ceph osd crush weight-set reweight-compat osd.%d %f',
                           osd, weight)
             result = CommandResult('')
@@ -1320,7 +1319,7 @@ class Module(MgrModule):
 
         # new_weight
         reweightn = {}
-        for osd, weight in six.iteritems(plan.osd_weights):
+        for osd, weight in plan.osd_weights.items():
             reweightn[str(osd)] = str(int(weight * float(0x10000)))
         if len(reweightn):
             self.log.info('ceph osd reweightn %s', reweightn)

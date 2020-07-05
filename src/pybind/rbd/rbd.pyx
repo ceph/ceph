@@ -1036,8 +1036,6 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return val
     elif isinstance(val, str):
         return val.encode(encoding)
-    elif sys.version_info < (3, 0) and isinstance(val, unicode):
-        return val.encode(encoding)
     else:
         raise InvalidArgument('%s must be a string' % name)
 

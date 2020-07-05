@@ -6,7 +6,6 @@ import logging
 import ipaddress
 from distutils.util import strtobool
 import xml.etree.ElementTree as ET  # noqa: N814
-import six
 from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..settings import Settings, Options
@@ -139,7 +138,7 @@ def _parse_addr(value):
         #   Group 2: 2001:db8:85a3::8a2e:370:7334
         addr = match.group(3) if match.group(3) else match.group(2)
         try:
-            ipaddress.ip_address(six.u(addr))
+            ipaddress.ip_address(addr)
             return addr
         except ValueError:
             raise LookupError('Invalid RGW address \'{}\' found'.format(addr))

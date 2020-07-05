@@ -4,7 +4,6 @@ import threading
 import random
 import json
 import errno
-import six
 
 
 class Module(MgrModule):
@@ -173,7 +172,7 @@ class Module(MgrModule):
             return -1, "", "Failed to decode JSON input: {}".format(e)
 
         try:
-            for check, info in six.iteritems(checks):
+            for check, info in checks.items():
                 self._health[check] = {
                     "severity": str(info["severity"]),
                     "summary": str(info["summary"]),

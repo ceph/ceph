@@ -2,7 +2,6 @@ from io import StringIO
 import json
 import time
 import logging
-import six
 
 from textwrap import dedent
 
@@ -217,7 +216,7 @@ class FuseMount(CephFSMount):
                 log.info('mount point does not exist: %s', self.mountpoint)
                 return False
 
-        fstype = six.ensure_str(proc.stdout.getvalue()).rstrip('\n')
+        fstype = proc.stdout.getvalue().rstrip('\n')
         if fstype == 'fuseblk':
             log.info('ceph-fuse is mounted on %s', self.mountpoint)
             return True

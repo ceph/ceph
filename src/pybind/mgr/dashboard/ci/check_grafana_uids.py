@@ -18,18 +18,13 @@ import copy
 import json
 import os
 
-import six
-from six.moves.html_parser import HTMLParser
+from html.parser import HTMLParser
 
 
 class TemplateParser(HTMLParser):
 
     def __init__(self, _file, search_tag):
-        if six.PY3:
-            super(TemplateParser, self).__init__()
-        else:
-            # HTMLParser is not a new-style class in py2
-            HTMLParser.__init__(self)
+        super().__init__()
         self.search_tag = search_tag
         self.file = _file
         self.parsed_data = []
@@ -52,10 +47,6 @@ class TemplateParser(HTMLParser):
         error_msg = 'fail to parse file {} (@{}): {}'.\
             format(self.file, self.getpos(), message)
         exit(error_msg)
-
-
-def stdout(msg):
-    six.print_(msg)
 
 
 def get_files(base_dir, file_ext):
@@ -132,7 +123,7 @@ def main():
         exit(error_msg)
 
     if verbose:
-        stdout('Found mappings:')
+        print('Found mappings:')
     no_dashboard_tags = []
     for tag in tags:
         uid = tag['attrs']['uid']
@@ -144,7 +135,7 @@ def main():
                 format(uid, tag['file'], tag['line'],
                        grafana_dashboards[uid]['title'],
                        grafana_dashboards[uid]['file'])
-            stdout(msg)
+            print(msg)
 
     if no_dashboard_tags:
         title = ('Checking Grafana dashboards UIDs: ERROR\n'
@@ -156,7 +147,7 @@ def main():
         error_msg = title + '\n'.join(lines)
         exit(error_msg)
     else:
-        stdout('Checking Grafana dashboards UIDs: OK')
+        print('Checking Grafana dashboards UIDs: OK')
 
 
 if __name__ == '__main__':
