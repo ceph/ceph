@@ -7,7 +7,6 @@ import contextlib
 import json
 import logging
 import os
-import six
 import sys
 import tempfile
 import time
@@ -487,8 +486,8 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                                 log.error("failed with " +
                                           str(proc.exitstatus))
                                 log.error(" ".join([
-                                    six.ensure_str(proc.stdout.getvalue()),
-                                    six.ensure_str(proc.stderr.getvalue()),
+                                    proc.stdout.getvalue().decode(),
+                                    proc.stderr.getvalue().decode(),
                                     ]))
                                 ERRORS += 1
 
