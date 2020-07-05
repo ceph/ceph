@@ -297,7 +297,7 @@ int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
   if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
     return ret;
   }
-  outbl->claim(op.outdata);
+  outbl = std::move(op.outdata);
   return 0;
 }
 
@@ -357,7 +357,7 @@ int cls_cxx_map_clear(cls_method_context_t hctx)
 int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
 {
   OSDOp op{CEPH_OSD_OP_OMAPSETHEADER};
-  op.indata.claim(*inbl);
+  op.indata = std::move(*inbl);
   return execute_osd_op(hctx, op);
 }
 
