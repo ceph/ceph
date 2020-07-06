@@ -148,7 +148,7 @@ def run_tasks(tasks, ctx):
         # causes failures with 'too many values to unpack.'  We want to
         # fail as before, but with easier to understand error indicators.
         if isinstance(e, ValueError):
-            if e.message == 'too many values to unpack':
+            if str(e) == 'too many values to unpack':
                 emsg = 'Possible configuration error in yaml file'
                 log.error(emsg)
                 ctx.summary['failure_info'] = emsg
