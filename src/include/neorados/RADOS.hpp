@@ -55,6 +55,7 @@
 #include "include/common_fwd.h"
 
 #include "include/buffer.h"
+#include "include/rados/librados_fwd.hpp"
 
 #include "common/ceph_time.h"
 
@@ -530,6 +531,8 @@ public:
 				    std::move(init.completion_handler)));
     return init.result.get();
   }
+
+  static RADOS make_with_librados(librados::Rados& rados);
 
   RADOS(const RADOS&) = delete;
   RADOS& operator =(const RADOS&) = delete;

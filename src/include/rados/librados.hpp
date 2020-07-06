@@ -19,6 +19,8 @@ namespace libradosstriper
   class RadosStriper;
 }
 
+namespace neorados { class RADOS; }
+
 namespace librados {
 
 using ceph::bufferlist;
@@ -1503,9 +1505,11 @@ inline namespace v14_2_0 {
 						callback_t cb_safe)
       __attribute__ ((deprecated));
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
-    
+
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
+    friend class neorados::RADOS;
+
     // We don't allow assignment or copying
     Rados(const Rados& rhs);
     const Rados& operator=(const Rados& rhs);

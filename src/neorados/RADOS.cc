@@ -759,6 +759,9 @@ void RADOS::make_with_cct(CephContext* cct,
   }
 }
 
+RADOS RADOS::make_with_librados(librados::Rados& rados) {
+  return RADOS{std::make_unique<detail::RadosClient>(rados.client)};
+}
 
 RADOS::RADOS() = default;
 
