@@ -32,6 +32,7 @@ public:
   inodeno_t dirino;
   std::string d_name;
   __u8 d_type = 0;
+  std::set<frag_t> frags;
 
   int omap_idx = -1;	// stored in which omap object
 
@@ -43,13 +44,13 @@ public:
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<Anchor*>& ls);
+  bool operator==(const Anchor &r) const {
+    return ino == r.ino && dirino == r.dirino &&
+	   d_name == r.d_name && d_type == r.d_type &&
+	   frags == r.frags;
+  }
 };
 WRITE_CLASS_ENCODER(Anchor)
-
-inline bool operator==(const Anchor &l, const Anchor &r) {
-  return l.ino == r.ino && l.dirino == r.dirino &&
-	 l.d_name == r.d_name && l.d_type == r.d_type;
-}
 
 ostream& operator<<(ostream& out, const Anchor &a);
 
