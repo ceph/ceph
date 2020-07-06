@@ -748,9 +748,9 @@ void RADOS::make_with_cct(CephContext* cct,
 			  boost::asio::io_context& ioctx,
 			  std::unique_ptr<BuildComp> c) {
   try {
-    auto r = new detail::RADOS(ioctx, cct);
+    auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct)};
     r->objecter->wait_for_osd_map(
-      [c = std::move(c), r = std::unique_ptr<detail::RADOS>(r)]() mutable {
+      [c = std::move(c), r = std::unique_ptr<detail::Client>(r)]() mutable {
 	c->dispatch(std::move(c), bs::error_code{},
 		    RADOS{std::move(r)});
       });
@@ -762,7 +762,7 @@ void RADOS::make_with_cct(CephContext* cct,
 
 RADOS::RADOS() = default;
 
-RADOS::RADOS(std::unique_ptr<detail::RADOS> impl)
+RADOS::RADOS(std::unique_ptr<detail::Client> impl)
   : impl(std::move(impl)) {}
 
 RADOS::RADOS(RADOS&&) = default;
@@ -873,7 +873,7 @@ void RADOS::lookup_pool(std::string_view name,
   if (ret < 0) {
     impl->objecter->wait_for_latest_osdmap(
       [name = std::string(name), c = std::move(c),
-       objecter = impl->objecter.get()]
+       objecter = impl->objecter]
       (bs::error_code ec) mutable {
 	int64_t ret =
 	  objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
@@ -1175,7 +1175,7 @@ void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
 			 ioc->snapc, ceph::real_clock::now(), 0,
 			 Objecter::Op::OpComp::create(
 			   get_executor(),
-			   [objecter = impl->objecter.get(),
+			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
 			     objecter->linger_cancel(linger_op);
@@ -1203,7 +1203,7 @@ void RADOS::unwatch(uint64_t cookie, std::int64_t pool,
 			 {}, ceph::real_clock::now(), 0,
 			 Objecter::Op::OpComp::create(
 			   get_executor(),
-			   [objecter = impl->objecter.get(),
+			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
 			     objecter->linger_cancel(linger_op);
@@ -1279,7 +1279,7 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc, 0);
 
-  auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter.get(),
+  auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
                                             linger_op, std::move(c));
   linger_op->on_notify_finish =
     Objecter::LingerOp::OpComp::create(
@@ -1318,7 +1318,7 @@ void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
     oloc.key = *key;
   auto linger_op = impl->objecter->linger_register(*oid, oloc, 0);
 
-  auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter.get(),
+  auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
                                             linger_op, std::move(c));
   linger_op->on_notify_finish =
     Objecter::LingerOp::OpComp::create(

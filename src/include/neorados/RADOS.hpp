@@ -73,7 +73,7 @@ struct hash<neorados::IOContext>;
 
 namespace neorados {
 namespace detail {
-class RADOS;
+class Client;
 }
 
 class RADOS;
@@ -944,7 +944,7 @@ private:
 
   friend Builder;
 
-  RADOS(std::unique_ptr<detail::RADOS> impl);
+  RADOS(std::unique_ptr<detail::Client> impl);
   static void make_with_cct(CephContext* cct,
 			    boost::asio::io_context& ioctx,
 		    std::unique_ptr<BuildComp> c);
@@ -1068,9 +1068,8 @@ private:
 			  bool force, std::unique_ptr<SimpleOpComp> c);
 
 
-  // Since detail::RADOS has immovable things inside it, hold a
-  // unique_ptr to it so we can be moved.
-  std::unique_ptr<detail::RADOS> impl;
+  // Proxy object to provide access to low-level RADOS messaging clients
+  std::unique_ptr<detail::Client> impl;
 };
 
 enum class errc {
