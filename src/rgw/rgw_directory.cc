@@ -69,7 +69,23 @@ BackendProtocol stringToProtocol(string protocol)
 		return BackendProtocol::S3;
 }
 
+time_t stringToTime(string time)
+{
+	struct tm tm;
+	strptime(time.c_str(), "%Y-%m-%d %H:%M:%S", &tm);
+	time_t t = mktime(&tm); 
+	return t;
+}
 
+string timeToString(time_t time)
+{
+	struct tm *tm = new struct tm;
+	tm = gmtime(&time);
+
+	// format: %Y-%m-%d %H:%M:%S
+	string time_s = to_string(tm->tm_year)+"-"+to_string(tm->tm_mon)+"-"+to_string(tm->tm_mday)+" "+to_string(tm->tm_hour)+":"+to_string(tm->tm_min)+":"+to_string(tm->tm_sec);
+	return time_s;
+}
 
 /* this function should be implemented in their own respected classes */
 int RGWDirectory::getValue(cache_obj *ptr){
@@ -108,7 +124,8 @@ int RGWDirectory::existKey(string key){
  * its input is a host which has a copy of the data
  * and bucket_name, obj_name and chunk_id in *ptr
  */
-int RGWDirectory::updateHostList(RGWDirectory *dirObj, cache_obj *ptr, string host){
+int RGWDirectory::updateHostList(RGWDirectory *dirObj, cache_obj *ptr){
+	string host = ptr->host_list[0];
 
 	cache_obj tmpObj;
 	
@@ -140,7 +157,9 @@ int RGWDirectory::updateHostList(RGWDirectory *dirObj, cache_obj *ptr, string ho
  * its input is a new acl of the object
  * and bucket_name, obj_name and chunk_id in *ptr
  */
-int RGWDirectory::updateACL(RGWDirectory *dirObj, cache_obj *ptr, string acl){
+int RGWDirectory::updateACL(RGWDirectory *dirObj, cache_obj *ptr){
+	string acl = ptr->acl;
+	time_t aclTimeStamp = ptr->aclTimeStamp;
 
 	cache_obj tmpObj;
 	
@@ -157,6 +176,7 @@ int RGWDirectory::updateACL(RGWDirectory *dirObj, cache_obj *ptr, string acl){
 		getValue(&tmpObj);
 
 		tmpObj.acl = acl;
+		tmpObj.aclTimeStamp = aclTimeStamp;
 
 		//updating the directory value 
 		setKey(key, &tmpObj);
@@ -171,7 +191,7 @@ int RGWDirectory::updateACL(RGWDirectory *dirObj, cache_obj *ptr, string acl){
  * its input is object's ceph::real_time last access time 
  * and bucket_name, obj_name and chunk_id in *ptr
  */
-int RGWDirectory::updateLastAcessTime(RGWDirectory *dirObj, cache_obj *ptr, string lastAccessTime){
+int RGWDirectory::updateLastAcessTime(RGWDirectory *dirObj, cache_obj *ptr){
 
 	cache_obj tmpObj;
 	
@@ -187,7 +207,7 @@ int RGWDirectory::updateLastAcessTime(RGWDirectory *dirObj, cache_obj *ptr, stri
 		//getting old values from the directory
 		getValue(&tmpObj);
 
-		tmpObj.lastAccessTime = lastAccessTime;
+		tmpObj.lastAccessTime = ptr->lastAccessTime;
 
 		//updating the directory value 
 		setKey(key, &tmpObj);
@@ -220,14 +240,11 @@ int RGWDirectory::delKey(string key){
 	return result;
 }
 
-
-
-
 /* builds the index for the directory
  * based on bucket_name, obj_name, and chunk_id
  */
 string RGWObjectDirectory::buildIndex(cache_obj *ptr){
-	return ptr->bucket_name + "_" + ptr->obj_name + "_" + to_string(ptr->chunk_id);
+	return ptr->bucket_name + "_" + ptr->obj_name;
 }
 
 /* builds the index for the directory
@@ -280,23 +297,22 @@ int RGWObjectDirectory::setKey(string key, cache_obj *ptr){
 	list.push_back(make_pair("key", key));
 	list.push_back(make_pair("owner", ptr->user));
 	list.push_back(make_pair("obj_acl", ptr->acl));
-	list.push_back(make_pair("aclTimeStamp", ptr->aclTimeStamp));
+	list.push_back(make_pair("aclTimeStamp", timeToString(ptr->aclTimeStamp)));
 	list.push_back(make_pair("host", host));
 	list.push_back(make_pair("dirty", BoolToString(ptr->dirty)));
 	list.push_back(make_pair("size", to_string(ptr->size_in_bytes)));
-	list.push_back(make_pair("creationTime", ptr->creationTime));
-	list.push_back(make_pair("lastAccessTime", ptr->lastAccessTime));
+	list.push_back(make_pair("creationTime", timeToString(ptr->creationTime)));
+	list.push_back(make_pair("lastAccessTime", timeToString(ptr->lastAccessTime)));
 	list.push_back(make_pair("etag", ptr->etag));
 	list.push_back(make_pair("backendProtocol", protocolToString(ptr->backendProtocol)));
 	list.push_back(make_pair("bucket_name", ptr->bucket_name));
 	list.push_back(make_pair("obj_name", ptr->obj_name));
-	list.push_back(make_pair("chunk_id", to_string(ptr->chunk_id)));
 
 	//creating a key entry
 	keys.push_back(key);
 
 	//making key and time a pair
-	timeKey.emplace(ptr->creationTime,key);
+	timeKey.emplace(timeToString(ptr->creationTime),key);
 
 	client.hmset(key, list, [](cpp_redis::reply &reply){
 	});
@@ -339,13 +355,13 @@ int RGWBlockDirectory::setKey(string key, cache_obj *ptr){
 	//creating a list of key's properties
 	list.push_back(make_pair("key", key));
 	list.push_back(make_pair("owner", ptr->user));
-	list.push_back(make_pair("block_acl", ptr->acl));
-	list.push_back(make_pair("aclTimeStamp", ptr->aclTimeStamp));
+	//list.push_back(make_pair("block_acl", ptr->acl));
+	//list.push_back(make_pair("aclTimeStamp", timeToString(ptr->aclTimeStamp)));
 	list.push_back(make_pair("host", host));
 	list.push_back(make_pair("dirty", BoolToString(ptr->dirty)));
 	list.push_back(make_pair("size", to_string(ptr->size_in_bytes)));
-	list.push_back(make_pair("creationTime", ptr->creationTime));
-	list.push_back(make_pair("lastAccessTime", ptr->lastAccessTime));
+	list.push_back(make_pair("creationTime", timeToString(ptr->creationTime)));
+	list.push_back(make_pair("lastAccessTime", timeToString(ptr->lastAccessTime)));
 	list.push_back(make_pair("etag", ptr->etag));
 	list.push_back(make_pair("bucket_name", ptr->bucket_name));
 	list.push_back(make_pair("obj_name", ptr->obj_name));
@@ -355,7 +371,7 @@ int RGWBlockDirectory::setKey(string key, cache_obj *ptr){
 	keys.push_back(key);
 
 	//making key and time a pair
-	timeKey.emplace(ptr->creationTime,key);
+	timeKey.emplace(timeToString(ptr->creationTime),key);
 
 	client.hmset(key, list, [](cpp_redis::reply &reply){
 	});
@@ -389,7 +405,6 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
     string backendProtocol;
     string bucket_name;
     string obj_name;
-	string chunk_id;
 
 	cpp_redis::client client;
 	client.connect("127.0.0.1", 7000);
@@ -409,9 +424,8 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 	fields.push_back("backendProtocol");
 	fields.push_back("bucket_name");
 	fields.push_back("obj_name");
-	fields.push_back("chunk_id");
 
-	client.hmget(key, fields, [&key, &owner, &obj_acl, &aclTimeStamp, &host, &dirty, &size, &creationTime, &lastAccessTime, &etag, &backendProtocol, &bucket_name, &obj_name, &chunk_id](cpp_redis::reply &reply){
+	client.hmget(key, fields, [&key, &owner, &obj_acl, &aclTimeStamp, &host, &dirty, &size, &creationTime, &lastAccessTime, &etag, &backendProtocol, &bucket_name, &obj_name](cpp_redis::reply &reply){
 	      key = reply.as_string()[0];
 	      owner = reply.as_string()[1];
 	      obj_acl = reply.as_string()[2];
@@ -425,7 +439,6 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
   		  backendProtocol = reply.as_string()[10];
   		  bucket_name = reply.as_string()[11];
 	      obj_name = reply.as_string()[12];
-	      chunk_id = reply.as_string()[13];
 	});
 
 	stringstream sloction(host);
@@ -434,7 +447,7 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 	//passing the values to the requester
 	ptr->user = owner;
 	ptr->acl = obj_acl;
-	ptr->aclTimeStamp = aclTimeStamp;
+	ptr->aclTimeStamp = stringToTime(aclTimeStamp);
 
 	//host1_host2_host3_...
 	while(getline(sloction, tmp, '_'))
@@ -442,13 +455,13 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 
 	ptr->dirty = StringToBool(dirty);
 	ptr->size_in_bytes = stoull(size);
-	ptr->creationTime = creationTime;
-	ptr->lastAccessTime = lastAccessTime;
+	ptr->creationTime = stringToTime(creationTime);
+	ptr->lastAccessTime = stringToTime(lastAccessTime);
 	ptr->etag = etag;
 	ptr->backendProtocol = stringToProtocol(backendProtocol);
 	ptr->bucket_name = bucket_name;
 	ptr->obj_name = obj_name;
-	ptr->chunk_id = stoull(chunk_id);
+	//ptr->chunk_id = NULL;
 
 	// synchronous commit, no timeout
 	client.sync_commit();
@@ -461,8 +474,6 @@ int RGWBlockDirectory::getValue(cache_obj *ptr){
 
     string key = buildIndex(ptr);
     string owner;
-    string block_acl;
-    string aclTimeStamp;
     string host;
     string dirty;
     string size;
@@ -481,8 +492,6 @@ int RGWBlockDirectory::getValue(cache_obj *ptr){
 	std::vector<std::string> fields;
 	fields.push_back("key");
 	fields.push_back("owner");
-	fields.push_back("block_acl");
-	fields.push_back("aclTimeStamp");
 	fields.push_back("host");
 	fields.push_back("dirty");
 	fields.push_back("size");
@@ -494,21 +503,19 @@ int RGWBlockDirectory::getValue(cache_obj *ptr){
 	fields.push_back("obj_name");
 	fields.push_back("chunk_id");
 
-	client.hmget(key, fields, [&key, &owner, &block_acl, &aclTimeStamp, &host, &dirty, &size, &creationTime, &lastAccessTime, &etag, &backendProtocol, &bucket_name, &obj_name, &chunk_id](cpp_redis::reply &reply){
+	client.hmget(key, fields, [&key, &owner, &host, &dirty, &size, &creationTime, &lastAccessTime, &etag, &backendProtocol, &bucket_name, &obj_name, &chunk_id](cpp_redis::reply &reply){
 	      key = reply.as_string()[0];
 	      owner = reply.as_string()[1];
-	      block_acl = reply.as_string()[2];
-	      aclTimeStamp = reply.as_string()[3];
-	      host = reply.as_string()[4];
-	      dirty = reply.as_string()[5];
-	      size = reply.as_string()[6];
-	      creationTime = reply.as_string()[7];
-	      lastAccessTime = reply.as_string()[8];
-	      etag = reply.as_string()[9];
-  		  backendProtocol = reply.as_string()[10];
-  		  bucket_name = reply.as_string()[11];
-	      obj_name = reply.as_string()[12];
-	      chunk_id = reply.as_string()[13];
+	      host = reply.as_string()[2];
+	      dirty = reply.as_string()[3];
+	      size = reply.as_string()[4];
+	      creationTime = reply.as_string()[5];
+	      lastAccessTime = reply.as_string()[6];
+	      etag = reply.as_string()[7];
+  		  backendProtocol = reply.as_string()[8];
+  		  bucket_name = reply.as_string()[9];
+	      obj_name = reply.as_string()[10];
+	      chunk_id = reply.as_string()[11];
 	});
 
 	stringstream sloction(host);
@@ -516,8 +523,8 @@ int RGWBlockDirectory::getValue(cache_obj *ptr){
 
 	//passing the values to the requester
 	ptr->user = owner;
-	ptr->acl = block_acl;
-	ptr->aclTimeStamp = aclTimeStamp;
+	//ptr->acl = NULL;
+	//ptr->aclTimeStamp = NULL;
 
 	//host1_host2_host3_...
 	while(getline(sloction, tmp, '_'))
@@ -525,8 +532,8 @@ int RGWBlockDirectory::getValue(cache_obj *ptr){
 
 	ptr->dirty = StringToBool(dirty);
 	ptr->size_in_bytes = stoull(size);
-	ptr->creationTime = creationTime;
-	ptr->lastAccessTime = lastAccessTime;
+	ptr->creationTime = stringToTime(creationTime);
+	ptr->lastAccessTime = stringToTime(lastAccessTime);
 	ptr->etag = etag;
 	ptr->backendProtocol = stringToProtocol(backendProtocol);
 	ptr->bucket_name = bucket_name;
@@ -540,73 +547,18 @@ int RGWBlockDirectory::getValue(cache_obj *ptr){
 }
 
 
-
-/* updatinh the directory value*/
-/* value should be string even for fields such as size or chunk_id */
-/*
-int RGWObjectDirectory::updateValue(cache_obj *ptr, string field, string value){
-
-	cache_obj tmpObj;
-	
-	//we need to build the key to find the object in the directory
-	tmpObj.bucket_name = ptr->bucket_name;
-	tmpObj.obj_name = ptr->obj_name;
-	tmpObj.chunk_id = ptr->chunk_id;
-
-	string key = buildIndex(&tmpObj);
-
-	if (existKey(key))
-	{
-		//getting old values from the directory
-		getValue(&tmpObj);
-
-		//updating the desired field
-		if (field == "user")
-			tmpObj.user = value;	
-		else if (field == "bucket_name")
-			tmpObj.bucket_name = value;
-		else if (field == "obj_name")
-			tmpObj.obj_name = value;
-		else if (field == "host")
-			tmpObj.host_list.push_back(value);
-		else if (field == "size_in_bytes")
-			tmpObj.size_in_bytes = stoull(value);
-		else if (field == "dirty")
-			tmpObj.dirty = value[0];
-		else if (field == "chunk_id")
-			tmpObj.chunk_id = stoull(value);
-		else if (field == "etag")
-			tmpObj.etag = value;
-		else if (field == "creationTime")
-			tmpObj.creationTime = value;
-		else if (field == "lastAccessTime")
-			tmpObj.lastAccessTime = value;
-		else if (field == "backendProtocol")
-			tmpObj.backendProtocol = value;
-		else if (field == "obj_acl")
-			tmpObj.obj_acl = value;
-		else if (field == "aclTimeStamp")
-			tmpObj.aclTimeStamp = value;
-
-		//updating the directory value 
-		setKey(key, &tmpObj);
-	}
-	else
-		setValue(&tmpObj);
-	
-}
-*/
-
-
 /* returns all the keys between startTime and endTime 
  * as a vector of <bucket_name, object_name, chunk_id, owner, creationTime> vectors
  */
-vector<vector<string>> RGWObjectDirectory::get_aged_keys(string startTime, string endTime){
-	vector<std::pair<std::string, std::string>> list;
-	vector<vector<string>> keys; //return aged keys
+vector<pair<vector<string>, time_t>> RGWObjectDirectory::get_aged_keys(time_t startTime_t, time_t endTime_t){
+	vector<pair<string, string>> list;
+	vector<pair<vector<string>, time_t>> keys; //return aged keys
 	string key;
 	string time;
 	int rep_size = 0;
+
+	string startTime = timeToString(startTime_t);
+	string endTime = timeToString(endTime_t);
 
 	cpp_redis::client client;
 	client.connect("127.0.0.1", 7000);
@@ -643,10 +595,8 @@ vector<vector<string>> RGWObjectDirectory::get_aged_keys(string startTime, strin
 
 		vTmp.push_back(owner);
 
-		//creationTime
-		vTmp.push_back(list[i].second);
-
-		keys.push_back(vTmp);
+		//creationTime and return value
+		keys.push_back(make_pair(vTmp, stringToTime(list[i].second)));
 				
 	}
 	

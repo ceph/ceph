@@ -36,9 +36,10 @@
 #include <cpp_redis/cpp_redis>
 #include "rgw_cacherequest.h"
 #include "rgw_directory.h"
-//#include "rgw_cache.h"
+#include "rgw_cache.h"
 /*datacache*/
 
+struct DataCache;
 class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
@@ -1109,7 +1110,7 @@ public:
 
   RGWObjectDirectory objDirectory;
   RGWBlockDirectory blkDirectory;
-
+  DataCache *datacache;
   int create_bucket(RGWRados *store, string userid, string dest_bucket_name, CephContext *cct, RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs, RGWAccessKey& accesskey);
   int get_s3_credentials(RGWRados *store, string userid, RGWAccessKey& s3_key);
   int copy_remote(RGWRados *store, cache_obj& c_obj);
@@ -1117,6 +1118,7 @@ public:
   int fetch_remote(RGWRados *store, string userid, string dest_bucket_name, string dest_obj_name, string location, RGWGetDataCB *cb, RGWObjectCtx& ctx);
   int retrieve_oid(cache_obj& c_obj, rgw_raw_obj& read_obj, uint64_t obj_ofs, optional_yield y);
   int retrieve_obj_acls(cache_obj& c_obj);
+  int retrieve_obj_size(cache_obj& c_obj, RGWRados *store);
 
   /* datacache */
 
@@ -1308,12 +1310,9 @@ public:
 
   /* datacache */
   int put_data(string key, bufferlist& bl, unsigned int len);
-  
-  using iterate_local_obj_cb = int (*)(const rgw_raw_obj&, std::string,cache_obj& c_obj, off_t, off_t, off_t, void*, RGWRados *store); 
-
-  int iterate_local_obj(RGWObjectCtx& ctx,  const rgw_obj& obj, cache_obj& c_obj, off_t ofs, off_t end, uint64_t max_chunk_size, iterate_local_obj_cb cb, void *arg, optional_yield y, RGWRados *store);
-  
-  int get_local_obj_iterate_cb(const rgw_raw_obj& read_obj, string key, cache_obj& c_obj, off_t obj_ofs, off_t read_ofs, off_t read_len,  void *arg, RGWRados *store);
+  using iterate_cache_obj_cb = int (*)(cache_obj& c_obj, off_t, off_t, off_t, void*, RGWRados *store); 
+  int iterate_obj(cache_obj& c_obj, off_t ofs, off_t end, uint64_t max_chunk_size, iterate_cache_obj_cb cb, void *arg, optional_yield y, RGWRados *store);
+  int get_cache_obj_iterate_cb( cache_obj& c_obj, off_t obj_ofs, off_t read_ofs, off_t read_len,  void *arg, RGWRados *store);
 
   /* datacache */
 

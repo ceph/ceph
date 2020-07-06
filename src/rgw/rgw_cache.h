@@ -28,6 +28,9 @@
 #include "rgw_threadpool.h"
 #include "rgw_cacherequest.h"
 #include <curl/curl.h>
+#include "include/lru.h"
+// #include <mutex> 
+// #include "common/RWLock.h"
 struct DataCache;
 class CacheThreadPool;
 class RemoteS3Request;
@@ -283,11 +286,11 @@ class RemoteS3Request : public Task {
     virtual void set_handler(void *handle) {
       curl_handle = (CURL *)handle;
     }
+    string sign_s3_request(string HTTP_Verb, string uri, string date, string YourSecretAccessKeyID, string AWSAccessKeyId);
+    string get_date();
   private:
     int submit_op();
-    string sign_s3_request(string HTTP_Verb, string uri, string date, string YourSecretAccessKeyID, string AWSAccessKeyId);
     int submit_http_get_request_s3();
-    string get_date();
   private:
     pthread_mutex_t qmtx;
     pthread_cond_t wcond;
@@ -319,23 +322,43 @@ struct cacheAioWriteRequest{
   }
 };
 
+struct ChunkDataInfo : public LRUObject {
+  CephContext *cct;
+  uint64_t size;
+  time_t access_time;
+  string address;
+  string obj_id;
+  bool complete;
+  struct ChunkDataInfo *lru_prev;
+  struct ChunkDataInfo *lru_next;
+
+  ChunkDataInfo(): size(0) {}
+
+  void set_ctx(CephContext *_cct) {
+    cct = _cct;
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ChunkDataInfo*>& o);
+};
+
 struct DataCache {
   private:
+//    std::map<string, ChunkDataInfo*> cache_map;
     std::list<string> outstanding_write_list;
-    uint64_t capacity ;
+    uint64_t capacity;
     CephContext *cct;
     std::string path;
     CacheThreadPool *tp;
-
-    //ceph::mutex lock = ceph::make_mutex("DataCache::lock");
+    ceph::mutex cache_lock = ceph::make_mutex("DataCache::cache_lock");
+  
   public:
-    DataCache();
+    DataCache() ;
     ~DataCache() {}
     void retrieve_obj_info(cache_obj* c_obj, RGWRados *store);
-    //void timer_start(RGWRados *store, size_t interval);
     void submit_remote_req(struct RemoteRequest *c);
-    void put(bufferlist& bl, uint64_t len, string key);
-    int create_aio_write_request(bufferlist& bl, uint64_t len, std::string key);
+    void put(bufferlist& bl, uint64_t len, string obj_id);
+    int create_aio_write_request(bufferlist& bl, uint64_t len, std::string obj_id);
     void cache_aio_write_completion_cb(cacheAioWriteRequest *c);
     size_t remove_read_cache_entry(cache_obj& c_obj);
     size_t get_used_pool_capacity(string pool_name, RGWRados *store);
@@ -344,7 +367,7 @@ struct DataCache {
       cct = _cct;
       capacity = 1000;
       path = cct->_conf->rgw_datacache_path;
-      tp = new CacheThreadPool(32);
+      tp = new CacheThreadPool(cct->_conf->cache_threadpool_size);
     }
 };
 

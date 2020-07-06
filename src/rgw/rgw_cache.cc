@@ -21,6 +21,7 @@ uint64_t expected_size = 0;
 #include "rgw_rest_conn.h"
 #include <openssl/hmac.h>
 #include <ctime>
+#include <mutex>
 #include <curl/curl.h>
 #include <time.h>
 //#include "rgw_cacherequest.h"
@@ -415,7 +416,7 @@ ObjectCache::~ObjectCache()
 
 /* datacache */
 
-DataCache::DataCache () : cct(NULL), capacity(0)  {}
+DataCache::DataCache() : cct(NULL), capacity(0){}
 
 void DataCache::submit_remote_req(struct RemoteRequest *c){
   ldout(cct, 0) << "submit_remote_req" <<dendl;
@@ -427,10 +428,12 @@ void DataCache::retrieve_obj_info(cache_obj* c_obj, RGWRados *store){
   int ret = store->blkDirectory.getValue(c_obj);
 }
 
+
+
 void retrieve_aged_objList(RGWRados *store, string start_time, string end_time){
-//  ldout(cct, 0) << __func__ <<dendl;
+  //  ldout(cct, 0) << __func__ <<dendl;
   vector<vector<string>> object_list;
-  object_list = store->objDirectory.get_aged_keys(start_time, end_time);
+  //  object_list = store->objDirectory.get_aged_keys(start_time, end_time);
 }
 
 
@@ -442,7 +445,7 @@ size_t DataCache::get_used_pool_capacity(string pool_name, RGWRados *store){
   librados::Rados *rados = store->get_rados_handle();
   list<string> vec;
   int r = rados->pool_list(vec);
-//  vec.push_back(pool_name);
+  //  vec.push_back(pool_name);
   map<string,librados::pool_stat_t> stats;
   r = rados->get_pool_stats(vec, stats);
   if (r < 0) {
@@ -459,24 +462,25 @@ size_t DataCache::get_used_pool_capacity(string pool_name, RGWRados *store){
 
 void timer_start(RGWRados *store, int interval)
 {
-    time_t rawTime = time(NULL);
-    string end_time = asctime(gmtime(&rawTime));
-    rawTime = rawTime - (60 * interval);
-    string start_time = asctime(gmtime(&rawTime));
-    std::thread([store, interval, &start_time, &end_time]() {
-        while (true)
-        {
-	    std::vector<std::pair<std::string, std::string>> object_list;
-	    retrieve_aged_objList(store, start_time, end_time); 
-	    for (const auto& c_obj : object_list){ //FIXME : iterate over aged objects
-	//	    store->copy_remote(store, c_obj); //aging function
-	    }
-            std::this_thread::sleep_for(std::chrono::minutes(interval));
-	    start_time = end_time;
-	    time_t rawTime = time(NULL);
-	    end_time = asctime(gmtime(&rawTime));
-	}
-    }).detach();
+  time_t rawTime = time(NULL);
+  string end_time = asctime(gmtime(&rawTime));
+  rawTime = rawTime - (60 * interval);
+  string start_time = asctime(gmtime(&rawTime));
+  std::thread([store, interval, &start_time, &end_time]() {
+      while (true)
+      {
+      //	    std::vector<std::pair<std::string, std::string>> object_list;
+      vector<vector<string>> object_list;
+      retrieve_aged_objList(store, start_time, end_time); 
+      /*	    for (const auto& c_obj : object_list){ //FIXME : iterate over aged objects
+      //	    store->copy_remote(store, c_obj); //aging function
+      }
+      */          std::this_thread::sleep_for(std::chrono::minutes(interval));
+      start_time = end_time;
+      time_t rawTime = time(NULL);
+      end_time = asctime(gmtime(&rawTime));
+      }
+      }).detach();
 }
 
 
@@ -486,8 +490,26 @@ void DataCache::start_cache_aging(RGWRados *store){
 }
 
 size_t DataCache::remove_read_cache_entry(cache_obj& c_obj){
+
+  string oid = c_obj.bucket_name+"_"+c_obj.obj_name+"_" + std::to_string(c_obj.chunk_id);
+  /*
+  ChunkDataInfo *del_entry;
+  cache_lock.lock();
+
+  int n_entries = cache_map.size();
+  if (n_entries <= 0){
+    cache_lock.unlock();
+    return -1;
+  }
+  
+  map<string, ChunkDataInfo*>::iterator iter = cache_map.begin();
+  string del_oid = iter->first;
+
+  cache_map.erase(del_oid); 
+  cache_lock.unlock();
+*/
   string location = cct->_conf->rgw_datacache_path + "/"+ c_obj.bucket_name+"_"+c_obj.obj_name+"_" + std::to_string(c_obj.chunk_id);
-  if(access(location.c_str(), F_OK ) != -1 ) { // file 
+  if(access(location.c_str(), F_OK ) != -1 ) { 
     remove(location.c_str());
     return c_obj.chunk_size_in_bytes;
   }
@@ -529,8 +551,18 @@ done:
 
 
 void DataCache::cache_aio_write_completion_cb(cacheAioWriteRequest *c){
-  //ldout(cct, 0) << "engage: cache_aio_write_completion_cb oid:" <<dendl;
-  //outstanding_write_list.remove(c->key);
+  ChunkDataInfo  *chunk_info = NULL;
+  
+  ldout(cct, 20) << __func__ <<dendl;
+  cache_lock.lock();
+  outstanding_write_list.remove(c->key);
+  /*chunk_info = new ChunkDataInfo;
+  chunk_info->obj_id = c->key;
+  chunk_info->set_ctx(cct);
+  chunk_info->size = c->cb->aio_nbytes;
+  cache_map.insert(pair<string, ChunkDataInfo*>(c->key, chunk_info));
+  */
+  cache_lock.unlock();
   c->release(); 
 
 }
@@ -568,25 +600,34 @@ done:
 
 
 }
-void DataCache::put(bufferlist& bl, uint64_t len, string key){
-  ldout(cct, 10) << __func__  << key <<dendl;
-  int ret = 0;
-  // cache_lock.lock();  
-  std::list<std::string>::iterator it = std::find(outstanding_write_list.begin(), outstanding_write_list.end(),key);
+void DataCache::put(bufferlist& bl, uint64_t len, string obj_id){
+  ldout(cct, 10) << __func__  << obj_id <<dendl;
+
+  cache_lock.lock(); 
+  /*
+  map<string, ChunkDataInfo *>::iterator iter = cache_map.find(obj_id);
+  if (iter != cache_map.end()) {
+    cache_lock.unlock();
+    ldout(cct, 10) << "Warning: obj data already is cached, no re-write" << dendl;
+    return;
+  }*/
+
+  std::list<std::string>::iterator it = std::find(outstanding_write_list.begin(), outstanding_write_list.end(),obj_id);
   if (it != outstanding_write_list.end()) {
-    //       cache_lock.unlock();
-    ldout(cct, 5) << "re-write: write already issued, key "<< key << dendl;
+    cache_lock.unlock();
+    ldout(cct, 5) << "Warning: write is already issued, re-write, obj_id="<< obj_id << dendl;
     return;
   }
-  outstanding_write_list.push_back(key);
-  //cache_lock.unlock();
 
-  ret = create_aio_write_request(bl, len, key);
+  outstanding_write_list.push_back(obj_id);
+  cache_lock.unlock();
+
+  int ret = create_aio_write_request(bl, len, obj_id);
   if (ret < 0) {
-    //  cache_lock.lock();
-    outstanding_write_list.remove(key);
-    //    cache_lock.unlock();
-    ldout(cct, 1) << "Error: create_aio_write_request failed "  << ret << dendl;
+    cache_lock.lock();
+    outstanding_write_list.remove(obj_id);
+    cache_lock.unlock();
+    ldout(cct, 0) << "Error: create_aio_write_request is failed"  << ret << dendl;
     return;
   }
 }
@@ -669,28 +710,24 @@ int RemoteS3Request::submit_http_get_request_s3(){
 
 /*Remote S3 Request datacacahe*/
 int RemoteS3Request::submit_op() {
-  ldout(cct, 10) << __func__  << " for block" <<  req->key << dendl;
   return req->submit_op();
 }
 
 void RemoteS3Request::run() {
 
-  ldout(cct, 10) << __func__  <<dendl;
-  //int retries =  cct->_conf->rgw_l2_request_thread_num;   
-  int retries = 10;
+  ldout(cct, 20) << __func__  <<dendl;
+  int max_retries = cct->_conf->max_remote_retries;
   int r = 0;
-  for (int i=0; i<retries; i++ ){
+  for (int i=0; i<max_retries; i++ ){
     if(!(r = submit_http_get_request_s3())){
-//      if(!(r = req->submit_op())){
       req->finish();
       return;
     }
-    ldout(cct, 10) << __func__  << " error " <<  req->key << dendl;
+    ldout(cct, 0) << "ERROR: " << __func__  << "(): remote s3 request for failed, obj="<<req->key << dendl;
     req->r->result = -1;
     req->aio->put(*(req->r));
-    }
-
-
   }
 
+
+}
 
