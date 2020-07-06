@@ -96,7 +96,7 @@ class Host(RESTController):
     @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
     @host_task('create', {'hostname': '{hostname}'})
-    def create(self, hostname): #pragma: no cover - requires realtime env
+    def create(self, hostname):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, True)
         orch_client.hosts.add(hostname)
@@ -104,12 +104,12 @@ class Host(RESTController):
     @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
     @host_task('delete', {'hostname': '{hostname}'})
-    def delete(self, hostname): #pragma: no cover - requires realtime env
+    def delete(self, hostname):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, False)
         orch_client.hosts.remove(hostname)
 
-    def _check_orchestrator_host_op(self, orch_client, hostname, add_host=True): #pragma: no cover - requires realtime env
+    def _check_orchestrator_host_op(self, orch_client, hostname, add_host=True):  # pragma:no cover
         """Check if we can adding or removing a host with orchestrator
 
         :param orch_client: Orchestrator client
