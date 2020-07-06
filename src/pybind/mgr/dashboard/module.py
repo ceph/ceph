@@ -29,15 +29,6 @@ if cherrypy is not None:
     from .cherrypy_backports import patch_cherrypy
     patch_cherrypy(cherrypy.__version__)
 
-if 'COVERAGE_ENABLED' in os.environ:
-    import coverage
-    __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
-                              data_suffix=True)
-
-    cherrypy.engine.subscribe('start', __cov.start)
-    cherrypy.engine.subscribe('after_request', __cov.save)
-    cherrypy.engine.subscribe('stop', __cov.stop)
-
 # pylint: disable=wrong-import-position
 from . import mgr
 from .controllers import generate_routes, json_error_page
@@ -296,6 +287,14 @@ class Module(MgrModule, CherryPyConfig):
         return os.path.join(current_dir, 'frontend/dist')
 
     def serve(self):
+
+        if 'COVERAGE_ENABLED' in os.environ:
+            import coverage
+            __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
+                                      data_suffix=True)
+            __cov.start()
+            cherrypy.engine.subscribe('after_request', __cov.save)
+
         AuthManager.initialize()
         load_sso_db()
 
@@ -339,6 +338,7 @@ class Module(MgrModule, CherryPyConfig):
         self.shutdown_event.clear()
         NotificationQueue.stop()
         cherrypy.engine.stop()
+        cherrypy.engine.subscribe('stop', __cov.stop)
         logger.info('Engine stopped')
 
     def shutdown(self):

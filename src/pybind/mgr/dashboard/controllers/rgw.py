@@ -5,7 +5,7 @@ import logging
 import json
 
 import cherrypy
-
+import rgw
 from . import ApiController, BaseController, RESTController, Endpoint, \
     ReadPermission
 from ..exceptions import DashboardException
@@ -18,8 +18,8 @@ from ..tools import json_str_to_object, str_to_bool
 
 try:
     from typing import List
-except ImportError:
-    pass  # Just for type checking
+except ImportError: #pragma: no cover
+    pass  # Just for type checking #pragma: no cover
 
 logger = logging.getLogger('controllers.rgw')
 
@@ -33,7 +33,7 @@ class Rgw(BaseController):
         try:
             instance = RgwClient.admin_instance()
             # Check if the service is online.
-            if not instance.is_service_online():
+            if not instance.is_service_online(): #pragma: no cover - no complexity there
                 msg = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
                 raise RequestException(msg)
             # Ensure the API user ID is known by the RGW.
@@ -42,7 +42,7 @@ class Rgw(BaseController):
                     instance.userid)
                 raise RequestException(msg)
             # Ensure the system flag is set for the API user ID.
-            if not instance.is_system_user():
+            if not instance.is_system_user(): #pragma: no cover - no complexity there
                 msg = 'The system flag is not set for user "{}".'.format(
                     instance.userid)
                 raise RequestException(msg)
@@ -229,7 +229,7 @@ class RgwBucket(RgwRESTController):
                                   lock_retention_period_days,
                                   lock_retention_period_years)
             return result
-        except RequestException as e:
+        except RequestException as e: #pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')
 
     def set(self, bucket, bucket_id, uid, versioning_state=None,
@@ -380,7 +380,7 @@ class RgwUser(RgwRESTController):
                                              'Object Gateway'.format(uid))
             # Finally redirect request to the RGW proxy.
             return self.proxy('DELETE', 'user', {'uid': uid}, json_response=False)
-        except (DashboardException, RequestException) as e:
+        except (DashboardException, RequestException) as e: #pragma: no cover - handling is too obvious
             raise DashboardException(e, component='rgw')
 
     # pylint: disable=redefined-builtin

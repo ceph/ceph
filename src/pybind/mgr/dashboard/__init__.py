@@ -6,7 +6,15 @@ ceph dashboard module
 from __future__ import absolute_import
 
 import os
+import cherrypy
 
+if 'COVERAGE_ENABLED' in os.environ:
+    import coverage
+    __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
+                              data_suffix=True)
+    __cov.start()
+    cherrypy.engine.subscribe('after_request', __cov.save)
+    cherrypy.engine.subscribe('stop', __cov.stop)
 
 if 'UNITTEST' not in os.environ:
     class _ModuleProxy(object):
