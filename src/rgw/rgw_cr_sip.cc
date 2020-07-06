@@ -6,6 +6,22 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+class SIProviderCRMgr
+{
+protected:
+  CephContext *cct;
+public:
+  SIProviderCRMgr(CephContext *_cct) : cct(_cct) {}
+  virtual ~SIProviderCRMgr() {}
+
+  virtual RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) = 0;
+  virtual RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) = 0;
+  virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
+  virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) = 0;
+  virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) = 0;
+  virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) = 0;
+};
+
 template <class T>
 class RGWSafeRetAsyncCR : public RGWCoroutine {
   friend struct Action;
@@ -56,27 +72,26 @@ public:
   }
 };
 
-class SIProviderCRMgr
+class SIProviderCRMgr_Local : public SIProviderCRMgr
 {
-  CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   SIProviderRef provider;
 public:
-    SIProviderCRMgr(CephContext *_cct,
-                    RGWAsyncRadosProcessor *_async_rados,
-                    SIProviderRef& _provider) : cct(_cct),
-                                                async_rados(_async_rados),
-                                                provider(_provider) {}
+  SIProviderCRMgr_Local(CephContext *_cct,
+                        RGWAsyncRadosProcessor *_async_rados,
+                        SIProviderRef& _provider) : SIProviderCRMgr(_cct),
+                                                    async_rados(_async_rados),
+                                                    provider(_provider) {}
 
-    RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages);
-    RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info);
-    RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result);
-    RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker);
-    RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker);
-    RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid);
+  RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
+  RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
+  RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
+  RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
+  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
+  RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) override;
 };
 
-RGWCoroutine *SIProviderCRMgr::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
+RGWCoroutine *SIProviderCRMgr_Local::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<std::vector<SIProvider::stage_id_t> >(cct,
@@ -88,7 +103,7 @@ RGWCoroutine *SIProviderCRMgr::get_stages_cr(std::vector<SIProvider::stage_id_t>
                                });
 }
 
-RGWCoroutine *SIProviderCRMgr::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info)
+RGWCoroutine *SIProviderCRMgr_Local::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<SIProvider::StageInfo>(cct,
@@ -99,7 +114,7 @@ RGWCoroutine *SIProviderCRMgr::get_stage_info_cr(const SIProvider::stage_id_t& s
                                });
 }
 
-RGWCoroutine *SIProviderCRMgr::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
+RGWCoroutine *SIProviderCRMgr_Local::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<SIProvider::fetch_result>(cct,
@@ -110,7 +125,7 @@ RGWCoroutine *SIProviderCRMgr::fetch_cr(const SIProvider::stage_id_t& sid, int s
                                });
 }
 
-RGWCoroutine *SIProviderCRMgr::get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
+RGWCoroutine *SIProviderCRMgr_Local::get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<std::string>(cct,
@@ -121,7 +136,7 @@ RGWCoroutine *SIProviderCRMgr::get_start_marker_cr(const SIProvider::stage_id_t&
                                });
 }
 
-RGWCoroutine *SIProviderCRMgr::get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
+RGWCoroutine *SIProviderCRMgr_Local::get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<std::string>(cct,
@@ -132,7 +147,7 @@ RGWCoroutine *SIProviderCRMgr::get_cur_state_cr(const SIProvider::stage_id_t& si
                                });
 }
 
-RGWCoroutine *SIProviderCRMgr::get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid)
+RGWCoroutine *SIProviderCRMgr_Local::get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<SIProvider::stage_id_t>(cct,
