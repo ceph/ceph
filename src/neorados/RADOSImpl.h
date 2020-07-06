@@ -31,12 +31,17 @@
 #include "osdc/Objecter.h"
 
 namespace neorados {
-  class RADOS;
+
+class RADOS;
+
 namespace detail {
+
+class NeoClient;
 
 class RADOS : public Dispatcher
 {
   friend ::neorados::RADOS;
+  friend NeoClient;
 
   boost::asio::io_context& ioctx;
   boost::intrusive_ptr<CephContext> cct;
@@ -67,7 +72,49 @@ public:
     return instance_id;
   }
 };
-}
-}
+
+class Client {
+public:
+  Client(boost::asio::io_context& ioctx,
+         boost::intrusive_ptr<CephContext> cct,
+         MonClient& monclient, Objecter* objecter)
+    : ioctx(ioctx), cct(cct), monclient(monclient), objecter(objecter) {
+  }
+  virtual ~Client() {}
+
+  Client(const Client&) = delete;
+  Client& operator=(const Client&) = delete;
+
+  boost::asio::io_context& ioctx;
+
+  boost::intrusive_ptr<CephContext> cct;
+  MonClient& monclient;
+  Objecter* objecter;
+
+  mon_feature_t get_required_monitor_features() const {
+    return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
+  }
+
+  virtual int get_instance_id() const = 0;
+};
+
+class NeoClient : public Client {
+public:
+  NeoClient(std::unique_ptr<RADOS>&& rados)
+    : Client(rados->ioctx, rados->cct, rados->monclient,
+             rados->objecter.get()),
+      rados(std::move(rados)) {
+  }
+
+  int get_instance_id() const override {
+    return rados->get_instance_id();
+  }
+
+private:
+  std::unique_ptr<RADOS> rados;
+};
+
+} // namespace detail
+} // namespace neorados
 
 #endif
