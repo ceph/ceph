@@ -310,7 +310,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             out = []
 
             table = PrettyTable(
-                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE', 'AVAIL',
+                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE_ID', 'MODEL', 'VENDOR', 'ROTATIONAL', 'AVAIL',
                  'REJECT REASONS'],
                 border=False)
             table.align = 'l'
@@ -326,6 +326,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                             d.human_readable_type,
                             format_bytes(d.sys_api.get('size', 0), 5),
                             d.device_id,
+                            d.sys_api.get('model') or 'n/a',
+                            d.sys_api.get('vendor') or 'n/a',
+                            d.sys_api.get('rotational') or 'n/a',
                             d.available,
                             ', '.join(d.rejected_reasons)
                         )
