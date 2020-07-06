@@ -2418,7 +2418,8 @@ def command_bootstrap():
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks().items():
-            if base_ip in ips:
+            if ipaddress.ip_address(unicode(base_ip)) in \
+                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
@@ -3121,10 +3122,15 @@ def list_networks():
     #j = json.loads(out)
     #for x in j:
 
-    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
-    return _parse_ip_route(out)
+    res = _list_ipv4_networks()
+    res.update(_list_ipv6_networks())
+    return res
 
-def _parse_ip_route(out):
+def _list_ipv4_networks():
+    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    return _parse_ipv4_route(out)
+
+def _parse_ipv4_route(out):
     r = {}  # type: Dict[str,List[str]]
     p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
@@ -3136,6 +3142,36 @@ def _parse_ip_route(out):
         if net not in r:
             r[net] = []
         r[net].append(ip)
+    return r
+
+def _list_ipv6_networks():
+    routes, _, _ = call_throws([find_executable('ip'), '-6', 'route', 'ls'])
+    ips, _, _ = call_throws([find_executable('ip'), '-6', 'addr', 'ls'])
+    return _parse_ipv6_route(routes, ips)
+
+def _parse_ipv6_route(routes, ips):
+    r = {}  # type: Dict[str,List[str]]
+    route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) pref (\S+)$')
+    ip_p = re.compile(r'^\s+inet6 (\S+)/(.*)scope (.*)$')
+    for line in routes.splitlines():
+        m = route_p.findall(line)
+        if not m or m[0][0].lower() == 'default':
+            continue
+        net = m[0][0]
+        if net not in r:
+            r[net] = []
+
+    for line in ips.splitlines():
+        m = ip_p.findall(line)
+        if not m:
+            continue
+        ip = m[0][0]
+        # find the network it belongs to
+        net = [n for n in r.keys()
+               if ipaddress.ip_address(unicode(ip)) in ipaddress.ip_network(unicode(n))]
+        if net:
+            r[net[0]].append(ip)
+
     return r
 
 def command_list_networks():

@@ -90,8 +90,63 @@ default via 10.3.64.1 dev eno1 proto static metric 100
                 '192.168.122.0/24': ['192.168.122.1']}
         ),
     ])
-    def test_parse_ip_route(self, test_input, expected):
-        assert cd._parse_ip_route(test_input) == expected
+    def test_parse_ipv4_route(self, test_input, expected):
+        assert cd._parse_ipv4_route(test_input) == expected
+
+    @pytest.mark.parametrize("test_routes, test_ips, expected", [
+        (
+"""
+::1 dev lo proto kernel metric 256 pref medium
+fdbc:7574:21fe:9200::/64 dev wlp2s0 proto ra metric 600 pref medium
+fdd8:591e:4969:6363::/64 dev wlp2s0 proto ra metric 600 pref medium
+fe80::/64 dev tun0 proto kernel metric 256 pref medium
+fe80::/64 dev wlp2s0 proto kernel metric 600 pref medium
+default dev tun0 proto static metric 50 pref medium
+default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medium
+""",
+"""
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+    inet6 fdd8:591e:4969:6363:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic 
+       valid_lft 86394sec preferred_lft 14394sec
+    inet6 fdbc:7574:21fe:9200:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic 
+       valid_lft 6745sec preferred_lft 3145sec
+    inet6 fdd8:591e:4969:6363:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic 
+       valid_lft 86394sec preferred_lft 0sec
+    inet6 fdbc:7574:21fe:9200:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic 
+       valid_lft 6745sec preferred_lft 0sec
+    inet6 fdd8:591e:4969:6363:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic 
+       valid_lft 86394sec preferred_lft 0sec
+    inet6 fdbc:7574:21fe:9200:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic 
+       valid_lft 6745sec preferred_lft 0sec
+    inet6 fdd8:591e:4969:6363:d581:4321:380b:3905/64 scope global temporary deprecated dynamic 
+       valid_lft 86394sec preferred_lft 0sec
+    inet6 fdbc:7574:21fe:9200:d581:4321:380b:3905/64 scope global temporary deprecated dynamic 
+       valid_lft 6745sec preferred_lft 0sec
+    inet6 fe80::1111:2222:3333:4444/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+12: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 state UNKNOWN qlen 100
+    inet6 fe80::cafe:cafe:cafe:cafe/64 scope link stable-privacy 
+       valid_lft forever preferred_lft forever
+""",
+            {
+                "::1": ["::1"],
+                "fdbc:7574:21fe:9200::/64": ["fdbc:7574:21fe:9200:4c52:cafe:8dd4:dc4",
+                                             "fdbc:7574:21fe:9200:103a:abcd:af1f:57f3",
+                                             "fdbc:7574:21fe:9200:a128:1234:2bdd:1b6f",
+                                             "fdbc:7574:21fe:9200:d581:4321:380b:3905"],
+                "fdd8:591e:4969:6363::/64": ["fdd8:591e:4969:6363:4c52:cafe:8dd4:dc4",
+                                             "fdd8:591e:4969:6363:103a:abcd:af1f:57f3",
+                                             "fdd8:591e:4969:6363:a128:1234:2bdd:1b6f",
+                                             "fdd8:591e:4969:6363:d581:4321:380b:3905"],
+                "fe80::/64": ["fe80::1111:2222:3333:4444",
+                              "fe80::cafe:cafe:cafe:cafe"]
+            }
+        )])
+    def test_parse_ipv6_route(self, test_routes, test_ips, expected):
+        assert cd._parse_ipv6_route(test_routes, test_ips) == expected
 
     def test_is_ipv6(self):
         cd.logger = mock.Mock()
