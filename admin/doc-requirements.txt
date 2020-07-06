@@ -6,6 +6,3 @@ Cython
 prettytable
 sphinx-autodoc-typehints == 1.10.3
 typed-ast
-pcpp
--e../src/python-common
-Jinja2
