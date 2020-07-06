@@ -809,8 +809,10 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     if (o->pop_cache()) {
       lru.erase(lru.iterator_to(*o));
     } else {
+      ceph_assert(num_pinned);
       --num_pinned;
     }
+    ceph_assert(num);
     --num;
   }
   void _pin(BlueStore::Onode* o) override
@@ -822,6 +824,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
   void _unpin(BlueStore::Onode* o) override
   {
     lru.push_front(*o);
+    ceph_assert(num_pinned);
     --num_pinned;
     dout(30) << __func__ << " " << o->oid << " unpinned" << dendl;
   }
@@ -835,23 +838,36 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     auto p = lru.end();
     ceph_assert(p != lru.begin());
     --p;
-    while (n > 0) {
+    ceph_assert(num >= n);
+    num -= n;
+    while (n-- > 0) {
       BlueStore::Onode *o = &*p;
       dout(30) << __func__ << "  rm " << o->oid << " "
                << o->nref << " " << o->cached << " " << o->pinned << dendl;
       if (p != lru.begin()) {
         lru.erase(p--);
       } else {
+        ceph_assert(n == 0);
         lru.erase(p);
-        ceph_assert(n == 1);
       }
-      if (!o->pop_cache()) {
-        --num_pinned;
-      }
+      auto pinned = !o->pop_cache();
+      ceph_assert(!pinned);
       o->c->onode_map.remove(o->oid);
-      --n;
     }
-    num = lru.size();
+  }
+  void move_pinned(OnodeCacheShard *to, BlueStore::Onode *o) override
+  {
+    if (to == this) {
+      return;
+    }
+    ceph_assert(o->cached);
+    ceph_assert(o->pinned);
+    ceph_assert(num);
+    ceph_assert(num_pinned);
+    --num_pinned;
+    --num;
+    ++to->num_pinned;
+    ++to->num;
   }
   void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) override
   {
@@ -3697,9 +3713,13 @@ void BlueStore::Collection::split_cache(
       // ensuring that nref is always >= 2 and hence onode is pinned and 
       // physically out of cache during the transition
       OnodeRef o_pin = o;
+      ceph_assert(o->pinned);
 
       p = onode_map.onode_map.erase(p);
       dest->onode_map.onode_map[o->oid] = o;
+      if (get_onode_cache() != dest->get_onode_cache()) {
+        get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
+      }
       o->c = dest;
 
       // move over shared blobs and buffers.  cover shared blobs from
