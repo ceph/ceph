@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .breadcrumb {
   background-color: transparent;
@@ -8,12 +8,12 @@
 }
 
 .breadcrumb > li + li::before {
-  color: $color-breadcrumb;
+  color: bd.$color-breadcrumb;
   content: '\f101';
   font-family: 'ForkAwesome';
   padding: 0 5px 0 7px;
 }
 
 .breadcrumb > li > span {
-  color: $color-breadcrumb;
+  color: bd.$color-breadcrumb;
 }

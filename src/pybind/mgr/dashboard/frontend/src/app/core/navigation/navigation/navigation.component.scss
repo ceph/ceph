@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 /* ---------------------------------------------------
     NAVBAR STYLE
@@ -6,16 +6,16 @@
 
 ::ng-deep .cd-navbar-top {
   .cd-navbar-brand {
-    background: $color-navbar-bg;
-    border-top: 4px solid $color-nav-top-bar;
+    background: bd.$color-navbar-bg;
+    border-top: 4px solid bd.$color-nav-top-bar;
 
     &.isPwdDisplayed {
-      top: $top-notification-height;
+      top: bd.$top-notification-height;
     }
 
     .navbar-brand,
     .navbar-brand:hover {
-      color: $color-navbar-brand;
+      color: bd.$color-navbar-brand;
       height: auto;
       padding: 0;
     }
@@ -33,7 +33,7 @@
       }
 
       .fa-navicon {
-        color: $color-nav-toggle-bar;
+        color: bd.$color-nav-toggle-bar;
       }
     }
 
@@ -42,8 +42,8 @@
     }
 
     .cd-navbar-utility > .active > a {
-      background-color: $color-nav-links-hover;
-      color: $color-nav-links;
+      background-color: bd.$color-nav-links-hover;
+      color: bd.$color-nav-links;
     }
 
     .cd-navbar-utility > li > .open > a,
@@ -51,14 +51,14 @@
     .cd-navbar-utility > li > .open > a:hover {
       background-color: transparent;
       border-color: transparent;
-      color: $color-nav-links;
+      color: bd.$color-nav-links;
     }
   }
 
   .navbar-nav > li > .cd-navbar > [ngbDropdown] > a,
   .navbar-nav > li > .cd-navbar > a,
   .navbar-nav > li > a {
-    color: $color-nav-links;
+    color: bd.$color-nav-links;
     display: block;
     line-height: 1;
     padding: 13.5px 18px !important;
@@ -68,7 +68,7 @@
 
   .navbar-nav .nav-link,
   .navbar-nav .nav-link:hover {
-    color: $color-nav-links;
+    color: bd.$color-nav-links;
   }
 
   .navbar-nav > li > .cd-navbar > [ngbDropdown] > a:hover,
@@ -76,7 +76,7 @@
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
-    background-color: $color-nav-links-hover;
+    background-color: bd.$color-nav-links-hover;
   }
 
   .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
@@ -90,10 +90,10 @@
   .navbar-nav > .open > a:hover {
     background-color: transparent;
     border-color: transparent;
-    color: $color-nav-links;
+    color: bd.$color-nav-links;
   }
 
-  @media (min-width: $screen-md-min) {
+  @media (min-width: bd.$screen-md-min) {
     .cd-navbar-utility {
       border-bottom: 0;
       font-size: 1.1rem;
@@ -103,7 +103,7 @@
     }
   }
 
-  @media (max-width: $screen-sm-max) {
+  @media (max-width: bd.$screen-sm-max) {
     .navbar-nav {
       margin: 0;
 
@@ -112,24 +112,24 @@
       }
 
       .open .dropdown-menu {
-        background-color: $color-nav-open-bg;
+        background-color: bd.$color-nav-open-bg;
         border: 0;
         padding-bottom: 0;
         padding-top: 0;
       }
 
       .open .dropdown-menu > li > a {
-        color: $color-nav-links;
+        color: bd.$color-nav-links;
         padding: 5px 15px 5px 35px;
       }
 
       .open .dropdown-menu > .active > a {
-        background-color: $color-nav-active-link-bg;
+        background-color: bd.$color-nav-active-link-bg;
       }
+    }
 
-      > li > a:hover {
-        background-color: $color-nav-active-link-bg;
-      }
+    .navbar-nav > li > a:hover {
+      background-color: bd.$color-nav-active-link-bg;
     }
   }
 }
@@ -143,9 +143,9 @@ $sidebar-width: 200px;
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
 .cd-navbar-primary > .active > a:hover {
-  background-color: $color-nav-links-hover !important;
+  background-color: bd.$color-nav-links-hover !important;
   border: 0 !important;
-  color: $color-nav-links !important;
+  color: bd.$color-nav-links !important;
 }
 
 .wrapper {
@@ -153,13 +153,13 @@ $sidebar-width: 200px;
   width: 100%;
 
   #sidebar {
-    background: $color-navbar-bg;
+    background: bd.$color-navbar-bg;
     bottom: 0;
-    color: $color-solid-white;
+    color: bd.$color-solid-white;
     left: 0;
     overflow-y: auto;
     position: fixed;
-    top: $navbar-height;
+    top: bd.$navbar-height;
     transition: all 0.3s;
     width: $sidebar-width;
     z-index: 999;
@@ -175,12 +175,12 @@ $sidebar-width: 200px;
       }
 
       p {
-        color: $color-solid-white;
+        color: bd.$color-solid-white;
         padding: 10px;
       }
 
       li a {
-        color: $color-solid-white;
+        color: bd.$color-solid-white;
         display: block;
         font-size: 1.1em;
         padding: 10px;
@@ -188,8 +188,8 @@ $sidebar-width: 200px;
         text-decoration: none;
 
         &:hover {
-          background: $color-primary;
-          color: $color-solid-white;
+          background: bd.$color-primary;
+          color: bd.$color-solid-white;
         }
 
         > .badge {
@@ -199,7 +199,7 @@ $sidebar-width: 200px;
 
       li.active > a,
       li > a a[aria-expanded='true'] {
-        color: $color-solid-white;
+        color: bd.$color-solid-white;
       }
     }
   }
@@ -223,7 +223,7 @@ $sidebar-width: 200px;
   }
 
   ul ul a {
-    background: lighten($color-navbar-bg, 10);
+    background: lighten(bd.$color-navbar-bg, 10);
     font-size: 0.9em !important;
     padding-left: 30px !important;
   }
@@ -245,7 +245,7 @@ $sidebar-width: 200px;
   bottom: 0;
   position: absolute;
   right: 0;
-  top: $navbar-height;
+  top: bd.$navbar-height;
   transition: all 0.3s;
   width: calc(100% - #{$sidebar-width});
 
@@ -261,19 +261,19 @@ $sidebar-width: 200px;
 @for $i from 1 through 2 {
   :host.top-notification-#{$i} {
     .cd-navbar-top .cd-navbar-brand {
-      top: $top-notification-height * $i;
+      top: bd.$top-notification-height * $i;
     }
 
     #sidebar {
-      top: $navbar-height + $top-notification-height * $i;
+      top: bd.$navbar-height + bd.$top-notification-height * $i;
     }
 
     #content {
-      top: $navbar-height + $top-notification-height * $i;
+      top: bd.$navbar-height + bd.$top-notification-height * $i;
     }
 
     cd-notifications-sidebar {
-      top: $navbar-height + $top-notification-height * $i + 10px;
+      top: bd.$navbar-height + bd.$top-notification-height * $i + 10px;
     }
   }
 }

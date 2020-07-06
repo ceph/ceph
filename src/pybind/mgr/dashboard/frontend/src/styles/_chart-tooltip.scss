@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .chart-container {
   cursor: pointer;
@@ -12,9 +12,9 @@ canvas {
 }
 
 .chartjs-tooltip {
-  background: $color-chart-tooltip-bg;
+  background: bd.$color-chart-tooltip-bg;
   border-radius: 3px;
-  color: $color-chat-tooltip-text;
+  color: bd.$color-chat-tooltip-text;
   font-family: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif !important;
   opacity: 0;
   pointer-events: none;
@@ -41,7 +41,7 @@ canvas {
 }
 
 .chartjs-tooltip::after {
-  border-color: $color-chart-tooltip-border transparent transparent transparent;
+  border-color: bd.$color-chart-tooltip-border transparent transparent transparent;
   border-style: solid;
   border-width: 5px;
   content: ' ';

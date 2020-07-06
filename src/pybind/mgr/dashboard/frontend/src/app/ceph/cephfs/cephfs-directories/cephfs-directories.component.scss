@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 // Angular2-Tree Component
 ::ng-deep tree-root {
@@ -8,10 +8,10 @@
 }
 
 .quota-origin {
-  color: $color-brand-teal;
+  color: bd.$color-brand-teal;
   cursor: pointer;
 
   &:hover {
-    color: $color-gray13;
+    color: bd.$color-gray13;
   }
 }

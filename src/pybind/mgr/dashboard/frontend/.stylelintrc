@@ -27,7 +27,8 @@
             "inherit",
             "initial",
             "transparent",
-            "/darken/"
+            "/darken/",
+            "/\\w+\\.\\$.+/"
           ]
         }
       ]

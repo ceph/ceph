@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 cd-info-card {
   padding: 0 0.5vw;
@@ -27,7 +27,7 @@ cd-info-card {
 }
 
 .card-text-error {
-  color: $color-solid-red;
+  color: bd.$color-solid-red;
   display: inline;
 }
 
