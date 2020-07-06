@@ -19,19 +19,20 @@ drives are high capacity hard drives with the ZBC/ZAC interface.  The longer
 term goal is to support ZNS SSDs, as they become available, as well as overwrite
 workloads.
 
-The first patch in these series enables writing data to HM-SMR drives.  The
-second patch will introduce ZonedFreelistManger, a FreelistManager
-implementation that passes enough information to ZonedAllocator to correctly
-initialize state of zones.  We have to introduce a new FreelistManager
-implementation because with zoned devices a region of disk can be in three
-states (empty, used, and stale), whereas current BitmapFreelistManager tracks
-only two states (empty and used).  It is not possible to accurately initialize
-the state of zones in ZonedAllocator by tracking only two states.  The third
-planned patch will introduce a rudimentary cleaner to form a baseline for
-further research.
+The first patch in these series enabled writing data to HM-SMR drives.  This
+patch introduces ZonedFreelistManger, a FreelistManager implementation that
+passes enough information to ZonedAllocator to correctly initialize state of
+zones by tracking the write pointer and the number of dead bytes per zone.  We
+have to introduce a new FreelistManager implementation because with zoned
+devices a region of disk can be in three states (empty, used, and dead), whereas
+current BitmapFreelistManager tracks only two states (empty and used).  It is
+not possible to accurately initialize the state of zones in ZonedAllocator by
+tracking only two states.  The third planned patch will introduce a rudimentary
+cleaner to form a baseline for further research.
 
 Currently we can perform basic RADOS benchmarks on an OSD running on an HM-SMR
-drives, restart the OSD, and read the written data, as can be seen below.
+drives, restart the OSD, and read the written data, and write new data, as can
+be seen below.
 
 Please contact Abutalib Aghayev <agayev@cs.cmu.edu> for questions.
 
@@ -114,4 +115,20 @@ Please contact Abutalib Aghayev <agayev@cs.cmu.edu> for questions.
   Average Latency(s):   0.249385
   Max latency(s):       0.888654
   Min latency(s):       0.0103208
+  $ sudo ./bin/rados bench -p bench 10 write --no-cleanup
+  hints = 1
+  Maintaining 16 concurrent writes of 4194304 bytes to objects of size 4194304 for up to 10 seconds or 0 objects
+  Object prefix: benchmark_data_h0.aa.journaling712.narwhal.p_64416
+    sec Cur ops   started  finished  avg MB/s  cur MB/s last lat(s)  avg lat(s)
+      0       0         0         0         0         0           -           0
+      1      16        46        30   119.949       120     0.52627    0.396166
+      2      16        82        66   131.955       144     0.48087    0.427311
+      3      16       123       107   142.627       164      0.3287    0.420614
+      4      16       158       142   141.964       140    0.405177    0.425993
+      5      16       192       176   140.766       136    0.514565    0.425175
+      6      16       224       208   138.635       128     0.69184    0.436672
+      7      16       261       245   139.967       148    0.459929    0.439502
+      8      16       301       285   142.468       160    0.250846    0.434799
+      9      16       336       320   142.189       140    0.621686    0.435457
+     10      16       374       358   143.166       152    0.460593    0.436384
   

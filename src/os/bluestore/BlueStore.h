@@ -2339,6 +2339,20 @@ private:
   int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
 
+  // Functions related to zoned storage.
+
+  // For now, to avoid interface changes we piggyback zone_size (in MiB) and the
+  // first sequential zone number onto min_alloc_size and pass it to functions
+  // Allocator::create and FreelistManager::create.
+  uint64_t _piggyback_zoned_device_parameters_onto(uint64_t min_alloc_size) {
+    uint64_t zone_size = bdev->get_zone_size();
+    uint64_t zone_size_mb = zone_size / (1024 * 1024);
+    uint64_t first_seq_zone = bdev->get_conventional_region_size() / zone_size;
+    min_alloc_size |= (zone_size_mb << 32);
+    min_alloc_size |= (first_seq_zone << 48);
+    return min_alloc_size;
+  }
+
 public:
   utime_t get_deferred_last_submitted() {
     std::lock_guard l(deferred_lock);
