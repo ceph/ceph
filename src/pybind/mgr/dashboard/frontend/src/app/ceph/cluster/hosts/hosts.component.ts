@@ -155,39 +155,37 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         return { enabled: true, name: label };
       });
       this.modalService.show(FormModalComponent, {
-        initialState: {
-          titleText: this.i18n('Edit Host: {{hostname}}', host),
-          fields: [
-            {
-              type: 'select-badges',
-              name: 'labels',
-              value: host['labels'],
-              label: this.i18n('Labels'),
-              typeConfig: {
-                customBadges: true,
-                options: allLabels,
-                messages: new SelectMessages(
-                  {
-                    empty: this.i18n('There are no labels.'),
-                    filter: this.i18n('Filter or add labels'),
-                    add: this.i18n('Add label')
-                  },
-                  this.i18n
-                )
-              }
+        titleText: this.i18n('Edit Host: {{hostname}}', host),
+        fields: [
+          {
+            type: 'select-badges',
+            name: 'labels',
+            value: host['labels'],
+            label: this.i18n('Labels'),
+            typeConfig: {
+              customBadges: true,
+              options: allLabels,
+              messages: new SelectMessages(
+                {
+                  empty: this.i18n('There are no labels.'),
+                  filter: this.i18n('Filter or add labels'),
+                  add: this.i18n('Add label')
+                },
+                this.i18n
+              )
             }
-          ],
-          submitButtonText: this.i18n('Edit Host'),
-          onSubmit: (values: any) => {
-            this.hostService.update(host['hostname'], values.labels).subscribe(() => {
-              this.notificationService.show(
-                NotificationType.success,
-                this.i18n('Updated Host "{{hostname}}"', host)
-              );
-              // Reload the data table content.
-              this.table.refreshBtn();
-            });
           }
+        ],
+        submitButtonText: this.i18n('Edit Host'),
+        onSubmit: (values: any) => {
+          this.hostService.update(host['hostname'], values.labels).subscribe(() => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Updated Host "{{hostname}}"', host)
+            );
+            // Reload the data table content.
+            this.table.refreshBtn();
+          });
         }
       });
     });
