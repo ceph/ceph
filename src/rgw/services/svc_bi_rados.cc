@@ -209,15 +209,16 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
 void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base,
                                                       uint32_t num_shards,
                                                       int shard_id,
-                                                      uint64_t gen_id,
+                                                      std::optional<uint64_t> _gen_id,
                                                       string *bucket_obj)
 {
+  auto gen_id = _gen_id.value_or(0);
   if (!num_shards) {
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
     char buf[bucket_oid_base.size() + 64];
-    if (gen_id != 0) {
+    if (gen_id) {
       snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
       (*bucket_obj) = buf;
 	  ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
@@ -292,7 +293,8 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *d
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *dpp,
                                                      const RGWBucketInfo& bucket_info,
                                                      int shard_id,
-                                                     const rgw::bucket_index_layout_generation& target_layout,
+                                                     uint32_t num_shards,
+                                                     std::optional<uint64_t> gen,
                                                      RGWSI_RADOS::Obj *bucket_obj)
 {
   RGWSI_RADOS::Pool index_pool;
@@ -306,8 +308,8 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *d
 
   string oid;
 
-  get_bucket_index_object(bucket_oid_base, target_layout.layout.normal.num_shards,
-                          shard_id, target_layout.gen, &oid);
+  get_bucket_index_object(bucket_oid_base, num_shards,
+                          shard_id, gen, &oid);
 
   *bucket_obj = svc.rados->obj(index_pool, oid);
 
