@@ -5,7 +5,6 @@ import logging
 import json
 
 import cherrypy
-import rgw
 from . import ApiController, BaseController, RESTController, Endpoint, \
     ReadPermission
 from ..exceptions import DashboardException
