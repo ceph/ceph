@@ -61,14 +61,25 @@ OpenFileTable::~OpenFileTable() {
   }
 }
 
-void OpenFileTable::get_ref(CInode *in)
+void OpenFileTable::get_ref(CInode *in, frag_t fg)
 {
   do {
     auto p = anchor_map.find(in->ino());
+    if (!in->is_dir()) {
+      ceph_assert(fg == -1U);
+      ceph_assert(p == anchor_map.end());
+    }
+
     if (p != anchor_map.end()) {
       ceph_assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
       ceph_assert(p->second.nref > 0);
       p->second.nref++;
+
+      if (fg != -1U) {
+	auto ret = p->second.frags.insert(fg);
+	ceph_assert(ret.second);
+	dirty_items.emplace(in->ino(), (int)DIRTY_UNDEF);
+      }
       break;
     }
 
@@ -81,6 +92,9 @@ void OpenFileTable::get_ref(CInode *in)
     ceph_assert(ret.second == true);
     in->state_set(CInode::STATE_TRACKEDBYOFT);
 
+    if (fg != -1U)
+      ret.first->second.frags.insert(fg);
+
     auto ret1 = dirty_items.emplace(in->ino(), (int)DIRTY_NEW);
     if (!ret1.second) {
       int omap_idx = ret1.first->second;
@@ -89,10 +103,11 @@ void OpenFileTable::get_ref(CInode *in)
     }
 
     in = pin;
+    fg = -1U;
   } while (in);
 }
 
-void OpenFileTable::put_ref(CInode *in)
+void OpenFileTable::put_ref(CInode *in, frag_t fg)
 {
   do {
     ceph_assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
@@ -100,8 +115,18 @@ void OpenFileTable::put_ref(CInode *in)
     ceph_assert(p != anchor_map.end());
     ceph_assert(p->second.nref > 0);
 
+    if (!in->is_dir()) {
+      ceph_assert(fg == -1U);
+      ceph_assert(p->second.nref == 1);
+    }
+
     if (p->second.nref > 1) {
       p->second.nref--;
+      if (fg != -1U) {
+	auto ret = p->second.frags.erase(fg);
+	ceph_assert(ret);
+	dirty_items.emplace(in->ino(), (int)DIRTY_UNDEF);
+      }
       break;
     }
 
@@ -113,6 +138,11 @@ void OpenFileTable::put_ref(CInode *in)
     } else {
       ceph_assert(p->second.dirino == inodeno_t(0));
       ceph_assert(p->second.d_name == "");
+    }
+
+    if (fg != -1U) {
+      ceph_assert(p->second.frags.size() == 1);
+      ceph_assert(*p->second.frags.begin() == fg);
     }
 
     int omap_idx = p->second.omap_idx;
@@ -131,27 +161,19 @@ void OpenFileTable::put_ref(CInode *in)
     }
 
     in = pin;
+    fg = -1U;
   } while (in);
 }
 
 void OpenFileTable::add_inode(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
-  if (!in->is_dir()) {
-    auto p = anchor_map.find(in->ino());
-    ceph_assert(p == anchor_map.end());
-  }
   get_ref(in);
 }
 
 void OpenFileTable::remove_inode(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
-  if (!in->is_dir()) {
-    auto p = anchor_map.find(in->ino());
-    ceph_assert(p != anchor_map.end());
-    ceph_assert(p->second.nref == 1);
-  }
   put_ref(in);
 }
 
@@ -160,10 +182,7 @@ void OpenFileTable::add_dirfrag(CDir *dir)
   dout(10) << __func__ << " " << *dir << dendl;
   ceph_assert(!dir->state_test(CDir::STATE_TRACKEDBYOFT));
   dir->state_set(CDir::STATE_TRACKEDBYOFT);
-  auto ret = dirfrags.insert(dir->dirfrag());
-  ceph_assert(ret.second);
-  get_ref(dir->get_inode());
-  dirty_items.emplace(dir->ino(), (int)DIRTY_UNDEF);
+  get_ref(dir->get_inode(), dir->get_frag());
 }
 
 void OpenFileTable::remove_dirfrag(CDir *dir)
@@ -171,11 +190,7 @@ void OpenFileTable::remove_dirfrag(CDir *dir)
   dout(10) << __func__ << " " << *dir << dendl;
   ceph_assert(dir->state_test(CDir::STATE_TRACKEDBYOFT));
   dir->state_clear(CDir::STATE_TRACKEDBYOFT);
-  auto p = dirfrags.find(dir->dirfrag());
-  ceph_assert(p != dirfrags.end());
-  dirfrags.erase(p);
-  dirty_items.emplace(dir->ino(), (int)DIRTY_UNDEF);
-  put_ref(dir->get_inode());
+  put_ref(dir->get_inode(), dir->get_frag());
 }
 
 void OpenFileTable::notify_link(CInode *in)
@@ -452,33 +467,14 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   }
 
   for (auto& it : dirty_items) {
-    frag_vec_t frags;
     auto p = anchor_map.find(it.first);
-    if (p != anchor_map.end()) {
-      for (auto q = dirfrags.lower_bound(dirfrag_t(it.first, 0));
-	   q != dirfrags.end() && q->ino == it.first;
-	   ++q)
-	frags.push_back(q->frag);
-    }
 
     if (first_commit) {
       auto q = loaded_anchor_map.find(it.first);
       if (q != loaded_anchor_map.end()) {
 	ceph_assert(p != anchor_map.end());
 	p->second.omap_idx = q->second.omap_idx;
-	bool same = p->second == q->second;
-	if (same) {
-	  auto r = loaded_dirfrags.lower_bound(dirfrag_t(it.first, 0));
-	  for (const auto& fg : frags) {
-	    if (r == loaded_dirfrags.end() || !(*r == dirfrag_t(it.first, fg))) {
-	      same = false;
-	      break;
-	    }
-	    ++r;
-	  }
-	  if (same && r != loaded_dirfrags.end() && r->ino == it.first)
-	    same = false;
-	}
+	bool same = (p->second == q->second);
 	loaded_anchor_map.erase(q);
 	if (same)
 	  continue;
@@ -526,7 +522,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     if (p != anchor_map.end()) {
       bufferlist bl;
       encode(p->second, bl);
-      encode(frags, bl);
+      encode((__u32)0, bl); // frags set was encoded here
 
       ctl.write_size += bl.length() + len + 2 * sizeof(__u32);
       ctl.to_update[key].swap(bl);
@@ -563,7 +559,6 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       }
     }
     loaded_anchor_map.clear();
-    loaded_dirfrags.clear();
   }
 
   size_t total_items = 0;
@@ -748,14 +743,12 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 					    std::make_tuple());
     RecoveredAnchor& anchor = it->second;
     decode(anchor, p);
+    frag_vec_t frags; // unused
+    decode(frags, p);
     ceph_assert(ino == anchor.ino);
     anchor.omap_idx = idx;
     anchor.auth = MDS_RANK_NONE;
 
-    frag_vec_t frags;
-    decode(frags, p);
-    for (const auto& fg : frags)
-      loaded_dirfrags.insert(loaded_dirfrags.end(), dirfrag_t(anchor.ino, fg));
 
     if (loaded_anchor_map.size() > count)
       ++omap_num_items[idx];
@@ -905,9 +898,6 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 	      ceph_assert(count > 0);
 	      --count;
 	    }
-	    auto r = loaded_dirfrags.lower_bound(dirfrag_t(ino, 0));
-	    while (r != loaded_dirfrags.end() && r->ino == ino)
-	      loaded_dirfrags.erase(r++);
 	  }
 
 	  op_vec.resize(op_vec.size() + 1);
@@ -1064,35 +1054,34 @@ void OpenFileTable::_prefetch_dirfrags()
   MDCache *mdcache = mds->mdcache;
   std::vector<CDir*> fetch_queue;
 
-  CInode *last_in = nullptr;
-  for (auto df : loaded_dirfrags) {
-    CInode *diri;
-    if (last_in && last_in->ino() == df.ino) {
-      diri = last_in;
-    } else {
-      diri = mdcache->get_inode(df.ino);
-      if (!diri)
-	continue;
-      last_in = diri;
-    }
+  for (auto& it : loaded_anchor_map) {
+    if (it.second.frags.empty())
+      continue;
+    CInode *diri = mdcache->get_inode(it.first);
+    if (!diri)
+      continue;
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
 
-    CDir *dir = diri->get_dirfrag(df.frag);
-    if (dir) {
-      if (dir->is_auth() && !dir->is_complete())
-	fetch_queue.push_back(dir);
-    } else {
-      frag_vec_t leaves;
-      diri->dirfragtree.get_leaves_under(df.frag, leaves);
-      for (const auto& leaf : leaves) {
-	if (diri->is_auth()) {
-	  dir = diri->get_or_open_dirfrag(mdcache, leaf);
-	} else {
-	  dir = diri->get_dirfrag(leaf);
-	}
-	if (dir && dir->is_auth() && !dir->is_complete())
+    for (auto& fg: it.second.frags) {
+      CDir *dir = diri->get_dirfrag(fg);
+      if (dir) {
+	if (dir->is_auth() && !dir->is_complete())
 	  fetch_queue.push_back(dir);
+      } else {
+	frag_vec_t leaves;
+	diri->dirfragtree.get_leaves_under(fg, leaves);
+	if (leaves.empty())
+	  leaves.push_back(diri->dirfragtree[fg.value()]);
+	for (auto& leaf : leaves) {
+	  if (diri->is_auth()) {
+	    dir = diri->get_or_open_dirfrag(mdcache, leaf);
+	  } else {
+	    dir = diri->get_dirfrag(leaf);
+	  }
+	  if (dir && dir->is_auth() && !dir->is_complete())
+	    fetch_queue.push_back(dir);
+	}
       }
     }
   }

@@ -84,8 +84,8 @@ protected:
   void _journal_finish(int r, uint64_t log_seq, MDSContext *fin,
 		       std::map<unsigned, std::vector<ObjectOperation> >& ops);
 
-  void get_ref(CInode *in);
-  void put_ref(CInode *in);
+  void get_ref(CInode *in, frag_t fg=-1U);
+  void put_ref(CInode *in, frag_t fg=-1U);
 
   object_t get_object_name(unsigned idx) const;
 
@@ -95,7 +95,6 @@ protected:
     journal_state = JOURNAL_NONE;
     loaded_journals.clear();
     loaded_anchor_map.clear();
-    loaded_dirfrags.clear();
   }
   void _load_finish(int op_r, int header_r, int values_r,
 		    unsigned idx, bool first, bool more,
@@ -115,7 +114,6 @@ protected:
   std::vector<unsigned> omap_num_items;
 
   map<inodeno_t, OpenedAnchor> anchor_map;
-  set<dirfrag_t> dirfrags;
 
   std::map<inodeno_t, int> dirty_items; // ino -> dirty state
 
@@ -131,7 +129,6 @@ protected:
 
   std::vector<std::map<std::string, bufferlist> > loaded_journals;
   map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
-  set<dirfrag_t> loaded_dirfrags;
   MDSContext::vec waiting_for_load;
   bool load_done = false;
 
