@@ -1,0 +1,68 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+/* Forms */
+.required::after {
+  color: bd.$color-required-text;
+  content: '*';
+  font-size: 1.167rem;
+  padding-left: 4px;
+}
+
+.form-footer {
+  display: flex;
+  width: 100%;
+}
+
+.form-control {
+  display: table-cell;
+
+  &:focus {
+    border-color: bd.$color-primary-transparent;
+    box-shadow: inset 0 1px 1px bd.$color-transparent-black1,
+      0 0 8px 2px bd.$color-primary-transparent1;
+    outline: 0;
+  }
+}
+
+.custom-checkbox {
+  padding-top: 7px;
+}
+
+.cd-col-form {
+  @extend .col-12;
+  @extend .col-lg-8;
+  @extend .col-xl-6;
+}
+
+.cd-col-form-label {
+  @extend .col-form-label;
+  @extend .col-sm-4;
+  @extend .col-md-4;
+  @extend .col-lg-3;
+}
+
+.cd-col-form-input {
+  @extend .col-sm-8;
+  @extend .col-md-8;
+  @extend .col-lg-9;
+}
+
+.cd-col-form-offset {
+  @extend .offset-sm-4;
+  @extend .offset-lg-3;
+  @extend .cd-col-form-input;
+}
+
+cd-modal {
+  .cd-col-form-label {
+    @extend .col-lg-4;
+  }
+
+  .cd-col-form-input {
+    @extend .col-lg-8;
+  }
+
+  .cd-col-form-offset {
+    @extend .offset-lg-4;
+  }
+}

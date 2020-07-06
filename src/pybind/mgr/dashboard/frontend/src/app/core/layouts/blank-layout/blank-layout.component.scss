@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep #toast-container {
   margin-top: 2vw;
@@ -7,7 +7,7 @@
     margin-top: 2.5vw;
   }
 
-  @media (max-width: $screen-md-max) {
+  @media (max-width: bd.$screen-md-max) {
     margin-top: 9vw;
   }
 

@@ -1,0 +1,66 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+/* Reset checkbox success color */
+.was-validated .custom-control-input:valid,
+.custom-control-input.is-valid {
+  ~ .custom-control-label {
+    color: initial;
+  }
+
+  &:checked ~ .custom-control-label::before {
+    background-color: $component-active-bg;
+    border-color: $custom-control-indicator-checked-border-color;
+  }
+
+  ~ .custom-control-label::before {
+    border-color: $custom-control-indicator-border-color;
+  }
+
+  &:focus ~ .custom-control-label::before {
+    box-shadow: $custom-control-indicator-focus-box-shadow;
+  }
+
+  &:focus:not(:checked) ~ .custom-control-label::before {
+    border-color: $custom-control-indicator-focus-border-color;
+  }
+}
+
+/* Buttons */
+.btn-light {
+  background-color: bd.$color-solid-white;
+  border-color: bd.$color-input-border !important;
+
+  &:hover {
+    background-color: bd.$color-soft-gray;
+    border-color: bd.$color-input-border-hover !important;
+  }
+}
+
+// We have some inputs that don't have a corresponding formControlName,
+// to be able to get the same styling and no JS errors we need use a different
+// class name
+.cd-form-control {
+  @extend .form-control;
+}
+
+.btn {
+  &,
+  &:active,
+  &.active {
+    &:focus,
+    &.focus {
+      outline: 0;
+    }
+  }
+}
+
+.btn-primary .badge {
+  background-color: bd.$color-button-badge;
+  color: bd.$color-primary;
+}
+
+.btn-group > .btn > i.fa,
+.cd-datatable-actions button.btn i.fa {
+  /** Add space between icon and text */
+  margin-right: 5px;
+}

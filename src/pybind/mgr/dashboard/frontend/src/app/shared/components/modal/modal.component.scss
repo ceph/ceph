@@ -1,12 +1,12 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/mixins';
 
 .modal-header {
-  @include hf;
+  @include mixins.hf;
   border-radius: 5px 5px 0 0;
 }
 
 ::ng-deep .modal-footer {
-  @include hf;
+  @include mixins.hf;
   border-radius: 0 0 5px 5px;
 }
 
