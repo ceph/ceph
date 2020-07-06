@@ -290,8 +290,8 @@ class Module(MgrModule, CherryPyConfig):
 
         if 'COVERAGE_ENABLED' in os.environ:
             import coverage
-            __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
-                                      data_suffix=True)
+            __cov = coverage.Coverage(config_file="{}/.coveragerc".format
+            (os.path.dirname(__file__)),data_suffix=True)
             __cov.start()
             cherrypy.engine.subscribe('after_request', __cov.save)
 
