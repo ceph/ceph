@@ -690,8 +690,12 @@ public:
     RGWSI_RADOS::Obj bucket_obj;
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
-    int init(const rgw_bucket& _bucket, const rgw_obj& obj, RGWBucketInfo* out, const DoutPrefixProvider *dpp);
-    int init(const rgw_bucket& _bucket, int sid, const rgw::bucket_index_layout_generation& idx_layout, RGWBucketInfo* out, const DoutPrefixProvider *dpp);
+    int init(const rgw_bucket& _bucket, const rgw_obj& obj,
+             RGWBucketInfo* out, const DoutPrefixProvider *dpp);
+    int init(const rgw_bucket& _bucket, int sid,
+             const rgw::bucket_index_layout_generation& current_layout,
+             std::optional<rgw::bucket_index_layout_generation> target_layout,
+             RGWBucketInfo* out, const DoutPrefixProvider *dpp);
     int init(const RGWBucketInfo& bucket_info, const rgw_obj& obj);
     int init(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid);
   };
