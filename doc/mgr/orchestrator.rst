@@ -154,25 +154,23 @@ Example command::
 Create OSDs
 -----------
 
-Create OSDs on a group of devices on a single host::
+Create OSDs on a set of devices on a single host::
 
     ceph orch daemon add osd <host>:device1,device2
 
 Example::
-
-    # ceph orch daemon add osd node1:/dev/vdd
-    Created 1 OSD on host 'node1' using device '/dev/vdd'
-
+=========
 or::
 
-    ceph orch apply osd -i <json_file/yaml_file>
+    ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
+
 
 Where the ``json_file/yaml_file`` is a DriveGroup specification.
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
 
 or::
 
-    ceph orch apply osd --all-available-devices
+    ceph orch apply osd --all-available-devices [--dry-run]
 
 If the 'apply' method is used. You will be presented with a preview of what will happen.
 
@@ -261,25 +259,18 @@ The previously set the 'destroyed' flag is used to determined osd ids that will 
 If you use OSDSpecs for osd deployment, your newly added disks will be assigned with the osd ids of their replaced
 counterpart, granted the new disk still match the OSDSpecs.
 
-For assistance in this process you can use the 'preview' feature:
-
-Example::
-
-
-    ceph orch apply osd --service-name <name_of_osd_spec> --preview
-    NAME                  HOST  DATA     DB WAL
-    <name_of_osd_spec>    node1 /dev/vdb -  -
+For assistance in this process you can use the '--dry-run' feature:
 
 Tip: The name of your OSDSpec can be retrieved from **ceph orch ls**
 
 Alternatively, you can use your OSDSpec file::
 
-    ceph orch apply osd -i <osd_spec_file> --preview
+    ceph orch apply osd -i <osd_spec_file> --dry-run
     NAME                  HOST  DATA     DB WAL
     <name_of_osd_spec>    node1 /dev/vdb -  -
 
 
-If this matches your anticipated behavior, just omit the --preview flag to execute the deployment.
+If this matches your anticipated behavior, just omit the --dry-run flag to execute the deployment.
 
 
 ..
@@ -318,13 +309,13 @@ error if it doesn't know how to do this transition.
 
 Update the number of monitor hosts::
 
-    ceph orch apply mon <num> [host, host:network...]
+    ceph orch apply mon <num> [host, host:network...] [--dry-run]
 
 Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager hosts::
 
-    ceph orch apply mgr <num> [host...]
+    ceph orch apply mgr <num> [host...] [--dry-run]
 
 ..
     .. note::
@@ -400,9 +391,9 @@ The ``name`` parameter is an identifier of the group of instances:
 
 Creating/growing/shrinking/removing services::
 
-    ceph orch apply mds <fs_name> [--placement=<placement>]
-    ceph orch apply rgw <realm> <zone> [--subcluster=<subcluster>] [--port=<port>] [--ssl] [--placement=<placement>]
-    ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>]
+    ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
+    ceph orch apply rgw <realm> <zone> [--subcluster=<subcluster>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
+    ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
     ceph orch rm <service_name> [--force]
 
 Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
@@ -624,7 +615,7 @@ specification.
 
 3. Apply the new ``ServiceSpec``::
 
-    ceph orch apply -i myservice.yaml
+    ceph orch apply -i myservice.yaml [--dry-run]
 
 Configuring the Orchestrator CLI
 ================================
