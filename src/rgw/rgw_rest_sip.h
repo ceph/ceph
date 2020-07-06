@@ -18,6 +18,26 @@
 #include "rgw_rest_s3.h"
 #include "rgw_sync_info.h"
 
+class RGWOp_SIP_GetInfo : public RGWRESTOp {
+  string provider;
+  SIProviderRef sip;
+public:
+  RGWOp_SIP_GetInfo(string&& _provider) : provider(std::move(_provider)) {}
+  ~RGWOp_SIP_GetInfo() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("sip", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->get_caps());
+  }
+  void send_response() override;
+  void execute() override;
+  const char* name() const override {
+    return "get_sip_info";
+  }
+};
+
 class RGWOp_SIP_List : public RGWRESTOp {
   /* result */
   std::vector<std::string> providers;

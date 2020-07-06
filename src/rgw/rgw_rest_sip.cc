@@ -14,6 +14,7 @@
  */
 
 #include "rgw_rest_sip.h"
+#include "rgw_rest_conn.h"
 #include "rgw_sync_info.h"
 #include "rgw_sal_rados.h"
 
@@ -23,6 +24,29 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+
+void RGWOp_SIP_GetInfo::execute() {
+  auto opt_instance = s->info.args.get_std_optional("instance");
+
+  sip = store->ctl()->si.mgr->find_sip(provider, opt_instance);
+  if (!sip) {
+    ldout(s->cct, 20) << "ERROR: sync info provider not found" << dendl;
+    op_ret = -ENOENT;
+    return;
+  }
+}
+
+void RGWOp_SIP_GetInfo::send_response() {
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (op_ret < 0)
+    return;
+
+  encode_json("info", sip->get_info(), s->formatter);
+  flusher.flush();
+}
 
 void RGWOp_SIP_List::execute() {
   providers = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->list_sip();
@@ -36,10 +60,7 @@ void RGWOp_SIP_List::send_response() {
   if (op_ret < 0)
     return;
 
-  {
-    Formatter::ObjectSection top_section(*s->formatter, "result");
-    encode_json("providers", providers, s->formatter);
-  }
+  encode_json("providers", providers, s->formatter);
   flusher.flush();
 }
 
@@ -141,6 +162,10 @@ RGWOp *RGWHandler_SIP::op_get() {
   auto provider = s->info.args.get_std_optional("provider");
   if (!provider) {
     return new RGWOp_SIP_List;
+  }
+
+  if (s->info.args.exists("info")) {
+    return new RGWOp_SIP_GetInfo(std::move(*provider));
   }
 
   return new RGWOp_SIP_Fetch(std::move(*provider));
