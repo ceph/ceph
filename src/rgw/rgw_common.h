@@ -2436,12 +2436,13 @@ enum BackendProtocol {
 };
 
 struct cache_obj{
-  string user; // s3 username
+  string owner; //s3 Object owner who create the object 
+  string user; // s3 requester username
   string bucket_name; // s3 bucket name
   string obj_name; //s3 obj name 
-  RGWAccessKey accesskey; //user's s3_key
+  RGWAccessKey accesskey; // object owner's s3_key
   rgw_user user_id;
-  string host; // url <ip:post> of the cache that request rados obj
+  string host; // url <ip:phost> of the cache that request rados obj
   vector<string> host_list; // list of hostnames <ip:host> of remote caches
   CacheLocation cache_location;  
   uint64_t size_in_bytes; // s3 object size in bytes
@@ -2451,11 +2452,11 @@ struct cache_obj{
   bool dirty; // s3 object is clean or has been modified
   string etag; 
   //ceph::real_time creationTime; // creation time of the s3 object
-  string creationTime; // creation time of the s3 object
-  string lastAccessTime; // last access time 
+  time_t creationTime; // creation time of the s3 object
+  time_t lastAccessTime; // last access time 
   BackendProtocol backendProtocol; // protocol used for backend communication
   string acl; // ACLs of s3 object
-  string aclTimeStamp; 
+  time_t aclTimeStamp; 
 };
 
 
