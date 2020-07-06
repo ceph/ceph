@@ -40,6 +40,14 @@ This will go out on all the matching hosts and deploy these OSDs.
 
 Since we want to have more complex setups, there are more filters than just the 'all' filter.
 
+Also, there is a `--dry-run` flag that can be passed to the `apply osd` command, which gives you a synopsis
+of the proposed layout.
+
+Example::
+
+  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+
+
 
 Filters
 =======
