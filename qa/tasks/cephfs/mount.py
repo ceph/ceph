@@ -156,34 +156,39 @@ class CephFSMount(object):
     def _setup_netns(self):
         p = self.client_remote.run(args=['ip', 'netns', 'list'],
                                    stderr=StringIO(), stdout=StringIO(),
-                                   timeout=(5*60))
-        p = p.stdout.getvalue().strip()
-        if re.match(self.netns_name, p) is not None:
-            raise RuntimeError("the netns '{}' already exists!".format(self.netns_name))
+                                   timeout=(5*60)).stdout.getvalue().strip()
 
         # Get the netns name list
         netns_list = re.findall(r'[^()\s][-.\w]+[^():\s]', p)
 
-        # Get an uniq netns id
-        nsid = 0
-        while True:
+        out = re.search(r"{0}".format(self.netns_name), p)
+        if out is None:
+            # Get an uniq nsid for the new netns
+            nsid = 0
             p = self.client_remote.run(args=['ip', 'netns', 'list-id'],
                                        stderr=StringIO(), stdout=StringIO(),
-                                       timeout=(5*60))
-            p = re.search(r"nsid {} ".format(nsid), p.stdout.getvalue())
-            if p is None:
-                break
+                                       timeout=(5*60)).stdout.getvalue()
+            while True:
+                out = re.search(r"nsid {} ".format(nsid), p)
+                if out is None:
+                    break
 
-            nsid += 1
+                nsid += 1
 
-        self.nsid = nsid;
+            # Add one new netns and set it id
+            self.run_shell_payload(f"""
+                set -e
+                sudo ip netns add {self.netns_name}
+                sudo ip netns set {self.netns_name} {nsid}
+            """, timeout=(5*60), omit_sudo=False, cwd='/')
+            self.nsid = nsid;
+        else:
+            # The netns already exists and maybe suspended by self.kill()
+            self.resume_netns();
 
-        # Add one new netns and set it id
-        self.run_shell_payload(f"""
-            set -e
-            sudo ip netns add {self.netns_name}
-            sudo ip netns set {self.netns_name} {nsid}
-        """, timeout=(5*60), omit_sudo=False, cwd='/')
+            nsid = int(re.search(r"{0} \(id: (\d+)\)".format(self.netns_name), p).group(1))
+            self.nsid = nsid;
+            return
 
         # Get one ip address for netns
         ips = IP(self.ceph_brx_net)
@@ -304,9 +309,13 @@ class CephFSMount(object):
         """
         Cleanup the netns for the mountpoint.
         """
-        log.info("Cleaning the '{0}' netns for '{1}'".format(self._netns_name, self.mountpoint))
-        self._cleanup_netns()
-        self._cleanup_brx_and_nat()
+        # We will defer cleaning the netnses and bridge until the last
+        # mountpoint is unmounted, this will be a temporary work around
+        # for issue#46282.
+
+        # log.info("Cleaning the '{0}' netns for '{1}'".format(self._netns_name, self.mountpoint))
+        # self._cleanup_netns()
+        # self._cleanup_brx_and_nat()
 
     def suspend_netns(self):
         """
