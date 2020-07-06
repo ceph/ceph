@@ -157,7 +157,7 @@ class Osd(RESTController):
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
     @osd_task('delete', {'svc_id': '{svc_id}'})
-    def delete(self, svc_id, preserve_id=None, force=None):  # pragma: no cover - requires realtime env
+    def delete(self, svc_id, preserve_id=None, force=None):  # pragma: no cover
         replace = False
         check = False
         try:
