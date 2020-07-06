@@ -37,49 +37,19 @@ namespace detail {
 class RADOS : public Dispatcher
 {
   friend ::neorados::RADOS;
-  struct MsgDeleter {
-    void operator()(Messenger* p) const {
-      if (p) {
-	p->shutdown();
-	p->wait();
-      }
-      delete p;
-    }
-  };
-
-  struct ObjDeleter {
-    void operator()(Objecter* p) const {
-      if (p) {
-	p->shutdown();
-      }
-      delete p;
-    }
-  };
-
-  template<typename T>
-  struct scoped_shutdown {
-    T& m;
-    scoped_shutdown(T& m) : m(m) {}
-
-    ~scoped_shutdown() {
-      m.shutdown();
-    }
-  };
 
   boost::asio::io_context& ioctx;
+  boost::intrusive_ptr<CephContext> cct;
+
   ceph::mutex lock = ceph::make_mutex("RADOS_unleashed::_::RADOSImpl");
   int instance_id = -1;
 
-  std::unique_ptr<Messenger, MsgDeleter> messenger;
+  std::unique_ptr<Messenger> messenger;
 
   MonClient monclient;
-  scoped_shutdown<MonClient> moncsd;
-
   MgrClient mgrclient;
-  scoped_shutdown<MgrClient> mgrcsd;
 
-  std::unique_ptr<Objecter, ObjDeleter> objecter;
-
+  std::unique_ptr<Objecter> objecter;
 
 public:
 

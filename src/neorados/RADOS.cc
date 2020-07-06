@@ -1637,7 +1637,7 @@ const bs::error_category& error_category() noexcept {
 }
 
 CephContext* RADOS::cct() {
-  return impl->cct;
+  return impl->cct.get();
 }
 }
 
