@@ -19,6 +19,8 @@ namespace ceph {
  * non-stateful entity that is responsible for providing data
  */
 
+class JSONObj;
+
 class SIProvider {
 public:
   enum StageType {
@@ -35,6 +37,7 @@ public:
     int num_shards{0};
 
     void dump(Formatter *f) const;
+    void decode_json(JSONObj *obj);
   };
 
   struct Info {
@@ -44,6 +47,7 @@ public:
     std::vector<StageInfo> stages;
 
     void dump(Formatter *f) const;
+    void decode_json(JSONObj *obj);
   };
 
   struct EntryInfoBase {

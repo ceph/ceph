@@ -18,12 +18,33 @@ static inline string stage_type_to_str(SIProvider::StageType st)
   }
 }
 
+static inline SIProvider::StageType stage_type_from_str(const string& s)
+{
+  if (s == "full") {
+    return SIProvider::StageType::FULL;
+  }
+  if (s == "inc") {
+    return SIProvider::StageType::INC;
+  }
+
+  return SIProvider::StageType::UNKNOWN;
+}
+
 
 void SIProvider::StageInfo::dump(Formatter *f) const
 {
   encode_json("sid", sid, f);
   encode_json("type", stage_type_to_str(type), f);
   encode_json("num_shards", num_shards, f);
+}
+
+void SIProvider::StageInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("sid", sid, obj);
+  string type_str;
+  JSONDecoder::decode_json("type", type_str, obj);
+  type = stage_type_from_str(type_str);
+  JSONDecoder::decode_json("num_shards", num_shards, obj);
 }
 
 void SIProvider::Info::dump(Formatter *f) const
@@ -34,6 +55,13 @@ void SIProvider::Info::dump(Formatter *f) const
   encode_json("stages", stages, f);
 }
 
+void SIProvider::Info::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("first_stage", first_stage, obj);
+  JSONDecoder::decode_json("last_stage", last_stage, obj);
+  JSONDecoder::decode_json("stages", stages, obj);
+}
 
 SIProvider::Info SIProviderCommon::get_info() const
 {
