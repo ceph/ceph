@@ -12,6 +12,7 @@ import socket
 import tempfile
 import threading
 import time
+
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr, ServerConfigException, verify_tls_files, \
     create_self_signed_cert
@@ -290,8 +291,9 @@ class Module(MgrModule, CherryPyConfig):
 
         if 'COVERAGE_ENABLED' in os.environ:
             import coverage
-            __cov = coverage.Coverage(config_file="{}/.coveragerc".format
-            (os.path.dirname(__file__)),data_suffix=True)
+            __cov = coverage.Coverage(config_file="{}/.coveragerc"
+                                      .format(os.path.dirname(__file__)),
+                                      data_suffix=True)
             __cov.start()
             cherrypy.engine.subscribe('after_request', __cov.save)
 
