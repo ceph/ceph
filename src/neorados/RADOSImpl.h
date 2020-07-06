@@ -11,8 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifndef CEPH_LIBRADOS_RADOSCLIENT_H
-#define CEPH_LIBRADOS_RADOSCLIENT_H
+#ifndef CEPH_NEORADOS_RADOSIMPL_H
+#define CEPH_NEORADOS_RADOSIMPL_H
 
 #include <functional>
 #include <memory>
@@ -23,6 +23,8 @@
 
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+
+#include "librados/RadosClient.h"
 
 #include "mon/MonClient.h"
 
@@ -68,9 +70,6 @@ public:
   mon_feature_t get_required_monitor_features() const {
     return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
   }
-  int get_instance_id() const {
-    return instance_id;
-  }
 };
 
 class Client {
@@ -107,11 +106,27 @@ public:
   }
 
   int get_instance_id() const override {
-    return rados->get_instance_id();
+    return rados->instance_id;
   }
 
 private:
   std::unique_ptr<RADOS> rados;
+};
+
+class RadosClient : public Client {
+public:
+  RadosClient(librados::RadosClient* rados_client)
+    : Client(rados_client->poolctx, {rados_client->cct},
+             rados_client->monclient, rados_client->objecter),
+      rados_client(rados_client) {
+  }
+
+  int get_instance_id() const override {
+    return rados_client->instance_id;
+  }
+
+public:
+  librados::RadosClient* rados_client;
 };
 
 } // namespace detail
