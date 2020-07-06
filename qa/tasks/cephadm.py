@@ -1156,8 +1156,13 @@ def task(ctx, config):
     ref = None
     if not ctx.ceph[cluster_name].image:
         sha1 = config.get('sha1')
+        flavor = config.get('flavor', 'default')
+
         if sha1:
-            ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
+            if flavor == "crimson":
+                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
+            else:
+                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
             ref = sha1
         else:
             # hmm, fall back to branch?
