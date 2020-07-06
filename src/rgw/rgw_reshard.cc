@@ -62,7 +62,6 @@ class BucketReshardShard {
   rgw::sal::RGWRadosStore *store;
   const RGWBucketInfo& bucket_info;
   int num_shard;
-  const rgw::bucket_index_layout_generation& target_layout;
   RGWRados::BucketShard bs;
   vector<rgw_cls_bi_entry> entries;
   map<RGWObjCategory, rgw_bucket_category_stats> stats;
@@ -103,14 +102,14 @@ class BucketReshardShard {
 
 public:
   BucketReshardShard(rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
-                     int _num_shard, const rgw::bucket_index_layout_generation& _target_layout,
-                     deque<librados::AioCompletion *>& _completions) :
-    store(_store), bucket_info(_bucket_info), target_layout(_target_layout), bs(store->getRados()),
+                     int _num_shard, deque<librados::AioCompletion *>& _completions) :
+    store(_store), bucket_info(_bucket_info), bs(store->getRados()),
     aio_completions(_completions)
   {
-    num_shard = (target_layout.layout.normal.num_shards > 0 ? _num_shard : -1);
+    num_shard = (bucket_info.layout.target_index->layout.normal.num_shards > 0 ? _num_shard : -1);
 
-    bs.init(bucket_info.bucket, num_shard, target_layout, nullptr /* no RGWBucketInfo */);
+    bs.init(bucket_info.bucket, num_shard, bucket_info.layout.current_index,
+            bucket_info.layout.target_index, nullptr /* no RGWBucketInfo */);
 
     max_aio_completions =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
@@ -194,11 +193,11 @@ public:
 		       int _num_target_shards) :
     store(_store), target_bucket_info(_target_bucket_info),
     num_target_shards(_num_target_shards)
-  { 
-    const auto& target_layout = target_bucket_info.layout.target_index;
+  {
+
     target_shards.resize(num_target_shards);
     for (int i = 0; i < num_target_shards; ++i) {
-      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, target_layout, completions);
+      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, completions);
     }
   }
 
@@ -321,8 +320,10 @@ static int update_num_shards(rgw::sal::RGWRadosStore *store,
 				      RGWBucketInfo& bucket_info,
 				      map<string, bufferlist>& attrs)
 {
-
-  bucket_info.layout.target_index.layout.normal.num_shards = new_num_shards;
+  if (!bucket_info.layout.target_index) {
+    bucket_info.layout.target_index.emplace();
+  }
+  bucket_info.layout.target_index->layout.normal.num_shards = new_num_shards;
 
   bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
 
@@ -391,7 +392,7 @@ public:
 	  " clear_index_shard_status returned " << ret << dendl;
       }
     }
-  } 
+  }
 
   int start() {
     int ret = set_status(rgw::BucketReshardState::IN_PROGRESS);
@@ -522,9 +523,9 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   //increment generation number
-  bucket_info.layout.target_index.gen++;
+  bucket_info.layout.target_index->gen++;
 
-  auto target_shards = bucket_info.layout.target_index.layout.normal.num_shards;
+  auto target_shards = bucket_info.layout.target_index->layout.normal.num_shards;
   int num_target_shards = (target_shards > 0 ? num_shards : 1);
 
   BucketReshardManager target_shards_mgr(store, bucket_info, num_target_shards);
@@ -551,14 +552,10 @@ int RGWBucketReshard::do_reshard(int num_shards,
     while (is_truncated) {
       entries.clear();
       ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
-      if (ret < 0) {
-		if (ret == -ENOENT && i < (num_source_shards - 1)) {
-		  continue;
-		} else {
-		  derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
-		  return ret;
+      if (ret < 0 && ret == -ENOENT) {
+        derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+        return ret;
 		}
-	  }
 
       for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
 	rgw_cls_bi_entry& entry = *iter;
@@ -585,7 +582,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  // place the multipart .meta object on the same shard as its head object
 	  obj.index_hash_source = mp.get_key();
 	}
-	int ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index.layout.normal, obj
+	int ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal, obj
 	.get_hash_object(),	&target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
@@ -640,7 +637,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   //overwrite current_index for the next reshard process
-  bucket_info.layout.current_index = bucket_info.layout.target_index;
+  bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
   ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
   if (ret < 0) {
@@ -719,7 +716,7 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->svc()->bi->clean_index(bucket_info, bucket_info.layout.target_index.gen);
+  int ret2 = store->svc()->bi->clean_index(bucket_info, bucket_info.layout.target_index->gen);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
