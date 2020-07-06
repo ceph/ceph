@@ -1480,6 +1480,8 @@ def exec_test():
         verbosity=2,
         failfast=True).run(overall_suite)
 
+    CephFSMount.cleanup_stale_netnses_and_bridge(remote)
+
     if opt_teardown_cluster:
         teardown_cluster()
 

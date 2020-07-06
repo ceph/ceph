@@ -169,3 +169,5 @@ def task(ctx, config):
             mount = info["mount"]
             if mount.is_mounted():
                 mount.umount_wait()
+        for remote in remotes:
+            FuseMount.cleanup_stale_netnses_and_bridge(remote)

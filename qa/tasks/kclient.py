@@ -118,6 +118,9 @@ def task(ctx, config):
                     forced = True
                     mount.umount_wait(force=True)
 
+        for id_, remote in clients:
+            KernelMount.cleanup_stale_netnses_and_bridge(remote)
+
         return forced
 
     ctx.mounts = mounts
