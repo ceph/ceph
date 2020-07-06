@@ -30,8 +30,8 @@ class Settings(RESTController):
 
         try:
             yield result
-        except AttributeError:
-            raise cherrypy.NotFound(result)
+        except AttributeError: #pragma: no cover - handling is too obvious
+            raise cherrypy.NotFound(result) #pragma: no cover - handling is too obvious
 
     @staticmethod
     def _to_native(setting):
@@ -98,7 +98,7 @@ class StandardSettings(RESTController):
             settings.
         :rtype: dict
         """
-        return {
+        return { #pragma: no cover - no complexity there
             'user_pwd_expiration_span':
             SettingsModule.USER_PWD_EXPIRATION_SPAN,
             'user_pwd_expiration_warning_1':

@@ -111,6 +111,18 @@ class OsdTest(DashboardTestCase):
             'tracking_id': 'bare-5'
         })
         self.assertStatus(201)
+
+        # invalid method
+        self._task_post('/api/osd', {
+            'method': 'xyz',
+            'data': {
+                'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+                'svc_id': 5
+            },
+            'tracking_id': 'bare-5'
+        })
+        self.assertStatus(400)
+
         # Lost
         self._post('/api/osd/5/mark_lost')
         self.assertStatus(200)
