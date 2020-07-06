@@ -60,7 +60,6 @@
 using ceph::crypto::SHA1;
 
 struct req_state;
-//struct objectDirectory_t; //datacache
 class RGWOp;
 class RGWRados;
 
@@ -192,13 +191,11 @@ public:
   virtual void pre_exec() {}
   virtual void execute() = 0;
   /*datacache*/
-  virtual void fetch_remote_execute() {} 
-  virtual void cache_execute() {} 
-  virtual void directory_lookup() {} 
+  virtual void cache_execute() {}  
   cache_obj c_obj;
   RGWObjectDirectory objectDirectory;
-  //RGWBlockDirectory blockDirectory;
   /*datacache*/
+
   virtual void send_response() {}
   virtual void complete() {
     send_response();
@@ -349,9 +346,8 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  void fetch_remote_execute(); // datacache
-  void cache_execute(); // datacache
-  void directory_lookup(); // datacache
+  void cache_execute() override; // datacache
+  bool cache_authorize(cache_obj &c_obj); // datacache
   int parse_range();
   int read_user_manifest_part(
     rgw_bucket& bucket,
