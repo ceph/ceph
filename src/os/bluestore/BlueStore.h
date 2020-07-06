@@ -1231,6 +1231,7 @@ public:
       }
     }
 
+    virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
     bool empty() {
       return _get_num() == 0;
