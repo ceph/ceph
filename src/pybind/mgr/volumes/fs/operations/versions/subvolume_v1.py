@@ -195,6 +195,15 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
     def create_snapshot(self, snapname):
         snappath = self.snapshot_path(snapname)
+        # persist snapshot size "trusted.snapdir.rbytes" as "ceph.dir.rbytes"
+        # on snapshot becomes stale on I/O on parent subvolume
+        size = self.fs.getxattr(self.path, "ceph.dir.rbytes")
+        try:
+            self.fs.setxattr(self.path, 'trusted.snapdir.rbytes', size, 0)
+        except cephfs.InvalidValue as e:
+            raise VolumeException(-errno.EINVAL, "invalid size specified: '{0}'".format(size))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
         mksnap(self.fs, snappath)
 
     def is_snapshot_protected(self, snapname):
@@ -227,7 +236,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         snappath = self.snapshot_path(snapname)
         snap_info = {}
         try:
-            snap_attrs = {'created_at':'ceph.snap.btime', 'size':'ceph.dir.rbytes',
+            snap_attrs = {'created_at':'ceph.snap.btime', 'size':'trusted.snapdir.rbytes',
                           'data_pool':'ceph.dir.layout.pool'}
             for key, val in snap_attrs.items():
                 snap_info[key] = self.fs.getxattr(snappath, val)
