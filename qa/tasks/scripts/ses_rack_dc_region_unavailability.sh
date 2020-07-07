@@ -137,7 +137,7 @@ done
 # bring down rack
 for node2fail in ${rack4_hosts[@]}
 do
-    iptables_drop ${node2fail}.teuthology
+    iptables_drop "${node2fail}.*"
 done
 
 wait_until_down "rack"
@@ -145,7 +145,7 @@ wait_until_down "rack"
 # bring rack up
 for node2fail in ${rack4_hosts[@]}
 do
-    iptables_accept ${node2fail}.teuthology
+    iptables_accept "${node2fail}.*"
 done
 
 cluster_health
@@ -166,7 +166,7 @@ dc2_nodes=(${rack3_hosts[@]} ${rack4_hosts[@]})
 # bringing down DC
 for node2fail in ${dc1_nodes[@]}
 do
-    iptables_drop ${node2fail}.teuthology
+    iptables_drop "${node2fail}.*"
 done
 
 wait_until_down "datacenter"
@@ -174,7 +174,7 @@ wait_until_down "datacenter"
 # bring DC up
 for node2fail in ${dc1_nodes[@]}
 do
-    iptables_accept ${node2fail}.teuthology
+    iptables_accept "${node2fail}.*"
 done
 
 cluster_health
@@ -200,7 +200,7 @@ region2_nodes=(${rack3_hosts[@]} ${rack4_hosts[@]})
 # bringing down region
 for node2fail in ${region1_nodes[@]}
 do
-    iptables_drop ${node2fail}.teuthology
+    iptables_drop "${node2fail}.*"
 done
 
 wait_until_down "region"
@@ -208,7 +208,7 @@ wait_until_down "region"
 # bring region up
 for node2fail in ${region1_nodes[@]}
 do
-    iptables_accept ${node2fail}.teuthology
+    iptables_accept "${node2fail}.*"
 done
 
 cluster_health
