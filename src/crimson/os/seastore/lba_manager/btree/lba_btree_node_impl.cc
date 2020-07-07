@@ -23,7 +23,7 @@ namespace crimson::os::seastore::lba_manager::btree {
 std::ostream &LBAInternalNode::print_detail(std::ostream &out) const
 {
   return out << ", size=" << get_size()
-	     << ", depth=" << depth;
+	     << ", meta=" << get_meta();
 }
 
 LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
@@ -40,7 +40,7 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
     [this, c, &result, addr, len](const auto &val) mutable {
       return get_lba_btree_extent(
 	c,
-	depth-1,
+	get_meta().depth - 1,
 	val.get_val(),
 	get_paddr()).safe_then(
 	  [c, &result, addr, len](auto extent) mutable {
@@ -68,7 +68,7 @@ LBAInternalNode::insert_ret LBAInternalNode::insert(
   auto insertion_pt = get_containing_child(laddr);
   return get_lba_btree_extent(
     c,
-    depth-1,
+    get_meta().depth - 1,
     insertion_pt->get_val(),
     get_paddr()).safe_then(
       [this, insertion_pt, c, laddr, val=std::move(val)](
@@ -89,7 +89,7 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
 {
   return get_lba_btree_extent(
     c,
-    depth-1,
+    get_meta().depth - 1,
     get_containing_child(laddr)->get_val(),
     get_paddr()
   ).safe_then([this, c, laddr](LBANodeRef extent) {
@@ -131,7 +131,7 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
 	  }
 	  return get_lba_btree_extent(
 	    c,
-	    depth-1,
+	    get_meta().depth - 1,
 	    i->get_val(),
 	    get_paddr()
 	  ).safe_then([c, &i, len](auto extent) mutable {
@@ -234,7 +234,7 @@ LBAInternalNode::merge_entry(
   auto donor_iter = donor_is_left ? iter - 1 : iter + 1;
   return get_lba_btree_extent(
     c,
-    depth - 1,
+    get_meta().depth - 1,
     donor_iter->get_val(),
     get_paddr()
   ).safe_then([this, c, addr, iter, entry, donor_iter, donor_is_left](
@@ -303,7 +303,7 @@ LBAInternalNode::get_containing_child(laddr_t laddr)
 std::ostream &LBALeafNode::print_detail(std::ostream &out) const
 {
   return out << ", size=" << get_size()
-	     << ", depth=" << depth;
+	     << ", meta=" << get_meta();
 }
 
 LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
@@ -466,10 +466,13 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
       c.trans,
       offset,
       LBA_BLOCK_SIZE).safe_then([depth](auto ret) {
-	ret->set_depth(depth);
+	auto meta = ret->get_meta();
+	if (ret->get_size()) {
+	  ceph_assert(meta.begin <= ret->begin()->get_key());
+	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
+	}
 	return LBANodeRef(ret.detach(), /* add_ref = */ false);
       });
-
   } else {
     logger().debug(
       "get_lba_btree_extent: reading leaf at offset {}, depth {}",
@@ -482,7 +485,11 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
 	logger().debug(
 	  "get_lba_btree_extent: read leaf at offset {}",
 	  offset);
-	ret->set_depth(depth);
+	auto meta = ret->get_meta();
+	if (ret->get_size()) {
+	  ceph_assert(meta.begin <= ret->begin()->get_key());
+	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
+	}
 	return LBANodeRef(ret.detach(), /* add_ref = */ false);
       });
   }
