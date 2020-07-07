@@ -543,9 +543,9 @@ Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
   });
 }
 
-void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
+void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replace */)
 {
-  gate.dispatch_in_background(__func__, *this, [this, conn, is_replace] {
+  gate.dispatch_in_background(__func__, *this, [this, conn] {
     auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
 			      [peer_addr = conn->get_peer_addr()](auto& mc) {
 				return mc->is_my_peer(peer_addr);

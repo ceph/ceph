@@ -96,11 +96,11 @@ struct RootBlock : CachedExtent {
   }
 
   complete_load_ertr::future<> complete_load() final {
-    assert(0 == "Root is only written via deltas");
+    ceph_abort_msg("Root is only written via deltas");
   }
 
   void on_initial_write() final {
-    assert(0 == "Root is only written via deltas");
+    ceph_abort_msg("Root is only written via deltas");
   }
 
   root_t &get_lba_root() { return root; }
