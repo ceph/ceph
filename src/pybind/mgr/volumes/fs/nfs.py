@@ -2,6 +2,7 @@ import errno
 import json
 import logging
 from typing import List
+import socket
 
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
 from rados import TimedOut
@@ -707,4 +708,49 @@ class NFSCluster:
             return 0, '\n'.join(available_clusters(self.mgr)), ""
         except Exception as e:
             log.exception("Failed to list NFS Cluster")
+            return getattr(e, 'errno', -1), "", str(e)
+
+    def _show_nfs_cluster_info(self, cluster_id):
+        self._set_cluster_id(cluster_id)
+        completion = self.mgr.list_daemons(daemon_type='nfs')
+        self.mgr._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        host_ip = []
+        # Here completion.result is a list DaemonDescription objects
+        for cluster in completion.result:
+            if self.cluster_id == cluster.service_id():
+                """
+                getaddrinfo sample output: [(<AddressFamily.AF_INET: 2>,
+                <SocketKind.SOCK_STREAM: 1>, 6, 'xyz', ('172.217.166.98',2049)),
+                (<AddressFamily.AF_INET6: 10>, <SocketKind.SOCK_STREAM: 1>, 6, '',
+                ('2404:6800:4009:80d::200e', 2049, 0, 0))]
+                """
+                try:
+                    host_ip.append({
+                            "hostname": cluster.hostname,
+                            "ip": list(set([ip[4][0] for ip in socket.getaddrinfo(
+                                cluster.hostname, 2049, flags=socket.AI_CANONNAME,
+                                type=socket.SOCK_STREAM)])),
+                            "port": 2049  # Default ganesha port
+                            })
+                except socket.gaierror:
+                    continue
+        return host_ip
+
+    def show_nfs_cluster_info(self, cluster_id=None):
+        try:
+            cluster_ls = []
+            info_res = {}
+            if cluster_id:
+                cluster_ls = [cluster_id]
+            else:
+                cluster_ls = available_clusters(self.mgr)
+
+            for cluster_id in cluster_ls:
+                res = self._show_nfs_cluster_info(cluster_id)
+                if res:
+                    info_res[cluster_id] = res
+            return (0, json.dumps(info_res, indent=4), '')
+        except Exception as e:
+            log.exception(f"Failed to show info for cluster")
             return getattr(e, 'errno', -1), "", str(e)

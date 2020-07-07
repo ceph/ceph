@@ -54,6 +54,15 @@ List NFS Ganesha Cluster
 
 This lists deployed clusters.
 
+Show NFS Ganesha Cluster Information
+====================================
+
+.. code:: bash
+
+    $ ceph nfs cluster info [<clusterid>]
+
+This displays ip and port of deployed cluster.
+
 Create CephFS Export
 ====================
 
