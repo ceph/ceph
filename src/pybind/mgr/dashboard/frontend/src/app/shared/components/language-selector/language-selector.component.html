@@ -4,7 +4,7 @@
   <a ngbDropdownToggle
      i18n-title
      title="Select a Language">
-    {{ supportedLanguages[selectedLanguage] }}
+    {{ allLanguages[selectedLanguage] }}
   </a>
   <div ngbDropdownMenu>
     <ng-container *ngFor="let lang of supportedLanguages | keyvalue">
