@@ -40,7 +40,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_REMOVE_UNPROTECT, RBD_SNAP_MIRROR_STATE_PRIMARY,
                  RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED,
                  RBD_SNAP_CREATE_SKIP_QUIESCE,
-                 RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
+                 RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
+                 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
 
 rados = None
 ioctx = None
@@ -608,6 +609,14 @@ class TestImage(object):
         self.image.write(data, 0)
         self.image.write_zeroes(0, 256)
         eq(self.image.read(256, 256), b'\0' * 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [])
+
+    def test_write_zeroes_thick_provision(self):
+        data = rand_data(256)
+        self.image.write(data, 0)
+        self.image.write_zeroes(0, 256, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
+        eq(self.image.read(256, 256), b'\0' * 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 256, True)])
 
     def test_read(self):
         data = self.image.read(0, 20)
