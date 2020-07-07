@@ -499,10 +499,12 @@ public:
   }
 };
 
+class LogicalCachedExtent;
 class LBAPin;
 using LBAPinRef = std::unique_ptr<LBAPin>;
 class LBAPin {
 public:
+  virtual void link_extent(LogicalCachedExtent *ref) = 0;
   virtual extent_len_t get_length() const = 0;
   virtual paddr_t get_paddr() const = 0;
   virtual laddr_t get_laddr() const = 0;
@@ -534,6 +536,7 @@ public:
     assert(!pin);
     pin = std::move(npin);
     laddr = pin->get_laddr();
+    pin->link_extent(this);
   }
 
   bool has_pin() const {
