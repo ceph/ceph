@@ -834,7 +834,9 @@ class MDCache {
 
   void kick_open_ino_peers(mds_rank_t who);
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
-		bool want_replica=true, bool want_xlocked=false);
+		bool want_replica=true, bool want_xlocked=false,
+		vector<inode_backpointer_t> *ancestors_hint=nullptr,
+		mds_rank_t auth_hint=MDS_RANK_NONE);
 
   void find_ino_peers(inodeno_t ino, MDSContext *c,
 		      mds_rank_t hint=MDS_RANK_NONE, bool path_locked=false);
