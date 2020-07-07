@@ -366,6 +366,11 @@ typedef enum {
   RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
 } rbd_pool_stat_option_t;
 
+/* rbd_write_zeroes / rbd_aio_write_zeroes flags */
+enum {
+  RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = (1U<<0), /* fully allocated zeroed extent */
+};
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
