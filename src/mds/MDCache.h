@@ -1095,7 +1095,9 @@ protected:
 public:
   void kick_open_ino_peers(mds_rank_t who);
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
-		bool want_replica=true, bool want_xlocked=false);
+		bool want_replica=true, bool want_xlocked=false,
+		vector<inode_backpointer_t> *ancestors_hint=nullptr,
+		mds_rank_t auth_hint=MDS_RANK_NONE);
   
   // -- find_ino_peer --
   struct find_ino_peer_info_t {
