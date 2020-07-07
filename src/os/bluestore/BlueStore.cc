@@ -415,6 +415,23 @@ static int get_key_object(const S& key, ghobject_t *oid)
   return 0;
 }
 
+int BlueStore::objkey_to_oid(const std::string& key, ghobject_t *oid)
+{
+  return get_key_object(key, oid);
+}
+
+int BlueStore::extentkey_to_oid(const std::string& key, ghobject_t *oid, uint32_t *offset)
+{
+  if (key.size() <= sizeof(uint32_t) + 1)
+    return -9;
+  if (*key.rbegin() != EXTENT_SHARD_KEY_SUFFIX)
+    return -10;
+  int key_len = key.size() - sizeof(uint32_t) - 1;
+  const char *p = key.data() + key_len;
+  _key_decode_u32(p, offset);
+  return get_key_object(key.substr(0, key_len), oid);
+}
+
 template<typename S>
 static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
 {

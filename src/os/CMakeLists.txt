@@ -103,7 +103,8 @@ add_dependencies(os crypto_plugins)
 
 if(WITH_BLUESTORE)
   add_executable(ceph-bluestore-tool
-    bluestore/bluestore_tool.cc)
+    bluestore/bluestore_tool.cc
+    bluestore/bluestore_dump.cc)
   target_link_libraries(ceph-bluestore-tool
     os global)
   install(TARGETS ceph-bluestore-tool

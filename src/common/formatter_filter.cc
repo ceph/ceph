@@ -713,6 +713,26 @@ bool parse(TokenSplitter& token_src,
 }
 
 
+std::string_view capture(std::string_view name) {
+  char* copy = new char[name.length()];
+  memcpy(copy, name.data(), name.length());
+  return std::string_view(copy, name.length());
+}
+char* capture(const char* name) {
+  if (name == nullptr) {
+    return nullptr;
+  } else {
+    return strdup(name);
+  }
+}
+void uncapture(std::string_view name) {
+  free(const_cast<char*>(name.data()));
+}
+void uncapture(char* name) {
+  free(name);
+}
+
+
 class BufferImpl final: public Buffer, public Formatter {
   Formatter* sink;
   std::vector<std::function<void()>> stack;
@@ -746,7 +766,7 @@ private:
     stack.clear();
   }
   static void list_helper(Formatter* f,
-			  const char *name, const char *ns, bool quoted, const char *fmt, ...) {
+			  std::string_view name, const char *ns, bool quoted, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     f->dump_format_va(name, ns, quoted, fmt, ap);
@@ -791,76 +811,71 @@ private:
     Formatter* f = sink;
     push([f](){f->output_footer();});
   }
-  void open_array_section(const char *name) override {
+  void open_array_section(std::string_view name) override {
     Formatter* f = sink;
-    std::string _name(name);
-    push([f, _name](){f->open_array_section(_name.c_str());});
+    auto _name = capture(name);
+    push([f, _name]() { f->open_array_section(_name); uncapture(_name); } );
   }
-  void open_array_section_in_ns(const char *name, const char *ns) override {
+  void open_array_section_in_ns(std::string_view name, const char *ns) override {
     Formatter* f = sink;
-    std::string _name(name);
-    std::string _ns(ns);
-    push([f, _name, _ns](){f->open_array_section_in_ns(_name.c_str(), _ns.c_str());});    
+    auto _name = capture(name);
+    auto _ns = capture(ns);
+    push([f, _name, _ns]() { f->open_array_section_in_ns(_name, _ns); uncapture(_name); uncapture(_ns); } );
   }
-  void open_object_section(const char *name) override {
+  void open_object_section(std::string_view name) override {
     Formatter* f = sink;
-    std::string _name(name);
-    push([f, _name](){f->open_object_section(_name.c_str());});
+    auto _name = capture(name);
+    push([f, _name]() { f->open_object_section(_name); uncapture(_name); } );
   }
-  void open_object_section_in_ns(const char *name, const char *ns) override {
+  void open_object_section_in_ns(std::string_view name, const char *ns) override {
     Formatter* f = sink;
-    std::string _name(name);
-    std::string _ns(ns);
-    push([f, _name, _ns](){f->open_object_section_in_ns(_name.c_str(), _ns.c_str());});    
+    auto _name = capture(name);
+    auto _ns = capture(ns);
+    push([f, _name, _ns]() { f->open_object_section_in_ns(_name, _ns); uncapture(_name); uncapture(_ns); } );
   }
   void close_section() override {
     Formatter* f = sink;
     push([f](){f->close_section();});
   }
-  void dump_unsigned(const char *name, uint64_t u) override {
-    std::string _name(name);
+  void dump_unsigned(std::string_view name, uint64_t u) override {
+    auto _name = capture(name);
     Formatter* f = sink;
-    push([f, _name, u](){f->dump_unsigned(_name.c_str(), u);});
+    push([f, _name, u]() { f->dump_unsigned(_name, u); uncapture(_name); } );
   }
-  void dump_int(const char *name, int64_t s) override {
-    std::string _name(name);
+  void dump_int(std::string_view name, int64_t s) override {
+    auto _name = capture(name);
     Formatter* f = sink;
-    push([f, _name, s](){f->dump_int(_name.c_str(), s);});
+    push([f, _name, s]() { f->dump_int(_name, s); uncapture(_name); } );
   }
-  void dump_float(const char *name, double d) override {
-    std::string _name(name);
+  void dump_float(std::string_view name, double d) override {
+    auto _name = capture(name);
     Formatter* f = sink;
-    push([f, _name, d](){f->dump_float(_name.c_str(), d);});
+    push([f, _name, d]() { f->dump_float(_name, d); uncapture(_name); } );
   }
-  void dump_string(const char *name, std::string_view s) override {
-    std::string _name(name);
-    std::string _s(s);
+  void dump_string(std::string_view name, std::string_view s) override {
+    auto _name = capture(name);
+    auto _s = capture(s);
     Formatter* f = sink;
-    push([f, _name, _s](){f->dump_string(_name.c_str(), _s);});
+    push([f, _name, _s]() { f->dump_string(_name, _s); uncapture(_name); uncapture(_s); } );
   }
-  std::ostream& dump_stream(const char *name) override {
+  std::ostream& dump_stream(std::string_view name) override {
     dump_stream_name = name;
     dump_stream_is = true;
     return dump_stream_stream;
   }
-  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override {
+  void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override {
     Formatter* f = sink;
     char* _buf;
     int r = vasprintf(&_buf, fmt, ap);
     ceph_assert(r >= 0);
-    std::string _name(name);
-    if (ns != nullptr) {
-      std::string _ns(ns);
-      push([f, _name, _ns, quoted, _buf]() {
-	  list_helper(f, _name.c_str(), _ns.c_str(), quoted, "%s", _buf);
-	  free(_buf);
-	});
-    } else {
-      push([f, _name, quoted, _buf]() {
-	  list_helper(f, _name.c_str(), nullptr, quoted, "%s", _buf);
-	  free(_buf);
-	});
-    }
+    auto _name = capture(name);
+    auto _ns = capture(ns);
+    push([f, _name, _ns, quoted, _buf]() {
+	list_helper(f, _name, _ns, quoted, "%s", _buf);
+	uncapture(_name);
+	uncapture(_ns);
+	free(_buf);
+      });
   }
   int get_len() const override {
     //can't suspend getting len
@@ -871,24 +886,26 @@ private:
     std::string _data(data);
     push([f, _data](){f->write_raw_data(_data.c_str());});
   }
-  void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs) override {
+  void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override {
     Formatter* f = sink;
-    std::string _name(name);
+    auto _name = capture(name);
     FormatterAttrs _attrs(attrs);
-    push([f, _name, _attrs](){f->open_array_section_with_attrs(_name.c_str(), _attrs);});    
+    push([f, _name, _attrs]() { f->open_array_section_with_attrs(_name, _attrs); uncapture(_name); } );
   }
-  void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs) override {
+  void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override {
     Formatter* f = sink;
-    std::string _name(name);
+    auto _name = capture(name);
     FormatterAttrs _attrs(attrs);
-    push([f, _name, _attrs](){f->open_object_section_with_attrs(_name.c_str(), _attrs);});        
+    push([f, _name, _attrs]() { f->open_object_section_with_attrs(_name, _attrs); uncapture(_name); } );
   }
-  void dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs) override {
+  void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs) override {
     Formatter* f = sink;
-    std::string _name(name);
-    std::string _s(s);
+    auto _name = capture(name);
+    auto _s = capture(s);
     FormatterAttrs _attrs(attrs);
-    push([f, _name, _s, _attrs](){f->dump_string_with_attrs(_name.c_str(), _s, _attrs);});
+    push([f, _name, _s, _attrs]() {
+	f->dump_string_with_attrs(_name, _s, _attrs);
+	uncapture(_name); uncapture(_s); } );
   }
 };
 
@@ -944,7 +961,7 @@ public:
   }
 
 private:
-  void enter(const char* name) {
+  void enter(std::string_view name) {
     maybe_dump_stream();
     size_t l = path.length();
     path_sizes.push_back(l);
@@ -972,7 +989,7 @@ private:
       }
     }
   }
-  VariableMap::iterator var_it(const char* name) {
+  VariableMap::iterator var_it(std::string_view name) {
     maybe_dump_stream();
     size_t l = path.length();
     path.push_back('.');
@@ -1008,19 +1025,19 @@ private:
   void output_footer() override {
     sink->output_footer();
   }
-  void open_array_section(const char *name) override {
+  void open_array_section(std::string_view name) override {
     enter(name);
     sink->open_array_section(name);
   }
-  void open_array_section_in_ns(const char *name, const char *ns) override {
+  void open_array_section_in_ns(std::string_view name, const char *ns) override {
     enter(name);
     sink->open_array_section_in_ns(name, ns);
   }
-  void open_object_section(const char *name) override {
+  void open_object_section(std::string_view name) override {
     enter(name);
     sink->open_object_section(name);
   }
-  void open_object_section_in_ns(const char *name, const char *ns) override {
+  void open_object_section_in_ns(std::string_view name, const char *ns) override {
     enter(name);
     sink->open_object_section_in_ns(name, ns);
   }
@@ -1028,7 +1045,7 @@ private:
     leave();
     sink->close_section();
   }
-  void dump_unsigned(const char *name, uint64_t u) override {
+  void dump_unsigned(std::string_view name, uint64_t u) override {
     auto it = var_it(name);
     if (it != vars.end()) {
       it->second.reset(new std::string(to_string(u)));
@@ -1036,7 +1053,7 @@ private:
     }
     sink->dump_unsigned(name, u);
   }
-  void dump_int(const char *name, int64_t s) override {
+  void dump_int(std::string_view name, int64_t s) override {
     auto it = var_it(name);
     if (it != vars.end()) {
       it->second.reset(new std::string(to_string(s)));
@@ -1044,7 +1061,7 @@ private:
     }
     sink->dump_int(name, s);
   }
-  void dump_float(const char *name, double d) override {
+  void dump_float(std::string_view name, double d) override {
     auto it = var_it(name);
     if (it != vars.end()) {
       it->second.reset(new std::string(to_string(d)));
@@ -1052,7 +1069,7 @@ private:
     }
     sink->dump_float(name, d);
   }
-  void dump_string(const char *name, std::string_view s) override {
+  void dump_string(std::string_view name, std::string_view s) override {
     auto it = var_it(name);
     if (it != vars.end()) {
       it->second.reset(new std::string(s));
@@ -1060,12 +1077,12 @@ private:
     }
     sink->dump_string(name, s);
   }
-  std::ostream& dump_stream(const char *name) override {
+  std::ostream& dump_stream(std::string_view name) override {
     dump_stream_name = name;
     dump_stream_is = true;
     return dump_stream_stream;
   }
-  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override {
+  void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override {
     auto it = var_it(name);
     if (it != vars.end()) {
       char* buf;
@@ -1084,15 +1101,15 @@ private:
     //cannot be filtered
     sink->write_raw_data(data);
   }
-  void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs) override {
+  void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override {
     enter(name);
     sink->open_array_section_with_attrs(name, attrs);
   }
-  void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs) override {
+  void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override {
     enter(name);
     sink->open_object_section_with_attrs(name, attrs);
   }
-  void dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs) override {
+  void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs) override {
     auto it = var_it(name);
     if (it != vars.end()) {
       it->second.reset(new std::string(s));
@@ -1293,19 +1310,11 @@ public:
     }
   }
 
-  static char* capture(const char* name) {
-    if (name == nullptr) {
-      return nullptr;
-    } else {
-      return strdup(name);
-    }
-  }
-
-  bool qualify(const char* name) {
+  bool qualify(std::string_view name) {
     if (extra_depth > 0) {
       return current->action == in;
     }
-    auto it = current->pattern.find(name);
+    auto it = current->pattern.find(std::string(name));
     if (it == current->pattern.end()) {
       //no specialization for that name
       return current->action == in;
@@ -1318,7 +1327,7 @@ public:
     }
   }
 
-  shape enter(const char* name) {
+  shape enter(std::string_view name) {
     if (extra_depth > 0) {
       extra_depth++;
       //if we are in ^maybe mode, it means ^out
@@ -1328,7 +1337,7 @@ public:
 	return out;
       }
     }
-    auto it = current->pattern.find(name);
+    auto it = current->pattern.find(std::string(name));
     if (it == current->pattern.end()) {
       //no specialization for that name
       extra_depth++;
@@ -1403,13 +1412,13 @@ public:
     sink->output_footer();
   }
 
-  void open_array_section(const char *name) override {
+  void open_array_section(std::string_view name) override {
     switch (enter(name)) {
     case maybe:
       {
 	Formatter* f = sink;
-	char* _name = capture(name);
-	push([f, _name](){f->open_array_section(_name); free(_name);});
+	auto _name = capture(name);
+	push([f, _name](){f->open_array_section(_name); uncapture(_name);});
       }
       break;
     case in:
@@ -1419,14 +1428,14 @@ public:
       break;
     }
   }
-  void open_array_section_in_ns(const char *name, const char *ns) override {
+  void open_array_section_in_ns(std::string_view name, const char *ns) override {
     switch (enter(name)) {
     case maybe:
       {
 	Formatter* f = sink;
-	char* _name = capture(name);
-	char* _ns = capture(ns);
-	push([f, _name, _ns](){f->open_array_section_in_ns(_name, _ns); free(_name); free(_ns);});
+	auto _name = capture(name);
+	auto _ns = capture(ns);
+	push([f, _name, _ns](){f->open_array_section_in_ns(_name, _ns); uncapture(_name); uncapture(_ns);});
       }
       break;
     case in:
@@ -1436,13 +1445,13 @@ public:
       break;
     }
   }
-  void open_object_section(const char *name) override {
+  void open_object_section(std::string_view name) override {
     switch (enter(name)) {
     case maybe:
       {
 	Formatter* f = sink;
-	char* _name = capture(name);
-	push([f, _name](){f->open_object_section(_name); free(_name); });
+	auto _name = capture(name);
+	push([f, _name](){f->open_object_section(_name); uncapture(_name); });
       }
       break;
     case in:
@@ -1452,14 +1461,14 @@ public:
       break;
     }
   }
-  void open_object_section_in_ns(const char *name, const char *ns) override {
+  void open_object_section_in_ns(std::string_view name, const char *ns) override {
     switch (enter(name)) {
     case maybe:
       {
 	Formatter* f = sink;
-	char* _name = capture(name);
-	char* _ns = capture(ns);
-	push([f, _name, _ns](){f->open_object_section_in_ns(_name, _ns); free(_name); free(_ns);});
+	auto _name = capture(name);
+	auto _ns = capture(ns);
+	push([f, _name, _ns](){f->open_object_section_in_ns(_name, _ns); uncapture(_name); uncapture(_ns);});
       }
       break;
     case in:
@@ -1474,27 +1483,27 @@ public:
       sink->close_section();
     }
   }
-  void dump_unsigned(const char *name, uint64_t u) override {
+  void dump_unsigned(std::string_view name, uint64_t u) override {
     if (qualify(name)) {
       sink->dump_unsigned(name, u);
     }
   }
-  void dump_int(const char *name, int64_t s) override {
+  void dump_int(std::string_view name, int64_t s) override {
     if (qualify(name)) {
       sink->dump_int(name, s);
     }
   }
-  void dump_float(const char *name, double d) override {
+  void dump_float(std::string_view name, double d) override {
     if (qualify(name)) {
       sink->dump_float(name, d);
     }
   }
-  void dump_string(const char *name, std::string_view s) override {
+  void dump_string(std::string_view name, std::string_view s) override {
     if (qualify(name)) {
       sink->dump_string(name, s);
     }
   }
-  std::ostream& dump_stream(const char *name) override {
+  std::ostream& dump_stream(std::string_view name) override {
     if (qualify(name)) {
       return sink->dump_stream(name);
     } else {
@@ -1503,7 +1512,7 @@ public:
       return stream_devnull;
     }
   }
-  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override {
+  void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override {
     if (qualify(name)) {
       sink->dump_format_va(name, ns, quoted, fmt, ap);
     }
@@ -1516,14 +1525,14 @@ public:
       sink->write_raw_data(data);
     }
   }
-  void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs) override {
+  void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override {
     switch (enter(name)) {
     case maybe:
       {
 	Formatter* f = sink;
-	char* _name = capture(name);
+	auto _name = capture(name);
 	FormatterAttrs _attrs(attrs);
-	push([f, _name, _attrs](){f->open_array_section_with_attrs(_name, _attrs); free(_name);});
+	push([f, _name, _attrs](){f->open_array_section_with_attrs(_name, _attrs); uncapture(_name);});
       }
       break;
     case in:
@@ -1533,14 +1542,14 @@ public:
       break;
     }
   }
-  void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs) override {
+  void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override {
     switch (enter(name)) {
     case maybe:
       {
 	Formatter* f = sink;
-	char* _name = capture(name);
+	auto _name = capture(name);
 	FormatterAttrs _attrs(attrs);
-	push([f, _name, _attrs](){f->open_object_section_with_attrs(_name, _attrs); free(_name);});
+	push([f, _name, _attrs](){f->open_object_section_with_attrs(_name, _attrs); uncapture(_name);});
       }
       break;
     case in:
@@ -1550,7 +1559,7 @@ public:
       break;
     }
   }
-  void dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs) override {
+  void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs) override {
     if (qualify(name)) {
       sink->dump_string_with_attrs(name, s, attrs);
     }

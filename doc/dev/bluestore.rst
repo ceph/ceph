@@ -83,3 +83,60 @@ might be several blobs to consider (e.g., we might be able to *W* into one or
 +--------------------------+--------+--------------+-------------+--------------+---------------+
 | 100 byte clone overwrite | P | N  | P | N        | P | N       | P | N        | N (F?)        |
 +--------------------------+--------+--------------+-------------+--------------+---------------+
+
+
+
+==========
+ Database
+==========
+
+BlueStore uses key-value database to store its state.
+Currently only RocksDB has been integrated.
+
+
+Objects
+-------
+
+Objects and shards are stored in DB under prefix 'O'.
+
+- Key is a serialization of *ghobject_t* oid.
+- Value is a serialization of TODO
+
+Encoding of object key:
+~~~~~~~~~~~~~~~~~~~~~~~
+
++------------+------+------------+------------------------------+
+| data field | size | type       | maps to                      |
++============+======+============+==============================+
+| shard id   | 1    | uint8_t    | oid.shard.id + 2^7           |
++------------+------+------------+------------------------------+
+| pool id    | 8    | uint64_t   | oid.hobj.pool + 2^63         |
++------------+------+------------+------------------------------+
+| hash       | 4    | uint64_t   | _reverse_bits(oid.hobj.hash) |
++------------+------+------------+------------------------------+
+| nspace     | vary | lexistring | oid.hobj.nspace              |
++------------+------+------------+------------------------------+
+| name       | vary | lexistring | oid.hobj.name                |
++------------+------+------------+------------------------------+
+| key marker | 1    | {=,<,>}    | '=': key not present;        |
+|            |      |            | '<': name<key; '>': name>key |
++------------+------+------------+------------------------------+
+| key(opt.)  | vary | lexistring | oid.hobj.key                 |
++------------+------+------------+------------------------------+
+| snap       | 8    | uint64_t   | oid.hobj.snap.val            |
++------------+------+------------+------------------------------+
+| generation | 8    | uint64_t   | oid.generation               |
++------------+------+------------+------------------------------+
+| suffix     | 1    | 'o'        | equals ONODE_KEY_SUFFIX      |
++------------+------+------------+------------------------------+
+
+*Lexistring* encodes binary string into readable string in a manner that preserves lexicographic order:
+
+a. Values <= '#' (0x23) encoded as '#'(hexdigit)(hexdigit).
+b. Values > '~' (0x7e) encoded as '~'(hexdigit)(hexdigit).
+c. Values '$'..'~' are not changed.
+d. Value '!' terminates string.
+
+In BS code function ``get_key_object()`` and ``get_object_key()`` are responsible to translate ghobject_t to serialized form.
+
+**Note** Serialization of _hash_ entry breaks lexicographic order of objects by name in database.

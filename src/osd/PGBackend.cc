@@ -293,7 +293,7 @@ void PGBackend::rollforward(
   ldpp_dout(dpp, 20) << __func__ << ": entry=" << entry << dendl;
   if (!entry.can_rollback())
     return;
-  Trimmer trimmer(entry.soid, this, t);
+  ::Trimmer trimmer(entry.soid, this, t);
   entry.mod_desc.visit(&trimmer);
 }
 
@@ -303,7 +303,7 @@ void PGBackend::trim(
 {
   if (!entry.can_rollback())
     return;
-  Trimmer trimmer(entry.soid, this, t);
+  ::Trimmer trimmer(entry.soid, this, t);
   entry.mod_desc.visit(&trimmer);
 }
 
