@@ -200,8 +200,15 @@ LBAInternalNode::split_entry(
   ceph_assert(!at_max_capacity());
   auto [left, right, pivot] = entry->make_split_children(c, t);
 
-  journal_update(iter, left->get_paddr(), maybe_get_delta_buffer());
-  journal_insert(iter + 1, pivot, right->get_paddr(), maybe_get_delta_buffer());
+  journal_update(
+    iter,
+    maybe_generate_relative(left->get_paddr()),
+    maybe_get_delta_buffer());
+  journal_insert(
+    iter + 1,
+    pivot,
+    maybe_generate_relative(right->get_paddr()),
+    maybe_get_delta_buffer());
 
   c.retire_extent(t, entry);
 
@@ -251,7 +258,10 @@ LBAInternalNode::merge_entry(
 	t,
 	r);
 
-      journal_update(liter, replacement->get_paddr(), maybe_get_delta_buffer());
+      journal_update(
+	liter,
+	maybe_generate_relative(replacement->get_paddr()),
+	maybe_get_delta_buffer());
       journal_remove(riter, maybe_get_delta_buffer());
 
       c.retire_extent(t, l);
@@ -271,12 +281,12 @@ LBAInternalNode::merge_entry(
 
       journal_update(
 	liter,
-	replacement_l->get_paddr(),
+	maybe_generate_relative(replacement_l->get_paddr()),
 	maybe_get_delta_buffer());
       journal_replace(
 	riter,
 	pivot,
-	replacement_r->get_paddr(),
+	maybe_generate_relative(replacement_r->get_paddr()),
 	maybe_get_delta_buffer());
 
       c.retire_extent(t, l);
