@@ -28,6 +28,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "i18nLocale": "en",
             "aot": true,
             "i18nMissingTranslation": "ignore",
             "outputPath": "dist",
