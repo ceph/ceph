@@ -975,23 +975,19 @@ void OpenFileTable::load(MDSContext *onload)
 		      new C_OnFinisher(c, mds->finisher));
 }
 
-bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors,
-				  mds_rank_t& auth_hint)
+void OpenFileTable::_get_ancestors(const Anchor& parent,
+				   vector<inode_backpointer_t>& ancestors,
+				   mds_rank_t& auth_hint)
 {
-  auto p = loaded_anchor_map.find(ino);
-  if (p == loaded_anchor_map.end())
-    return false;
-
-  inodeno_t dirino = p->second.dirino;
-  if (dirino == inodeno_t(0))
-    return false;
+  inodeno_t dirino = parent.dirino;
+  std::string_view d_name = parent.d_name;
 
   bool first = true;
   ancestors.clear();
   while (true) {
-    ancestors.push_back(inode_backpointer_t(dirino, p->second.d_name, 0));
+    ancestors.push_back(inode_backpointer_t(dirino, string{d_name}, 0));
 
-    p = loaded_anchor_map.find(dirino);
+    auto p = loaded_anchor_map.find(dirino);
     if (p == loaded_anchor_map.end())
       break;
 
@@ -999,12 +995,12 @@ bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& an
       auth_hint = p->second.auth;
 
     dirino = p->second.dirino;
+    d_name = p->second.d_name;
     if (dirino == inodeno_t(0))
       break;
 
     first = false;
   }
-  return true;
 }
 
 class C_OFT_OpenInoFinish: public MDSContext {
@@ -1156,7 +1152,16 @@ void OpenFileTable::_prefetch_inodes()
       continue;
 
     num_opening_inodes++;
-    mdcache->open_ino(it.first, pool, new C_OFT_OpenInoFinish(this, it.first), false);
+
+    auto fin = new C_OFT_OpenInoFinish(this, it.first);
+    if (it.second.dirino != inodeno_t(0)) {
+      vector<inode_backpointer_t> ancestors;
+      mds_rank_t auth_hint = MDS_RANK_NONE;
+      _get_ancestors(it.second, ancestors, auth_hint);
+      mdcache->open_ino(it.first, pool, fin, false, false, &ancestors, auth_hint);
+    } else {
+      mdcache->open_ino(it.first, pool, fin, false);
+    }
 
     if (!(num_opening_inodes % 1000))
       mds->heartbeat_reset();
