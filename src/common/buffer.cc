@@ -457,21 +457,29 @@ static ceph::spinlock debug_lock;
 
   void buffer::ptr::release()
   {
-    if (_raw) {
-      bdout << "ptr " << this << " release " << _raw << bendl;
-      const bool last_one = (1 == _raw->nref.load(std::memory_order_acquire));
-      if (likely(last_one) || --_raw->nref == 0) {
-        // BE CAREFUL: this is called also for hypercombined ptr_node. After
-        // freeing underlying raw, `*this` can become inaccessible as well!
-        const auto* delete_raw = _raw;
-        _raw = nullptr;
-	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-        ANNOTATE_HAPPENS_AFTER(&delete_raw->nref);
-        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&delete_raw->nref);
-	delete delete_raw;  // dealloc old (if any)
+    // BE CAREFUL: this is called also for hypercombined ptr_node. After
+    // freeing underlying raw, `*this` can become inaccessible as well!
+    //
+    // cache the pointer to avoid unncecessary reloads and repeated
+    // checks.
+    if (auto* const cached_raw = std::exchange(_raw, nullptr);
+	cached_raw) {
+      bdout << "ptr " << this << " release " << cached_raw << bendl;
+      // optimize the common case where a particular `buffer::raw` has
+      // only a single reference. Altogether with initializing `nref` of
+      // freshly fabricated one with `1` through the std::atomic's ctor
+      // (which doesn't impose a memory barrier on the strongly-ordered
+      // x86), this allows to avoid all atomical operations in such case.
+      const bool last_one = \
+        (1 == cached_raw->nref.load(std::memory_order_acquire));
+      if (likely(last_one) || --cached_raw->nref == 0) {
+	bdout << "deleting raw " << static_cast<void*>(cached_raw)
+	      << " len " << cached_raw->len << bendl;
+	ANNOTATE_HAPPENS_AFTER(&cached_raw->nref);
+	ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&cached_raw->nref);
+	delete cached_raw;  // dealloc old (if any)
       } else {
-        ANNOTATE_HAPPENS_BEFORE(&_raw->nref);
-        _raw = nullptr;
+	ANNOTATE_HAPPENS_BEFORE(&cached_raw->nref);
       }
     }
   }
