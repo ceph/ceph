@@ -1755,17 +1755,11 @@ def get_container(fsid, daemon_type, daemon_id,
     ceph_args = [] # type: List[str]
     if daemon_type in Monitoring.components:
         uid, gid = extract_uid_gid_monitoring(daemon_type)
-        m = Monitoring.components[daemon_type]  # type: ignore
-        metadata = m.get('image', dict())  # type: ignore
         monitoring_args = [
             '--user',
             str(uid),
             # FIXME: disable cpu/memory limits for the time being (not supported
             # by ubuntu 18.04 kernel!)
-            #'--cpus',
-            #metadata.get('cpus', '2'),
-            #'--memory',
-            #metadata.get('memory', '4GB')
         ]
         container_args.extend(monitoring_args)
     elif daemon_type == 'crash':
@@ -2714,7 +2708,7 @@ def command_bootstrap():
 
             if not os.path.exists(ssh_dir):
                 makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
-                	
+
             auth_keys_file = '%s/authorized_keys' % ssh_dir
             add_newline = False
 
