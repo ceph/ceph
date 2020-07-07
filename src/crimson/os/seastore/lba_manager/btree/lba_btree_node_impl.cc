@@ -456,7 +456,8 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
   paddr_t offset,
   paddr_t base) {
   offset = offset.maybe_relative_to(base);
-  if (depth > 0) {
+  ceph_assert(depth > 0);
+  if (depth > 1) {
     logger().debug(
       "get_lba_btree_extent: reading internal at offset {}, depth {}",
       offset,
