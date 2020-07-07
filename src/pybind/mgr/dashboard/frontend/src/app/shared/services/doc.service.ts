@@ -35,7 +35,10 @@ export class DocService {
       dashboard: `${domain}mgr/dashboard`,
       grafana: `${domain}mgr/dashboard/#enabling-the-embedding-of-grafana-dashboards`,
       orch: `${domain}mgr/orchestrator`,
-      pgs: `http://ceph.com/pgcalc`
+      pgs: `http://ceph.com/pgcalc`,
+      'dashboard-landing-page-status': `${domain}mgr/dashboard/#dashboard-landing-page-status`,
+      'dashboard-landing-page-performance': `${domain}mgr/dashboard/#dashboard-landing-page-performance`,
+      'dashboard-landing-page-capacity': `${domain}mgr/dashboard/#dashboard-landing-page-capacity`
     };
 
     return sections[section];

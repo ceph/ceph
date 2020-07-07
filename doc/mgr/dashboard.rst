@@ -131,6 +131,8 @@ Displays overall cluster status, performance and capacity metrics. Gives instant
 feedback to changes in the cluster and provides easy access to subpages of the
 dashboard.
 
+.. _dashboard-landing-page-status:
+
 Status
 """"""
 
@@ -156,6 +158,8 @@ Status
   Gateways (down). Provides link to the subpage providing a list of all iSCSI
   Gateways.
 
+.. _dashboard-landing-page-capacity:
+
 Capacity
 """"""""
 
@@ -171,6 +175,8 @@ Capacity
   lists all Ceph pools and their details.
 * **PGs per OSD**: Displays the number of placement groups per object storage
   daemons.
+
+.. _dashboard-landing-page-performance:
 
 Performance
 """""""""""
