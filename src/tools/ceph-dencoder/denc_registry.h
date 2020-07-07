@@ -27,6 +27,12 @@ struct Dencoder {
   virtual int num_generated() = 0;
   virtual std::string select_generated(unsigned n) = 0;
   virtual bool is_deterministic() = 0;
+  unsigned get_struct_v(bufferlist bl, uint64_t seek) const {
+    auto p = bl.cbegin(seek);
+    uint8_t struct_v = 0;
+    ceph::decode(struct_v, p);
+    return struct_v;
+  }
   //virtual void print(ostream& out) = 0;
 };
 
