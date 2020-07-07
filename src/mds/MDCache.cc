@@ -9310,7 +9310,9 @@ void MDCache::kick_open_ino_peers(mds_rank_t who)
 }
 
 void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSContext* fin,
-		       bool want_replica, bool want_xlocked)
+		       bool want_replica, bool want_xlocked,
+		       vector<inode_backpointer_t> *ancestors_hint,
+		       mds_rank_t auth_hint)
 {
   dout(10) << "open_ino " << ino << " pool " << pool << " want_replica "
 	   << want_replica << dendl;
@@ -9343,8 +9345,10 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSContext* fin,
     info.tid = ++open_ino_last_tid;
     info.pool = pool >= 0 ? pool : default_file_layout.pool_id;
     info.waiters.push_back(fin);
-    if (mds->is_rejoin() &&
-	open_file_table.get_ancestors(ino, info.ancestors, info.auth_hint)) {
+    if (auth_hint != MDS_RANK_NONE)
+      info.auth_hint = auth_hint;
+    if (ancestors_hint) {
+      info.ancestors = std::move(*ancestors_hint);
       info.fetch_backtrace = false;
       info.checking = mds->get_nodeid();
       _open_ino_traverse_dir(ino, info, 0);

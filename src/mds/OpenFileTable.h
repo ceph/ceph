@@ -50,9 +50,6 @@ public:
     waiting_for_load.push_back(c);
   }
 
-  bool get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors,
-		     mds_rank_t& auth_hint);
-
   bool prefetch_inodes();
   bool is_prefetched() const { return prefetch_state == DONE; }
   void wait_for_prefetch(MDSContext *c) {
@@ -105,6 +102,10 @@ protected:
   void _open_ino_finish(inodeno_t ino, int r);
   void _prefetch_inodes();
   void _prefetch_dirfrags();
+
+  void _get_ancestors(const Anchor& parent,
+		      vector<inode_backpointer_t>& ancestors,
+		      mds_rank_t& auth_hint);
 
   MDSRank *mds;
 
