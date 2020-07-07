@@ -8,7 +8,10 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "deep_copy/Types.h"
 #include <map>
+#include <memory>
 #include <string>
+
+namespace neorados { class IOContext; }
 
 namespace librbd {
 
@@ -54,6 +57,8 @@ enum {
 
   l_librbd_last,
 };
+
+typedef std::shared_ptr<neorados::IOContext> IOContext;
 
 typedef std::map<uint64_t, uint64_t> SnapSeqs;
 

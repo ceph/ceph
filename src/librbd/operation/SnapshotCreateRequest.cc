@@ -433,6 +433,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
   image_ctx.snapc.snaps.swap(snaps);
   image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(
     image_ctx.snapc.seq, image_ctx.snaps);
+  image_ctx.rebuild_data_io_context();
 
   if (!image_ctx.migration_info.empty()) {
     auto it = image_ctx.migration_info.snap_map.find(CEPH_NOSNAP);

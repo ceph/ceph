@@ -1385,6 +1385,7 @@ void RefreshRequest<I>::apply() {
   if (m_image_ctx.data_ctx.is_valid()) {
     m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
                                                         m_image_ctx.snaps);
+    m_image_ctx.rebuild_data_io_context();
   }
 
   // handle dynamically enabled / disabled features

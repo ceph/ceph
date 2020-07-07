@@ -4,6 +4,8 @@
 #include <boost/assign/list_of.hpp>
 #include <stddef.h>
 
+#include "include/neorados/RADOS.hpp"
+
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -36,7 +38,6 @@
 #include "librbd/operation/ResizeRequest.h"
 
 #include "osdc/Striper.h"
-#include <boost/bind.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -71,6 +72,12 @@ public:
   }
 };
 
+librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
+  librados::IoCtx dup_io_ctx;
+  dup_io_ctx.dup(io_ctx);
+  return dup_io_ctx;
+}
+
 } // anonymous namespace
 
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
@@ -87,6 +94,9 @@ public:
       exclusive_locked(false),
       name(image_name),
       asio_engine(std::make_shared<AsioEngine>(p)),
+      rados_api(asio_engine->get_rados_api()),
+      data_ctx(duplicate_io_ctx(p)),
+      md_ctx(duplicate_io_ctx(p)),
       image_watcher(NULL),
       journal(NULL),
       owner_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ImageCtx::owner_lock", this))),
@@ -112,10 +122,10 @@ public:
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
-    md_ctx.dup(p);
-    data_ctx.dup(p);
     if (snap)
       snap_name = snap;
+
+    rebuild_data_io_context();
 
     // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&header, 0, sizeof(header));
@@ -316,6 +326,7 @@ public:
       snap_exists = true;
       if (data_ctx.is_valid()) {
         data_ctx.snap_set_read(snap_id);
+        rebuild_data_io_context();
       }
       return 0;
     }
@@ -331,6 +342,7 @@ public:
     snap_exists = true;
     if (data_ctx.is_valid()) {
       data_ctx.snap_set_read(snap_id);
+      rebuild_data_io_context();
     }
   }
 
@@ -891,6 +903,21 @@ public:
     ceph_assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
+  }
+
+  void ImageCtx::rebuild_data_io_context() {
+    auto ctx = std::make_shared<neorados::IOContext>(
+      data_ctx.get_id(), data_ctx.get_namespace());
+    ctx->read_snap(snap_id);
+    ctx->write_snap_context(
+      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+
+    // atomically reset the data IOContext to new version
+    atomic_store(&data_io_context, ctx);
+  }
+
+  IOContext ImageCtx::get_data_io_context() const {
+    return atomic_load(&data_io_context);
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

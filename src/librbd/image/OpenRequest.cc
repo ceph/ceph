@@ -483,6 +483,7 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
       m_image_ctx->data_ctx.close();
     } else {
       m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+      m_image_ctx->rebuild_data_io_context();
     }
   } else {
     data_pool_id = m_image_ctx->md_ctx.get_id();
