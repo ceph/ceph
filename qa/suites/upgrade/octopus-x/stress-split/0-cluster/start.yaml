@@ -21,20 +21,25 @@ overrides:
       mon:
         mon warn on osd down out interval zero: false
 roles:
-- - mon.a
+- - host.a
+#- - mon.a
   - mgr.x
   - osd.0
   - osd.1
   - osd.2
   - osd.3
-- - mon.b
+- - host.b
+#- - mon.b
   - osd.4
   - osd.5
   - osd.6
   - osd.7
-- - mon.c
-- - osd.8
+- - host.c
+#- - mon.c
+- - host.d
+#- - osd.8
   - osd.9
   - osd.10
   - osd.11
-- - client.0
+- - host.e
+#- - client.0
