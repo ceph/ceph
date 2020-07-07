@@ -18,7 +18,15 @@ describe('ServiceDetailsComponent', () => {
   configureTestBed({
     imports: [HttpClientTestingModule, RouterTestingModule, TabsModule.forRoot(), SharedModule],
     declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
-    providers: [i18nProviders, { provide: SummaryService, useValue: { subscribe: jest.fn() } }]
+    providers: [
+      i18nProviders,
+      {
+        provide: SummaryService,
+        useValue: {
+          subscribeOnce: jest.fn()
+        }
+      }
+    ]
   });
 
   beforeEach(() => {
