@@ -11635,6 +11635,12 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
     return -EROFS;
   }
 
+  if (size == 0) {
+    value = "";
+  } else if (value == NULL) {
+      return -EINVAL;
+  }
+
   bool posix_acl_xattr = false;
   if (acl_type == POSIX_ACL)
     posix_acl_xattr = !strncmp(name, "system.", 7);
