@@ -67,7 +67,7 @@
   <div *ngIf="!safeToPerform"
        class="danger">
     <cd-alert-panel type="warning"
-                    i18n>The {selection.hasSingleSelection, select, true {OSD is} false {OSDs are}} not safe to be
+                    i18n>The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} not safe to be
       {{ actionDescription }}! {{ message }}</cd-alert-panel>
   </div>
   <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
