@@ -1,4 +1,5 @@
 #include "rgw_cr_rados.h"
+#include "rgw_cr_rest.h"
 #include "rgw_sync_info.h"
 
 #include <boost/asio/yield.hpp>
@@ -13,6 +14,10 @@ protected:
 public:
   SIProviderCRMgr(CephContext *_cct) : cct(_cct) {}
   virtual ~SIProviderCRMgr() {}
+
+  CephContext *ctx() {
+    return cct;
+  }
 
   virtual RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) = 0;
   virtual RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) = 0;
@@ -156,6 +161,161 @@ RGWCoroutine *SIProviderCRMgr_Local::get_next_stage_cr(const SIProvider::stage_i
                                [=](std::string *_next_sid) {
                                  return pvd->get_next_stage(sid, _next_sid);
                                });
+}
+
+class RGWRESTConn;
+
+class SIProviderCRMgr_REST : public SIProviderCRMgr
+{
+  friend class GetStagesCR;
+
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRESTConn *conn;
+  RGWHTTPManager *http_manager;
+
+  string path_prefix = "/admin/sip";
+
+  string provider;
+  std::optional<string> instance;
+
+  class GetStagesInfoCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+
+    string path;
+    SIProvider::Info *info;
+  public:
+    GetStagesInfoCR(SIProviderCRMgr_REST *_mgr,
+                    SIProvider::Info *_info) : RGWCoroutine(_mgr->ctx()),
+                                               mgr(_mgr),
+                                               info(_info) {
+      path = mgr->path_prefix;
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield {
+          const char *instance_key = (mgr->instance ? "instance" : "");
+          const char *instance_val = (mgr->instance ? mgr->instance->c_str() : "");
+          rgw_http_param_pair pairs[] = { { "info", nullptr },
+					  { "provider" , mgr->provider.c_str() },
+					  { instance_key , instance_val },
+	                                  { nullptr, nullptr } };
+          call(new RGWReadRESTResourceCR(mgr->ctx(),
+                                         mgr->conn,
+                                         mgr->http_manager,
+                                         path,
+                                         pairs,
+                                         info));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        return set_cr_done();
+      }
+
+      return 0;
+    }
+  };
+
+  class GetStagesCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+    std::vector<SIProvider::stage_id_t> *result;
+
+    SIProvider::Info info;
+  public:
+    GetStagesCR(SIProviderCRMgr_REST *_mgr,
+                std::vector<SIProvider::stage_id_t> *_result) : RGWCoroutine(_mgr->ctx()),
+                                                                mgr(_mgr),
+                                                                result(_result) {
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield call(new GetStagesInfoCR(mgr, &info));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        result->clear();
+        result->reserve(info.stages.size());
+
+        for (auto& sinfo : info.stages) {
+          result->push_back(sinfo.sid);
+        }
+
+        return set_cr_done();
+      }
+
+      return 0;
+    }
+  };
+
+  class GetStageInfoCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+    SIProvider::stage_id_t sid;
+
+    SIProvider::Info info;
+    SIProvider::StageInfo *sinfo;
+  public:
+    GetStageInfoCR(SIProviderCRMgr_REST *_mgr,
+                   const SIProvider::stage_id_t& _sid,
+                   SIProvider::StageInfo *_sinfo) : RGWCoroutine(_mgr->ctx()),
+                                                    mgr(_mgr),
+                                                    sid(_sid),
+                                                    sinfo(_sinfo) {
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield call(new GetStagesInfoCR(mgr, &info));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        for (auto& si : info.stages) {
+          if (si.sid == sid) {
+            *sinfo = si;
+            return set_cr_done();
+          }
+        }
+
+        ldout(mgr->ctx(), 10) << "GetStageInfoCR(): sid not found: provider=" << mgr->provider << " sid=" << sid << dendl;
+
+        return set_cr_error(-ENOENT);
+      }
+
+      return 0;
+    }
+  };
+
+public:
+  SIProviderCRMgr_REST(CephContext *_cct,
+                       RGWRESTConn *_conn,
+                       RGWHTTPManager *_http_manager,
+                       const string& _provider,
+                       std::optional<string> _instance) : SIProviderCRMgr(_cct),
+                                                          conn(_conn),
+                                                          http_manager(_http_manager),
+                                                          provider(_provider),
+                                                          instance(_instance.value_or(string())) {}
+
+  RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
+  RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
+  RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
+  RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
+  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
+  RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) override;
+};
+
+RGWCoroutine *SIProviderCRMgr_REST::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
+{
+  return new GetStagesCR(this, stages);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *sinfo)
+{
+  return new GetStageInfoCR(this, sid, sinfo);
 }
 
 class SIPClientCRMgr
