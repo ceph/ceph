@@ -13,6 +13,9 @@
 
 namespace crimson::os::seastore {
 
+using depth_t = int32_t;
+using depth_le_t = ceph_les32;
+
 using checksum_t = uint32_t;
 
 // Identifies segment location on disk, see SegmentManager,
