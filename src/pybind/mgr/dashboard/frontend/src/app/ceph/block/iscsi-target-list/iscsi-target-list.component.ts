@@ -86,7 +86,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
         icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT,
-        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
+        disable: () => !this.selection.first() || !_.isUndefined(this.getEditDisableDesc()),
         disableDesc: () => this.getEditDisableDesc()
       },
       {
