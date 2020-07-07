@@ -37,10 +37,15 @@ __version__ = '1.0.0'
 # do our best, but if it fails, continue with above
 
 try:
-    __version__ += '-' + str(subprocess.check_output(
-        'git rev-parse --short HEAD'.split(),
-        cwd=os.path.dirname(os.path.realpath(__file__))
-    ).decode()).strip()
+    teuthology_dir = os.path.dirname(os.path.realpath(__file__))
+    site_dir = os.path.dirname(teuthology_dir)
+    git_dir = os.path.join(site_dir, '.git')
+    # make sure we use git repo otherwise it is a released version
+    if os.path.exists(git_dir):
+        __version__ += '-' + str(subprocess.check_output(
+            'git rev-parse --short HEAD'.split(),
+            cwd=site_dir
+        ).decode()).strip()
 except Exception as e:
     # before logging; should be unusual
     print("Can't get version from git rev-parse %s" % e, file=sys.stderr)
