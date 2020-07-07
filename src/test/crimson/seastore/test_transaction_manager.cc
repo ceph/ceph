@@ -324,3 +324,21 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
     }
   });
 }
+
+TEST_F(transaction_manager_test_t, cause_lba_split)
+{
+  constexpr laddr_t SIZE = 4096;
+  run_async([this] {
+    for (unsigned i = 0; i < 200; ++i) {
+      auto t = create_transaction();
+      auto extent = alloc_extent(
+	t,
+	i * SIZE,
+	SIZE,
+	(char)(i & 0xFF));
+      ASSERT_EQ(i * SIZE, extent->get_laddr());
+      submit_transaction(std::move(t));
+    }
+    check_mappings();
+  });
+}
