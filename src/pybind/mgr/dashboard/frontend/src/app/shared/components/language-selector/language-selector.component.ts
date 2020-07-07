@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
 import * as _ from 'lodash';
 
@@ -11,9 +11,6 @@ import { SupportedLanguages } from './supported-languages.enum';
   styleUrls: ['./language-selector.component.scss']
 })
 export class LanguageSelectorComponent implements OnInit {
-  @Input()
-  isDropdown = true;
-
   allLanguages = SupportedLanguages;
   supportedLanguages: Record<string, any> = {};
   selectedLanguage: string;
