@@ -52,10 +52,12 @@ class CephServiceTest(unittest.TestCase):
     def test_get_pool_by_attribute_matching_a_not_always_set_attribute(self):
         self.assertEqual(self.service.get_pool_by_attribute('flaky', 'option_x'), self.pools[1])
 
-    def test_get_pool_name_from_id_with_match(self):
+    @mock.patch('dashboard.mgr.rados.pool_reverse_lookup', return_value='good_pool')
+    def test_get_pool_name_from_id_with_match(self, _mock):
         self.assertEqual(self.service.get_pool_name_from_id(1), 'good_pool')
 
-    def test_get_pool_name_from_id_without_match(self):
+    @mock.patch('dashboard.mgr.rados.pool_reverse_lookup', return_value=None)
+    def test_get_pool_name_from_id_without_match(self, _mock):
         self.assertEqual(self.service.get_pool_name_from_id(3), None)
 
     def test_get_pool_pg_status(self):
