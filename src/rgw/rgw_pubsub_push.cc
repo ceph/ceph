@@ -18,10 +18,15 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+#include "rgw_aws.h"
+#endif
 #include <boost/asio/yield.hpp>
 #include <boost/algorithm/string.hpp>
 #include <functional>
 #include "rgw_perf_counters.h"
+
+#define dout_subsys ceph_subsys_rgw
 
 using namespace rgw;
 
@@ -98,7 +103,7 @@ private:
   };
 
 public:
-  RGWPubSubHTTPEndpoint(const std::string& _endpoint, 
+  RGWPubSubHTTPEndpoint(const std::string& _endpoint,
     const RGWHTTPArgs& args) : endpoint(_endpoint) {
     bool exists;
 
@@ -249,7 +254,7 @@ private:
       reenter(this) {
         yield {
           init_new_io(this);
-          const auto rc = amqp::publish_with_confirm(conn, 
+          const auto rc = amqp::publish_with_confirm(conn,
               topic,
               message,
               std::bind(&AckPublishCR::request_complete, this, std::placeholders::_1));
@@ -277,7 +282,7 @@ private:
       io_complete();
       if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     }
-   
+
     // TODO: why are these mandatory in RGWIOProvider?
     void set_io_user_info(void *_user_info) override {
     }
@@ -286,19 +291,19 @@ private:
       return nullptr;
     }
   };
-  
+
 public:
   RGWPubSubAMQPEndpoint(const std::string& _endpoint,
       const std::string& _topic,
       const RGWHTTPArgs& args,
-      CephContext* _cct) : 
+      CephContext* _cct) :
         cct(_cct),
-        endpoint(_endpoint), 
+        endpoint(_endpoint),
         topic(_topic),
         exchange(get_exchange(args)),
         ack_level(get_ack_level(args)),
         conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker))) {
-    if (!conn) { 
+    if (!conn) {
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
     }
   }
@@ -311,7 +316,7 @@ public:
       return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
-  
+
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
@@ -385,7 +390,7 @@ public:
       // TODO: currently broker and routable are the same - this will require different flags but the same mechanism
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
-      const auto rc = amqp::publish_with_confirm(conn, 
+      const auto rc = amqp::publish_with_confirm(conn,
         topic,
         json_format_pubsub_event(record),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
@@ -502,7 +507,7 @@ private:
   };
 
   // AckPublishCR implements async kafka publishing via coroutine
-  // This coroutine ends when an ack is received from the borker 
+  // This coroutine ends when an ack is received from the borker
   // note that it does not wait for an ack fron the end client
   class AckPublishCR : public RGWCoroutine, public RGWIOProvider {
   private:
@@ -523,7 +528,7 @@ private:
       reenter(this) {
         yield {
           init_new_io(this);
-          const auto rc = kafka::publish_with_confirm(conn, 
+          const auto rc = kafka::publish_with_confirm(conn,
               topic,
               message,
               std::bind(&AckPublishCR::request_complete, this, std::placeholders::_1));
@@ -551,7 +556,7 @@ private:
       io_complete();
       if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     }
-   
+
     // TODO: why are these mandatory in RGWIOProvider?
     void set_io_user_info(void *_user_info) override {
     }
@@ -565,12 +570,12 @@ public:
   RGWPubSubKafkaEndpoint(const std::string& _endpoint,
       const std::string& _topic,
       const RGWHTTPArgs& args,
-      CephContext* _cct) : 
+      CephContext* _cct) :
         cct(_cct),
         topic(_topic),
         conn(kafka::connect(_endpoint, get_use_ssl(args), get_verify_ssl(args), args.get_optional("ca-location"))) ,
         ack_level(get_ack_level(args)) {
-    if (!conn) { 
+    if (!conn) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
@@ -583,7 +588,7 @@ public:
       return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
-  
+
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
@@ -656,7 +661,7 @@ public:
     } else {
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
-      const auto rc = kafka::publish_with_confirm(conn, 
+      const auto rc = kafka::publish_with_confirm(conn,
         topic,
         json_format_pubsub_event(record),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
@@ -679,13 +684,115 @@ public:
 static const std::string KAFKA_SCHEMA("kafka");
 #endif	// ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+class RGWPubSubAWSEndpoint : public RGWPubSubEndpoint {
+private:
+
+  CephContext* const cct;
+  const std::string arn;
+  rgw::aws::AwsClient client;
+
+  bool get_verify_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_verify_ssl = args.get("verify-ssl", &exists);
+    if (!exists) {
+      // verify server certificate by default
+      return true;
+    }
+    boost::algorithm::to_lower(str_verify_ssl);
+    if (str_verify_ssl == "true") {
+      return true;
+    }
+    if (str_verify_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
+  }
+
+  bool get_use_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_use_ssl = args.get("use-ssl", &exists);
+    if (!exists) {
+      // by default ssl not used
+      return false;
+    }
+    boost::algorithm::to_lower(str_use_ssl);
+    if (str_use_ssl == "true") {
+      return true;
+    }
+    if (str_use_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'use-ssl' must be true/false, not: " + str_use_ssl);
+  }
+
+  std::string get_arn(const RGWHTTPArgs& args){
+    bool exists;
+    auto arnString = args.get("AwsArn", &exists);
+    boost::optional<ARN> arn1 = ARN::parse(arnString);
+    if(!arn1) {
+      throw configuration_error("incorrect arn format");
+    }
+    if(arn1->service != Service::sns && arn1->service != Service::lambda){
+      throw configuration_error("only sns and lambda aws services allowed");
+    }
+    return arn1->to_string();
+  }
+
+  std::string get_access_key(const RGWHTTPArgs& args){
+    bool exists;
+    auto accessKey = args.get("AccessKey", &exists);
+    if(!exists) {
+      return "";
+    }
+    return accessKey;
+  }
+
+  std::string get_access_secret(const RGWHTTPArgs& args){
+    bool exists;
+    auto accessSecret = args.get("SecretKey", &exists);
+    if(!exists) {
+      return "";
+    }
+    return accessSecret;
+  }
+
+public:
+  RGWPubSubAWSEndpoint(const std::string& _endpoint,
+      const RGWHTTPArgs& args,
+      CephContext* _cct) :
+        cct(_cct),
+        arn(get_arn(args)),
+        client(rgw::aws::connect(get_access_key(args), get_access_secret(args), arn, "", true)){
+    if (client == rgw::aws::AwsClient()) {
+      throw configuration_error("AWS: failed to create connection to: " + _endpoint);
+    }
+  }
+
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {}
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {}
+
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+    return rgw::aws::publish(client, json_format_pubsub_event(record), arn);
+  }
+
+  std::string to_str() const override {
+    std::string str("AWS Endpoint");
+    str += "\nArn: " + arn;
+    return str;
+  }
+};
+
+static const std::string AWS_SCHEMA("aws");
+#endif	// ifdef WITH_RADOSGW_AWS_ENDPOINT
+
 static const std::string WEBHOOK_SCHEMA("webhook");
 static const std::string UNKNOWN_SCHEMA("unknown");
 static const std::string NO_SCHEMA("");
 
 const std::string& get_schema(const std::string& endpoint) {
   if (endpoint.empty()) {
-    return NO_SCHEMA; 
+    return NO_SCHEMA;
   }
   const auto pos = endpoint.find(':');
   if (pos == std::string::npos) {
@@ -702,12 +809,16 @@ const std::string& get_schema(const std::string& endpoint) {
   } else if (schema == "kafka") {
     return KAFKA_SCHEMA;
 #endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  }else if(schema == "aws"){
+    return AWS_SCHEMA;
+#endif
   }
   return UNKNOWN_SCHEMA;
 }
 
-RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint, 
-    const std::string& topic, 
+RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
+    const std::string& topic,
     const RGWHTTPArgs& args,
     CephContext* cct) {
   const auto& schema = get_schema(endpoint);
@@ -736,6 +847,10 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == KAFKA_SCHEMA) {
       return Ptr(new RGWPubSubKafkaEndpoint(endpoint, topic, args, cct));
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  }else if (schema == AWS_SCHEMA){
+      return Ptr(new RGWPubSubAWSEndpoint(endpoint, args, cct));
 #endif
   }
 

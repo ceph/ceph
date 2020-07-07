@@ -51,10 +51,10 @@ namespace rgw::aws {
 
   struct message_t {
     const AwsClient client;
-    const std::string& resourceARN;
-    const std::string& payload;
+    const std::string resourceARN;
+    const std::string payload;
 
-    message_t(const AwsClient client, const std::string &resourceARN, const std::string &payload) :
+    message_t(const AwsClient client, const std::string& resourceARN, const std::string& payload) :
             client(client),
             resourceARN(resourceARN),
             payload(payload) {};
@@ -81,7 +81,7 @@ namespace rgw::aws {
       std::visit([&msg, this](auto &&arg) { this->publish_util(arg, msg->resourceARN, msg->payload); }, msg->client);
     }
 
-    void publish_util(Aws::SNS::SNSClient *client, string resourceArn, string payload) {
+    void publish_util(Aws::SNS::SNSClient *client, const string &resourceArn, const string &payload) {
       ldout(cct, 1) << "Publishing.." << dendl;
       Aws::SNS::Model::PublishRequest req;
       req.SetMessage(Aws::String(payload));
@@ -99,6 +99,7 @@ namespace rgw::aws {
     }
 
     void publish_util(Aws::Lambda::LambdaClient *client, const string &resourceArn, const string &payload) {
+      ldout(cct, 1) << "Invoking..." << dendl;
       Aws::Lambda::Model::InvokeRequest invokeRequest;
       Aws::Utils::ARN arn((Aws::String(resourceArn)));
       invokeRequest.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -217,7 +218,7 @@ namespace rgw::aws {
   };
 
   static Manager *manager = nullptr;
-
+  Aws::SDKOptions options;
   static const unsigned IDLE_TIME_MS = 100;
   static const size_t MAX_QUEUE_DEFAULT = 8192;
   static const size_t MAX_CLIENTS_DEFAULT = 256;
@@ -226,12 +227,15 @@ namespace rgw::aws {
     if (manager) {
       return false;
     }
+    options = Aws::SDKOptions();
+    Aws::InitAPI(options);
     manager = new Manager(MAX_CLIENTS_DEFAULT, MAX_QUEUE_DEFAULT, IDLE_TIME_MS, cct);
     return true;
   }
 
   void shutdown() {
     delete manager;
+    Aws::ShutdownAPI(options);
     manager = nullptr;
   }
 

@@ -336,6 +336,8 @@
 /* Defined if libedkafka is available for rgw kafka push endpoint */
 #cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
 
+#cmakedefine WITH_RADOSGW_AWS_ENDPOINT
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 

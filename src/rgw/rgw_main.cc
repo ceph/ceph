@@ -51,6 +51,7 @@
 #include "rgw_dmclock_scheduler_ctx.h"
 
 #include "services/svc_zone.h"
+#include "rgw_aws.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -401,6 +402,11 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
     if (!rgw::kafka::init(cct.get())) {
         dout(1) << "ERROR: failed to initialize Kafka manager" << dendl;
+    }
+#endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+  if (!rgw::aws::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize AWS manager" << dendl;
     }
 #endif
   }

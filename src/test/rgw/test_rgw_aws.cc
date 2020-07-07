@@ -10,19 +10,14 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 
 class TestAWS : public ::testing::Test {
-private:
-  Aws::SDKOptions options;
 protected:
 
   void SetUp() override {
     auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
-    options = Aws::SDKOptions();
-    Aws::InitAPI(options);
     ASSERT_TRUE(rgw::aws::init(cct));
   }
 
   void TearDown() override {
-    Aws::ShutdownAPI(options);
     rgw::aws::shutdown();
   }
 
