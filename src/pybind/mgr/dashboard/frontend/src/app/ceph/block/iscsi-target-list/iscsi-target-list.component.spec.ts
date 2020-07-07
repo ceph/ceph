@@ -16,6 +16,7 @@ import {
 } from '../../../../testing/unit-test-helper';
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -169,6 +170,102 @@ describe('IscsiTargetListComponent', () => {
       addTask('iscsi/target/delete', 'iqn.b');
       expect(component.targets.length).toBe(3);
       expectItemTasks(component.targets[1], 'Deleting');
+    });
+  });
+
+  describe('handling of actions', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+
+    let action: CdTableAction;
+
+    const getAction = (name: string): CdTableAction => {
+      return component.tableActions.find((tableAction) => tableAction.name === name);
+    };
+
+    describe('edit', () => {
+      beforeEach(() => {
+        action = getAction('Edit');
+      });
+
+      it('should be disabled if no gateways', () => {
+        component.selection.selected = [
+          {
+            id: '-1'
+          }
+        ];
+        expect(action.disable(undefined)).toBeTruthy();
+        expect(action.disableDesc(undefined)).toBe('Unavailable gateway(s)');
+      });
+
+      it('should be enabled if active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 1
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeFalsy();
+        expect(action.disableDesc(undefined)).toBeUndefined();
+      });
+
+      it('should be enabled if no active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 0
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeFalsy();
+        expect(action.disableDesc(undefined)).toBeUndefined();
+      });
+    });
+
+    describe('delete', () => {
+      beforeEach(() => {
+        action = getAction('Delete');
+      });
+
+      it('should be disabled if no gateways', () => {
+        component.selection.selected = [
+          {
+            id: '-1'
+          }
+        ];
+        expect(action.disable(undefined)).toBeTruthy();
+        expect(action.disableDesc(undefined)).toBe('Unavailable gateway(s)');
+      });
+
+      it('should be disabled if active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 1
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeTruthy();
+        expect(action.disableDesc(undefined)).toBe('Target has active sessions');
+      });
+
+      it('should be enabled if no active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 0
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeFalsy();
+        expect(action.disableDesc(undefined)).toBeUndefined();
+      });
     });
   });
 
