@@ -1,14 +1,15 @@
 tasks:
-- install.upgrade:
-    osd.8:
-    client.0:
+- cephadm.shell:
+    #we need to upgrade only nodes d e - how? syntax or else?
+    #osd.8:
+    #client.0:
     extra_packages:
       - python3-rados
       - python3-rgw
       - python3-rbd
       - python3-cephfs
-- ceph.restart:
-    daemons: [mon.c, osd.8, osd.9, osd.10, osd.11, rgw.*]
+- cephadm.shell:
+    #do we need to restart?
     wait-for-healthy: false
     wait-for-osds-up: true
 - print: "**** restarted/upgrated => mon.c, osd.8, osd.9, osd.10, osd.11, rgw.*"
@@ -18,4 +19,3 @@ tasks:
       - ceph osd dump --format=json-pretty | grep "flags"
       - ceph config set global mon_warn_on_msgr2_not_enabled false
 - print: "**** try to set pglog_hardlimit again, should succeed"
-
