@@ -42,6 +42,8 @@ void usage(ostream &out)
   out << "  encode              encode in-memory object\n";
   out << "  dump_json           dump in-memory object as json (to stdout)\n";
   out << "  hexdump             print encoded data in hex\n";
+  out << "  get_struct_v        print version of the encoded object\n";
+  out << "  get_struct_compat   print the oldest version of decoder that can decode the encoded object\n";
   out << "\n";
   out << "  copy                copy object (via operator=)\n";
   out << "  copy_ctor           copy object (via copy ctor)\n";
@@ -154,6 +156,10 @@ int main(int argc, const char **argv)
 
     } else if (*i == string("hexdump")) {
       encbl.hexdump(cout);
+    } else if (*i == string("get_struct_v")) {
+      std::cout << den->get_struct_v(encbl, 0) << std::endl;
+    } else if (*i == string("get_struct_compat")) {
+      std::cout << den->get_struct_v(encbl, sizeof(uint8_t)) << std::endl;
     } else if (*i == string("import")) {
       ++i;
       if (i == args.end()) {
