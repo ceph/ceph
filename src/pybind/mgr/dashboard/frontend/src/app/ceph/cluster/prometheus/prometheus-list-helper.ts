@@ -1,10 +1,12 @@
-import { OnInit } from '@angular/core';
+import { Directive, OnInit } from '@angular/core';
 
 import { PrometheusService } from '../../../shared/api/prometheus.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
 
+@Directive()
+// tslint:disable-next-line: directive-class-suffix
 export class PrometheusListHelper extends ListWithDetails implements OnInit {
   public isPrometheusConfigured = false;
   public isAlertmanagerConfigured = false;
