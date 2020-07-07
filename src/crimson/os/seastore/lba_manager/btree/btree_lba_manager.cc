@@ -27,10 +27,11 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
     auto root_leaf = cache.alloc_new_extent<LBALeafNode>(
       t,
       LBA_BLOCK_SIZE);
+    root_leaf->set_depth(1);
     root_leaf->set_size(0);
     croot->get_lba_root() =
       root_t{
-        0,
+        1,
         0,
         root_leaf->get_paddr(),
         make_record_relative_paddr(0)};
