@@ -1275,9 +1275,9 @@ def make_data_dir_base(fsid, uid, gid):
 
 
 def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
-    # type: (str, str, Union[int, str], int, int) -> str
-    if not uid or not gid:
-        (uid, gid) = extract_uid_gid()
+    # type: (str, str, Union[int, str], Optional[int], Optional[int]) -> str
+    if uid is None or gid is None:
+        uid, gid = extract_uid_gid()
     make_data_dir_base(fsid, uid, gid)
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
     makedirs(data_dir, uid, gid, DATA_DIR_MODE)
@@ -1285,9 +1285,9 @@ def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
 
 
 def make_log_dir(fsid, uid=None, gid=None):
-    # type: (str, int, int) -> str
-    if not uid or not gid:
-        (uid, gid) = extract_uid_gid()
+    # type: (str, Optional[int], Optional[int]) -> str
+    if uid is None or gid is None:
+        uid, gid = extract_uid_gid()
     log_dir = get_log_dir(fsid)
     makedirs(log_dir, uid, gid, LOG_DIR_MODE)
     return log_dir
