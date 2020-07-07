@@ -8,6 +8,42 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+struct lba_node_meta_t {
+  laddr_t begin = 0;
+  laddr_t end = 0;
+  depth_t depth = 0;
+
+  std::pair<lba_node_meta_t, lba_node_meta_t> split_into(laddr_t pivot) const {
+    return std::make_pair(
+      lba_node_meta_t{begin, pivot, depth},
+      lba_node_meta_t{pivot, end, depth});
+  }
+
+  static lba_node_meta_t merge_from(const lba_node_meta_t &lhs, const lba_node_meta_t &rhs) {
+    assert(lhs.depth == rhs.depth);
+    return lba_node_meta_t{lhs.begin, rhs.end, lhs.depth};
+  }
+
+  static std::pair<lba_node_meta_t, lba_node_meta_t>
+  rebalance(const lba_node_meta_t &lhs, const lba_node_meta_t &rhs, laddr_t pivot) {
+    assert(lhs.depth == rhs.depth);
+    return std::make_pair(
+      lba_node_meta_t{lhs.begin, pivot, lhs.depth},
+      lba_node_meta_t{pivot, rhs.end, lhs.depth});
+  }
+};
+
+inline std::ostream &operator<<(
+  std::ostream &lhs,
+  const lba_node_meta_t &rhs)
+{
+  return lhs << "btree_node_meta_t("
+	     << "begin=" << rhs.begin
+	     << ", end=" << rhs.end
+	     << ", depth=" << rhs.depth
+	     << ")";
+}
+
 /* BtreeLBAPin
  *
  * References leaf node

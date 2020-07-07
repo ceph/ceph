@@ -25,24 +25,51 @@ namespace crimson::os::seastore::lba_manager::btree {
 constexpr size_t LBA_BLOCK_SIZE = 4096;
 
 /**
+ * lba_node_meta_le_t
+ *
+ * On disk layout for lba_node_meta_t
+ */
+struct lba_node_meta_le_t {
+  laddr_le_t begin = init_le64(0);
+  laddr_le_t end = init_le64(0);
+  depth_le_t depth = init_les32(0);
+
+  lba_node_meta_le_t() = default;
+  lba_node_meta_le_t(const lba_node_meta_le_t &) = default;
+  explicit lba_node_meta_le_t(const lba_node_meta_t &val)
+    : begin(init_le64(val.begin)),
+      end(init_le64(val.end)),
+      depth(init_les32(val.depth)) {}
+
+  operator lba_node_meta_t() const {
+    return lba_node_meta_t{ begin, end, depth };
+  }
+};
+
+
+/**
  * LBAInternalNode
  *
  * Abstracts operations on and layout of internal nodes for the
  * LBA Tree.
  *
  * Layout (4k):
- *   size       : uint32_t[1]      (1*4)b
- *   keys       : laddr_t[255]     (255*8)b
- *   values     : paddr_t[255]     (255*8)b
- *                                 = 4084
+ *   size       : uint32_t[1]                4b
+ *   (padding)  :                            4b
+ *   meta       : lba_node_meta_le_t[3]      (1*24)b
+ *   keys       : laddr_t[255]               (254*8)b
+ *   values     : paddr_t[255]               (254*8)b
+ *                                           = 4096
 
  * TODO: make the above capacity calculation part of FixedKVNodeLayout
+ * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t INTERNAL_NODE_CAPACITY = 255;
+constexpr size_t INTERNAL_NODE_CAPACITY = 254;
 struct LBAInternalNode
   : LBANode,
     common::FixedKVNodeLayout<
       INTERNAL_NODE_CAPACITY,
+      lba_node_meta_t, lba_node_meta_le_t,
       laddr_t, laddr_le_t,
       paddr_t, paddr_le_t> {
   using internal_iterator_t = const_iterator;
@@ -52,6 +79,8 @@ struct LBAInternalNode
     FixedKVNodeLayout(get_bptr().c_str()) {}
 
   static constexpr extent_types_t type = extent_types_t::LADDR_INTERNAL;
+
+  lba_node_meta_t get_node_meta() const final { return get_meta(); }
 
   CachedExtentRef duplicate_for_write() final {
     assert(delta_buffer.empty());
@@ -239,14 +268,17 @@ struct LBAInternalNode
  * LBA Tree.
  *
  * Layout (4k):
- *   num_entries: uint32_t           4b
- *   keys       : laddr_t[170]       (146*8)b
- *   values     : lba_map_val_t[170] (146*20)b
- *                                   = 4090
+ *   size       : uint32_t[1]                4b
+ *   (padding)  :                            4b
+ *   meta       : lba_node_meta_le_t[3]      (1*24)b
+ *   keys       : laddr_t[170]               (145*8)b
+ *   values     : lba_map_val_t[170]         (145*20)b
+ *                                           = 4092
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
+ * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 146;
+constexpr size_t LEAF_NODE_CAPACITY = 145;
 
 /**
  * lba_map_val_le_t
@@ -276,6 +308,7 @@ struct LBALeafNode
   : LBANode,
     common::FixedKVNodeLayout<
       LEAF_NODE_CAPACITY,
+      lba_node_meta_t, lba_node_meta_le_t,
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t> {
   using internal_iterator_t = const_iterator;
@@ -285,6 +318,8 @@ struct LBALeafNode
     FixedKVNodeLayout(get_bptr().c_str()) {}
 
   static constexpr extent_types_t type = extent_types_t::LADDR_LEAF;
+
+  lba_node_meta_t get_node_meta() const final { return get_meta(); }
 
   CachedExtentRef duplicate_for_write() final {
     assert(delta_buffer.empty());

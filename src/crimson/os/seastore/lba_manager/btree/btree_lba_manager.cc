@@ -27,8 +27,8 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
     auto root_leaf = cache.alloc_new_extent<LBALeafNode>(
       t,
       LBA_BLOCK_SIZE);
-    root_leaf->set_depth(1);
     root_leaf->set_size(0);
+    root_leaf->set_meta({0, L_ADDR_MAX, 1});
     croot->get_lba_root() =
       root_t{
         1,
@@ -191,14 +191,14 @@ BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
 	  croot = mut_croot->cast<RootBlock>();
 	}
 	auto nroot = cache.alloc_new_extent<LBAInternalNode>(t, LBA_BLOCK_SIZE);
-	nroot->set_depth(root->depth + 1);
+	nroot->set_meta({0, L_ADDR_MAX, croot->root.lba_depth + 1});
 	nroot->journal_insert(
 	  nroot->begin(),
 	  L_ADDR_MIN,
 	  root->get_paddr(),
 	  nullptr);
 	croot->get_lba_root().lba_root_addr = nroot->get_paddr();
-	croot->get_lba_root().lba_depth = root->depth + 1;
+	croot->get_lba_root().lba_depth = root->get_node_meta().depth + 1;
 	return nroot->split_entry(
 	  get_context(t),
 	  laddr, nroot->begin(), root);
