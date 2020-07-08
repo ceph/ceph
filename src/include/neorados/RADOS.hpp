@@ -551,23 +551,25 @@ public:
   template<typename CompletionToken>
   auto execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 	       ceph::buffer::list* bl,
-	       CompletionToken&& token, uint64_t* objver = nullptr) {
+	       CompletionToken&& token, uint64_t* objver = nullptr,
+	       const blkin_trace_info* trace_info = nullptr) {
     boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
     execute(o, ioc, std::move(op), bl,
 	    ReadOp::Completion::create(get_executor(),
 				       std::move(init.completion_handler)),
-	    objver);
+	    objver, trace_info);
     return init.result.get();
   }
 
   template<typename CompletionToken>
   auto execute(const Object& o, const IOContext& ioc, WriteOp&& op,
-	       CompletionToken&& token, uint64_t* objver = nullptr) {
+	       CompletionToken&& token, uint64_t* objver = nullptr,
+	       const blkin_trace_info* trace_info = nullptr) {
     boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
     execute(o, ioc, std::move(op),
 	    Op::Completion::create(get_executor(),
 				   std::move(init.completion_handler)),
-	    objver);
+	    objver, trace_info);
     return init.result.get();
   }
 
@@ -954,10 +956,11 @@ private:
 
   void execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
-	       uint64_t* objver);
+	       uint64_t* objver, const blkin_trace_info* trace_info);
 
   void execute(const Object& o, const IOContext& ioc, WriteOp&& op,
-	       std::unique_ptr<Op::Completion> c, uint64_t* objver);
+	       std::unique_ptr<Op::Completion> c, uint64_t* objver,
+	       const blkin_trace_info* trace_info);
 
   void execute(const Object& o, std::int64_t pool, ReadOp&& op,
 	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
