@@ -1,13 +1,13 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 thead {
-  background-color: $color-table-header-bg;
+  background-color: bd.$color-table-header-bg;
 }
 
 .fa {
   font-size: large;
 
   &.fa-square-o {
-    color: $color-light-gray;
+    color: bd.$color-light-gray;
   }
 }

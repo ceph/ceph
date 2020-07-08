@@ -1,11 +1,11 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep .login {
-  background-color: $color-login-row-bg;
+  background-color: bd.$color-login-row-bg;
   background-image: url('assets/ceph_background.gif');
   background-position: right bottom;
   background-repeat: no-repeat;
-  color: $color-login-row-text;
+  color: bd.$color-login-row-text;
 
   header {
     position: absolute;
@@ -19,7 +19,7 @@
 
         li a {
           &:hover {
-            background-color: $color-brand-teal;
+            background-color: bd.$color-brand-teal;
           }
         }
       }

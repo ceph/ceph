@@ -1,4 +1,5 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/defaults/mixins';
 
 $card-font-min-width: 320px;
 $card-font-max-width: 2048px;
@@ -6,15 +7,15 @@ $card-font-min-size: 12px;
 $card-font-max-size: 21px;
 
 .card {
-  @include fluid-font-size(
+  @include mixins.fluid-font-size(
     $card-font-min-width,
     $card-font-max-width,
     $card-font-min-size,
     $card-font-max-size
   );
-  border: 0.5px solid $color-info-card-border;
+  border: 0.5px solid bd.$color-info-card-border;
   border-radius: 3px;
-  box-shadow: 0 1px 1px $color-shadow-gray;
+  box-shadow: 0 1px 1px bd.$color-shadow-gray;
   height: 100%;
 
   .card-body {

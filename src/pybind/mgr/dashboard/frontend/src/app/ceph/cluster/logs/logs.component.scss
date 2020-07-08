@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 p {
   font-family: monospace;
@@ -27,15 +27,15 @@ p {
   }
 
   .err {
-    color: $color-pink;
+    color: bd.$color-pink;
   }
 
   .warn {
-    color: $color-bright-yellow;
+    color: bd.$color-bright-yellow;
   }
 
   .info {
-    color: $color-brand-teal;
+    color: bd.$color-brand-teal;
   }
 }
 

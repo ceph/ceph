@@ -1,0 +1,92 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+/* Basics */
+html {
+  background-color: bd.$color-app-bg;
+}
+
+html,
+body {
+  font-size: 12px;
+  height: 100%;
+  width: 100%;
+}
+
+h1 {
+  font-size: 2em;
+  letter-spacing: -1px;
+}
+
+h2 {
+  font-size: 1.833em;
+  letter-spacing: -1px;
+}
+
+h3 {
+  display: block;
+  font-size: 1.583em;
+  font-weight: 400;
+}
+
+h4 {
+  font-size: 1.5em;
+  line-height: normal;
+}
+
+option {
+  font-style: normal;
+  font-weight: normal;
+}
+
+.full-height {
+  height: 100vh;
+}
+
+.full-width {
+  width: 100vw;
+}
+
+.vertical-align {
+  align-items: center;
+  display: flex;
+}
+
+.horizontal-align {
+  display: flex;
+  justify-content: center;
+}
+
+.loading {
+  left: 50%;
+  position: absolute;
+  top: 50%;
+}
+
+.margin-right-md {
+  margin-right: 15px;
+}
+
+.no-border {
+  border: 0;
+  box-shadow: 0 0 0 !important;
+}
+
+.italic {
+  font-style: italic;
+}
+
+.bold {
+  font-weight: bold;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-monospace {
+  font-family: monospace;
+}
+
+.text-pre {
+  white-space: pre-wrap;
+}
