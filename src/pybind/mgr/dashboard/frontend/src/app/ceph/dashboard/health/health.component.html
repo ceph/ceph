@@ -98,10 +98,11 @@
     <cd-info-card cardTitle="Metadata Servers"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  *ngIf="(enabledFeature.cephfs && healthData.fs_map | mdsSummary) as transformedResult"
+                  *ngIf="((enabledFeature.cephfs && healthData.fs_map) | mdsSummary) as transformedResult"
                   [contentClass]="(transformedResult.length > 1 ? 'text-area-size-2' : '') + ' content-highlight'">
       <span *ngFor="let result of transformedResult"
-            [ngClass]="result.class">
+            [ngClass]="result.class"
+            [title]="result.titleText != null ? result.titleText : ''">
         {{ result.content }}
       </span>
     </cd-info-card>

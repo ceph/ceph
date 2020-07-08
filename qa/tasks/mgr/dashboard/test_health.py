@@ -19,6 +19,41 @@ class HealthTest(DashboardTestCase):
         'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
     })
 
+    __mdsmap_schema = JObj({
+        'session_autoclose': int,
+        'balancer': str,
+        'up': JObj({}, allow_unknown=True),
+        'last_failure_osd_epoch': int,
+        'in': JList(int),
+        'last_failure': int,
+        'max_file_size': int,
+        'explicitly_allowed_features': int,
+        'damaged': JList(int),
+        'tableserver': int,
+        'failed': JList(int),
+        'metadata_pool': int,
+        'epoch': int,
+        'stopped': JList(int),
+        'max_mds': int,
+        'compat': JObj({
+            'compat': JObj({}, allow_unknown=True),
+            'ro_compat': JObj({}, allow_unknown=True),
+            'incompat': JObj({}, allow_unknown=True)
+        }),
+        'min_compat_client': str,
+        'data_pools': JList(int),
+        'info': JObj({}, allow_unknown=True),
+        'fs_name': str,
+        'created': str,
+        'standby_count_wanted': int,
+        'enabled': bool,
+        'modified': str,
+        'session_timeout': int,
+        'flags': int,
+        'ever_allowed_features': int,
+        'root': int
+    })
+
     def test_minimal_health(self):
         data = self._get('/api/health/minimal')
         self.assertStatus(200)
@@ -40,18 +75,10 @@ class HealthTest(DashboardTestCase):
             'fs_map': JObj({
                 'filesystems': JList(
                     JObj({
-                        'mdsmap': JObj({
-                            'info': JObj(
-                                {},
-                                allow_unknown=True,
-                                unknown_schema=JObj({
-                                    'state': str
-                                })
-                            )
-                        })
+                        'mdsmap': self.__mdsmap_schema
                     }),
                 ),
-                'standbys': JList(JObj({})),
+                'standbys': JList(JObj({}, allow_unknown=True)),
             }),
             'health': JObj({
                 'checks': JList(str),
@@ -164,16 +191,7 @@ class HealthTest(DashboardTestCase):
                 'filesystems': JList(
                     JObj({
                         'id': int,
-                        'mdsmap': JObj({
-                            # TODO: Expand mdsmap schema
-                            'info': JObj(
-                                {},
-                                allow_unknown=True,
-                                unknown_schema=JObj({
-                                    'state': str
-                                }, allow_unknown=True)
-                            )
-                        }, allow_unknown=True)
+                        'mdsmap': self.__mdsmap_schema
                     }),
                 ),
                 'standbys': JList(JObj({}, allow_unknown=True)),
