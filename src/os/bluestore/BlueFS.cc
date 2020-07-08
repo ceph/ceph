@@ -2886,7 +2886,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     ++p;
     x_off = 0;
   }
-  logger->inc(l_bluefs_bytes_written_slow, bytes_written_slow);
+  if (bytes_written_slow) {
+    logger->inc(l_bluefs_bytes_written_slow, bytes_written_slow);
+  }
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       if (h->iocv[i] && h->iocv[i]->has_pending_aios()) {
