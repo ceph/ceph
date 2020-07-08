@@ -29,7 +29,7 @@ TEST_F(TestAWS, SNS) {
   Aws::Auth::AWSCredentials credentials = credentialsProvider.GetAWSCredentials();
   auto client = rgw::aws::connect(std::string(credentials.GetAWSAccessKeyId()),
                                   std::string(credentials.GetAWSSecretKey()),
-                                  "arn:aws:sns:us-east-1:125341253834:gsoc20-ceph", "", true);
+                                  "arn:aws:sns:us-east-1:125341253834:gsoc20-ceph", "", true, true);
   EXPECT_EQ(rgw::aws::publish(client, "body", "arn:aws:sns:us-east-1:125341253834:gsoc20-ceph"), 1);
 
   std::this_thread::sleep_for(std::chrono::milliseconds(10000));
@@ -40,9 +40,10 @@ TEST_F(TestAWS, Lambda) {
   Aws::Auth::AWSCredentials credentials = credentialsProvider.GetAWSCredentials();
   auto client = rgw::aws::connect(std::string(credentials.GetAWSAccessKeyId()),
                                   std::string(credentials.GetAWSSecretKey()),
-                                  "arn:aws:lambda:us-east-1:125341253834:function:gsoc20", "", true);
+                                  "arn:aws:lambda:us-east-1:125341253834:function:gsoc20", "", true, true);
   EXPECT_EQ(rgw::aws::publish(client, R"({ "name": "Bob" })", "arn:aws:lambda:us-east-1:125341253834:function:gsoc20"),
             1);
 
   std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 }
+

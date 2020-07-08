@@ -17,10 +17,13 @@ namespace rgw::aws {
 
   typedef std::variant<Aws::Lambda::LambdaClient *, Aws::SNS::SNSClient *> AwsClient;
 
+  #define NO_CLIENT AwsClient()
+
   AwsClient connect(const std::string &accessKey,
                     const std::string &accessSecret,
                     const std::string &arn,
                     const std::string &caPath,
+                    bool verifySSL,
                     bool useSSL);
 
   int publish(AwsClient client,
@@ -31,3 +34,4 @@ namespace rgw::aws {
 
   void shutdown();
 }
+

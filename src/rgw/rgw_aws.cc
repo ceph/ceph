@@ -74,32 +74,32 @@ namespace rgw::aws {
     mutable std::mutex clientsLock;
     CephContext *cct;
     const ceph::coarse_real_clock::duration idle_time;
+    const int MAX_CONNECTIONS = 25;
+    const int REQUEST_TIMEOUT_MS = 3000;
+    const int CONNECT_TIMEOUT_MS = 3000;
 
-    void publish_internal(message_t *msg) {
+    void publish_internal_wrapper(message_t *msg) {
       const std::unique_ptr<message_t> msg_owner(msg);
 
-      std::visit([&msg, this](auto &&arg) { this->publish_util(arg, msg->resourceARN, msg->payload); }, msg->client);
+      std::visit([&msg, this](auto &&arg) { this->publish_internal(arg, msg->resourceARN, msg->payload); }, msg->client);
     }
 
-    void publish_util(Aws::SNS::SNSClient *client, const string &resourceArn, const string &payload) {
-      ldout(cct, 1) << "Publishing.." << dendl;
+    void publish_internal(Aws::SNS::SNSClient *client, const std::string &resourceArn, const std::string &payload) {
+      ldout(cct, 20) << "Publishing.." << dendl;
       Aws::SNS::Model::PublishRequest req;
       req.SetMessage(Aws::String(payload));
       req.SetTopicArn(Aws::String(resourceArn));
-      Aws::Client::ClientConfiguration configuration;
-      configuration.verifySSL = true;
-      configuration.connectTimeoutMs = 30000;
 
       auto result = client->Publish(req);
       if (result.IsSuccess()) {
-        ldout(cct, 1) << "Published..." << dendl;
+        ldout(cct, 20) << "Published..." << dendl;
       } else {
         ldout(cct, 1) << result.GetError().GetMessage() << dendl;
       }
     }
 
-    void publish_util(Aws::Lambda::LambdaClient *client, const string &resourceArn, const string &payload) {
-      ldout(cct, 1) << "Invoking..." << dendl;
+    void publish_internal(Aws::Lambda::LambdaClient *client, const std::string &resourceArn, const std::string &payload) {
+      ldout(cct, 20) << "Invoking..." << dendl;
       Aws::Lambda::Model::InvokeRequest invokeRequest;
       Aws::Utils::ARN arn((Aws::String(resourceArn)));
       invokeRequest.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -117,7 +117,7 @@ namespace rgw::aws {
         Aws::IOStream &pl = result.GetPayload();
         Aws::String returnedData;
         std::getline(pl, returnedData);
-        ldout(cct, 1) << "Success " << returnedData << "\n" << dendl;
+        ldout(cct, 20) << "Success " << returnedData << "\n" << dendl;
       }
     }
 
@@ -125,7 +125,7 @@ namespace rgw::aws {
     void run() {
       while (!stopped) {
         const auto count = messageQueue.consume_all(
-                std::bind(&Manager::publish_internal, this, std::placeholders::_1));
+                std::bind(&Manager::publish_internal_wrapper, this, std::placeholders::_1));
         if (count == 0) {
           std::this_thread::sleep_for(idle_time);
         }
@@ -156,9 +156,10 @@ namespace rgw::aws {
                       const std::string &accessSecret,
                       const std::string &arn,
                       const std::string &caPath,
+                      bool verifySSL,
                       bool useSSL) {
       if (stopped) {
-        return AwsClient();
+        return NO_CLIENT;
       }
       const client_id_t id(accessKey, accessSecret, arn, useSSL);
       std::lock_guard lock(clientsLock);
@@ -171,25 +172,26 @@ namespace rgw::aws {
       Aws::Client::ClientConfiguration configuration;
       if (useSSL) {
         configuration.scheme = Aws::Http::Scheme::HTTPS;
-        configuration.verifySSL = true;
       } else {
         configuration.scheme = Aws::Http::Scheme::HTTP;
-        configuration.verifySSL = false;
       }
-      Aws::Utils::ARN arn1((Aws::String(arn)));
-      configuration.region = Aws::String(arn1.GetRegion());
-      configuration.maxConnections = 25;
-      configuration.requestTimeoutMs = 3000;
-      configuration.connectTimeoutMs = 3000;
+      configuration.verifySSL = verifySSL;
+      Aws::Utils::ARN arnAWS((Aws::String(arn)));
+      configuration.region = Aws::String(arnAWS.GetRegion());
+      configuration.maxConnections = MAX_CONNECTIONS;
+      configuration.requestTimeoutMs = REQUEST_TIMEOUT_MS;
+      configuration.connectTimeoutMs = CONNECT_TIMEOUT_MS;
       configuration.caPath = Aws::String(caPath);
       Aws::Auth::AWSCredentials credentials;
       credentials.SetAWSAccessKeyId(Aws::String(accessKey));
       credentials.SetAWSSecretKey(Aws::String(accessSecret));
       AwsClient client;
-      if (arn1.GetService() == "lambda") {
+      if (arnAWS.GetService() == "lambda") {
         client = new Aws::Lambda::LambdaClient(credentials, configuration);
-      } else if (arn1.GetService() == "sns") {
+      } else if (arnAWS.GetService() == "sns") {
         client = new Aws::SNS::SNSClient(credentials, configuration);
+      } else {
+        return NO_CLIENT;
       }
       return clientList.emplace(id, client).first->second;
     }
@@ -200,7 +202,7 @@ namespace rgw::aws {
       if (stopped) {
         return STATUS_MANAGER_STOPPED;
       }
-      if (client == AwsClient()) {
+      if (client == NO_CLIENT) {
         return STATUS_CLIENT_CLOSED;
       }
       if (messageQueue.push(new message_t(client, resourceARN, payload))) {
@@ -243,9 +245,10 @@ namespace rgw::aws {
                     const std::string &accessSecret,
                     const std::string &arn,
                     const std::string &caPath,
+                    bool verifySSL,
                     bool useSSL) {
-    if (!manager) return AwsClient();
-    return manager->connect(accessKey, accessSecret, arn, caPath, useSSL);
+    if (!manager) return NO_CLIENT;
+    return manager->connect(accessKey, accessSecret, arn, caPath, verifySSL, useSSL);
   }
 
   // Publishes the message to the queue

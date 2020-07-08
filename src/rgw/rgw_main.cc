@@ -667,6 +667,9 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();
 #endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+  rgw::aws::shutdown();
+#endif
 
   rgw_perf_stop(g_ceph_context);
 

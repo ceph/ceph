@@ -729,21 +729,21 @@ private:
   std::string get_arn(const RGWHTTPArgs& args){
     bool exists;
     auto arnString = args.get("AwsArn", &exists);
-    boost::optional<ARN> arn1 = ARN::parse(arnString);
-    if(!arn1) {
+    boost::optional<ARN> arnParsed = ARN::parse(arnString);
+    if(!arnParsed) {
       throw configuration_error("incorrect arn format");
     }
-    if(arn1->service != Service::sns && arn1->service != Service::lambda){
+    if(arnParsed->service != Service::sns && arnParsed->service != Service::lambda){
       throw configuration_error("only sns and lambda aws services allowed");
     }
-    return arn1->to_string();
+    return arnParsed->to_string();
   }
 
   std::string get_access_key(const RGWHTTPArgs& args){
     bool exists;
     auto accessKey = args.get("AccessKey", &exists);
     if(!exists) {
-      return "";
+      throw configuration_error("secret key cannot be empty");
     }
     return accessKey;
   }
@@ -752,7 +752,7 @@ private:
     bool exists;
     auto accessSecret = args.get("SecretKey", &exists);
     if(!exists) {
-      return "";
+      throw configuration_error("access secret cannot be empty");
     }
     return accessSecret;
   }
@@ -763,14 +763,18 @@ public:
       CephContext* _cct) :
         cct(_cct),
         arn(get_arn(args)),
-        client(rgw::aws::connect(get_access_key(args), get_access_secret(args), arn, "", true)){
-    if (client == rgw::aws::AwsClient()) {
+        client(rgw::aws::connect(get_access_key(args), get_access_secret(args), arn, "", get_verify_ssl(args),get_use_ssl(args))){
+    if (client == rgw::aws::NO_CLIENT) {
       throw configuration_error("AWS: failed to create connection to: " + _endpoint);
     }
   }
 
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {}
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {}
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
+    return nullptr;
+  }
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
+    return nullptr;
+  }
 
   int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
     return rgw::aws::publish(client, json_format_pubsub_event(record), arn);
@@ -848,7 +852,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
   } else if (schema == KAFKA_SCHEMA) {
       return Ptr(new RGWPubSubKafkaEndpoint(endpoint, topic, args, cct));
 #endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
   }else if (schema == AWS_SCHEMA){
       return Ptr(new RGWPubSubAWSEndpoint(endpoint, args, cct));
 #endif
