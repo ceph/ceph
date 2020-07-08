@@ -1,4 +1,4 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep cd-login {
   h1 {
@@ -6,13 +6,13 @@
   }
 
   .form-group {
-    background-color: $color-password-toggle-bg;
-    border-left: 4px solid $color-solid-white;
+    background-color: bd.$color-password-toggle-bg;
+    border-left: 4px solid bd.$color-solid-white;
     height: auto;
     margin-bottom: 2rem;
 
     &:focus-within {
-      border-left: 4px solid $color-accent;
+      border-left: 4px solid bd.$color-accent;
     }
 
     .invalid-feedback {
@@ -24,28 +24,28 @@
   .btn-password:focus,
   .form-control,
   .form-control:focus {
-    background-color: $color-password-toggle-bg;
+    background-color: bd.$color-password-toggle-bg;
     border: 0;
     box-shadow: none;
-    color: $color-password-toggle-text;
+    color: bd.$color-password-toggle-text;
     filter: none;
     outline: none;
   }
 
   .placeholder {
-    color: $color-password-toggle-placeholder-text;
+    color: bd.$color-password-toggle-placeholder-text;
   }
 
   .btn-password:focus {
-    outline-color: $color-password-toggle-focus;
+    outline-color: bd.$color-password-toggle-focus;
   }
 }
 
 // This will override the colors applied by chrome
 @keyframes autofill {
   to {
-    background-color: $color-password-toggle-bg;
-    color: $color-password-toggle-text;
+    background-color: bd.$color-password-toggle-bg;
+    color: bd.$color-password-toggle-text;
   }
 }
 
@@ -53,7 +53,7 @@ input:-webkit-autofill {
   animation-fill-mode: both;
   animation-name: autofill;
   border-radius: 0;
-  box-shadow: 0 0 0 1000px $color-password-toggle-bg inset;
-  -webkit-text-fill-color: $color-password-toggle-text;
+  box-shadow: 0 0 0 1000px bd.$color-password-toggle-bg inset;
+  -webkit-text-fill-color: bd.$color-password-toggle-text;
   transition-property: none;
 }

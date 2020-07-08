@@ -1,7 +1,7 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .dashboard {
-  background-color: $color-whitesmoke-gray;
+  background-color: bd.$color-whitesmoke-gray;
   margin: 0;
   padding: 0;
 }
@@ -17,7 +17,7 @@
     margin-top: 2.5vw;
   }
 
-  @media (max-width: $screen-md-max) {
+  @media (max-width: bd.$screen-md-max) {
     margin-top: 9vw;
   }
 

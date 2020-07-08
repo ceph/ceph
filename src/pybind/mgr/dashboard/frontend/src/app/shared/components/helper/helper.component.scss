@@ -1,7 +1,7 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 i {
-  color: $color-helper-bg;
+  color: bd.$color-helper-bg;
   cursor: pointer;
   padding-left: 4px;
 }

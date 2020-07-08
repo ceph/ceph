@@ -51,15 +51,13 @@
             ],
             "styles": [
               "node_modules/ngx-toastr/toastr.css",
-              "src/styles.scss",
-              "src/styles/vendor.overrides.scss"
+              "src/styles.scss"
             ],
             "scripts": [
               "node_modules/chart.js/dist/Chart.bundle.js"
             ],
             "stylePreprocessorOptions": {
               "includePaths": [
-                "src/styles",
                 "src"
               ]
             }

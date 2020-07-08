@@ -1,7 +1,8 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/defaults/mixins';
 
 @mixin row-details-icon {
-  color: $gray-900;
+  color: bd.$gray-900;
   font-family: 'ForkAwesome', sans-serif;
   font-size: 1rem;
   line-height: 1;
@@ -11,7 +12,7 @@
   margin-bottom: 25px;
 
   .separator {
-    border-left: 1px solid $color-table-seperator-border;
+    border-left: 1px solid bd.$color-table-seperator-border;
     display: inline-block;
     height: 30px;
     margin-left: 5px;
@@ -20,7 +21,7 @@
   }
 
   .widget-toolbar {
-    border-left: 1px solid $color-table-seperator-border;
+    border-left: 1px solid bd.$color-table-seperator-border;
     float: right;
     padding: 0 8px;
 
@@ -36,8 +37,8 @@
 }
 
 .dataTables_header {
-  background-color: $color-table-header-bg;
-  border: 1px solid $color-table-header-border;
+  background-color: bd.$color-table-header-bg;
+  border: 1px solid bd.$color-table-header-border;
   border-bottom: 0;
   padding: 5px;
   position: relative;
@@ -47,7 +48,7 @@
   }
 
   ::ng-deep .table-filters {
-    border-left: 1px solid $color-table-seperator-border;
+    border-left: 1px solid bd.$color-table-seperator-border;
     float: right;
     padding-left: 8px;
   }
@@ -61,7 +62,7 @@
   }
 
   .input-group {
-    border-left: 1px solid $color-table-input-border;
+    border-left: 1px solid bd.$color-table-input-border;
     float: right;
     max-width: 250px;
     padding-left: 8px;
@@ -86,7 +87,7 @@
 }
 
 ::ng-deep .cd-datatable {
-  border: 1px solid $color-table-header-border;
+  border: 1px solid bd.$color-table-header-border;
   margin-bottom: 0;
   max-width: none !important;
 
@@ -99,10 +100,10 @@
     width: 100%;
 
     .container {
-      background-color: $color-table-active-row;
+      background-color: bd.$color-table-active-row;
 
       .bar {
-        background-color: $color-table-active-row;
+        background-color: bd.$color-table-active-row;
         height: 100%;
         left: 0;
         overflow: hidden;
@@ -112,7 +113,7 @@
 
       .bar::before {
         animation: progress-loading 3s linear infinite;
-        background-color: $color-table-progress-bar-active;
+        background-color: bd.$color-table-progress-bar-active;
         content: '';
         display: block;
         height: 100%;
@@ -125,24 +126,24 @@
 
   .datatable-header {
     background-clip: padding-box;
-    background-color: $color-table-datatable-header;
+    background-color: bd.$color-table-datatable-header;
     background-image: linear-gradient(
       to bottom,
-      $color-table-gradient-1 0,
-      $color-table-gradient-2 100%
+      bd.$color-table-gradient-1 0,
+      bd.$color-table-gradient-2 100%
     );
     background-repeat: repeat-x;
     filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#fffafafa', endColorstr='#ffededed', GradientType=0);
 
     .sort-asc,
     .sort-desc {
-      color: $color-table-sort;
+      color: bd.$color-table-sort;
     }
 
     .datatable-header-cell {
-      @include table-cell;
-      font-weight: bold;
+      @include mixins.table-cell;
 
+      font-weight: bold;
       text-align: left;
 
       .datatable-header-cell-label {
@@ -184,7 +185,7 @@
     margin-bottom: -6px;
 
     .empty-row {
-      background-color: $color-table-empty-row;
+      background-color: bd.$color-table-empty-row;
       font-style: italic;
       font-weight: bold;
       padding-bottom: 5px;
@@ -194,27 +195,27 @@
 
     .datatable-body-row {
       &.clickable:hover .datatable-row-group {
-        background-color: $color-table-hover-row;
+        background-color: bd.$color-table-hover-row;
         transition-duration: 0.3s;
         transition-property: background;
         transition-timing-function: linear;
       }
 
       &.datatable-row-even {
-        background-color: $color-table-even-row-bg;
+        background-color: bd.$color-table-even-row-bg;
       }
 
       &.datatable-row-odd {
-        background-color: $color-table-odd-row-bg;
+        background-color: bd.$color-table-odd-row-bg;
       }
 
       &.active,
       &.active:hover {
-        background-color: $color-table-active-row-hover;
+        background-color: bd.$color-table-active-row-hover;
       }
 
       .datatable-body-cell {
-        @include table-cell;
+        @include mixins.table-cell;
 
         &:first-child {
           border-left: 0;
@@ -228,7 +229,7 @@
     }
 
     .datatable-row-detail {
-      border-bottom: 2px solid $color-table-header-border;
+      border-bottom: 2px solid bd.$color-table-header-border;
       overflow-y: visible !important;
       padding: 20px;
     }
