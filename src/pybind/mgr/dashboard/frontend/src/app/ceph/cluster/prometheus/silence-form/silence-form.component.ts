@@ -143,7 +143,10 @@ export class SilenceFormComponent {
   }
 
   private updateDate(updateStartDate?: boolean) {
-    const date = moment(this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt')).toDate();
+    const date = moment(
+      this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt'),
+      this.datetimeFormat
+    ).toDate();
     const next = this.timeDiff.calculateDate(date, this.form.getValue('duration'), updateStartDate);
     if (next) {
       const nextDate = moment(next).format(this.datetimeFormat);
@@ -164,8 +167,8 @@ export class SilenceFormComponent {
   }
 
   private onDateChange(updateStartDate?: boolean) {
-    const startsAt = moment(this.form.getValue('startsAt'));
-    const endsAt = moment(this.form.getValue('endsAt'));
+    const startsAt = moment(this.form.getValue('startsAt'), this.datetimeFormat);
+    const endsAt = moment(this.form.getValue('endsAt'), this.datetimeFormat);
     if (startsAt.isBefore(endsAt)) {
       this.updateDuration();
     } else {
@@ -174,8 +177,8 @@ export class SilenceFormComponent {
   }
 
   private updateDuration() {
-    const startsAt = moment(this.form.getValue('startsAt')).toDate();
-    const endsAt = moment(this.form.getValue('endsAt')).toDate();
+    const startsAt = moment(this.form.getValue('startsAt'), this.datetimeFormat).toDate();
+    const endsAt = moment(this.form.getValue('endsAt'), this.datetimeFormat).toDate();
     this.form.silentSet('duration', this.timeDiff.calculateDuration(startsAt, endsAt));
   }
 
