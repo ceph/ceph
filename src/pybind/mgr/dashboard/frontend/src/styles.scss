@@ -62,23 +62,6 @@ body {
   height: 100%;
   font-size: 12px;
 }
-h1 {
-  letter-spacing: -1px;
-  font-size: 2em;
-}
-h2 {
-  letter-spacing: -1px;
-  font-size: 1.833em;
-}
-h3 {
-  display: block;
-  font-size: 1.583em;
-  font-weight: 400;
-}
-h4 {
-  font-size: 1.5em;
-  line-height: normal;
-}
 option {
   font-weight: normal;
   font-style: normal;
@@ -263,9 +246,6 @@ uib-accordion .card-title,
 }
 .card-header {
   font-size: 1.3em;
-}
-.card-body h2:first-child {
-  margin-top: 0;
 }
 .disabled {
   pointer-events: none;
