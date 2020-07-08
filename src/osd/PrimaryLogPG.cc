@@ -3515,9 +3515,12 @@ void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext*
       refs);
 
     if (!refs.is_empty()) {
+      hobject_t soid = ctx->obc->obs.oi.soid;
       ctx->register_on_commit(
-	[ctx, this, refs](){
-	  dec_refcount(ctx->obc, refs);
+	[soid, this, refs](){
+	  ObjectContextRef obc = get_object_context(soid, false, NULL);
+	  ceph_assert(obc);
+	  dec_refcount(obc, refs);
 	});
     }
   } else if (oi.manifest.is_redirect()) {
