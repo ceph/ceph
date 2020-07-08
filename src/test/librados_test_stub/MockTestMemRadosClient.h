@@ -70,6 +70,19 @@ public:
     return TestMemRadosClient::service_daemon_update_status(std::move(s));
   }
 
+  MOCK_METHOD4(mon_command, int(const std::vector<std::string>&,
+                                const bufferlist&, bufferlist*, std::string*));
+  int do_mon_command(const std::vector<std::string>& cmd,
+                     const bufferlist &inbl, bufferlist *outbl,
+                     std::string *outs) {
+    return mon_command(cmd, inbl, outbl, outs);
+  }
+
+  MOCK_METHOD0(wait_for_latest_osd_map, int());
+  int do_wait_for_latest_osd_map() {
+    return wait_for_latest_osd_map();
+  }
+
   void default_to_dispatch() {
     using namespace ::testing;
 
@@ -80,6 +93,8 @@ public:
     ON_CALL(*this, get_min_compatible_client(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_get_min_compatible_client));
     ON_CALL(*this, service_daemon_register(_, _, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_register));
     ON_CALL(*this, service_daemon_update_status_r(_)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_update_status_r));
+    ON_CALL(*this, mon_command(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_mon_command));
+    ON_CALL(*this, wait_for_latest_osd_map()).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_wait_for_latest_osd_map));
   }
 };
 
