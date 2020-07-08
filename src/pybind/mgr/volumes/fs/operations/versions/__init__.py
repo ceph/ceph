@@ -5,11 +5,11 @@ import importlib
 import cephfs
 
 from .subvolume_base import SubvolumeBase
-from .subvolume_base import SubvolumeTypes
+from .subvolume_attrs import SubvolumeTypes
 from .subvolume_v1 import SubvolumeV1
 from .subvolume_v2 import SubvolumeV2
 from .metadata_manager import MetadataManager
-from ..op_sm import SubvolumeOpSm
+from .op_sm import SubvolumeOpSm
 from ..template import SubvolumeOpType
 from ...exception import MetadataMgrException, OpSmException, VolumeException
 

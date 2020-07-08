@@ -1,39 +1,19 @@
 import os
-import uuid
 import errno
 import logging
-from enum import Enum, unique
 from hashlib import md5
 
 import cephfs
 
 from ..pin_util import pin
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
+from .op_sm import SubvolumeOpSm
 
 log = logging.getLogger(__name__)
-
-@unique
-class SubvolumeFeatures(Enum):
-    FEATURE_SNAPSHOT_CLONE       = "snapshot-clone"
-    FEATURE_SNAPSHOT_AUTOPROTECT = "snapshot-autoprotect"
-    FEATURE_SNAPSHOT_RETENTION   = "snapshot-retention"
-
-@unique
-class SubvolumeTypes(Enum):
-    TYPE_NORMAL  = "subvolume"
-    TYPE_CLONE   = "clone"
-
-    @staticmethod
-    def from_value(value):
-        if value == "subvolume":
-            return SubvolumeTypes.TYPE_NORMAL
-        if value == "clone":
-            return SubvolumeTypes.TYPE_CLONE
-
-        raise VolumeException(-errno.EINVAL, "invalid subvolume type '{0}'".format(value))
 
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
@@ -114,14 +94,17 @@ class SubvolumeBase(object):
 
     @property
     def path(self):
+        """ Path to subvolume data directory """
         raise NotImplementedError
 
     @property
     def features(self):
+        """ List of features supported by the subvolume, containing items from SubvolumeFeatures """
         raise NotImplementedError
 
     @property
     def state(self):
+        """ Subvolume state, one of SubvolumeStates """
         raise NotImplementedError
 
     @property

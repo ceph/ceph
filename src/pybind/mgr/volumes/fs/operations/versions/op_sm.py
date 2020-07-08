@@ -1,47 +1,9 @@
 import errno
 
-from enum import Enum, unique
 from typing import Dict
 
-from .versions.subvolume_base import SubvolumeTypes
-from ..exception import OpSmException
-
-@unique
-class SubvolumeStates(Enum):
-    STATE_INIT          = 'init'
-    STATE_PENDING       = 'pending'
-    STATE_INPROGRESS    = 'in-progress'
-    STATE_FAILED        = 'failed'
-    STATE_COMPLETE      = 'complete'
-    STATE_CANCELED      = 'canceled'
-    STATE_RETAINED      = 'snapshot-retained'
-
-    @staticmethod
-    def from_value(value):
-        if value == "init":
-            return SubvolumeStates.STATE_INIT
-        if value == "pending":
-            return SubvolumeStates.STATE_PENDING
-        if value == "in-progress":
-            return SubvolumeStates.STATE_INPROGRESS
-        if value == "failed":
-            return SubvolumeStates.STATE_FAILED
-        if value == "complete":
-            return SubvolumeStates.STATE_COMPLETE
-        if value == "canceled":
-            return SubvolumeStates.STATE_CANCELED
-        if value == "snapshot-retained":
-            return SubvolumeStates.STATE_RETAINED
-
-        raise OpSmException(-errno.EINVAL, "invalid state '{0}'".format(value))
-
-@unique
-class SubvolumeActions(Enum):
-    ACTION_NONE         = 0
-    ACTION_SUCCESS      = 1
-    ACTION_FAILED       = 2
-    ACTION_CANCELLED    = 3
-    ACTION_RETAINED     = 4
+from ...exception import OpSmException
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeActions
 
 class TransitionKey(object):
     def __init__(self, subvol_type, state, action_type):
@@ -57,7 +19,7 @@ class TransitionKey(object):
         return not(self == other)
 
 class SubvolumeOpSm(object):
-    transition_table = {}
+    transition_table = {} # type: Dict
 
     @staticmethod
     def is_complete_state(state):

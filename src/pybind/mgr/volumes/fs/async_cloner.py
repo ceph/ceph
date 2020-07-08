@@ -10,17 +10,14 @@ import cephfs
 from .async_job import AsyncJobs
 from .exception import IndexException, MetadataMgrException, OpSmException, VolumeException
 from .fs_util import copy_file
-from .operations.op_sm import SubvolumeOpSm
-from .operations.op_sm import SubvolumeTypes
-from .operations.op_sm import SubvolumeActions
-from .operations.op_sm import SubvolumeStates
+from .operations.versions.op_sm import SubvolumeOpSm
+from .operations.versions.subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeActions
 from .operations.resolver import resolve
 from .operations.volume import open_volume, open_volume_lockless
 from .operations.group import open_group
 from .operations.subvolume import open_subvol
 from .operations.clone_index import open_clone_index
 from .operations.template import SubvolumeOpType
-from .operations.versions import SubvolumeBase
 
 log = logging.getLogger(__name__)
 
