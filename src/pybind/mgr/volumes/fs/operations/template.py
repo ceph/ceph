@@ -58,7 +58,7 @@ class SubvolumeOpType(Enum):
     CLONE_INTERNAL  = 'clone_internal'
 
 class SubvolumeTemplate(object):
-    VERSION = None
+    VERSION = None # type: int
 
     @staticmethod
     def version():
@@ -134,15 +134,6 @@ class SubvolumeTemplate(object):
 
         :param: subvolume snapshot name
         :return: None
-        """
-        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
-
-    def snapshot_path(self, snapname):
-        """
-        return the snapshot path for a given snapshot name
-
-        :param: subvolume snapshot name
-        :return: snapshot path
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
