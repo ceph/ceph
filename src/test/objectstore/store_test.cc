@@ -8365,6 +8365,7 @@ TEST_P(StoreTest, SpuriousReadErrorTest) {
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
   }
+  ch = store->open_collection(cid);
 
   cerr << "Injecting CRC error with no retry, expecting EIO" << std::endl;
   SetVal(g_conf(), "bluestore_retry_disk_reads", "0");
