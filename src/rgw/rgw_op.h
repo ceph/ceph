@@ -274,7 +274,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;

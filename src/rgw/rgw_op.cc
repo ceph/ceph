@@ -2101,25 +2101,6 @@ void RGWGetObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-static bool object_is_expired(map<string, bufferlist>& attrs) {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_DELETE_AT);
-  if (iter != attrs.end()) {
-    utime_t delete_at;
-    try {
-      decode(delete_at, iter->second);
-    } catch (buffer::error& err) {
-      dout(0) << "ERROR: " << __func__ << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
-      return false;
-    }
-
-    if (delete_at <= ceph_clock_now() && !delete_at.is_zero()) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 static inline void rgw_cond_decode_objtags(
   struct req_state *s,
   const std::map<std::string, buffer::list> &attrs)
@@ -2154,7 +2135,7 @@ void RGWGetObj::execute()
   perfcounter->inc(l_rgw_get);
 
   RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), s->object->get_obj());
-  RGWRados::Object::Read read_op(&op_target);
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op(s->object->get_read_op(s->obj_ctx));
 
   op_ret = get_params();
   if (op_ret < 0)
@@ -2164,22 +2145,21 @@ void RGWGetObj::execute()
   if (op_ret < 0)
     goto done_err;
 
-  read_op.conds.mod_ptr = mod_ptr;
-  read_op.conds.unmod_ptr = unmod_ptr;
-  read_op.conds.high_precision_time = s->system_request; /* system request need to use high precision time */
-  read_op.conds.mod_zone_id = mod_zone_id;
-  read_op.conds.mod_pg_ver = mod_pg_ver;
-  read_op.conds.if_match = if_match;
-  read_op.conds.if_nomatch = if_nomatch;
-  read_op.params.attrs = &attrs;
-  read_op.params.lastmod = &lastmod;
-  read_op.params.obj_size = &s->obj_size;
+  read_op->params.mod_ptr = mod_ptr;
+  read_op->params.unmod_ptr = unmod_ptr;
+  read_op->params.high_precision_time = s->system_request; /* system request need to use high precision time */
+  read_op->params.mod_zone_id = mod_zone_id;
+  read_op->params.mod_pg_ver = mod_pg_ver;
+  read_op->params.if_match = if_match;
+  read_op->params.if_nomatch = if_nomatch;
+  read_op->params.lastmod = &lastmod;
 
-  op_ret = read_op.prepare(s->yield);
+  op_ret = read_op->prepare(s->yield);
   if (op_ret < 0)
     goto done_err;
-  version_id = read_op.state.obj.key.instance;
-  s->object->set_obj_size(s->obj_size);
+  version_id = s->object->get_instance();
+  s->obj_size = s->object->get_obj_size();
+  attrs = s->object->get_attrs();
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
@@ -2201,7 +2181,7 @@ void RGWGetObj::execute()
     }
     torrent.init(s, store);
     rgw_obj obj = s->object->get_obj();
-    op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
+    op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
     if (op_ret < 0)
     {
       ldpp_dout(this, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
@@ -2218,7 +2198,7 @@ void RGWGetObj::execute()
   }
   /* end gettorrent */
 
-  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(attrs.attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
     goto done_err;
@@ -2260,20 +2240,20 @@ void RGWGetObj::execute()
     goto done_err;
   }
 
-  op_ret = read_op.range_to_ofs(s->obj_size, ofs, end);
+  op_ret = s->object->range_to_ofs(s->obj_size, ofs, end);
   if (op_ret < 0)
     goto done_err;
   total_len = (ofs <= end ? end + 1 - ofs : 0);
 
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
-  if (need_object_expiration() && object_is_expired(attrs)) {
+  if (need_object_expiration() && s->object->is_expired()) {
     op_ret = -ENOENT;
     goto done_err;
   }
 
   /* Decode S3 objtags, if any */
-  rgw_cond_decode_objtags(s, attrs);
+  rgw_cond_decode_objtags(s, attrs.attrs);
 
   start = ofs;
 
@@ -2297,7 +2277,7 @@ void RGWGetObj::execute()
   ofs_x = ofs;
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
-  op_ret = read_op.iterate(ofs_x, end_x, filter, s->yield);
+  op_ret = read_op->iterate(ofs_x, end_x, filter, s->yield);
 
   if (op_ret >= 0)
     op_ret = filter->flush();
@@ -4578,7 +4558,7 @@ void RGWPutMetadataObject::execute()
 
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
-  if (need_object_expiration() && object_is_expired(s->object->get_attrs().attrs)) {
+  if (need_object_expiration() && s->object->is_expired()) {
     op_ret = -ENOENT;
     return;
   }
@@ -4837,7 +4817,7 @@ void RGWDeleteObj::execute()
 
       /* Check whether the object has expired. Swift API documentation
        * stands that we should return 404 Not Found in such case. */
-      if (need_object_expiration() && object_is_expired(attrs.attrs)) {
+      if (need_object_expiration() && s->object->is_expired()) {
         op_ret = -ENOENT;
         return;
       }
