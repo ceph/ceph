@@ -14247,6 +14247,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     for (auto pool : pools) {
       pool->crush_rule = new_rule;
       pool->peering_crush_bucket_count = bucket_count;
+      pool->peering_crush_bucket_target = bucket_count;
       pool->peering_crush_bucket_barrier = dividing_id;
       pool->peering_crush_mandatory_member = 0;
       pool->size = 4; // TODO: make configurable
@@ -14315,7 +14316,6 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
       newp.min_size = 1;
-      newp.size = pgi.second.size / 2; // only support 2 zones now
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
@@ -14337,8 +14337,6 @@ void OSDMonitor::trigger_recovery_stretch_mode()
       pg_pool_t newp(pgi.second);
       // bump up the min_size since we have extra replicas available...
       newp.min_size = 2;
-      // ...and the target size to try and get back to normal!
-      newp.size = pgi.second.size * 2; // only support 2 zones now
       pending_inc.new_pools[pgi.first] = newp;
     }
   }

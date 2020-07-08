@@ -1386,6 +1386,10 @@ public:
   uint32_t peering_crush_bucket_barrier = 0;
   // including this one
   int32_t peering_crush_mandatory_member = 0;
+  // The per-bucket replica count is calculated with this "target"
+  // instead of the above crush_bucket_count. This means we can maintain a
+  // target size of 4 without attempting to place them all in 1 DC
+  uint32_t peering_crush_bucket_target = 0;
   /// last epoch that forced clients to resend
   epoch_t last_force_op_resend = 0;
   /// last epoch that forced clients to resend (pre-nautilus clients only)

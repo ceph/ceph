@@ -1536,6 +1536,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("min_size", get_min_size());
   f->dump_int("crush_rule", get_crush_rule());
   f->dump_int("peering_crush_bucket_count", peering_crush_bucket_count);
+  f->dump_int("peering_crush_bucket_target", peering_crush_bucket_target);
   f->dump_int("peering_crush_bucket_barrier", peering_crush_bucket_barrier);
   f->dump_int("peering_crush_bucket_mandatory_member", peering_crush_mandatory_member);
   f->dump_int("object_hash", get_object_hash());
@@ -2033,6 +2034,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(last_pg_merge_meta, bl);
   }
   if (peering_crush_bucket_barrier != 0 ||
+      peering_crush_bucket_target != 0 ||
       peering_crush_bucket_count !=0 ||
       peering_crush_mandatory_member) {
     ceph_assert(v >= 30);
@@ -2040,6 +2042,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   }
   if (v >= 30) {
     encode(peering_crush_bucket_count, bl);
+    encode(peering_crush_bucket_target, bl);
     encode(peering_crush_bucket_barrier, bl);
     encode(peering_crush_mandatory_member, bl);
   }
@@ -2225,6 +2228,7 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
   }
   if (struct_v >= 30) {
     decode(peering_crush_bucket_count, bl);
+    decode(peering_crush_bucket_target, bl);
     decode(peering_crush_bucket_barrier, bl);
     decode(peering_crush_mandatory_member, bl);
   }
