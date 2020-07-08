@@ -1695,6 +1695,7 @@ CDentry *CDir::_load_dentry(
     bufferlist &bl,
     const int pos,
     const std::set<snapid_t> *snaps,
+    double rand_threshold,
     bool *force_dirty)
 {
   auto q = bl.cbegin();
@@ -1857,7 +1858,7 @@ CDentry *CDir::_load_dentry(
         if (in->inode.is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        in->maybe_ephemeral_rand(true);
+        in->maybe_ephemeral_rand(true, rand_threshold);
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
@@ -1969,6 +1970,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   unsigned pos = omap.size() - 1;
+  double rand_threshold = get_inode()->get_ephemeral_rand();
   for (map<string, bufferlist>::reverse_iterator p = omap.rbegin();
        p != omap.rend();
        ++p, --pos) {
@@ -1980,7 +1982,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     try {
       dn = _load_dentry(
             p->first, dname, last, p->second, pos, snaps,
-            &force_dirty);
+            rand_threshold, &force_dirty);
     } catch (const buffer::error &err) {
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
