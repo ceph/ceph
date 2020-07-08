@@ -33,7 +33,7 @@ int main(int argc, const char **argv)
       ("debug", "show debug info")
       ("rank,r", po::value<string>(&rank_str), "the rank of cephfs, default(0) (e.g. -r cephfs_a:0)")
       ("minfo", po::value<string>(&minfo), "specify metapool, datapools and rank (e.g. cephfs_metadata_a:cephfs_data_a:0)")
-      ("ino,i", po::value<string>(&ino), "specify inode. e.g. 1099511627776, you can find it with cmd, 'ls -i'")
+      ("ino,i", po::value<string>(&ino), "specify inode. e.g. 1099511627776 or 0x10000000000, you can find it with cmd, 'ls -i'")
       ("out,o", po::value<string>(&out), "output file")
       ("in", po::value<string>(&in), "input file")
       ("yes-i-really-really-mean-it", "need by amend info")
@@ -43,7 +43,6 @@ int main(int argc, const char **argv)
   po::options_description modeoptions("mode options");
   modeoptions.add_options()
       ("mode", po::value<string>(&mode),
-       "\tconv : convert decimal ino to hex\n"  \
        "\tlistc : list all obj of dir\n"        \
        "\tshowm : show the info of ino\n"          \
        "\tshowfn : show the fnode of dir\n"        \
@@ -71,7 +70,7 @@ int main(int argc, const char **argv)
   if (vm.count("help")) {
     std::cout << version << std::endl;
     std::cout << "usage : \n"
-              << "  cephfs-meta-injection <conv|listc|showm|showfn|amend|amendfn> -r <fsname:rank> -i <ino>"
+              << "  cephfs-meta-injection <listc|showm|showfn|amend|amendfn> -r <fsname:rank> -i <ino>"
               << std::endl;
     std::cout << "example : \n"
               << "  amend info of inode(1099531628828)\n"
@@ -80,11 +79,6 @@ int main(int argc, const char **argv)
               << "    cephfs-meta-injection amend -r cephfs_a:0 -i 1099531628828 --in out --yes-i-really-mean-it"
               << std::endl;
     std::cout << all << std::endl;
-    return 0;
-  }
-
-  if (mode == "conv") {
-    MetaTool::conv2hexino(ino.c_str());
     return 0;
   }
 
