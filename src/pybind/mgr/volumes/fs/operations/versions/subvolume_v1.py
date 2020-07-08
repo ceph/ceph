@@ -8,11 +8,9 @@ from datetime import datetime
 import cephfs
 
 from .metadata_manager import MetadataManager
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
+from .op_sm import SubvolumeOpSm
 from .subvolume_base import SubvolumeBase
-from .subvolume_base import SubvolumeTypes
-from .subvolume_base import SubvolumeFeatures
-from ..op_sm import SubvolumeOpSm
-from ..op_sm import SubvolumeStates
 from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
@@ -55,6 +53,18 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     @property
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value]
+
+    def snapshot_base_path(self):
+        """ Base path for all snapshots """
+        return os.path.join(self.path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+
+    def snapshot_path(self, snapname):
+        """ Path to a specific snapshot named 'snapname' """
+        return os.path.join(self.snapshot_base_path(), snapname.encode('utf-8'))
+
+    def snapshot_data_path(self, snapname):
+        """ Path to user data directory within a subvolume snapshot named 'snapname' """
+        return self.snapshot_path(snapname)
 
     def create(self, size, isolate_nspace, pool, mode, uid, gid):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
@@ -241,14 +251,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         subvol_path = self.path
         return self._resize(subvol_path, newsize, noshrink)
 
-    def snapshot_path(self, snapname):
-        return os.path.join(self.path,
-                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                            snapname.encode('utf-8'))
-
-    def snapshot_data_path(self, snapname):
-        return self.snapshot_path(snapname)
-
     def create_snapshot(self, snapname):
         snappath = self.snapshot_path(snapname)
         mksnap(self.fs, snappath)
@@ -268,7 +270,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         rmsnap(self.fs, snappath)
 
     def snapshot_info(self, snapname):
-        snappath = self.snapshot_path(snapname)
+        snappath = self.snapshot_data_path(snapname)
         snap_info = {}
         try:
             snap_attrs = {'created_at':'ceph.snap.btime', 'size':'ceph.dir.rbytes',
@@ -287,8 +289,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
     def list_snapshots(self):
         try:
-            dirpath = os.path.join(self.path,
-                                   self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+            dirpath = self.snapshot_base_path()
             return listdir(self.fs, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:

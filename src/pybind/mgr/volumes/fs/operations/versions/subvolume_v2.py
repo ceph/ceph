@@ -3,27 +3,20 @@ import stat
 import uuid
 import errno
 import logging
-from datetime import datetime
 
 import cephfs
 
 from .metadata_manager import MetadataManager
-from .subvolume_base import SubvolumeBase
-from .subvolume_base import SubvolumeTypes
-from .subvolume_base import SubvolumeFeatures
-from ..op_sm import SubvolumeOpSm
-from ..op_sm import SubvolumeStates
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
+from .op_sm import SubvolumeOpSm
+from .subvolume_v1 import SubvolumeV1
 from ..template import SubvolumeTemplate
-from ..snapshot_util import mksnap, rmsnap
-from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
-from ...fs_util import listdir
+from ...exception import OpSmException, VolumeException, MetadataMgrException
 from ..template import SubvolumeOpType
-
-from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
-class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
+class SubvolumeV2(SubvolumeV1):
     """
     Version 2 subvolumes creates a subvolume with path as follows,
         volumes/<group-name>/<subvolume-name>/<uuid>/
@@ -50,18 +43,45 @@ class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
         return SubvolumeV2.VERSION
 
     @property
-    def path(self):
-        try:
-            # no need to stat the path -- open() does that
-            return self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH).encode('utf-8')
-        except MetadataMgrException as me:
-            raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
-
-    @property
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value,
                 SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value,
                 SubvolumeFeatures.FEATURE_SNAPSHOT_RETENTION.value]
+
+    @staticmethod
+    def is_valid_uuid(uuid_str):
+        try:
+            uuid.UUID(uuid_str)
+            return True
+        except ValueError:
+            return False
+
+    def snapshot_base_path(self):
+        return os.path.join(self.base_path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+
+    def snapshot_data_path(self, snapname):
+        snap_base_path = self.snapshot_path(snapname)
+        uuid_str = None
+        try:
+            with self.fs.opendir(snap_base_path) as dir_handle:
+                d = self.fs.readdir(dir_handle)
+                while d:
+                    if d.d_name not in (b".", b".."):
+                        d_full_path = os.path.join(snap_base_path, d.d_name)
+                        stx = self.fs.statx(d_full_path, cephfs.CEPH_STATX_MODE, cephfs.AT_SYMLINK_NOFOLLOW)
+                        if stat.S_ISDIR(stx.get('mode')):
+                            if self.is_valid_uuid(d.d_name.decode('utf-8')):
+                                uuid_str = d.d_name
+                    d = self.fs.readdir(dir_handle)
+        except cephfs.Error as e:
+            if e.errno == errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+            raise VolumeException(-e.args[0], e.args[1])
+
+        if not uuid_str:
+            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+
+        return os.path.join(snap_base_path, uuid_str)
 
     def _set_incarnation_metadata(self, subvolume_type, qpath, initial_state):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_TYPE, subvolume_type.value)
@@ -107,21 +127,6 @@ class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
 
-    def add_clone_source(self, volname, subvolume, snapname, flush=False):
-        self.metadata_mgr.add_section("source")
-        self.metadata_mgr.update_section("source", "volume", volname)
-        if not subvolume.group.is_default_group():
-            self.metadata_mgr.update_section("source", "group", subvolume.group_name)
-        self.metadata_mgr.update_section("source", "subvolume", subvolume.subvol_name)
-        self.metadata_mgr.update_section("source", "snapshot", snapname)
-        if flush:
-            self.metadata_mgr.flush()
-
-    def remove_clone_source(self, flush=False):
-        self.metadata_mgr.remove_section("source")
-        if flush:
-            self.metadata_mgr.flush()
-
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
@@ -134,7 +139,7 @@ class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
             stx = self.fs.statx(source_subvolume.snapshot_data_path(snapname),
                                 cephfs.CEPH_STATX_MODE | cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID,
                                 cephfs.AT_SYMLINK_NOFOLLOW)
-            uid= stx.get('uid')
+            uid = stx.get('uid')
             gid = stx.get('gid')
             stx_mode = stx.get('mode')
             if stx_mode is not None:
@@ -249,52 +254,6 @@ class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-    def _get_clone_source(self):
-        try:
-            clone_source = {
-                'volume'   : self.metadata_mgr.get_option("source", "volume"),
-                'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
-                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
-            }
-
-            try:
-                clone_source["group"] = self.metadata_mgr.get_option("source", "group")
-            except MetadataMgrException as me:
-                if me.errno == -errno.ENOENT:
-                    pass
-                else:
-                    raise
-        except MetadataMgrException as me:
-            raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
-        return clone_source
-
-    @property
-    def status(self):
-        state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
-        subvolume_type = self.subvol_type
-        subvolume_status = {
-            'state' : state.value
-        }
-        if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
-            subvolume_status["source"] = self._get_clone_source()
-        return subvolume_status
-
-    @property
-    def state(self):
-        return SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
-
-    @state.setter
-    def state(self, val):
-        state = val[0].value
-        flush = val[1]
-        self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, state)
-        if flush:
-            self.metadata_mgr.flush()
-
-    @property
-    def type(self):
-        return SubvolumeTypes.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE))
-
     def trash_incarnation_dir(self):
         self._trash_dir(self.path)
 
@@ -302,16 +261,13 @@ class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
         if self.list_snapshots():
             if not retainsnaps:
                 raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(self.subvolname))
-            self.trash_incarnation_dir()
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
-            self.metadata_mgr.flush()
+            if self.state != SubvolumeStates.STATE_RETAINED:
+                self.trash_incarnation_dir()
+                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
+                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
+                self.metadata_mgr.flush()
         else:
             self.trash_base_dir()
-
-    def resize(self, newsize, noshrink):
-        subvol_path = self.path
-        return self._resize(subvol_path, newsize, noshrink)
 
     def info(self):
         if self.state != SubvolumeStates.STATE_RETAINED:
@@ -319,121 +275,9 @@ class SubvolumeV2(SubvolumeBase, SubvolumeTemplate):
 
         return {'type': self.subvol_type.value, 'features': self.features, 'state': SubvolumeStates.STATE_RETAINED.value}
 
-    def snapshot_path(self, snapname):
-        return os.path.join(self.base_path,
-                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                            snapname.encode('utf-8'))
-
-    @staticmethod
-    def is_valid_uuid(uuid_str):
-        try:
-            uuid.UUID(uuid_str)
-            return True
-        except ValueError:
-            return False
-
-    def snapshot_data_path(self, snapname):
-        snap_base_path = self.snapshot_path(snapname)
-        uuid_str = None
-        try:
-            with self.fs.opendir(snap_base_path) as dir_handle:
-                d = self.fs.readdir(dir_handle)
-                while d:
-                    if d.d_name not in (b".", b".."):
-                        d_full_path = os.path.join(snap_base_path, d.d_name)
-                        stx = self.fs.statx(d_full_path, cephfs.CEPH_STATX_MODE, cephfs.AT_SYMLINK_NOFOLLOW)
-                        if stat.S_ISDIR(stx.get('mode')):
-                            if self.is_valid_uuid(d.d_name.decode('utf-8')):
-                                uuid_str = d.d_name
-                    d = self.fs.readdir(dir_handle)
-        except cephfs.Error as e:
-            if e.errno == errno.ENOENT:
-                raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
-            raise VolumeException(-e.args[0], e.args[1])
-
-        if not uuid_str:
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
-
-        return os.path.join(snap_base_path, uuid_str)
-
-    def create_snapshot(self, snapname):
-        snappath = self.snapshot_path(snapname)
-        mksnap(self.fs, snappath)
-
-    def has_pending_clones(self, snapname):
-        try:
-            return self.metadata_mgr.section_has_item('clone snaps', snapname)
-        except MetadataMgrException as me:
-            if me.errno == -errno.ENOENT:
-                return False
-            raise
-
     def remove_snapshot(self, snapname):
-        if self.has_pending_clones(snapname):
-            raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
-        snappath = self.snapshot_path(snapname)
-        rmsnap(self.fs, snappath)
+        super(SubvolumeV2, self).remove_snapshot(snapname)
         if self.state == SubvolumeStates.STATE_RETAINED and not self.list_snapshots():
             self.trash_base_dir()
             # tickle the volume purge job to purge this entry, using ESTALE
             raise VolumeException(-errno.ESTALE, "subvolume '{0}' has been removed as the last retained snapshot is removed".format(self.subvolname))
-
-    def snapshot_info(self, snapname):
-        snappath = self.snapshot_data_path(snapname)
-        snap_info = {}
-        try:
-            snap_attrs = {'created_at':'ceph.snap.btime', 'size':'ceph.dir.rbytes',
-                          'data_pool':'ceph.dir.layout.pool'}
-            for key, val in snap_attrs.items():
-                snap_info[key] = self.fs.getxattr(snappath, val)
-            return {'size': int(snap_info['size']),
-                    'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
-                    'data_pool': snap_info['data_pool'].decode('utf-8'),
-                    'has_pending_clones': "yes" if self.has_pending_clones(snapname) else "no"}
-        except cephfs.Error as e:
-            if e.errno == errno.ENOENT:
-                raise VolumeException(-errno.ENOENT,
-                                      "snapshot '{0}' does not exist".format(snapname))
-            raise VolumeException(-e.args[0], e.args[1])
-
-    def list_snapshots(self):
-        try:
-            dirpath = os.path.join(self.base_path,
-                                   self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
-            return listdir(self.fs, dirpath)
-        except VolumeException as ve:
-            if ve.errno == -errno.ENOENT:
-                return []
-            raise
-
-    def _add_snap_clone(self, track_id, snapname):
-        self.metadata_mgr.add_section("clone snaps")
-        self.metadata_mgr.update_section("clone snaps", track_id, snapname)
-        self.metadata_mgr.flush()
-
-    def _remove_snap_clone(self, track_id):
-        self.metadata_mgr.remove_option("clone snaps", track_id)
-        self.metadata_mgr.flush()
-
-    def attach_snapshot(self, snapname, tgt_subvolume):
-        if not snapname.encode('utf-8') in self.list_snapshots():
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
-        try:
-            create_clone_index(self.fs, self.vol_spec)
-            with open_clone_index(self.fs, self.vol_spec) as index:
-                track_idx = index.track(tgt_subvolume.base_path)
-                self._add_snap_clone(track_idx, snapname)
-        except (IndexException, MetadataMgrException) as e:
-            log.warning("error creating clone index: {0}".format(e))
-            raise VolumeException(-errno.EINVAL, "error cloning subvolume")
-
-    def detach_snapshot(self, snapname, track_id):
-        if not snapname.encode('utf-8') in self.list_snapshots():
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
-        try:
-            with open_clone_index(self.fs, self.vol_spec) as index:
-                index.untrack(track_id)
-                self._remove_snap_clone(track_id)
-        except (IndexException, MetadataMgrException) as e:
-            log.warning("error delining snapshot from clone: {0}".format(e))
-            raise VolumeException(-errno.EINVAL, "error delinking snapshot from clone")
