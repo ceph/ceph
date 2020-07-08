@@ -31,8 +31,9 @@ export class PwdExpirationNotificationComponent implements OnInit, OnDestroy {
         } else {
           this.alertType = 'warning';
         }
-        this.displayNotification = true;
-        this.authStorageService.isPwdDisplayedSource.next(true);
+        this.displayNotification =
+          this.expirationDays <= this.pwdExpirationSettings.pwdExpirationWarning1;
+        this.authStorageService.isPwdDisplayedSource.next(this.displayNotification);
       }
     });
   }
