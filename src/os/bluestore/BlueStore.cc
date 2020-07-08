@@ -803,6 +803,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
       ++num_pinned;
     }
     ++num; // we count both pinned and unpinned entries
+    dout(20) << __func__ << " " << this << " " << o->oid << " added, num=" << num << dendl;
   }
   void _rm(BlueStore::Onode* o) override
   {
@@ -814,19 +815,20 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     }
     ceph_assert(num);
     --num;
+    dout(20) << __func__ << " " << this << " " << " " << o->oid << " removed, num=" << num << dendl;
   }
   void _pin(BlueStore::Onode* o) override
   {
     lru.erase(lru.iterator_to(*o));
     ++num_pinned;
-    dout(30) << __func__ << " " << o->oid << " pinned" << dendl;
+    dout(20) << __func__ << this << " " << " " << " " << o->oid << " pinned" << dendl;
   }
   void _unpin(BlueStore::Onode* o) override
   {
     lru.push_front(*o);
     ceph_assert(num_pinned);
     --num_pinned;
-    dout(30) << __func__ << " " << o->oid << " unpinned" << dendl;
+    dout(20) << __func__ << this << " " << " " << " " << o->oid << " unpinned" << dendl;
   }
 
   void _trim_to(uint64_t new_size) override
@@ -842,7 +844,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     num -= n;
     while (n-- > 0) {
       BlueStore::Onode *o = &*p;
-      dout(30) << __func__ << "  rm " << o->oid << " "
+      dout(20) << __func__ << "  rm " << o->oid << " "
                << o->nref << " " << o->cached << " " << o->pinned << dendl;
       if (p != lru.begin()) {
         lru.erase(p--);
@@ -852,7 +854,7 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
       }
       auto pinned = !o->pop_cache();
       ceph_assert(!pinned);
-      o->c->onode_map.remove(o->oid);
+      o->c->onode_map._remove(o->oid);
     }
   }
   void move_pinned(OnodeCacheShard *to, BlueStore::Onode *o) override
@@ -1577,11 +1579,17 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid,
 			  << dendl;
     return p->second;
   }
-  ldout(cache->cct, 30) << __func__ << " " << oid << " " << o << dendl;
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
   onode_map[oid] = o;
   cache->_add(o.get(), 1);
   cache->_trim();
   return o;
+}
+
+void BlueStore::OnodeSpace::_remove(const ghobject_t& oid)
+{
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << dendl;
+  onode_map.erase(oid);
 }
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
@@ -1621,7 +1629,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 void BlueStore::OnodeSpace::clear()
 {
   std::lock_guard l(cache->lock);
-  ldout(cache->cct, 10) << __func__ << dendl;
+  ldout(cache->cct, 10) << __func__ << " " << onode_map.size()<< dendl;
   for (auto &p : onode_map) {
     cache->_rm(p.second.get());
   }
@@ -7143,7 +7151,7 @@ int BlueStore::_mount(bool kv_only, bool open_db)
  out_stop:
   _kv_stop();
  out_coll:
-  _flush_cache();
+  _shutdown_cache();
  out_db:
   _close_db_and_around(false);
  out_bdev:
@@ -7167,7 +7175,7 @@ int BlueStore::umount()
     mempool_thread.shutdown();
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
-    _flush_cache();
+    _shutdown_cache();
     dout(20) << __func__ << " closing" << dendl;
 
   }
@@ -8287,7 +8295,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
 
 out_scan:
   mempool_thread.shutdown();
-  _flush_cache();
+  _shutdown_cache();
 out_db:
   _close_db_and_around(false);
 out_bdev:
@@ -15757,22 +15765,15 @@ void BlueStore::generate_db_histogram(Formatter *f)
 
 }
 
-void BlueStore::_flush_cache()
+void BlueStore::_shutdown_cache()
 {
   dout(10) << __func__ << dendl;
-  for (auto i : onode_cache_shards) {
-    i->flush();
-    ceph_assert(i->empty());
-  }
   for (auto i : buffer_cache_shards) {
     i->flush();
     ceph_assert(i->empty());
   }
   for (auto& p : coll_map) {
-    if (!p.second->onode_map.empty()) {
-      derr << __func__ << " stray onodes on " << p.first << dendl;
-      p.second->onode_map.dump<0>(cct);
-    }
+    p.second->onode_map.clear();
     if (!p.second->shared_blob_set.empty()) {
       derr << __func__ << " stray shared blobs on " << p.first << dendl;
       p.second->shared_blob_set.dump<0>(cct);
@@ -15781,6 +15782,9 @@ void BlueStore::_flush_cache()
     ceph_assert(p.second->shared_blob_set.empty());
   }
   coll_map.clear();
+  for (auto i : onode_cache_shards) {
+    ceph_assert(i->empty());
+  }
 }
 
 // For external caller.
