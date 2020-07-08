@@ -100,7 +100,7 @@ export CEPH_DEV=1
 [ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR="$MGR"
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS="$FS"
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
-[ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM="$GANESHA"
+[ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM="$NFS"
 
 # if none of the CEPH_NUM_* number is specified, kill the existing
 # cluster.
@@ -189,7 +189,7 @@ inc_osd_num=0
 
 msgr="21"
 
-usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 GANESHA=1 $0 -n -d\n"
+usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -464,8 +464,8 @@ if [ "$new" -eq 0 ]; then
         CEPH_NUM_MGR="$MGR"
     RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
-    GANESHA=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
-        GANESHA_DAEMON_NUM="$GANESHA"
+    NFS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
+        GANESHA_DAEMON_NUM="$NFS"
 else
     # only delete if -n
     if [ -e "$conf_fn" ]; then
@@ -1058,15 +1058,33 @@ EOF
 }
 
 # Ganesha Daemons requires nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace
-# (version 2.7.6-2 and above) packages installed. On Fedora>=30 these packages
-# can be installed directly with 'dnf'. For CentOS>=8 the packages need to be
-# downloaded first from  https://download.nfs-ganesha.org/2.7/2.7.6/CentOS/ and
-# then install it. Similarly for Ubuntu 16.04 follow the instructions on
-# https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.7
+# nfs-ganesha-rados-urls (version 2.8.3 and above) packages installed. On
+# Fedora>=31 these packages can be installed directly with 'dnf'. For CentOS>=8
+# the packages are available at
+# https://wiki.centos.org/SpecialInterestGroup/Storage
+# Similarly for Ubuntu 16.04 follow the instructions on
+# https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.8
 
 start_ganesha() {
+    cluster_id="vstart"
     GANESHA_PORT=$(($CEPH_PORT + 4000))
     local ganesha=0
+    test_user="ganesha-$cluster_id"
+    pool_name="nfs-ganesha"
+    namespace=$cluster_id
+    url="rados://$pool_name/$namespace/conf-nfs.$test_user"
+
+    prun ceph_adm auth get-or-create client.$test_user \
+        mon "allow r" \
+        osd "allow rw pool=$pool_name namespace=$namespace, allow rw tag cephfs data=a" \
+        mds "allow rw path=/" \
+        >> "$keyring_fn"
+
+    ceph_adm mgr module enable test_orchestrator
+    ceph_adm orch set backend test_orchestrator
+    ceph_adm test_orchestrator load_data -i $CEPH_ROOT/src/pybind/mgr/test_orchestrator/dummy_data.json
+    prun ceph_adm nfs cluster create cephfs $cluster_id
+    prun ceph_adm nfs export create cephfs "a" $cluster_id "/cephfs"
 
     for name in a b c d e f g h i j k l m n o p
     do
@@ -1075,87 +1093,68 @@ start_ganesha() {
         port=$(($GANESHA_PORT + ganesha))
         ganesha=$(($ganesha + 1))
         ganesha_dir="$CEPH_DEV_DIR/ganesha.$name"
-
-        echo "Starting ganesha.$name on port: $port"
-
         prun rm -rf $ganesha_dir
         prun mkdir -p $ganesha_dir
 
         echo "NFS_CORE_PARAM {
-        Enable_NLM = false;
-        Enable_RQUOTA = false;
-        Protocols = 4;
-        NFS_Port = $port;
-}
+            Enable_NLM = false;
+            Enable_RQUOTA = false;
+            Protocols = 4;
+            NFS_Port = $port;
+        }
 
-CACHEINODE {
-        Dir_Chunk = 0;
-        NParts = 1;
-        Cache_Size = 1;
-}
+        MDCACHE {
+           Dir_Chunk = 0;
+           NParts = 1;
+           Cache_Size = 1;
+        }
 
-NFSv4 {
-        RecoveryBackend = 'rados_cluster';
-        Minor_Versions = 1, 2;
-}
+        NFSv4 {
+           RecoveryBackend = rados_cluster;
+           Minor_Versions = 1, 2;
+        }
 
-EXPORT {
-	Export_Id = 100;
-	Transports = TCP;
-	Path = /;
-	Pseudo = /ceph/;
-	Protocols = 4;
-	Access_Type = RW;
-	Attr_Expiration_Time = 0;
-	Squash = None;
-	FSAL {
-	    Name = CEPH;
-	}
-}
+        %url $url
 
-CEPH {
-	Ceph_Conf = $conf_fn;
-}
+        RADOS_KV {
+           pool = $pool_name;
+           namespace = $namespace;
+           UserId = $test_user;
+           nodeid = $name;
+        }
 
-RADOS_KV {
-	Ceph_Conf = $conf_fn;
-	pool = 'nfs-ganesha';
-	namespace = 'ganesha';
-	UserId = 'admin';
-	nodeid = $name;
-}" > "$ganesha_dir/ganesha.conf"
-
-
+        RADOS_URLS {
+	   Userid = $test_user;
+	   watch_url = \"$url\";
+        }" > "$ganesha_dir/ganesha-$name.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
         ip = $IP
         port = $port
         ganesha data = $ganesha_dir
-        pid file = $ganesha_dir/ganesha.pid
+        pid file = $ganesha_dir/ganesha-$name.pid
 EOF
 
-        if !($CEPH_BIN/rados lspools | grep "nfs-ganesha"); then
-            prun ceph_adm osd pool create nfs-ganesha
-            prun ceph_adm osd pool application enable nfs-ganesha nfs
-        fi
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha add $name
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
-
-        prun /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" ganesha.nfsd -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
+
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
         if $with_mgr_dashboard; then
-            $CEPH_BIN/rados -p nfs-ganesha put "conf-$name" "$ganesha_dir/ganesha.conf"
+            $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha-$name.conf"
         fi
+
+        echo "$test_user ganesha daemon $name started on port: $port"
     done
 
     if $with_mgr_dashboard; then
-        ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace nfs-ganesha
+        ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace $pool_name
     fi
 }
 
@@ -1364,7 +1363,17 @@ fi
 
 # Ganesha Daemons
 if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
-    start_ganesha
+    pseudo_path="/cephfs"
+    if [ "$cephadm" -gt 0 ]; then
+        cluster_id="vstart"
+        prun ceph_adm nfs cluster create cephfs $cluster_id
+        prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
+        port="2049"
+    else
+        start_ganesha
+        port="<ganesha-port-num>"
+    fi
+    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
 fi
 
 do_cache() {
