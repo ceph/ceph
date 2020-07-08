@@ -189,8 +189,14 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   // FIPS zeroization audit 20191115: this memset is fine.
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
+#ifdef __linux__
+  address.sun_path[0] = '\0';
+  snprintf(address.sun_path+1, sizeof(address.sun_path),
+	   "%s", sock_path.c_str());
+#else
   snprintf(address.sun_path, sizeof(address.sun_path),
 	   "%s", sock_path.c_str());
+#endif
   if (::bind(sock_fd, (struct sockaddr*)&address,
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
