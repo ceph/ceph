@@ -60,10 +60,6 @@ TestClusterRef get_cluster() {
   return cluster_ref;
 }
 
-} // namespace librados_test_stub
-
-namespace {
-
 librados::TestClassHandler *get_class_handler() {
   static boost::shared_ptr<librados::TestClassHandler> s_class_handler;
   if (!s_class_handler) {
@@ -72,6 +68,10 @@ librados::TestClassHandler *get_class_handler() {
   }
   return s_class_handler.get();
 }
+
+} // namespace librados_test_stub
+
+namespace {
 
 void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
   if (outbuf) {
@@ -525,7 +525,8 @@ int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
-    oid, boost::bind(&TestIoCtxImpl::exec, _1, _2, get_class_handler(), cls,
+    oid, boost::bind(&TestIoCtxImpl::exec, _1, _2,
+                     librados_test_stub::get_class_handler(), cls,
                      method, inbl, &outbl, ctx->get_snap_read(),
                      ctx->get_snap_context()));
 }
@@ -816,8 +817,8 @@ void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::exec, _1, _2,
-			       get_class_handler(), cls, method, inbl, _3, _4,
-			       _5));
+			       librados_test_stub::get_class_handler(), cls,
+			       method, inbl, _3, _4, _5));
 }
 
 void ObjectOperation::set_op_flags2(int flags) {
@@ -1492,7 +1493,7 @@ int cls_log(int level, const char *format, ...) {
 }
 
 int cls_register(const char *name, cls_handle_t *handle) {
-  librados::TestClassHandler *cls = get_class_handler();
+  librados::TestClassHandler *cls = librados_test_stub::get_class_handler();
   return cls->create(name, handle);
 }
 
@@ -1500,7 +1501,7 @@ int cls_register_cxx_method(cls_handle_t hclass, const char *method,
     int flags,
     cls_method_cxx_call_t class_call,
     cls_method_handle_t *handle) {
-  librados::TestClassHandler *cls = get_class_handler();
+  librados::TestClassHandler *cls = librados_test_stub::get_class_handler();
   return cls->create_method(hclass, method, class_call, handle);
 }
 
@@ -1509,7 +1510,7 @@ int cls_register_cxx_filter(cls_handle_t hclass,
                             cls_cxx_filter_factory_t fn,
                             cls_filter_handle_t *)
 {
-  librados::TestClassHandler *cls = get_class_handler();
+  librados::TestClassHandler *cls = librados_test_stub::get_class_handler();
   return cls->create_filter(hclass, filter_name, fn);
 }
 
