@@ -340,6 +340,28 @@ void RGWRadosStore::finalize(void)
     rados->finalize();
 }
 
+int RGWObject::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
+{
+  if (ofs < 0) {
+    ofs += obj_size;
+    if (ofs < 0)
+      ofs = 0;
+    end = obj_size - 1;
+  } else if (end < 0) {
+    end = obj_size - 1;
+  }
+
+  if (obj_size > 0) {
+    if (ofs >= (off_t)obj_size) {
+      return -ERANGE;
+    }
+    if (end >= (off_t)obj_size) {
+      end = obj_size - 1;
+    }
+  }
+  return 0;
+}
+
 int RGWRadosObject::get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh)
 {
   rgw_obj obj(bucket.get_bi(), key.name);
@@ -441,9 +463,98 @@ void RGWRadosObject::set_prefetch_data(RGWObjectCtx *rctx)
   store->getRados()->set_prefetch_data(rctx, obj);
 }
 
+bool RGWRadosObject::is_expired() {
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    try {
+      auto bufit = iter->second.cbegin();
+      decode(delete_at, bufit);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
+      return false;
+    }
+
+    if (delete_at <= ceph_clock_now() && !delete_at.is_zero()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void RGWRadosObject::gen_rand_obj_instance_name()
 {
   store->getRados()->gen_rand_obj_instance_name(&key);
+}
+
+int RGWRadosObject::omap_get_vals_by_keys(const std::string& oid,
+					  const std::set<std::string>& keys,
+					  std::map<std::string, bufferlist> *vals)
+{
+  int ret;
+  rgw_raw_obj head_obj;
+  librados::IoCtx cur_ioctx;
+  rgw_obj obj = get_obj();
+
+  store->getRados()->obj_to_raw(bucket->get_placement_rule(), obj, &head_obj);
+  ret = store->get_obj_head_ioctx(bucket->get_info(), obj, &cur_ioctx);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return cur_ioctx.omap_get_vals_by_keys(oid, keys, vals);
+}
+
+RGWObject::ReadOp* RGWRadosObject::get_read_op(RGWObjectCtx *ctx)
+{
+  return new RGWRadosObject::RadosReadOp(this, ctx);
+}
+
+RGWRadosObject::RadosReadOp::RadosReadOp(RGWRadosObject *_source, RGWObjectCtx *_rctx) :
+	source(_source),
+	rctx(_rctx),
+	op_target(_source->store->getRados(),
+		  _source->get_bucket()->get_info(),
+		  *static_cast<RGWObjectCtx *>(rctx),
+		  _source->get_obj()),
+	parent_op(&op_target)
+{ }
+
+int RGWRadosObject::RadosReadOp::prepare(optional_yield y)
+{
+  uint64_t obj_size;
+
+  parent_op.conds.mod_ptr = params.mod_ptr;
+  parent_op.conds.unmod_ptr = params.unmod_ptr;
+  parent_op.conds.high_precision_time = params.high_precision_time;
+  parent_op.conds.mod_zone_id = params.mod_zone_id;
+  parent_op.conds.mod_pg_ver = params.mod_pg_ver;
+  parent_op.conds.if_match = params.if_match;
+  parent_op.conds.if_nomatch = params.if_nomatch;
+  parent_op.params.lastmod = params.lastmod;
+  parent_op.params.target_obj = params.target_obj;
+  parent_op.params.obj_size = &obj_size;
+  parent_op.params.attrs = &source->get_attrs().attrs;
+
+  int ret = parent_op.prepare(y);
+  if (ret < 0)
+    return ret;
+
+  source->set_key(parent_op.state.obj.key);
+  source->set_obj_size(obj_size);
+
+  return ret;
+}
+
+int RGWRadosObject::RadosReadOp::read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y)
+{
+  return parent_op.read(ofs, end, bl, y);
+}
+
+int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y)
+{
+  return parent_op.iterate(ofs, end, cb, y);
 }
 
 int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket)
@@ -711,6 +822,11 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_raw_storage_provider(CephContext 
   }
 
   return store;
+}
+
+int rgw::sal::RGWRadosStore::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx)
+{
+  return rados->get_obj_head_ioctx(bucket_info, obj, ioctx);
 }
 
 void RGWStoreManager::close_storage(rgw::sal::RGWRadosStore *store)

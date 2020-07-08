@@ -36,9 +36,16 @@ struct RGWAttrs {
 
   void emplace(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+    map<string, bufferlist>::iterator find(const std::string& key);
   }
   std::map<std::string, bufferlist>::iterator find(const std::string& key) {
     return attrs.find(key);
+  }
+  std::map<std::string, bufferlist>::iterator end() {
+    return attrs.end();
+  }
+  std::map<std::string, bufferlist>::iterator begin() {
+    return attrs.begin();
   }
 };
 
@@ -265,19 +272,58 @@ class RGWObject {
     RGWBucket* bucket;
     std::string index_hash_source;
     uint64_t obj_size;
+    RGWAttrs attrs;
     ceph::real_time mtime;
 
   public:
-    RGWObject() : key(), bucket(nullptr), index_hash_source(), obj_size(), mtime() {}
-    RGWObject(const rgw_obj_key& _k) : key(_k), bucket(), index_hash_source(), obj_size(), mtime() {}
-    RGWObject(const rgw_obj_key& _k, RGWBucket* _b) : key(_k), bucket(_b), index_hash_source(), obj_size(), mtime() {}
-    RGWObject(const RGWObject& _o) = default;
+
+    struct ReadOp {
+      struct Params {
+        const ceph::real_time *mod_ptr{nullptr};
+        const ceph::real_time *unmod_ptr{nullptr};
+        bool high_precision_time{false};
+        uint32_t mod_zone_id{0};
+        uint64_t mod_pg_ver{0};
+        const char *if_match{nullptr};
+        const char *if_nomatch{nullptr};
+        ceph::real_time *lastmod{nullptr};
+        rgw_obj *target_obj{nullptr}; // XXX dang remove?
+      } params;
+
+      virtual ~ReadOp() = default;
+
+      virtual int prepare(optional_yield y) = 0;
+      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) = 0;
+      virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) = 0;
+    };
+
+    RGWObject()
+      : key(),
+      bucket(nullptr),
+      index_hash_source(),
+      obj_size(),
+      attrs(),
+      mtime() {}
+    RGWObject(const rgw_obj_key& _k)
+      : key(_k),
+      bucket(),
+      index_hash_source(),
+      obj_size(),
+      attrs(),
+      mtime() {}
+    RGWObject(const rgw_obj_key& _k, RGWBucket* _b)
+      : key(_k),
+      bucket(_b),
+      index_hash_source(),
+      obj_size(),
+      attrs(),
+      mtime() {}
+    RGWObject(RGWObject& _o) = default;
 
     virtual ~RGWObject() = default;
 
     virtual int read(off_t offset, off_t length, std::iostream& stream) = 0;
     virtual int write(off_t offset, off_t length, std::iostream& stream) = 0;
-    virtual RGWAttrs& get_attrs(void) = 0;
     virtual int delete_object(void) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
@@ -293,7 +339,9 @@ class RGWObject {
     virtual int modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y) = 0;
     virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y) = 0;
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) = 0;
+    virtual bool is_expired() = 0;
 
+    RGWAttrs& get_attrs(void) { return attrs; }
     ceph::real_time get_mtime(void) const { return mtime; }
     uint64_t get_obj_size(void) const { return obj_size; }
     RGWBucket* get_bucket(void) const { return bucket; }
@@ -301,6 +349,15 @@ class RGWObject {
     std::string get_hash_source(void) { return index_hash_source; }
     void set_hash_source(std::string s) { index_hash_source = s; }
     std::string get_oid(void) const { return key.get_oid(); }
+    int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
+
+    /* OPs */
+    virtual ReadOp* get_read_op(RGWObjectCtx *) = 0;
+
+    /* OMAP */
+    virtual int omap_get_vals_by_keys(const std::string& oid,
+			      const std::set<std::string>& keys,
+			      std::map<std::string, bufferlist> *vals) = 0;
 
     static bool empty(RGWObject* o) { return (!o || o->empty()); }
     virtual std::unique_ptr<RGWObject> clone() = 0;
@@ -361,33 +418,40 @@ class RGWRadosUser : public RGWUser {
 class RGWRadosObject : public RGWObject {
   private:
     RGWRadosStore *store;
-    RGWAttrs attrs;
     RGWAccessControlPolicy acls;
 
   public:
-    RGWRadosObject()
-      : store(),
-	attrs(),
-        acls() {
-    }
+    struct RadosReadOp : public ReadOp {
+    private:
+      RGWRadosObject* source;
+      RGWObjectCtx* rctx;
+      RGWRados::Object op_target;
+      RGWRados::Object::Read parent_op;
+
+    public:
+      RadosReadOp(RGWRadosObject *_source, RGWObjectCtx *_rctx);
+
+      virtual int prepare(optional_yield y) override;
+      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) override;
+      virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) override;
+    };
+
+    RGWRadosObject() = default;
 
     RGWRadosObject(RGWRadosStore *_st, const rgw_obj_key& _k)
       : RGWObject(_k),
 	store(_st),
-	attrs(),
         acls() {
     }
     RGWRadosObject(RGWRadosStore *_st, const rgw_obj_key& _k, RGWBucket* _b)
       : RGWObject(_k, _b),
 	store(_st),
-	attrs(),
         acls() {
     }
-    RGWRadosObject(const RGWRadosObject& _o) = default;
+    RGWRadosObject(RGWRadosObject& _o) = default;
 
     int read(off_t offset, off_t length, std::iostream& stream) { return length; }
     int write(off_t offset, off_t length, std::iostream& stream) { return length; }
-    RGWAttrs& get_attrs(void) { return attrs; }
     int delete_object(void) { return 0; }
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     int set_acl(const RGWAccessControlPolicy& acl) { acls = acl; return 0; }
@@ -400,10 +464,19 @@ class RGWRadosObject : public RGWObject {
     virtual int modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y) override;
     virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y) override;
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) override;
+    virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
     virtual std::unique_ptr<RGWObject> clone() {
       return std::unique_ptr<RGWObject>(new RGWRadosObject(*this));
     }
+
+    /* OPs */
+    virtual ReadOp* get_read_op(RGWObjectCtx *) override;
+
+    /* OMAP */
+    virtual int omap_get_vals_by_keys(const std::string& oid,
+			      const std::set<std::string>& keys,
+			      std::map<std::string, bufferlist> *vals) override;
 
   private:
     int read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj = nullptr);
@@ -534,6 +607,10 @@ class RGWRadosStore : public RGWStore {
     void finalize(void) override;
 
     virtual CephContext *ctx(void) { return rados->ctx(); }
+
+
+    int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+			   librados::IoCtx *ioctx);
 
     // implements DoutPrefixProvider
     std::ostream& gen_prefix(std::ostream& out) const { return out << "RGWRadosStore "; }

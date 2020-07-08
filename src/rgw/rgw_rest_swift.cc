@@ -1553,8 +1553,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
       }
     }
 
-    get_contype_from_attrs(attrs, content_type);
-    dump_object_metadata(this, s, attrs);
+    get_contype_from_attrs(attrs.attrs, content_type);
+    dump_object_metadata(this, s, attrs.attrs);
   }
 
   end_header(s, this, !content_type.empty() ? content_type.c_str()
