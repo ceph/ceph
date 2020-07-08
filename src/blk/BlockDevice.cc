@@ -131,8 +131,14 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 #endif
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #if defined(HAVE_LIBZBC)
-  if (zbc_device_is_zoned(path.c_str(), false, nullptr)) {
+  r = zbc_device_is_zoned(path.c_str(), false, nullptr);
+  if (r == 1) {
     return new HMSMRDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
+  }
+  if (r < 0) {
+    derr << __func__ << " zbc_device_is_zoned(" << path << ") failed: "
+	 << cpp_strerror(r) << dendl;
+    goto out_fail;
   }
 #endif
   if (type == "kernel") {
@@ -148,6 +154,8 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 #endif
 
   derr << __func__ << " unknown backend " << type << dendl;
+
+out_fail:
   ceph_abort();
   return NULL;
 }
