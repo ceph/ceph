@@ -2,10 +2,6 @@ import os
 import errno
 from contextlib import contextmanager
 
-import cephfs
-
-from .snapshot_util import mksnap, rmsnap
-from ..fs_util import listdir, get_ancestor_xattr
 from ..exception import VolumeException
 from .template import SubvolumeOpType
 
