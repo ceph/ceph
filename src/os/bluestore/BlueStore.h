@@ -1292,6 +1292,8 @@ public:
 
     friend struct Collection; // for split_cache()
 
+    friend struct LruOnodeCacheShard;
+    void _remove(const ghobject_t& oid);
   public:
     OnodeSpace(OnodeCacheShard *c) : cache(c) {}
     ~OnodeSpace() {
@@ -1300,9 +1302,6 @@ public:
 
     OnodeRef add(const ghobject_t& oid, OnodeRef& o);
     OnodeRef lookup(const ghobject_t& o);
-    void remove(const ghobject_t& oid) {
-      onode_map.erase(oid);
-    }
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
 		const mempool::bluestore_cache_other::string& new_okey);
@@ -2643,7 +2642,7 @@ public:
 
   void get_db_statistics(ceph::Formatter *f) override;
   void generate_db_histogram(ceph::Formatter *f) override;
-  void _flush_cache();
+  void _shutdown_cache();
   int flush_cache(std::ostream *os = NULL) override;
   void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");
