@@ -18,6 +18,12 @@ void siprovider_meta_info::dump(Formatter *f) const
   encode_json("id", id, f);
 }
 
+void siprovider_meta_info::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("section", section, obj);
+  JSONDecoder::decode_json("id", id, obj);
+}
+
 int SIProvider_MetaFull::init()
 {
   int r = get_all_sections();

@@ -32,6 +32,7 @@ struct siprovider_meta_info : public SIProvider::EntryInfoBase {
   }
 
   void dump(Formatter *f) const override;
+  void decode_json(JSONObj *obj) override;
 };
 WRITE_CLASS_ENCODER(siprovider_meta_info)
 

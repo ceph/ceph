@@ -16,6 +16,12 @@ void siprovider_data_info::dump(Formatter *f) const
   encode_json("timestamp", timestamp, f);
 }
 
+void siprovider_data_info::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+}
+
 int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id != 0) {

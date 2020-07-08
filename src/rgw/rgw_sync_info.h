@@ -8,6 +8,7 @@
 #include <functional>
 
 #include "include/buffer.h"
+#include "common/ceph_json.h"
 
 class SIProvider_Container;
 
@@ -50,6 +51,12 @@ public:
     void decode_json(JSONObj *obj);
   };
 
+  struct Entry {
+    std::string key;
+
+    bufferlist data; /* encoded EntryInfoBase */
+  };
+
   struct EntryInfoBase {
     virtual ~EntryInfoBase() {}
 
@@ -57,11 +64,7 @@ public:
     virtual void decode(bufferlist::const_iterator& bl) = 0;
 
     virtual void dump(Formatter *f) const = 0;
-  };
-
-  struct Entry {
-    std::string key;
-    bufferlist data; /* encoded EntryInfoBase */
+    virtual void decode_json(JSONObj *obj) = 0;
   };
 
   struct fetch_result {
@@ -89,6 +92,9 @@ public:
   virtual int handle_entry(const stage_id_t& sid,
                            Entry& entry,
                            std::function<int(EntryInfoBase&)> f) = 0;
+  virtual int decode_json_results(const stage_id_t& sid,
+                                  JSONObj *obj,
+                                  SIProvider::fetch_result *result) = 0;
 
   virtual int trim(const stage_id_t& sid,
                    int shard_id,
@@ -194,17 +200,28 @@ public:
   int handle_entry(const stage_id_t& sid,
                    Entry& entry,
                    std::function<int(EntryInfoBase&)> f) override;
+  int decode_json_results(const stage_id_t& sid,
+                          JSONObj *obj,
+                          SIProvider::fetch_result *result) override;
 
   int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
-template <class T>
+template<class T>
 class SITypedProviderDefaultHandler : public virtual SIProvider
 {
+  struct ExpandedEntry {
+    std::string key;
+    T info;
+
+    void decode_json(JSONObj *obj) {
+      JSONDecoder::decode_json("key", key, obj);
+      JSONDecoder::decode_json("info", info, obj);
+    }
+  };
+
 public:
   SITypedProviderDefaultHandler() {}
-
-  using value_type = T;
 
   int handle_entry(const stage_id_t& sid,
                    Entry& entry,
@@ -216,6 +233,25 @@ public:
       return -EINVAL;
     }
     return f(t);
+  }
+
+  int decode_json_results(const stage_id_t& sid,
+                          JSONObj *obj,
+                          SIProvider::fetch_result *result) override {
+    std::vector<ExpandedEntry> entries;
+    try {
+      JSONDecoder::decode_json("more", result->more, obj);
+      JSONDecoder::decode_json("done", result->done, obj);
+      JSONDecoder::decode_json("entries", entries, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
+    for (auto& e : entries) {
+      auto& entry = result->entries.emplace_back();
+      entry.key = std::move(e.key);
+      e.info.encode(entry.data);
+    }
+    return 0;
   }
 };
 

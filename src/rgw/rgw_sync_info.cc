@@ -313,6 +313,21 @@ int SIProvider_Container::handle_entry(const stage_id_t& sid,
   return provider->handle_entry(psid, entry, f);
 }
 
+int SIProvider_Container::decode_json_results(const stage_id_t& sid,
+                                              JSONObj *obj,
+                                              SIProvider::fetch_result *result)
+{
+  SIProviderRef provider;
+  stage_id_t psid;
+
+  if (!decode_sid(sid,  &provider, &psid)) {
+    ldout(cct, 20) << __func__ << "() can't decode sid: " << dendl;
+    return -ENOENT;
+  }
+
+  return provider->decode_json_results(psid, obj, result);
+}
+
 int SIProvider_Container::trim(const stage_id_t& sid, int shard_id, const std::string& marker)
 {
   SIProviderRef provider;

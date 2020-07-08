@@ -33,6 +33,7 @@ struct siprovider_bucket_entry_info : public SIProvider::EntryInfoBase {
   }
 
   void dump(Formatter *f) const override;
+  void decode_json(JSONObj *obj) override;
 };
 WRITE_CLASS_ENCODER(siprovider_bucket_entry_info)
 

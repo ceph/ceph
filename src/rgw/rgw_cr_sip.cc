@@ -175,8 +175,10 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
 
   string path_prefix = "/admin/sip";
 
-  string provider;
+  string remote_provider_name;
   std::optional<string> instance;
+
+  SIProviderRef local_provider;
 
   class GetStagesInfoCR : public RGWCoroutine {
     SIProviderCRMgr_REST *mgr;
@@ -197,7 +199,7 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
           const char *instance_key = (mgr->instance ? "instance" : "");
           const char *instance_val = (mgr->instance ? mgr->instance->c_str() : "");
           rgw_http_param_pair pairs[] = { { "info", nullptr },
-					  { "provider" , mgr->provider.c_str() },
+					  { "provider" , mgr->remote_provider_name.c_str() },
 					  { instance_key , instance_val },
 	                                  { nullptr, nullptr } };
           call(new RGWReadRESTResourceCR(mgr->ctx(),
@@ -280,9 +282,84 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
           }
         }
 
-        ldout(mgr->ctx(), 10) << "GetStageInfoCR(): sid not found: provider=" << mgr->provider << " sid=" << sid << dendl;
+        ldout(mgr->ctx(), 10) << "GetStageInfoCR(): sid not found: provider=" << mgr->remote_provider_name << " sid=" << sid << dendl;
 
         return set_cr_error(-ENOENT);
+      }
+
+      return 0;
+    }
+  };
+
+  class FetchCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+    SIProvider::stage_id_t sid;
+    int shard_id;
+    string marker;
+    int max;
+
+    string  path;
+
+    bufferlist bl;
+    SIProvider::fetch_result *result;
+
+  public:
+    FetchCR(SIProviderCRMgr_REST *_mgr,
+            const SIProvider::stage_id_t& _sid,
+            int _shard_id,
+            const string& _marker,
+            int _max,
+            SIProvider::fetch_result *_result) : RGWCoroutine(_mgr->ctx()),
+                                                 mgr(_mgr),
+                                                 sid(_sid),
+                                                 shard_id(_shard_id),
+                                                 marker(_marker),
+                                                 max(_max),
+                                                 result(_result) {
+      path = mgr->path_prefix;
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield {
+          const char *instance_key = (mgr->instance ? "instance" : "");
+          const char *instance_val = (mgr->instance ? mgr->instance->c_str() : "");
+          char max_buf[16];
+          snprintf(max_buf, sizeof(max_buf), "%d", max);
+          char shard_id_buf[16];
+          snprintf(shard_id_buf, sizeof(shard_id_buf), "%d", shard_id);
+          rgw_http_param_pair pairs[] = { { "provider" , mgr->remote_provider_name.c_str() },
+					  { instance_key , instance_val },
+					  { "stage-id" , sid.c_str() },
+					  { "shard-id" , shard_id_buf },
+					  { "max" , max_buf },
+					  { "marker" , marker.c_str() },
+	                                  { nullptr, nullptr } };
+          call(new RGWReadRESTResourceCR(mgr->ctx(),
+                                         mgr->conn,
+                                         mgr->http_manager,
+                                         path,
+                                         pairs,
+                                         &bl));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+
+        JSONParser p;
+        if (!p.parse(bl.c_str(), bl.length())) {
+          ldout(cct, 0) << "ERROR: failed to parse fetch result: bl=" << bl.to_str() << dendl;
+          return set_cr_error(-EIO);
+        }
+
+        int r = mgr->local_provider->decode_json_results(sid, &p, result);
+        if (r < 0) {
+          ldout(cct, 0) << "ERROR: failed to decode fetch result: bl=" << bl.to_str() << dendl;
+          return set_cr_error(r);
+        }
+
+        return set_cr_done();
       }
 
       return 0;
@@ -293,12 +370,14 @@ public:
   SIProviderCRMgr_REST(CephContext *_cct,
                        RGWRESTConn *_conn,
                        RGWHTTPManager *_http_manager,
-                       const string& _provider,
+                       const string& _remote_provider_name,
+                       SIProviderRef& _local_provider,
                        std::optional<string> _instance) : SIProviderCRMgr(_cct),
                                                           conn(_conn),
                                                           http_manager(_http_manager),
-                                                          provider(_provider),
-                                                          instance(_instance.value_or(string())) {}
+                                                          remote_provider_name(_remote_provider_name),
+                                                          instance(_instance.value_or(string())),
+                                                          local_provider(_local_provider) {}
 
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
@@ -316,6 +395,12 @@ RGWCoroutine *SIProviderCRMgr_REST::get_stages_cr(std::vector<SIProvider::stage_
 RGWCoroutine *SIProviderCRMgr_REST::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *sinfo)
 {
   return new GetStageInfoCR(this, sid, sinfo);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
+{
+  return new FetchCR(this, sid, shard_id,
+                     marker, max, result);
 }
 
 class SIPClientCRMgr

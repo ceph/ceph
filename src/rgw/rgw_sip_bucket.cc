@@ -17,6 +17,11 @@ void siprovider_bucket_entry_info::dump(Formatter *f) const
   entry.dump(f);
 }
 
+void siprovider_bucket_entry_info::decode_json(JSONObj *obj)
+{
+  decode_json_obj(entry, obj);
+}
+
 static inline string escape_str(const string& s)
 {
   return rgw_escape_str(s, '\\', ':');
