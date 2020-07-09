@@ -159,12 +159,13 @@ void ImageWatcher<I>::handle_async_complete(const AsyncRequestId &request,
 			   << cpp_strerror(ret_val) << dendl;
     if (ret_val == -ETIMEDOUT && !is_unregistered()) {
       schedule_async_complete(request, r);
+      m_async_op_tracker.finish_op();
+      return;
     }
-  } else {
-    std::unique_lock async_request_locker{m_async_request_lock};
-    m_async_pending.erase(request);
   }
 
+  std::unique_lock async_request_locker{m_async_request_lock};
+  m_async_pending.erase(request);
   m_async_op_tracker.finish_op();
 }
 
