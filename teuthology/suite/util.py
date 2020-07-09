@@ -140,7 +140,7 @@ def get_distro_defaults(distro, machine_type):
             os_version = '13.10'
             arch = 'armv7l'
         else:
-            os_version = '14.04'
+            os_version = '16.04'
     elif distro == 'debian':
         os_type = distro
         os_version = '7'
