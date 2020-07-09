@@ -150,7 +150,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     bl.append(data);
 
     auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               read(oid, len, off, _));
+                               read(oid, len, off, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -168,7 +168,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     bl.append(data);
 
     auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               sparse_read(oid, off, len, _, _));
+                               sparse_read(oid, off, len, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -225,7 +225,8 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_assert_exists(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), assert_exists(_))
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
+                assert_exists(_, _))
       .WillOnce(Return(r));
   }
 
@@ -299,7 +300,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
   void expect_cmpext(MockTestImageCtx &mock_image_ctx, int offset, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               cmpext(_, offset, _));
+                               cmpext(_, offset, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

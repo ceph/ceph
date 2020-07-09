@@ -196,7 +196,7 @@ public:
 
   void expect_v1_read_header(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               read(mock_image_ctx.header_oid, _, _, _));
+                               read(mock_image_ctx.header_oid, _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -206,7 +206,8 @@ public:
 
   void expect_v1_get_snapshots(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("snap_list"), _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("snap_list"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -216,7 +217,8 @@ public:
 
   void expect_v1_get_locks(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("get_info"), _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("lock"),
+                                    StrEq("get_info"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -227,7 +229,8 @@ public:
   void expect_get_mutable_metadata(MockRefreshImageCtx &mock_image_ctx,
                                    uint64_t features, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_size"), _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("get_size"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -237,7 +240,8 @@ public:
 
       expect.WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_features"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("get_features"), _, _, _, _))
                     .WillOnce(WithArg<5>(Invoke([features, incompatible](bufferlist* out_bl) {
                                            encode(features, *out_bl);
                                            encode(incompatible, *out_bl);
@@ -245,10 +249,12 @@ public:
                                          })));
       expect_get_flags(mock_image_ctx, 0);
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapcontext"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("get_snapcontext"), _, _, _, _))
                     .WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("get_info"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("lock"),
+                       StrEq("get_info"), _, _, _, _))
                     .WillOnce(DoDefault());
     }
   }
@@ -256,7 +262,7 @@ public:
   void expect_parent_overlap_get(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                               StrEq("parent_overlap_get"), _, _, _));
+                                    StrEq("parent_overlap_get"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -267,7 +273,7 @@ public:
   void expect_get_parent(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                                    StrEq("parent_get"), _, _, _));
+                                    StrEq("parent_get"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -279,7 +285,7 @@ public:
   void expect_get_parent_legacy(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                                    StrEq("get_parent"), _, _, _));
+                                    StrEq("get_parent"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -290,7 +296,7 @@ public:
   void expect_get_migration_header(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                                    StrEq("migration_get"), _, _, _));
+                                    StrEq("migration_get"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -313,7 +319,8 @@ public:
 
   void expect_get_flags(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_flags"), _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("get_flags"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -325,7 +332,7 @@ public:
                               uint64_t op_features, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("op_features_get"), _, _, _))
+                     StrEq("op_features_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([op_features, r](bufferlist* out_bl) {
                              encode(op_features, *out_bl);
                              return r;
@@ -335,7 +342,7 @@ public:
   void expect_get_group(MockRefreshImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                                    StrEq("image_group_get"), _, _, _));
+                                    StrEq("image_group_get"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -346,21 +353,24 @@ public:
   void expect_get_snapshots(MockRefreshImageCtx &mock_image_ctx,
                             bool legacy_parent, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("snapshot_get"), _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("snapshot_get"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
       expect.WillOnce(DoDefault());
       if (legacy_parent) {
         EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                    exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_parent"), _, _, _))
+                    exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                         StrEq("get_parent"), _, _, _, _))
                       .WillOnce(DoDefault());
       } else {
         expect_parent_overlap_get(mock_image_ctx, 0);
       }
       expect_get_flags(mock_image_ctx, 0);
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_protection_status"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("get_protection_status"), _, _, _, _))
                     .WillOnce(DoDefault());
     }
   }
@@ -368,25 +378,30 @@ public:
   void expect_get_snapshots_legacy(MockRefreshImageCtx &mock_image_ctx,
                                    bool include_timestamp, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_name"), _, _, _));
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("get_snapshot_name"), _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
       expect.WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_size"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("get_size"), _, _, _, _))
                     .WillOnce(DoDefault());
       if (include_timestamp) {
         EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                    exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_timestamp"), _, _, _))
+                    exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                         StrEq("get_snapshot_timestamp"), _, _, _, _))
                       .WillOnce(DoDefault());
       }
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_parent"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("get_parent"), _, _, _, _))
                     .WillOnce(DoDefault());
       expect_get_flags(mock_image_ctx, 0);
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_protection_status"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("get_protection_status"), _, _, _, _))
                     .WillOnce(DoDefault());
     }
   }

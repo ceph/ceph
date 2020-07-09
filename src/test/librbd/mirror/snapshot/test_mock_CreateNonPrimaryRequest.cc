@@ -129,7 +129,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
                       Return(r)));
   }
@@ -149,7 +149,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_peer_list"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
                       Return(r)));
   }

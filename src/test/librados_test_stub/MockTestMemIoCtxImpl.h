@@ -63,9 +63,9 @@ public:
     return TestMemIoCtxImpl::aio_unwatch(handle, c);
   }
 
-  MOCK_METHOD1(assert_exists, int(const std::string &));
-  int do_assert_exists(const std::string &oid) {
-    return TestMemIoCtxImpl::assert_exists(oid);
+  MOCK_METHOD2(assert_exists, int(const std::string &, uint64_t));
+  int do_assert_exists(const std::string &oid, uint64_t snap_id) {
+    return TestMemIoCtxImpl::assert_exists(oid, snap_id);
   }
 
   MOCK_METHOD3(create, int(const std::string&, bool, const SnapContext &));
@@ -74,23 +74,26 @@ public:
     return TestMemIoCtxImpl::create(oid, exclusive, snapc);
   }
 
-  MOCK_METHOD3(cmpext, int(const std::string&, uint64_t, bufferlist&));
-  int do_cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) {
-    return TestMemIoCtxImpl::cmpext(oid, off, cmp_bl);
+  MOCK_METHOD4(cmpext, int(const std::string&, uint64_t, bufferlist&,
+                           uint64_t snap_id));
+  int do_cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl,
+                uint64_t snap_id) {
+    return TestMemIoCtxImpl::cmpext(oid, off, cmp_bl, snap_id);
   }
 
-  MOCK_METHOD7(exec, int(const std::string& oid,
+  MOCK_METHOD8(exec, int(const std::string& oid,
                          TestClassHandler *handler,
                          const char *cls,
                          const char *method,
                          bufferlist& inbl,
                          bufferlist* outbl,
+                         uint64_t snap_id,
                          const SnapContext &snapc));
   int do_exec(const std::string& oid, TestClassHandler *handler,
               const char *cls, const char *method, bufferlist& inbl,
-              bufferlist* outbl, const SnapContext &snapc) {
+              bufferlist* outbl, uint64_t snap_id, const SnapContext &snapc) {
     return TestMemIoCtxImpl::exec(oid, handler, cls, method, inbl, outbl,
-                                  snapc);
+                                  snap_id, snapc);
   }
 
   MOCK_CONST_METHOD0(get_instance_id, uint64_t());
@@ -121,23 +124,24 @@ public:
   void do_set_snap_read(snap_t snap_id) {
     return TestMemIoCtxImpl::set_snap_read(snap_id);
   }
-  MOCK_METHOD5(sparse_read, int(const std::string& oid,
+  MOCK_METHOD6(sparse_read, int(const std::string& oid,
                                uint64_t off,
                                uint64_t len,
                                std::map<uint64_t, uint64_t> *m,
-                               bufferlist *bl));
+                               bufferlist *bl, uint64_t));
   int do_sparse_read(const std::string& oid, uint64_t off, size_t len,
-                     std::map<uint64_t, uint64_t> *m, bufferlist *bl){
-     return TestMemIoCtxImpl::sparse_read(oid, off, len, m, bl);
+                     std::map<uint64_t, uint64_t> *m, bufferlist *bl,
+                     uint64_t snap_id) {
+     return TestMemIoCtxImpl::sparse_read(oid, off, len, m, bl, snap_id);
   }
 
-  MOCK_METHOD4(read, int(const std::string& oid,
+  MOCK_METHOD5(read, int(const std::string& oid,
                          size_t len,
                          uint64_t off,
-                         bufferlist *bl));
+                         bufferlist *bl, uint64_t snap_id));
   int do_read(const std::string& oid, size_t len, uint64_t off,
-              bufferlist *bl) {
-    return TestMemIoCtxImpl::read(oid, len, off, bl);
+              bufferlist *bl, uint64_t snap_id) {
+    return TestMemIoCtxImpl::read(oid, len, off, bl, snap_id);
   }
 
   MOCK_METHOD2(remove, int(const std::string& oid, const SnapContext &snapc));
@@ -208,17 +212,17 @@ public:
     ON_CALL(*this, aio_operate(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_operate));
     ON_CALL(*this, aio_watch(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_watch));
     ON_CALL(*this, aio_unwatch(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_unwatch));
-    ON_CALL(*this, assert_exists(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_exists));
+    ON_CALL(*this, assert_exists(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_exists));
     ON_CALL(*this, create(_, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_create));
-    ON_CALL(*this, cmpext(_,_,_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_cmpext));
-    ON_CALL(*this, exec(_, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
+    ON_CALL(*this, cmpext(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_cmpext));
+    ON_CALL(*this, exec(_, _, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
     ON_CALL(*this, get_instance_id()).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_get_instance_id));
     ON_CALL(*this, list_snaps(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_snaps));
     ON_CALL(*this, list_watchers(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_watchers));
     ON_CALL(*this, notify(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_notify));
-    ON_CALL(*this, read(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
+    ON_CALL(*this, read(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
     ON_CALL(*this, set_snap_read(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_set_snap_read));
-    ON_CALL(*this, sparse_read(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_sparse_read));
+    ON_CALL(*this, sparse_read(_, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_sparse_read));
     ON_CALL(*this, remove(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_remove));
     ON_CALL(*this, selfmanaged_snap_create(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_create));
     ON_CALL(*this, selfmanaged_snap_remove(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_remove));

@@ -165,14 +165,14 @@ public:
   void expect_register_instance(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                                 int r) {
     EXPECT_CALL(mock_io_ctx, exec(RBD_MIRROR_LEADER, _, StrEq("rbd"),
-                                  StrEq("mirror_instances_add"), _, _, _))
+                                  StrEq("mirror_instances_add"), _, _, _, _))
       .WillOnce(Return(r));
   }
 
   void expect_unregister_instance(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                                   int r) {
     EXPECT_CALL(mock_io_ctx, exec(RBD_MIRROR_LEADER, _, StrEq("rbd"),
-                                  StrEq("mirror_instances_remove"), _, _, _))
+                                  StrEq("mirror_instances_remove"), _, _, _, _))
       .WillOnce(Return(r));
   }
 
