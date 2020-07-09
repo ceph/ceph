@@ -3743,7 +3743,7 @@ void OSD::final_init()
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_scrub_reservations",
 				     asok_hook,
-				     "show recovery reservations");
+				     "show scrub reservations");
   ceph_assert(r == 0);
   r = admin_socket->register_command("get_latest_osdmap",
 				     asok_hook,
