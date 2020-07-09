@@ -708,10 +708,15 @@ cdef class Rados(object):
         PyEval_InitThreads()
         self.__setup(*args, **kwargs)
 
+    NO_CONF_FILE = -1
+    "special value that indicates no conffile should be read when creating a mount handle"
+    DEFAULT_CONF_FILES = -2
+    "special value that indicates the default conffiles should be read when creating a mount handle"
+
     @requires(('rados_id', opt(str)), ('name', opt(str)), ('clustername', opt(str)),
-              ('conffile', opt(str)))
+              ('conffile', (str, int)))
     def __setup(self, rados_id=None, name=None, clustername=None,
-                conf_defaults=None, conffile=None, conf=None, flags=0,
+                conf_defaults=None, conffile=NO_CONF_FILE, conf=None, flags=0,
                 context=None):
         self.monitor_callback = None
         self.monitor_callback2 = None
@@ -753,10 +758,11 @@ cdef class Rados(object):
         if conf_defaults:
             for key, value in conf_defaults.items():
                 self.conf_set(key, value)
-        if conffile is not None:
-            # read the default conf file when '' is given
-            if conffile == '':
-                conffile = None
+        if conffile in (self.NO_CONF_FILE, None):
+            pass
+        elif conffile in (self.DEFAULT_CONF_FILES, ''):
+            self.conf_read_file(None)
+        else:
             self.conf_read_file(conffile)
         if conf:
             for key, value in conf.items():

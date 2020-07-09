@@ -603,13 +603,18 @@ cdef class LibCephFS(object):
             raise Error("libcephfs_initialize failed with error code: %d" % ret)
         self.state = "configuring"
 
-    def create(self, conf=None, conffile=None, auth_id=None):
+    NO_CONF_FILE = -1
+    "special value that indicates no conffile should be read when creating a mount handle"
+    DEFAULT_CONF_FILES = -2
+    "special value that indicates the default conffiles should be read when creating a mount handle"
+
+    def create(self, conf=None, conffile=NO_CONF_FILE, auth_id=None):
         """
         Create a mount handle for interacting with Ceph.  All libcephfs
         functions operate on a mount info handle.
         
         :param conf dict opt: settings overriding the default ones and conffile
-        :param conffile str opt: the path to ceph.conf to override the default settings
+        :param conffile Union[int,str], optional: the path to ceph.conf to override the default settings
         :auth_id str opt: the id used to authenticate the client entity
         """
         if conf is not None and not isinstance(conf, dict):
@@ -627,10 +632,11 @@ cdef class LibCephFS(object):
             raise Error("libcephfs_initialize failed with error code: %d" % ret)
 
         self.state = "configuring"
-        if conffile is not None:
-            # read the default conf file when '' is given
-            if conffile == '':
-                conffile = None
+        if conffile in (self.NO_CONF_FILE, None):
+            pass
+        elif conffile in (self.DEFAULT_CONF_FILES, ''):
+            self.conf_read_file(None)
+        else:
             self.conf_read_file(conffile)
         if conf is not None:
             for key, value in conf.items():
