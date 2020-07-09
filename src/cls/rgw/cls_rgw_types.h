@@ -1238,7 +1238,6 @@ struct cls_rgw_reshard_entry
   std::string tenant;
   std::string bucket_name;
   std::string bucket_id;
-  std::string instance_id;
   uint32_t old_num_shards{0};
   uint32_t new_num_shards{0};
 
@@ -1250,7 +1249,6 @@ struct cls_rgw_reshard_entry
     encode(tenant, bl);
     encode(bucket_name, bl);
     encode(bucket_id, bl);
-    encode(instance_id, bl);
     encode(old_num_shards, bl);
     encode(new_num_shards, bl);
     ENCODE_FINISH(bl);
@@ -1262,7 +1260,6 @@ struct cls_rgw_reshard_entry
     decode(tenant, bl);
     decode(bucket_name, bl);
     decode(bucket_id, bl);
-    decode(instance_id, bl);
     decode(old_num_shards, bl);
     decode(new_num_shards, bl);
     DECODE_FINISH(bl);
