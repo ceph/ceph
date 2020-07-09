@@ -264,6 +264,7 @@ struct ceph_client_mount {
 } __attribute__ ((packed));
 
 #define CEPH_SUBSCRIBE_ONETIME    1  /* i want only 1 update after have */
+#define CEPH_SUBSCRIBE_LATEST     2  /* i want the latest osdmap, for client */
 
 struct ceph_mon_subscribe_item {
 	__le64 start;

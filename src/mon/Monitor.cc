@@ -5233,7 +5233,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     {
       std::lock_guard l(session_map_lock);
       session_map.add_update_sub(s, p->first, p->second.start,
-				 p->second.flags & CEPH_SUBSCRIBE_ONETIME,
+				 p->second.flags,
 				 m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
     }
 

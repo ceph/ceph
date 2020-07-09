@@ -1778,6 +1778,15 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_max_span_of_incremental
+  type: uint
+  level: advanced
+  default: 0
+  flags:
+  - runtime
+  services:
+  - mon
+  desc: max span when build incremental map(default 0 means always send inc map
 - name: mon_osd_min_down_reporters
   type: uint
   level: advanced
