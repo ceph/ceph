@@ -3344,9 +3344,9 @@ void CInode::set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& 
   mds_caps_wanted.swap(m);
   if (old_empty != (bool)mds_caps_wanted.empty()) {
     if (old_empty)
-      adjust_num_caps_wanted(1);
+      adjust_num_caps_notable(1);
     else
-      adjust_num_caps_wanted(-1);
+      adjust_num_caps_notable(-1);
   }
 }
 
@@ -3356,23 +3356,23 @@ void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
   if (wanted) {
     mds_caps_wanted[mds] = wanted;
     if (old_empty)
-      adjust_num_caps_wanted(1);
+      adjust_num_caps_notable(1);
   } else if (!old_empty) {
     mds_caps_wanted.erase(mds);
     if (mds_caps_wanted.empty())
-      adjust_num_caps_wanted(-1);
+      adjust_num_caps_notable(-1);
   }
 }
 
-void CInode::adjust_num_caps_wanted(int d)
+void CInode::adjust_num_caps_notable(int d)
 {
-  if (!num_caps_wanted && d > 0)
+  if (!num_caps_notable && d > 0)
     mdcache->open_file_table.add_inode(this);
-  else if (num_caps_wanted > 0 && num_caps_wanted == -d)
+  else if (num_caps_notable > 0 && num_caps_notable == -d)
     mdcache->open_file_table.remove_inode(this);
 
-  num_caps_wanted +=d;
-  ceph_assert(num_caps_wanted >= 0);
+  num_caps_notable +=d;
+  ceph_assert(num_caps_notable >= 0);
 }
 
 Capability *CInode::add_client_cap(client_t client, Session *session,
@@ -3419,8 +3419,8 @@ void CInode::remove_client_cap(client_t client)
   if (client == loner_cap)
     loner_cap = -1;
 
-  if (cap->wanted())
-    adjust_num_caps_wanted(-1);
+  if (cap->is_wanted_notable())
+    adjust_num_caps_notable(-1);
 
   client_caps.erase(it);
   if (client_caps.empty()) {

@@ -212,15 +212,12 @@ void Capability::maybe_clear_notable()
 void Capability::set_wanted(int w) {
   CInode *in = get_inode();
   if (in) {
-    if (!_wanted && w) {
-      in->adjust_num_caps_wanted(1);
-    } else if (_wanted && !w) {
-      in->adjust_num_caps_wanted(-1);
-    }
     if (!is_wanted_notable(_wanted) && is_wanted_notable(w)) {
+      in->adjust_num_caps_notable(1);
       if (!is_notable())
 	mark_notable();
     } else if (is_wanted_notable(_wanted) && !is_wanted_notable(w)) {
+      in->adjust_num_caps_notable(-1);
       maybe_clear_notable();
     }
   }
