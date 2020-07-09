@@ -5883,15 +5883,20 @@ void object_manifest_t::calc_refs_to_drop_on_removal(
       std::numeric_limits<uint64_t>::max() : i->first;
   };
 
-  // Translate current, iter, map to a chunk_info_t, nullopt_t if iter
-  // is ahead of current or is at end()
+  /* If current matches the offset at iter, returns the chunk at *iter
+   * and increments iter.  Otherwise, returns nullptr.
+   *
+   * current will always be derived from the min of *giter, *iter, and
+   * *liter on each cycle, so the result will be that each loop iteration
+   * will pick up all chunks at the offest being considered, each offset
+   * will be considered once, and all offsets will be considered.
+   */
   auto get_chunk = [](
     uint64_t current, decltype(iter) &i, const object_manifest_t &manifest)
     -> const chunk_info_t * {
     if (i == manifest.chunk_map.end() || current != i->first) {
       return nullptr;
     } else {
-      // We advance the iterator iff we consider the chunk_map on this iteration
       return &(i++)->second;
     }
   };
