@@ -812,8 +812,17 @@ int RGWHTTPArgs::parse()
     int ret = nv.parse();
     if (ret >= 0) {
       string& name = nv.get_name();
+      if (name.find("X-Amz-") != string::npos) {
+        std::for_each(name.begin(),
+          name.end(),
+          [](char &c){
+            if (c != '-') {
+              c = ::tolower(static_cast<unsigned char>(c));
+            }
+        });
+      }
       string& val = nv.get_val();
-
+      dout(10) << "name: " << name << " val: " << val << dendl;
       append(name, val);
     }
 
