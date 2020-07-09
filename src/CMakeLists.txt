@@ -294,7 +294,8 @@ list(APPEND mds_files
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
   mds/mdstypes.cc
-  mds/flock.cc)
+  mds/flock.cc
+  mds/cephfs_features.cc)
 
 add_subdirectory(json_spirit)
 

@@ -2238,8 +2238,7 @@ void MDSRankDispatcher::handle_mds_map(
   if (objecter->get_client_incarnation() != incarnation)
     objecter->set_client_incarnation(incarnation);
 
-  if (mdsmap->get_min_compat_client() < ceph_release_t::max &&
-      oldmap.get_min_compat_client() != mdsmap->get_min_compat_client())
+  if (mdsmap->get_required_client_features() != oldmap.get_required_client_features())
     server->update_required_client_features();
 
   // for debug
