@@ -151,7 +151,7 @@ public:
       const cls::rbd::MirrorImageSiteStatus& mirror_image_status, int r) {
     EXPECT_CALL(*m_mock_local_io_ctx,
                 exec(RBD_MIRRORING, _, StrEq("rbd"),
-                     StrEq("mirror_image_status_set"), _, _, _))
+                     StrEq("mirror_image_status_set"), _, _, _, _))
       .WillOnce(WithArg<4>(Invoke(
         [r, global_image_id, mirror_image_status](bufferlist& in_bl) {
           auto bl_it = in_bl.cbegin();

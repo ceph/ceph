@@ -49,7 +49,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("metadata_get"), ContentsEqual(in_bl), _, _))
+                     StrEq("metadata_get"), ContentsEqual(in_bl), _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(out_bl)),
                       Return(r)));
   }
@@ -68,7 +68,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("metadata_set"), ContentsEqual(in_bl), _, _))
+                     StrEq("metadata_set"), ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
   }
 };

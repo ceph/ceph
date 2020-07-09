@@ -113,7 +113,8 @@ public:
 
   void expect_break_lock(MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("break_lock"), _, _, _))
+                exec(mock_image_ctx.header_oid, _, StrEq("lock"),
+                     StrEq("break_lock"), _, _, _, _))
                   .WillOnce(Return(r));
   }
 

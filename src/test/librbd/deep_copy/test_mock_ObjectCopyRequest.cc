@@ -220,7 +220,8 @@ public:
   void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx, uint64_t offset,
                           uint64_t length, int r) {
 
-    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _));
+    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _,
+                                                        _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

@@ -105,7 +105,7 @@ public:
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq(mock_image_ctx.old_format ? "snap_add" :
                                                                  "snapshot_add"),
-                               _, _, _));
+                               _, _, _, _));
     if (r == -ESTALE) {
       expect.WillOnce(Return(r)).WillOnce(DoDefault());
     } else if (r < 0) {

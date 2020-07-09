@@ -219,7 +219,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
                 exec(oid, _, StrEq("rbd"), StrEq("copyup"),
-                     ContentsEqual(in_bl), _, snapc))
+                     ContentsEqual(in_bl), _, _, snapc))
       .WillOnce(Return(r));
   }
 
@@ -241,7 +241,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
                 exec(oid, _, StrEq("rbd"), StrEq("sparse_copyup"),
-                     ContentsEqual(in_bl), _, snapc))
+                     ContentsEqual(in_bl), _, _, snapc))
       .WillOnce(Return(r));
   }
 

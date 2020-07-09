@@ -52,7 +52,7 @@ public:
 
   void expect_read_rbd_info(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                             const std::string& data, int r) {
-    auto& expect = EXPECT_CALL(mock_io_ctx, read(StrEq(RBD_INFO), 0, 0, _));
+    auto& expect = EXPECT_CALL(mock_io_ctx, read(StrEq(RBD_INFO), 0, 0, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

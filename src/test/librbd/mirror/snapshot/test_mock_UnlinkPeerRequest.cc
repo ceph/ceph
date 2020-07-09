@@ -85,7 +85,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
                      StrEq("mirror_image_snapshot_unlink_peer"),
-                     ContentsEqual(bl), _, _))
+                     ContentsEqual(bl), _, _, _))
       .WillOnce(Invoke([&mock_image_ctx, snap_id, peer_uuid, r](auto&&... args) -> int {
                          if (r == 0) {
                            auto it = mock_image_ctx.snap_info.find(snap_id);
