@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_IO_COPYUP_REQUEST_H
 
 #include "include/int_types.h"
-#include "include/rados/librados.hpp"
 #include "include/buffer.h"
 #include "common/ceph_mutex.h"
 #include "common/zipkin_trace.h"
