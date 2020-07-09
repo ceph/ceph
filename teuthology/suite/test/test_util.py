@@ -313,8 +313,8 @@ class TestDistroDefaults(object):
         assert util.get_distro_defaults('ubuntu', 'saya') == expected
 
     def test_distro_defaults_plana(self):
-        expected = ('x86_64', 'trusty',
-                    OS(name='ubuntu', version='14.04', codename='trusty'))
+        expected = ('x86_64', 'xenial',
+                    OS(name='ubuntu', version='16.04', codename='xenial'))
         assert util.get_distro_defaults('ubuntu', 'plana') == expected
 
     def test_distro_defaults_debian(self):
