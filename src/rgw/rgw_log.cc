@@ -274,6 +274,19 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     formatter->close_section();
   }
   formatter->dump_string("trans_id", entry.trans_id);
+  if (entry.token_claims.size() > 0) {
+    if (entry.token_claims[0] == "sts") {
+      formatter->open_object_section("sts_token_claims");
+      for (const auto& iter: entry.token_claims) {
+        auto pos = iter.find(":");
+        if (pos != string::npos) {
+          formatter->dump_string(iter.substr(0, pos), iter.substr(pos + 1));
+        }
+      }
+      formatter->close_section();
+    }
+  }
+
   formatter->close_section();
 }
 
@@ -393,6 +406,10 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   entry.uri = std::move(uri);
 
   entry.op = op_name;
+
+  if (! s->token_claims.empty()) {
+    entry.token_claims = std::move(s->token_claims);
+  }
 
   /* custom header logging */
   if (rest) {
