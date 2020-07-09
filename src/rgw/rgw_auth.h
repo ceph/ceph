@@ -58,7 +58,7 @@ public:
    * with the reason. */
   virtual uint32_t get_perm_mask() const = 0;
 
-  virtual bool is_anonymous() const final {
+  virtual bool is_anonymous() const {
     /* If the identity owns the anonymous account (rgw_user), it's considered
      * the anonymous identity. On error throws rgw::auth::Exception storing
      * the reason. */
@@ -502,7 +502,6 @@ public:
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
       acct_type(acct_type) {
     }
-    bool is_anon() const {return (acct_name.compare(RGW_USER_ANON_ID) == 0);}
   };
 
   using aclspec_t = rgw::auth::Identity::aclspec_t;
