@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timedelta
 from functools import partial, wraps
 from itertools import chain
-from typing import Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -55,7 +55,15 @@ cdef extern from "err.h" nogil:
 
 cdef extern from "rados/rados_types.h" nogil:
     cdef char* _LIBRADOS_ALL_NSPACES "LIBRADOS_ALL_NSPACES"
+    cdef struct notify_ack_t:
+        unsigned long notifier_id
+        unsigned long cookie
+        char *payload
+        unsigned long payload_len
 
+    cdef struct notify_timeout_t:
+        unsigned long notifier_id
+        unsigned long cookie
 
 cdef extern from "rados/librados.h" nogil:
     enum:
@@ -319,6 +327,9 @@ cdef extern from "rados/librados.h" nogil:
     int rados_omap_get_next(rados_omap_iter_t iter, const char * const* key, const char * const* val, size_t * len)
     void rados_omap_get_end(rados_omap_iter_t iter)
     int rados_notify2(rados_ioctx_t io, const char * o, const char *buf, int buf_len, uint64_t timeout_ms, char **reply_buffer, size_t *reply_buffer_len)
+    int rados_aio_notify(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len, uint64_t timeout_ms, char **reply_buffer, size_t *reply_buffer_len)
+    int rados_decode_notify_response(char *reply_buffer, size_t reply_buffer_len, notify_ack_t **acks, size_t *nr_acks, notify_timeout_t **timeouts, size_t *nr_timeouts)
+    void rados_free_notify_response(notify_ack_t *acks, size_t nr_acks, notify_timeout_t *timeouts)
     int rados_notify_ack(rados_ioctx_t io, const char *o, uint64_t notify_id, uint64_t cookie, const char *buf, int buf_len)
     int rados_watch3(rados_ioctx_t io, const char *o, uint64_t *cookie, rados_watchcb2_t watchcb, rados_watcherrcb_t watcherrcb, uint32_t timeout, void *arg)
     int rados_watch_check(rados_ioctx_t io, uint64_t cookie)
@@ -622,8 +633,6 @@ cdef char ** to_bytes_array(list_bytes):
     for i in range(len(list_bytes)):
         ret[i] = <char *>list_bytes[i]
     return ret
-
-
 
 cdef int __monitor_callback(void *arg, const char *line, const char *who,
                              uint64_t sec, uint64_t nsec, uint64_t seq,
@@ -3416,6 +3425,57 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Failed to notify %r" % (obj))
         return True
+
+    def aio_notify(self, obj: str,
+                   oncomplete: Callable[[Completion, int, Optional[List], Optional[List]], None],
+                   msg: str = '', timeout_ms: int = 5000) -> Completion:
+        """
+        Asynchronously send a rados notification to an object
+        """
+        self.require_ioctx_open()
+
+        msglen = len(msg)
+        obj_raw = cstr(obj, 'obj')
+        msg_raw = cstr(msg, 'msg')
+
+        cdef:
+            Completion completion
+            char *_obj = obj_raw
+            char *_msg = msg_raw
+            int _msglen = msglen
+            uint64_t _timeout_ms = timeout_ms
+            char *reply
+            size_t replylen = 0
+
+        def oncomplete_(completion_v):
+            cdef:
+                Completion _completion_v = completion_v
+                notify_ack_t *acks = NULL
+                notify_timeout_t *timeouts = NULL
+                size_t nr_acks
+                size_t nr_timeouts
+            return_value = _completion_v.get_return_value()
+            if return_value == 0:
+                return_value = rados_decode_notify_response(reply, replylen, &acks, &nr_acks, &timeouts, &nr_timeouts)
+                rados_buffer_free(reply)
+            if return_value == 0:
+                ack_list = [(ack.notifier_id, ack.cookie, '' if not ack.payload_len \
+                                                             else ack.payload[:ack.payload_len]) for ack in acks[:nr_acks]]
+                timeout_list = [(timeout.notifier_id, timeout.cookie) for timeout in timeouts[:nr_timeouts]]
+                rados_free_notify_response(acks, nr_acks, timeouts)
+                return oncomplete(_completion_v, 0, ack_list, timeout_list)
+            else:
+                return oncomplete(_completion_v, return_value, None, None)
+
+        completion = self.__get_completion(oncomplete_, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_notify(self.io, _obj, completion.rados_comp,
+                                   _msg, _msglen, _timeout_ms, &reply, &replylen)
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "aio_notify error: %s" % obj)
+        return completion
 
     def watch(self, obj: str,
               callback: Callable[[int, str, int, bytes], None],
