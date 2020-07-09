@@ -108,8 +108,8 @@ public:
   {
     num_shard = (bucket_info.layout.target_index->layout.normal.num_shards > 0 ? _num_shard : -1);
 
-    bs.init(bucket_info.bucket, num_shard, bucket_info.layout.current_index,
-            bucket_info.layout.target_index, nullptr /* no RGWBucketInfo */);
+    bs.init(bucket_info.bucket, num_shard, bucket_info.layout.target_index,
+            nullptr /* no RGWBucketInfo */);
 
     max_aio_completions =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
@@ -315,17 +315,17 @@ int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* 
   return 0;
 }
 
-static int update_num_shards(rgw::sal::RGWRadosStore *store,
+static int set_target_layout(rgw::sal::RGWRadosStore *store,
 				      int new_num_shards,
 				      RGWBucketInfo& bucket_info,
 				      map<string, bufferlist>& attrs)
 {
-  if (!bucket_info.layout.target_index) {
-    bucket_info.layout.target_index.emplace();
-  }
+  assert(!bucket_info.layout.target_index);
+  bucket_info.layout.target_index.emplace();
+
   bucket_info.layout.target_index->layout.normal.num_shards = new_num_shards;
 
-  bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
+  bucket_info.layout.resharding = rgw::BucketReshardState::IN_PROGRESS;
 
   int ret = store->getRados()->put_bucket_instance_info(bucket_info, true, real_time(), &attrs);
   if (ret < 0) {
@@ -336,9 +336,9 @@ static int update_num_shards(rgw::sal::RGWRadosStore *store,
   return 0;
 }
 
-int RGWBucketReshard::update_num_shards(int new_num_shards)
+int RGWBucketReshard::set_target_layout(int new_num_shards)
 {
-  return ::update_num_shards(store, new_num_shards,
+  return ::set_target_layout(store, new_num_shards,
 				      bucket_info, bucket_attrs);
 }
 
@@ -516,6 +516,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // complete successfully
   BucketInfoReshardUpdate bucket_info_updater(store, bucket_info, bucket_attrs);
 
+
   int ret = bucket_info_updater.start();
   if (ret < 0) {
     ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
@@ -551,7 +552,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     marker.clear();
     while (is_truncated) {
       entries.clear();
-      ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
+      int ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
       if (ret < 0 && ret == -ENOENT) {
         derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
         return ret;
@@ -638,6 +639,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   //overwrite current_index for the next reshard process
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
+  bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
   bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
   ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
   if (ret < 0) {
@@ -664,7 +666,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     return ret;
   }
 
-  ret = update_num_shards(num_shards); //modifies existing bucket
+  ret = set_target_layout(num_shards); //modifies existing bucket
   if (ret < 0) {
     // shard state is uncertain, but this will attempt to remove them anyway
     goto error_out;
