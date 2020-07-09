@@ -400,7 +400,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     close_snaprealm();
     clear_file_locks();
     ceph_assert(num_projected_srnodes == 0);
-    ceph_assert(num_caps_wanted == 0);
+    ceph_assert(num_caps_notable == 0);
     ceph_assert(num_subtree_roots == 0);
     ceph_assert(num_exporting_dirs == 0);
     ceph_assert(batch_ops.empty());
@@ -904,8 +904,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     }
   }
 
-  int get_num_caps_wanted() const { return num_caps_wanted; }
-  void adjust_num_caps_wanted(int d);
+  int get_num_caps_notable() const { return num_caps_notable; }
+  void adjust_num_caps_notable(int d);
 
   Capability *add_client_cap(client_t client, Session *session,
 			     SnapRealm *conrealm=nullptr, bool new_inode=false);
@@ -1207,7 +1207,7 @@ protected:
   mempool_cap_map client_caps; // client -> caps
   mempool::mds_co::compact_map<int32_t, int32_t> mds_caps_wanted;     // [auth] mds -> caps wanted
   int replica_caps_wanted = 0; // [replica] what i've requested from auth
-  int num_caps_wanted = 0;
+  int num_caps_notable = 0;
 
   ceph_lock_state_t *fcntl_locks = nullptr;
   ceph_lock_state_t *flock_locks = nullptr;

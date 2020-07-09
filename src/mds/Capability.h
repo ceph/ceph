@@ -253,6 +253,9 @@ public:
   static bool is_wanted_notable(int wanted) {
     return wanted & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD);
   }
+  bool is_wanted_notable() const {
+    return is_wanted_notable(wanted());
+  }
   bool is_notable() const { return state & STATE_NOTABLE; }
 
   bool is_stale() const;
