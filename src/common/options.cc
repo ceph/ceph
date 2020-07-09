@@ -7992,6 +7992,12 @@ std::vector<Option> get_mds_options() {
     .set_default(128)
     .set_description("maximum number of segments which may be untrimmed"),
 
+    Option("mds_log_warn_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2.0)
+    .set_min(1.0)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("trigger MDS_HEALTH_TRIM warning when the mds log is longer than mds_log_max_segments * mds_log_warn_factor"),
+
     Option("mds_bal_export_pin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("allow setting directory export pins to particular ranks"),
