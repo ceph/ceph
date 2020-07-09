@@ -949,6 +949,7 @@ const struct rbd_operations librbd_operations = {
 int
 krbd_open(const char *name, struct rbd_ctx *ctx)
 {
+	char buf[1024];
 	char *devnode;
 	int fd;
 	int ret;
@@ -957,7 +958,14 @@ krbd_open(const char *name, struct rbd_ctx *ctx)
 	if (ret < 0)
 		return ret;
 
-	ret = krbd_map(krbd, pool, "", name, "", "", &devnode);
+	ret = rados_conf_get(cluster, "rbd_default_map_options", buf,
+			     sizeof(buf));
+	if (ret < 0) {
+		simple_err("Could not get rbd_default_map_options value", ret);
+		return ret;
+	}
+
+	ret = krbd_map(krbd, pool, "", name, "", buf, &devnode);
 	if (ret < 0) {
 		prt("krbd_map(%s) failed\n", name);
 		return ret;
