@@ -2,6 +2,8 @@ import errno
 import logging
 import sys
 
+from typing import List
+
 from contextlib import contextmanager
 
 import orchestrator
@@ -26,12 +28,15 @@ def get_pool_names(mgr, volname):
     return metadata and data pools (list) names of volume as a tuple
     """
     fs_map = mgr.get("fs_map")
+    metadata_pool_id = None
+    data_pool_ids = [] # type: List[int]
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
             data_pool_ids = f['mdsmap']['data_pools']
-        else:
-            return None, None
+            break
+    if metadata_pool_id is None:
+        return None, None
 
     osdmap = mgr.get("osd_map")
     pools = dict([(p['pool'], p['pool_name']) for p in osdmap['pools']])
