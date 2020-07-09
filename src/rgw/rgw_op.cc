@@ -773,7 +773,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-			      bool prefetch_data)
+			      bool prefetch_data, off_t start, off_t end)
 {
   int ret = 0;
 
@@ -787,6 +787,7 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
     store->getRados()->set_atomic(s->obj_ctx, obj);
     if (prefetch_data) {
       store->getRados()->set_prefetch_data(s->obj_ctx, obj);
+      store->getRados()->set_prefetch_range_data(s->obj_ctx, obj, start, end);
     }
     ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs,
 			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket,
@@ -2142,15 +2143,21 @@ bool RGWGetObj::prefetch_data()
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
     return false;
   }
-
+  bool prefetch_first_chunk = true;
   range_str = s->info.env->get("HTTP_RANGE");
-  // TODO: add range prefetch
   if (range_str) {
-    parse_range();
-    return false;
+    int r = parse_range();
+    /* error on parsing the range, stop prefetch and will fail in execute() */
+    if (r < 0) {
+      return false; /* range_parsed==false */
+    }
+    /* range get goes to shadow objects, stop prefetch */
+    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
+      prefetch_first_chunk = false;
+    }
   }
 
-  return get_data;
+  return get_data && prefetch_first_chunk;
 }
 
 void RGWGetObj::pre_exec()
@@ -7646,7 +7653,9 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
     /* already read bucket info */
     return 0;
   }
-  int ret = rgw_build_object_policies(store, s, op->prefetch_data());
+  //we want to run prefetch_data to get the 
+  bool prefetch_data = op->prefetch_data();
+  int ret = rgw_build_object_policies(store, s, prefetch_data, op->get_start(), op->get_end());
 
   if (ret < 0) {
     ldpp_dout(op, 10) << "read_permissions on " << s->bucket << ":"

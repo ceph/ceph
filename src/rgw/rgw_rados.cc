@@ -218,8 +218,15 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   is_olh = rhs.is_olh;
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
+  start = rhs.start;
+  end = rhs.end;
 }
-
+void RGWObjectCtx::set_prefetch_range_data(const rgw_obj& obj, off_t start, off_t end) {
+  std::unique_lock wl{lock};
+  assert (!obj.empty());
+  objs_state[obj].start = start;
+  objs_state[obj].end = end;
+}
 RGWObjState *RGWObjectCtx::get_state(const rgw_obj& obj) {
   RGWObjState *result;
   typename std::map<rgw_obj, RGWObjState>::iterator iter;
@@ -5313,7 +5320,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   int r = -ENOENT;
 
   if (!assume_noent) {
-    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL, y);
+    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL, y, s->start, s->end);
   }
 
   if (r == -ENOENT) {
@@ -7499,7 +7506,7 @@ int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx
 
 int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                            map<string, bufferlist> *attrs, bufferlist *first_chunk,
-                           RGWObjVersionTracker *objv_tracker, optional_yield y)
+                           RGWObjVersionTracker *objv_tracker, optional_yield y, off_t start, off_t end)
 {
   rgw_rados_ref ref;
   int r = get_raw_obj_ref(obj, &ref);
@@ -7522,7 +7529,11 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
     op.stat2(&size, &mtime_ts, NULL);
   }
   if (first_chunk) {
-    op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
+    if(start == std::numeric_limits<off_t>::max())
+      op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
+    else {
+      op.read(start, end + 1, first_chunk, NULL);
+    }
   }
   bufferlist outbl;
   r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);

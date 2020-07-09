@@ -151,7 +151,8 @@ public:
   virtual ~RGWOp() = default;
 
   int get_ret() const { return op_ret; }
-
+  virtual off_t get_start() {return std::numeric_limits<off_t>::max();}
+  virtual off_t get_end() {return std::numeric_limits<off_t>::max();}
   virtual int init_processing() {
     if (dialect_handler->supports_quota()) {
       op_ret = init_quota();
@@ -357,7 +358,20 @@ public:
   virtual int get_params() = 0;
   virtual int send_response_data_error() = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
-
+  off_t get_start() override {
+    if(partial_content && range_parsed) {
+      return start;
+    } else {
+      return std::numeric_limits<off_t>::max();
+    }
+  }
+  off_t get_end() override {
+    if(partial_content && range_parsed) {
+      return end;
+    } else {
+      return std::numeric_limits<off_t>::max();
+    } 
+  }
   const char* name() const override { return "get_obj"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1964,7 +1978,7 @@ public:
 
 extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s);
 extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-				     bool prefetch_data);
+				     bool prefetch_data, off_t start = std::numeric_limits<off_t>::max(), off_t end = std::numeric_limits<off_t>::max());
 extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
 extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,

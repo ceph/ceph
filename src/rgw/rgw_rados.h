@@ -181,6 +181,8 @@ struct RGWObjState {
   bufferlist olh_tag;
   uint64_t pg_ver{false};
   uint32_t zone_short_id{0};
+  off_t start{std::numeric_limits<off_t>::max()};
+  off_t end{std::numeric_limits<off_t>::max()};
 
   /* important! don't forget to update copy constructor */
 
@@ -249,7 +251,7 @@ public:
   }
 
   RGWObjState *get_state(const rgw_obj& obj);
-
+  void set_prefetch_range_data(const rgw_obj& obj, off_t start, off_t end);
   void set_atomic(rgw_obj& obj);
   void set_prefetch_data(const rgw_obj& obj);
   void invalidate(const rgw_obj& obj);
@@ -1273,7 +1275,7 @@ public:
 
   int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, ceph::real_time *pmtime, uint64_t *epoch,
                    map<string, bufferlist> *attrs, bufferlist *first_chunk,
-                   RGWObjVersionTracker *objv_tracker, optional_yield y);
+                   RGWObjVersionTracker *objv_tracker, optional_yield y, off_t start = std::numeric_limits<off_t>::max(), off_t end = std::numeric_limits<off_t>::max());
 
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
@@ -1333,6 +1335,10 @@ public:
   void set_prefetch_data(void *ctx, const rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_prefetch_data(obj);
+  }
+  void set_prefetch_range_data(void *ctx, const rgw_obj& obj, off_t start, off_t end) {
+    RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
+    rctx->set_prefetch_range_data(obj, start, end);
   }
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
