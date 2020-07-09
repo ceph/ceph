@@ -149,8 +149,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     bufferlist bl;
     bl.append(data);
 
-    auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               read(oid, len, off, _, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto& expect = EXPECT_CALL(mock_io_ctx, read(oid, len, off, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -167,7 +168,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     bufferlist bl;
     bl.append(data);
 
-    auto& expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto& expect = EXPECT_CALL(mock_io_ctx,
                                sparse_read(oid, off, len, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
@@ -225,14 +228,17 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_assert_exists(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                assert_exists(_, _))
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    EXPECT_CALL(mock_io_ctx, assert_exists(_, _))
       .WillOnce(Return(r));
   }
 
   void expect_write(MockTestImageCtx &mock_image_ctx,
                     uint64_t offset, uint64_t length, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx,
                                write(_, _, length, offset, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
@@ -242,8 +248,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_write_full(MockTestImageCtx &mock_image_ctx, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               write_full(_, _, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx, write_full(_, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -253,8 +260,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
   void expect_writesame(MockTestImageCtx &mock_image_ctx,
                         uint64_t offset, uint64_t length, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               writesame(_, _, length, offset, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx, writesame(_, _, length, offset, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -263,8 +271,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_remove(MockTestImageCtx &mock_image_ctx, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               remove(_, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx, remove(_, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -273,13 +282,16 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_create(MockTestImageCtx &mock_image_ctx, bool exclusive) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, exclusive, _))
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    EXPECT_CALL(mock_io_ctx, create(_, exclusive, _))
       .Times(1);
   }
 
   void expect_truncate(MockTestImageCtx &mock_image_ctx, int offset, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               truncate(_, offset, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx, truncate(_, offset, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -289,8 +301,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
   void expect_zero(MockTestImageCtx &mock_image_ctx, int offset, int length,
                    int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               zero(_, offset, length, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx, zero(_, offset, length, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -299,8 +312,9 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_cmpext(MockTestImageCtx &mock_image_ctx, int offset, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                               cmpext(_, offset, _, _));
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto &expect = EXPECT_CALL(mock_io_ctx, cmpext(_, offset, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -328,7 +342,7 @@ TEST_F(TestMockIoObjectRequest, Read) {
               std::string(4096, '1'), 0);
 
   bufferlist bl;
-  ExtentMap extent_map;
+  Extents extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
@@ -356,7 +370,7 @@ TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
                      std::string(ictx->sparse_read_threshold_bytes, '1'), 0);
 
   bufferlist bl;
-  ExtentMap extent_map;
+  Extents extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, 0, ictx->sparse_read_threshold_bytes, CEPH_NOSNAP, 0,
@@ -383,7 +397,7 @@ TEST_F(TestMockIoObjectRequest, ReadError) {
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -EPERM);
 
   bufferlist bl;
-  ExtentMap extent_map;
+  Extents extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
@@ -430,7 +444,7 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, 0);
 
   bufferlist bl;
-  ExtentMap extent_map;
+  Extents extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
@@ -477,7 +491,7 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, -EPERM);
 
   bufferlist bl;
-  ExtentMap extent_map;
+  Extents extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
@@ -529,7 +543,7 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
   expect_copyup(mock_copyup_request, 0);
 
   bufferlist bl;
-  ExtentMap extent_map;
+  Extents extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);

@@ -183,7 +183,7 @@ template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::ExtentMap* extent_map,
+    ceph::bufferlist* read_data, io::Extents* extent_map,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   // IO chained in reverse order
