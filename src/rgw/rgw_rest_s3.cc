@@ -5926,7 +5926,7 @@ rgw::auth::s3::STSEngine::authenticate(
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session, token.token_claims);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
