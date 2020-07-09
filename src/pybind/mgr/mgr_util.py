@@ -55,6 +55,20 @@ class CephfsConnectionException(Exception):
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
 
+class RTimer(Timer):
+    """
+    recurring timer variant of Timer
+    """
+    @no_type_check
+    def run(self):
+        try:
+            while not self.finished.is_set():
+                self.finished.wait(self.interval)
+                self.function(*self.args, **self.kwargs)
+            self.finished.set()
+        except Exception as e:
+            logger.error("task exception: %s", e)
+            raise
 
 class CephfsConnectionPool(object):
     class Connection(object):
@@ -142,21 +156,6 @@ class CephfsConnectionPool(object):
             logger.info("abort done from cephfs '{0}'".format(self.fs_name))
             self.fs = None
 
-    class RTimer(Timer):
-        """
-        recurring timer variant of Timer
-        """
-        @no_type_check
-        def run(self):
-            try:
-                while not self.finished.is_set():
-                    self.finished.wait(self.interval)
-                    self.function(*self.args, **self.kwargs)
-                self.finished.set()
-            except Exception as e:
-                logger.error("CephfsConnectionPool.RTimer: %s", e)
-                raise
-
     # TODO: make this configurable
     TIMER_TASK_RUN_INTERVAL = 30.0   # seconds
     CONNECTION_IDLE_INTERVAL = 60.0  # seconds
@@ -166,9 +165,8 @@ class CephfsConnectionPool(object):
         self.connections = {}
         self.lock = Lock()
         self.cond = Condition(self.lock)
-        self.timer_task = CephfsConnectionPool.RTimer(
-            CephfsConnectionPool.TIMER_TASK_RUN_INTERVAL,
-            self.cleanup_connections)
+        self.timer_task = RTimer(CephfsConnectionPool.TIMER_TASK_RUN_INTERVAL,
+                                 self.cleanup_connections)
         self.timer_task.start()
 
     def cleanup_connections(self):
