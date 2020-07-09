@@ -26,8 +26,8 @@ namespace rgw::aws {
     const std::string arn;
     const bool useSSL;
 
-    client_id_t(const std::string accessKey, const std::string accessSecret,
-                const std::string arn, bool useSsl) : accessKey(accessKey),
+    client_id_t(const std::string &accessKey, const std::string &accessSecret,
+                const std::string &arn, bool useSsl) : accessKey(accessKey),
                                                       accessSecret(accessSecret),
                                                       arn(arn), useSSL(useSsl) {}
 
@@ -77,6 +77,7 @@ namespace rgw::aws {
     const int MAX_CONNECTIONS = 25;
     const int REQUEST_TIMEOUT_MS = 3000;
     const int CONNECT_TIMEOUT_MS = 3000;
+    Aws::SDKOptions options;
 
     void publish_internal_wrapper(message_t *msg) {
       const std::unique_ptr<message_t> msg_owner(msg);
@@ -142,13 +143,17 @@ namespace rgw::aws {
                                                                                                    clientList(_max_clients),
                                                                                                    runner(&Manager::run, this),
                                                                                                    stopped(false), cct(_cct),
-                                                                                                   idle_time(std::chrono::milliseconds(idle_time_ms)){}
+                                                                                                   idle_time(std::chrono::milliseconds(idle_time_ms)){
+          options = Aws::SDKOptions();
+          Aws::InitAPI(options);
+    }
     // dtor wait for thread to stop
     // then connection are cleaned-up
     ~Manager() {
       stopped = true;
       runner.join();
       messageQueue.consume_all(delete_message);
+      Aws::ShutdownAPI(options);
     }
 
 
@@ -220,7 +225,6 @@ namespace rgw::aws {
   };
 
   static Manager *manager = nullptr;
-  Aws::SDKOptions options;
   static const unsigned IDLE_TIME_MS = 100;
   static const size_t MAX_QUEUE_DEFAULT = 8192;
   static const size_t MAX_CLIENTS_DEFAULT = 256;
@@ -229,15 +233,12 @@ namespace rgw::aws {
     if (manager) {
       return false;
     }
-    options = Aws::SDKOptions();
-    Aws::InitAPI(options);
     manager = new Manager(MAX_CLIENTS_DEFAULT, MAX_QUEUE_DEFAULT, IDLE_TIME_MS, cct);
     return true;
   }
 
   void shutdown() {
     delete manager;
-    Aws::ShutdownAPI(options);
     manager = nullptr;
   }
 

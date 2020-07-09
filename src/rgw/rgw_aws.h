@@ -17,7 +17,7 @@ namespace rgw::aws {
 
   typedef std::variant<Aws::Lambda::LambdaClient *, Aws::SNS::SNSClient *> AwsClient;
 
-  #define NO_CLIENT AwsClient()
+  static const AwsClient NO_CLIENT = AwsClient();
 
   AwsClient connect(const std::string &accessKey,
                     const std::string &accessSecret,

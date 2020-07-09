@@ -770,9 +770,11 @@ public:
   }
 
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
+    ceph_assert(false);
     return nullptr;
   }
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
+    ceph_assert(false);
     return nullptr;
   }
 
@@ -813,7 +815,7 @@ const std::string& get_schema(const std::string& endpoint) {
   } else if (schema == "kafka") {
     return KAFKA_SCHEMA;
 #endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
   }else if(schema == "aws"){
     return AWS_SCHEMA;
 #endif
