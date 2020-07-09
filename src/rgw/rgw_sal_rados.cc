@@ -800,7 +800,7 @@ int RadosBucket::purge_instance(const DoutPrefixProvider* dpp)
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
     int shard_id = (info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-    int ret = bs.init(info.bucket, shard_id, info.layout.current_index, std::nullopt, nullptr, dpp);
+    int ret = bs.init(info.bucket, shard_id, info.layout.current_index, nullptr, dpp);
     if (ret < 0) {
       cerr << "ERROR: bs.init(bucket=" << info.bucket << ", shard=" << shard_id
            << "): " << cpp_strerror(-ret) << std::endl;
