@@ -59,7 +59,7 @@ Current CLT members are:
  * Haomai Wang <haomai@xsky.com>
  * Jason Dillaman <dillaman@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
- * Joao Eduardo Luis <joao@suse.de>
+ * João Eduardo Luis <joao@suse.de>
  * Ken Dreyer <kdreyer@redhat.com>
  * Lenz Grimmer <lgrimmer@suse.com>
  * Matt Benjamin <mbenjami@redhat.com>
