@@ -151,7 +151,7 @@
 
                                 // 150 already in use (MSG_OSD_RECOVERY_RESERVE)
 
-#define MSG_MDS_RESOLVE            0x200
+#define MSG_MDS_RESOLVE            0x200 // 0x2xx are for mdcache of mds
 #define MSG_MDS_RESOLVEACK         0x201
 #define MSG_MDS_CACHEREJOIN        0x202
 #define MSG_MDS_DISCOVER           0x203
@@ -169,12 +169,10 @@
 #define MSG_MDS_OPENINOREPLY       0x210
 #define MSG_MDS_SNAPUPDATE         0x211
 #define MSG_MDS_FRAGMENTNOTIFYACK  0x212
-#define MSG_MDS_LOCK               0x300
+#define MSG_MDS_LOCK               0x300 // 0x3xx are for locker of mds
 #define MSG_MDS_INODEFILECAPS      0x301
-#define MSG_MDS_METRICS            0x302
-#define MSG_MDS_PING               0x303
 
-#define MSG_MDS_EXPORTDIRDISCOVER     0x449
+#define MSG_MDS_EXPORTDIRDISCOVER     0x449 // 0x4xx are for migrator of mds
 #define MSG_MDS_EXPORTDIRDISCOVERACK  0x450
 #define MSG_MDS_EXPORTDIRCANCEL       0x451
 #define MSG_MDS_EXPORTDIRPREP         0x452
@@ -192,6 +190,8 @@
 #define MSG_MDS_GATHERCAPS            0x472
 
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
+#define MSG_MDS_METRICS            0x501  // for mds metric aggregator
+#define MSG_MDS_PING               0x502  // for mds pinger
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
