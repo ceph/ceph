@@ -38,6 +38,27 @@ public:
   }
 };
 
+class RGWOp_SIP_GetStageStatus : public RGWRESTOp {
+  string provider;
+  string start_marker;
+  string cur_marker;
+public:
+  RGWOp_SIP_GetStageStatus(string&& _provider) : provider(std::move(_provider)) {}
+  ~RGWOp_SIP_GetStageStatus() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("sip", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->get_caps());
+  }
+  void send_response() override;
+  void execute() override;
+  const char* name() const override {
+    return "get_sip_info";
+  }
+};
+
 class RGWOp_SIP_List : public RGWRESTOp {
   /* result */
   std::vector<std::string> providers;
