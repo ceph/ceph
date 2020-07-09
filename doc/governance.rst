@@ -65,6 +65,7 @@ Current CLT members are:
  * Matt Benjamin <mbenjami@redhat.com>
  * Myoungwon Oh <omwmw@sk.com>
  * Neha Ojha <nojha@redhat.com>
+ * Patrick Donnelly <pdonnell@redhat.com>
  * Sage Weil <sage@redhat.com>
  * Sebastian Wagner <swagner@suse.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
