@@ -40,7 +40,7 @@ class HealthTest(DashboardTestCase):
             'ro_compat': JObj({}, allow_unknown=True),
             'incompat': JObj({}, allow_unknown=True)
         }),
-        'min_compat_client': str,
+        'required_client_features': JObj({}, allow_unknown=True),
         'data_pools': JList(int),
         'info': JObj({}, allow_unknown=True),
         'fs_name': str,

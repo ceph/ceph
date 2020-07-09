@@ -1171,8 +1171,30 @@ public:
       return false;
     return _vec[bit / bits_per_block] & ((block_type)1 << (bit % bits_per_block));
   }
+  void insert(size_t bit) {
+    size_t n = bit / bits_per_block;
+    if (n >= _vec.size())
+      _vec.resize(n + 1);
+    _vec[n] |= ((block_type)1 << (bit % bits_per_block));
+  }
+  void erase(size_t bit) {
+    size_t n = bit / bits_per_block;
+    if (n >= _vec.size())
+      return;
+    _vec[n] &= ~((block_type)1 << (bit % bits_per_block));
+    if (n + 1 == _vec.size()) {
+      while (!_vec.empty() && _vec.back() == 0)
+	_vec.pop_back();
+    }
+  }
   void clear() {
     _vec.clear();
+  }
+  bool operator==(const feature_bitset_t& other) const {
+    return _vec == other._vec;
+  }
+  bool operator!=(const feature_bitset_t& other) const {
+    return _vec != other._vec;
   }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &p);

@@ -150,8 +150,9 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("root", root);
   f->dump_int("session_timeout", session_timeout);
   f->dump_int("session_autoclose", session_autoclose);
-  f->dump_stream("min_compat_client") << to_integer<int>(min_compat_client) << " ("
-				      << min_compat_client << ")";
+  f->open_object_section("required_client_features");
+  cephfs_dump_features(f, required_client_features);
+  f->close_section();
   f->dump_int("max_file_size", max_file_size);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
@@ -230,8 +231,7 @@ void MDSMap::print(ostream& out) const
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
   out << "max_file_size\t" << max_file_size << "\n";
-  out << "min_compat_client\t" << to_integer<int>(min_compat_client) << " ("
-			       << min_compat_client << ")\n";
+  out << "required_client_features\t" << cephfs_stringify_features(required_client_features) << "\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
   out << "compat\t" << compat << "\n";
@@ -702,7 +702,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 15;
+  __u16 ev = 16;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -724,7 +724,11 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(balancer, bl);
   encode(standby_count_wanted, bl);
   encode(old_max_mds, bl);
-  encode(min_compat_client, bl);
+  {
+    ceph_release_t min_compat_client = ceph_release_t::unknown;
+    encode(min_compat_client, bl);
+  }
+  encode(required_client_features, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -852,16 +856,24 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(old_max_mds, p);
   }
 
-  if (ev == 14) {
-    int8_t r;
-    decode(r, p);
-    if (r < 0) {
-      min_compat_client = ceph_release_t::unknown;
-    } else {
-      min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
+  if (ev >= 14) {
+    ceph_release_t min_compat_client;
+    if (ev == 14) {
+      int8_t r;
+      decode(r, p);
+      if (r < 0) {
+	min_compat_client = ceph_release_t::unknown;
+      } else {
+	min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
+      }
+    } else if (ev >= 15) {
+      decode(min_compat_client, p);
     }
-  } else if (ev > 14) {
-    decode(min_compat_client, p);
+    if (ev >= 16) {
+      decode(required_client_features, p);
+    } else {
+      set_min_compat_client(min_compat_client);
+    }
   }
 
   DECODE_FINISH(p);
@@ -1047,4 +1059,25 @@ bool MDSMap::is_degraded() const {
       return true;
   }
   return false;
+}
+
+void MDSMap::set_min_compat_client(ceph_release_t version)
+{
+  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
+
+  if (version >= ceph_release_t::octopus)
+    bits.push_back(CEPHFS_FEATURE_OCTOPUS);
+  else if (version >= ceph_release_t::nautilus)
+    bits.push_back(CEPHFS_FEATURE_NAUTILUS);
+  else if (version >= ceph_release_t::mimic)
+    bits.push_back(CEPHFS_FEATURE_MIMIC);
+  else if (version >= ceph_release_t::luminous)
+    bits.push_back(CEPHFS_FEATURE_LUMINOUS);
+  else if (version >= ceph_release_t::kraken)
+    bits.push_back(CEPHFS_FEATURE_KRAKEN);
+  else if (version >= ceph_release_t::jewel)
+    bits.push_back(CEPHFS_FEATURE_JEWEL);
+
+  std::sort(bits.begin(), bits.end());
+  required_client_features = feature_bitset_t(bits);
 }

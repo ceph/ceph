@@ -15,6 +15,11 @@
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
 
+class feature_bitset_t;
+namespace ceph {
+  class Formatter;
+}
+
 // When adding a new release, please update the "current" release below, add a
 // feature bit for that release, add that feature bit to CEPHFS_FEATURES_ALL,
 // and update Server::update_required_client_features(). This feature bit
@@ -35,6 +40,7 @@
 #define CEPHFS_FEATURE_DELEG_INO        13
 #define CEPHFS_FEATURE_OCTOPUS          13
 #define CEPHFS_FEATURE_METRIC_COLLECT   14
+#define CEPHFS_FEATURE_MAX		14
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -57,5 +63,10 @@
 
 #define CEPHFS_FEATURES_CLIENT_SUPPORTED CEPHFS_FEATURES_ALL
 #define CEPHFS_FEATURES_CLIENT_REQUIRED {}
+
+extern std::string_view cephfs_feature_name(size_t id);
+extern int cephfs_feature_from_name(std::string_view name);
+std::string cephfs_stringify_features(const feature_bitset_t& features);
+void cephfs_dump_features(ceph::Formatter *f, const feature_bitset_t& features);
 
 #endif

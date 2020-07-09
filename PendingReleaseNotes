@@ -86,3 +86,9 @@
 * Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
   If any OSD has repaired more than this many I/O errors in stored data a
  ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
+
+* Introduce commands that manipulate required client features of a file system::
+
+    ceph fs required_client_features <fs name> add <feature>
+    ceph fs required_client_features <fs name> rm <feature>
+    ceph fs feature ls
