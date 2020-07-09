@@ -33,7 +33,7 @@ Vagrant.configure("2") do |config|
     sudo yum install -y yum-utils
     sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
     sudo rpm --import 'https://download.ceph.com/keys/release.asc'
-    curl -L https://shaman.ceph.com/api/repos/ceph/master/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+    curl -L https://shaman.ceph.com/api/repos/ceph/octopus/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
     sudo yum install -y python36 podman ceph
     sudo ln -s /usr/bin/python36 /usr/bin/python3 || true
   SHELL
