@@ -8246,13 +8246,15 @@ void doManySetAttr(ObjectStore* store,
   ceph::bufferlist in, out;
   ostringstream err;
 
-  bool b = admin_socket->execute_command(
-    { "{\"prefix\": \"bluestore bluefs stats\"}" },
+  auto r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluefs stats\"}" },
     in, err, &out);
-  if (!b) {
-    cerr << "failure querying " << std::endl;
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  } else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
   }
-  std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  do_check_fn(store);
   test_obj.shutdown();
 }
 

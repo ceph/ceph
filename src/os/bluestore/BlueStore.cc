@@ -15776,6 +15776,7 @@ uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
       // - observed maximums on DB dev for DB/WAL/UNSORTED data
       // - observed maximum spillovers
       uint64_t max_db_use = 0; // max db usage we potentially observed
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_LOG - LEVEL_FIRST);
       max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
       max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
       // this could go to db hence using it in the estimation
@@ -15792,6 +15793,7 @@ uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
       }
     }
     break;
+  case LEVEL_LOG:
   case LEVEL_WAL:
     res = BlueFS::BDEV_WAL;
     break;
@@ -15834,14 +15836,15 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
     << ", db_avail:" << db_avail4slow << std::endl
     << "Usage matrix:" << std::endl;
-  constexpr std::array<const char*, 7> names{ {
+  constexpr std::array<const char*, 8> names{ {
     "DEV/LEV",
     "WAL",
     "DB",
     "SLOW",
     "*",
     "*",
-    "REAL"
+    "REAL",
+    "FILES",
   } };
   const size_t width = 12;
   for (size_t i = 0; i < names.size(); ++i) {
@@ -15854,6 +15857,8 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.setf(std::ios::left, std::ios::adjustfield);
     sout.width(width);
     switch (l + LEVEL_FIRST) {
+    case LEVEL_LOG:
+      sout << "LOG"; break;
     case LEVEL_WAL:
       sout << "WAL"; break;
     case LEVEL_DB:
@@ -15863,15 +15868,14 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     case LEVEL_MAX:
       sout << "TOTALS"; break;
     }
-    for (size_t d = 0; d < max_x - 1; d++) {
+    for (size_t d = 0; d < max_x; d++) {
       sout.setf(std::ios::left, std::ios::adjustfield);
       sout.width(width);
       sout << stringify(byte_u_t(per_level_per_dev_usage.at(d, l)));
     }
     sout.setf(std::ios::left, std::ios::adjustfield);
     sout.width(width);
-    sout << stringify(byte_u_t(per_level_per_dev_usage.at(max_x - 1, l)))
-         << std::endl;
+    sout << stringify(per_level_files[l]) << std::endl;
   }
   ceph_assert(max_x == per_level_per_dev_max.get_max_x());
   ceph_assert(max_y == per_level_per_dev_max.get_max_y());
@@ -15880,6 +15884,8 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.setf(std::ios::left, std::ios::adjustfield);
     sout.width(width);
     switch (l + LEVEL_FIRST) {
+    case LEVEL_LOG:
+      sout << "LOG"; break;
     case LEVEL_WAL:
       sout << "WAL"; break;
     case LEVEL_DB:
