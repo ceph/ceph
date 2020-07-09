@@ -112,7 +112,7 @@
     "@types/node": "12.12.47",
     "@types/simplebar": "5.1.1",
     "codelyzer": "5.2.2",
-    "cypress": "4.8.0",
+    "cypress": "4.10.0",
     "html-linter": "1.1.1",
     "htmllint-cli": "0.0.7",
     "jest": "26.1.0",
