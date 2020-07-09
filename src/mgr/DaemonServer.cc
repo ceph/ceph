@@ -551,9 +551,21 @@ bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
 void DaemonServer::update_task_status(DaemonKey key, const ref_t<MMgrReport>& m) {
   dout(10) << "got task status from " << key << dendl;
 
-  auto p = pending_service_map.get_daemon(key.type, key.name);
-  if (!map_compare(p.first->task_status, *m->task_status)) {
-    p.first->task_status = *m->task_status;
+  bool service_map_dirty = false;
+  if ((*m->task_status).empty()) {
+    auto removed = pending_service_map.rm_daemon(key.type, key.name);
+    if (removed) {
+      service_map_dirty = true;
+    }
+  } else {
+    auto p = pending_service_map.get_daemon(key.type, key.name);
+    if (!map_compare(p.first->task_status, *m->task_status)) {
+      service_map_dirty = true;
+      p.first->task_status = *m->task_status;
+    }
+  }
+
+  if (service_map_dirty) {
     pending_service_map_dirty = pending_service_map.epoch;
   }
 }
