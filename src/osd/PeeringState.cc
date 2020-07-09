@@ -1355,11 +1355,10 @@ bool PeeringState::needs_recovery() const
   }
 
   ceph_assert(!acting_recovery_backfill.empty());
-  auto end = acting_recovery_backfill.end();
-  auto a = acting_recovery_backfill.begin();
-  for (; a != end; ++a) {
-    if (*a == get_primary()) continue;
-    pg_shard_t peer = *a;
+  for (const pg_shard_t& peer : acting_recovery_backfill) {
+    if (peer == get_primary()) {
+      continue;
+    }
     auto pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
       psdout(10) << __func__ << " osd." << peer << " doesn't have missing set"
@@ -1383,11 +1382,9 @@ bool PeeringState::needs_backfill() const
 
   // We can assume that only possible osds that need backfill
   // are on the backfill_targets vector nodes.
-  auto end = backfill_targets.end();
-  auto a = backfill_targets.begin();
-  for (; a != end; ++a) {
-    pg_shard_t peer = *a;
+  for (const pg_shard_t& peer : backfill_targets) {
     auto pi = peer_info.find(peer);
+    ceph_assert(pi != peer_info.end());
     if (!pi->second.last_backfill.is_max()) {
       psdout(10) << __func__ << " osd." << peer
 		 << " has last_backfill " << pi->second.last_backfill << dendl;
