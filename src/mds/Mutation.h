@@ -415,19 +415,14 @@ typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 struct MDSlaveUpdate {
   int origop;
   bufferlist rollback;
-  elist<MDSlaveUpdate*>::item item;
   Context *waiter;
   set<CInode*> olddirs;
   set<CInode*> unlinked;
-  MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
-    origop(oo),
-    item(this),
-    waiter(0) {
+  MDSlaveUpdate(int oo, bufferlist &rbl) :
+    origop(oo) {
     rollback.claim(rbl);
-    list.push_back(&item);
   }
   ~MDSlaveUpdate() {
-    item.remove_myself();
     if (waiter)
       waiter->complete(0);
   }

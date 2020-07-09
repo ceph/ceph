@@ -2731,16 +2731,13 @@ void MDCache::send_slave_resolves()
   map<mds_rank_t, MMDSResolve::ref> resolves;
 
   if (mds->is_resolve()) {
-    for (map<mds_rank_t, map<metareqid_t, MDSlaveUpdate*> >::iterator p = uncommitted_slave_updates.begin();
-	 p != uncommitted_slave_updates.end();
+    for (map<metareqid_t, uslave>::iterator p = uncommitted_slaves.begin();
+	 p != uncommitted_slaves.end();
 	 ++p) {
-      resolves[p->first] = MMDSResolve::create();
-      for (map<metareqid_t, MDSlaveUpdate*>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
-	dout(10) << " including uncommitted " << q->first << dendl;
-	resolves[p->first]->add_slave_request(q->first, false);
-      }
+      mds_rank_t master = p->second.master;
+      auto &m = resolves[master];
+      if (!m) m = MMDSResolve::create();
+      m->add_slave_request(p->first, false);
     }
   } else {
     set<mds_rank_t> resolve_set;
@@ -3405,7 +3402,7 @@ void MDCache::handle_resolve_ack(const MMDSResolveAck::const_ref &ack)
 
     if (mds->is_resolve()) {
       // replay
-      MDSlaveUpdate *su = get_uncommitted_slave_update(p.first, from);
+      MDSlaveUpdate *su = get_uncommitted_slave(p.first, from);
       ceph_assert(su);
 
       // log commit
@@ -3414,7 +3411,7 @@ void MDCache::handle_resolve_ack(const MMDSResolveAck::const_ref &ack)
 				     new C_MDC_SlaveCommit(this, from, p.first));
       mds->mdlog->flush();
 
-      finish_uncommitted_slave_update(p.first, from);
+      finish_uncommitted_slave(p.first);
     } else {
       MDRequestRef mdr = request_get(p.first);
       // information about master imported caps
@@ -3430,7 +3427,7 @@ void MDCache::handle_resolve_ack(const MMDSResolveAck::const_ref &ack)
     dout(10) << " abort on slave " << metareq << dendl;
 
     if (mds->is_resolve()) {
-      MDSlaveUpdate *su = get_uncommitted_slave_update(metareq, from);
+      MDSlaveUpdate *su = get_uncommitted_slave(metareq, from);
       ceph_assert(su);
 
       // perform rollback (and journal a rollback entry)
@@ -3467,24 +3464,45 @@ void MDCache::handle_resolve_ack(const MMDSResolveAck::const_ref &ack)
   }
 }
 
-void MDCache::add_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master, MDSlaveUpdate *su)
+void MDCache::add_uncommitted_slave(metareqid_t reqid, LogSegment *ls, mds_rank_t master, MDSlaveUpdate *su)
 {
-  ceph_assert(uncommitted_slave_updates[master].count(reqid) == 0);
-  uncommitted_slave_updates[master][reqid] = su;
+  auto const &ret = uncommitted_slaves.emplace(std::piecewise_construct,
+                                               std::forward_as_tuple(reqid),
+                                               std::forward_as_tuple());
+  ceph_assert(ret.second);
+  ls->uncommitted_slaves.insert(reqid);
+  uslave &u = ret.first->second;
+  u.master = master;
+  u.ls = ls;
+  u.su = su;
+  if (su == nullptr) {
+    return;
+  }
   for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p)
     uncommitted_slave_rename_olddir[*p]++;
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p)
     uncommitted_slave_unlink[*p]++;
 }
 
-void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master)
+void MDCache::finish_uncommitted_slave(metareqid_t reqid, bool assert_exist)
 {
-  ceph_assert(uncommitted_slave_updates[master].count(reqid));
-  MDSlaveUpdate* su = uncommitted_slave_updates[master][reqid];
+  auto it = uncommitted_slaves.find(reqid);
+  if (it == uncommitted_slaves.end()) {
+    ceph_assert(!assert_exist);
+    return;
+  }
+  uslave &u = it->second;
+  MDSlaveUpdate* su = u.su;
 
-  uncommitted_slave_updates[master].erase(reqid);
-  if (uncommitted_slave_updates[master].empty())
-    uncommitted_slave_updates.erase(master);
+  if (!u.waiters.empty()) {
+    mds->queue_waiters(u.waiters);
+  }
+  u.ls->uncommitted_slaves.erase(reqid);
+  uncommitted_slaves.erase(it);
+
+  if (su == nullptr) {
+    return;
+  }
   // discard the non-auth subtree we renamed out of
   for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p) {
     CInode *diri = *p;
@@ -3522,23 +3540,26 @@ void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t mast
   delete su;
 }
 
-MDSlaveUpdate* MDCache::get_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master)
+MDSlaveUpdate* MDCache::get_uncommitted_slave(metareqid_t reqid, mds_rank_t master)
 {
 
-  MDSlaveUpdate* su = NULL;
-  if (uncommitted_slave_updates.count(master) &&
-      uncommitted_slave_updates[master].count(reqid)) {
-    su = uncommitted_slave_updates[master][reqid];
-    ceph_assert(su);
+  MDSlaveUpdate* su = nullptr;
+  auto it = uncommitted_slaves.find(reqid);
+  if (it != uncommitted_slaves.end() &&
+      it->second.master == master) {
+    su = it->second.su;
   }
   return su;
 }
 
-void MDCache::finish_rollback(metareqid_t reqid) {
-  auto p = resolve_need_rollback.find(reqid);
+void MDCache::finish_rollback(metareqid_t reqid, MDRequestRef& mdr) {
+  auto p = resolve_need_rollback.find(mdr->reqid);
   ceph_assert(p != resolve_need_rollback.end());
-  if (mds->is_resolve())
-    finish_uncommitted_slave_update(reqid, p->second);
+  if (mds->is_resolve()) {
+    finish_uncommitted_slave(reqid, false);
+  } else if (mdr) {
+    finish_uncommitted_slave(mdr->reqid, mdr->more()->slave_update_journaled);
+  }
   resolve_need_rollback.erase(p);
   maybe_finish_slave_resolve();
 }
