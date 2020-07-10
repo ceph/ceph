@@ -194,6 +194,7 @@ public:
   uint64_t get_examined_bytes() { return examined_bytes; }
   uint64_t get_total_bytes() { return total_bytes; }
   uint64_t get_total_objects() { return total_objects; }
+  void set_debug(const bool debug_) { debug = debug_; }
   friend class EstimateDedupRatio;
   friend class ChunkScrub;
 };
@@ -663,6 +664,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
 			     report_period, s.num_objects, max_read_size,
 			     max_seconds));
     ptr->create("estimate_thread");
+    ptr->set_debug(debug);
     estimate_threads.push_back(move(ptr));
   }
   glock.unlock();
