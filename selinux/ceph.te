@@ -14,6 +14,8 @@ require {
 	type setfiles_t;
 	type nvme_device_t;
 	type targetd_etc_rw_t;
+	type amqp_port_t;
+	type soundd_port_t;
 	class sock_file unlink;
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
