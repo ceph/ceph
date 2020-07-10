@@ -769,7 +769,7 @@ namespace rgw {
     typedef bi::rbtree<RGWFileHandle, bi::compare<FhLT>, FhHook> FhTree;
 #endif
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
-			       std::mutex> FHCache;
+			       std::recursive_mutex> FHCache;
 
     ~RGWFileHandle() override;
 
