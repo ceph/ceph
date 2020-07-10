@@ -185,10 +185,11 @@ void StrayManager::_purge_stray_purged(
     auto &pi = in->project_inode();
     pi.inode.size = 0;
     pi.inode.max_size_ever = 0;
-    pi.inode.client_ranges.clear();
     pi.inode.truncate_size = 0;
     pi.inode.truncate_from = 0;
     pi.inode.version = in->pre_dirty();
+    pi.inode.client_ranges.clear();
+    in->clear_clientwriteable();
 
     le->metablob.add_dir_context(dn->dir);
     le->metablob.add_primary_dentry(dn, in, true);
