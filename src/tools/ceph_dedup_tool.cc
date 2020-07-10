@@ -389,7 +389,6 @@ void ChunkScrub::chunk_scrub_common()
   ObjectCursor shard_start;
   ObjectCursor shard_end;
   int ret;
-  utime_t cur_time = ceph_clock_now();
   Rados rados;
 
   ret = rados.init_with_context(g_ceph_context);
