@@ -178,21 +178,7 @@
               we initiate trimming. Set to ``-1`` to disable limits.
 
 :Type:  32-bit Integer
-:Default: ``30``
-
-
-``mds log max expiring``
-
-:Description: The maximum number of segments to expire in parallels
-:Type:  32-bit Integer
-:Default: ``20``
-
-
-``mds log eopen size``
-
-:Description: The maximum number of inodes in an EOpen event.
-:Type:  32-bit Integer
-:Default: ``100``
+:Default: ``128``
 
 
 ``mds bal sample interval``
