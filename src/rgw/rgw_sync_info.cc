@@ -65,7 +65,7 @@ void SIProvider::Info::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("stages", stages, obj);
 }
 
-SIProvider::Info SIProviderCommon::get_info() const
+SIProvider::Info SIProviderCommon::get_info()
 {
   vector<SIProvider::StageInfo> stages;
 
@@ -93,7 +93,7 @@ int SIProvider_SingleStage::fetch(const stage_id_t& sid, int shard_id, std::stri
   return do_fetch(shard_id, marker, max, result);
 }
 
-int SIProvider_SingleStage::get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const
+int SIProvider_SingleStage::get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker)
 {
   if (sid != stage_info.sid) {
     return -ERANGE;
@@ -101,7 +101,7 @@ int SIProvider_SingleStage::get_start_marker(const stage_id_t& sid, int shard_id
   return do_get_start_marker(shard_id, marker);
 }
 
-int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const
+int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker)
 {
   if (sid != stage_info.sid) {
     return -ERANGE;
@@ -170,7 +170,7 @@ SIProvider::stage_id_t SIProvider_Container::encode_sid(const std::string& pid,
   return pid + ":" + provider_sid;
 }
 
-SIProvider::stage_id_t SIProvider_Container::get_first_stage() const
+SIProvider::stage_id_t SIProvider_Container::get_first_stage()
 {
   if (pids.empty()) {
     return stage_id_t();
@@ -178,7 +178,7 @@ SIProvider::stage_id_t SIProvider_Container::get_first_stage() const
   return encode_sid(pids[0], providers[0]->get_first_stage());
 }
 
-SIProvider::stage_id_t SIProvider_Container::get_last_stage() const
+SIProvider::stage_id_t SIProvider_Container::get_last_stage()
 {
   if (pids.empty()) {
     return stage_id_t();
@@ -187,7 +187,7 @@ SIProvider::stage_id_t SIProvider_Container::get_last_stage() const
   return encode_sid(pids[i], providers[i]->get_last_stage());
 }
 
-int SIProvider_Container::get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) const
+int SIProvider_Container::get_next_stage(const stage_id_t& sid, stage_id_t *next_sid)
 {
   if (pids.empty()) {
     ldout(cct, 20) << "NOTICE: " << __func__ << "() called by pids is empty" << dendl;
@@ -222,7 +222,7 @@ int SIProvider_Container::get_next_stage(const stage_id_t& sid, stage_id_t *next
   return 0;
 }
 
-std::vector<SIProvider::stage_id_t> SIProvider_Container::get_stages() const
+std::vector<SIProvider::stage_id_t> SIProvider_Container::get_stages()
 {
   std::vector<stage_id_t> result;
 
@@ -241,7 +241,7 @@ std::vector<SIProvider::stage_id_t> SIProvider_Container::get_stages() const
   return result;
 }
 
-int SIProvider_Container::get_stage_info(const stage_id_t& sid, StageInfo *sinfo) const
+int SIProvider_Container::get_stage_info(const stage_id_t& sid, StageInfo *sinfo)
 {
   SIProviderRef provider;
   stage_id_t psid;
@@ -282,7 +282,7 @@ int SIProvider_Container::fetch(const stage_id_t& sid, int shard_id, std::string
   return provider->fetch(psid, shard_id, marker, max, result);
 }
 
-int SIProvider_Container::get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const
+int SIProvider_Container::get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker)
 {
   SIProviderRef provider;
   stage_id_t psid;
@@ -295,7 +295,7 @@ int SIProvider_Container::get_start_marker(const stage_id_t& sid, int shard_id, 
   return provider->get_start_marker(psid, shard_id, marker);
 }
 
-int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const
+int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker)
 {
   SIProviderRef provider;
   stage_id_t psid;

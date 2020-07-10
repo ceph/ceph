@@ -28,7 +28,7 @@ int SIProviderCRMgr::GetNextStageCR::operate()
       }
     }
 
-    int ret = (found ? -ENOENT : -ERANGE);
+    int ret = (found ? -ENODATA : -ENOENT);
     return set_cr_error(ret);
   }
 

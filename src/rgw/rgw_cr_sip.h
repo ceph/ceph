@@ -81,14 +81,14 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
   string remote_provider_name;
   std::optional<string> instance;
 
-  SIProviderRef local_provider;
+  SIProvider *local_provider;
 
 public:
   SIProviderCRMgr_REST(CephContext *_cct,
                        RGWRESTConn *_conn,
                        RGWHTTPManager *_http_manager,
                        const string& _remote_provider_name,
-                       SIProviderRef& _local_provider,
+                       SIProvider *_local_provider,
                        std::optional<string> _instance) : SIProviderCRMgr(_cct),
                                                           conn(_conn),
                                                           http_manager(_http_manager),
