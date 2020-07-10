@@ -34,6 +34,7 @@ public:
 
   struct StageInfo {
     stage_id_t sid;
+    std::optional<stage_id_t> next_sid;
     StageType type{UNKNOWN};
     int num_shards{0};
 
@@ -79,7 +80,7 @@ public:
 
   virtual stage_id_t get_first_stage() const = 0;
   virtual stage_id_t get_last_stage() const = 0;
-  virtual int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) = 0;
+  virtual int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) const = 0;
   virtual std::vector<stage_id_t> get_stages() const = 0;
 
   virtual int get_stage_info(const stage_id_t& sid, StageInfo *stage_info) const = 0;
@@ -133,7 +134,7 @@ public:
                          const std::string& name,
                          StageType type,
                          int num_shards) : SIProviderCommon(_cct, name),
-                                           stage_info({name, type, num_shards}) {}
+                                           stage_info({name, nullopt, type, num_shards}) {}
   stage_id_t get_first_stage() const override {
     return stage_info.sid;
   }
@@ -141,7 +142,7 @@ public:
     return stage_info.sid;
   }
 
-  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override {
+  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) const override {
     return -ENOENT;
   }
   std::vector<stage_id_t> get_stages() const override {
@@ -188,7 +189,7 @@ public:
   stage_id_t get_first_stage() const override;
   stage_id_t get_last_stage() const override;
 
-  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override;
+  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) const override;
   std::vector<SIProvider::stage_id_t> get_stages() const override;
 
   int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) const override;

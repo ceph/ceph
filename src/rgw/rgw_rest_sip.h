@@ -55,7 +55,7 @@ public:
   void send_response() override;
   void execute() override;
   const char* name() const override {
-    return "get_sip_info";
+    return "get_stage_status";
   }
 };
 

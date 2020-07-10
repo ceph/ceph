@@ -9,6 +9,48 @@
 
 class SIProviderCRMgr
 {
+  class GetNextStageCR : public RGWCoroutine {
+    SIProviderCRMgr *mgr;
+
+    SIProvider::stage_id_t sid;
+    SIProvider::stage_id_t *next_sid;
+
+    std::vector<SIProvider::stage_id_t> stages;
+  public:
+    GetNextStageCR(SIProviderCRMgr *_mgr,
+                   SIProvider::stage_id_t _sid,
+                   SIProvider::stage_id_t *_next_sid) : RGWCoroutine(_mgr->ctx()),
+                                                        mgr(_mgr),
+                                                        sid(_sid),
+                                                        next_sid(_next_sid) {}
+
+    int operate() override {
+      reenter(this) {
+        yield call(mgr->get_stages_cr(&stages));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        bool found = (sid.empty()); /* for empty stage id return the first stage */
+        for (auto& stage : stages) {
+          if (found) {
+            *next_sid = stage;
+            return set_cr_done();
+          }
+
+          if (stage == sid) {
+            found = true;
+          }
+        }
+
+        int ret = (found ? -ENOENT : -ERANGE);
+        return set_cr_error(ret);
+      }
+
+      return 0;
+    }
+  };
+
 protected:
   CephContext *cct;
 public:
@@ -24,7 +66,10 @@ public:
   virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
   virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) = 0;
   virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) = 0;
-  virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) = 0;
+
+  virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) {
+    return new GetNextStageCR(this, sid, next_sid);
+  }
 };
 
 template <class T>
@@ -93,7 +138,6 @@ public:
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
-  RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) override;
 };
 
 RGWCoroutine *SIProviderCRMgr_Local::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
@@ -149,17 +193,6 @@ RGWCoroutine *SIProviderCRMgr_Local::get_cur_state_cr(const SIProvider::stage_id
                                marker,
                                [=](std::string *_marker) {
                                  return pvd->get_cur_state(sid, shard_id, _marker);
-                               });
-}
-
-RGWCoroutine *SIProviderCRMgr_Local::get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid)
-{
-  auto pvd = provider; /* capture another reference */
-  return new RGWSafeRetAsyncCR<SIProvider::stage_id_t>(cct,
-                               async_rados,
-                               next_sid,
-                               [=](std::string *_next_sid) {
-                                 return pvd->get_next_stage(sid, _next_sid);
                                });
 }
 
@@ -366,6 +399,84 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
     }
   };
 
+  class GetStagesStatusCR : public RGWCoroutine {
+    SIProviderCRMgr_REST *mgr;
+    SIProvider::stage_id_t sid;
+    int shard_id;
+
+    string *start_marker;
+    string *cur_marker;
+
+    string path;
+
+    struct {
+      struct {
+        string start;
+        string current;
+
+        void decode_json(JSONObj *obj) {
+          JSONDecoder::decode_json("start", start, obj);
+          JSONDecoder::decode_json("current", current, obj);
+        }
+      } markers;
+
+      void decode_json(JSONObj *obj) {
+        JSONDecoder::decode_json("markers", markers, obj);
+      }
+    } status;
+
+  public:
+    GetStagesStatusCR(SIProviderCRMgr_REST *_mgr,
+                      const SIProvider::stage_id_t& _sid,
+                      int _shard_id,
+                      string *_start_marker,
+                      string *_cur_marker) : RGWCoroutine(_mgr->ctx()),
+                                              mgr(_mgr),
+                                              sid(_sid),
+                                              shard_id(_shard_id),
+                                              start_marker(_start_marker),
+                                              cur_marker(_cur_marker) {
+      path = mgr->path_prefix;
+    }
+
+    int operate() override {
+      reenter(this) {
+        yield {
+          const char *instance_key = (mgr->instance ? "instance" : "");
+          char shard_id_buf[16];
+          snprintf(shard_id_buf, sizeof(shard_id_buf), "%d", shard_id);
+          const char *instance_val = (mgr->instance ? mgr->instance->c_str() : "");
+          rgw_http_param_pair pairs[] = { { "status", nullptr },
+					  { "provider" , mgr->remote_provider_name.c_str() },
+					  { instance_key , instance_val },
+					  { "stage-id" , sid.c_str() },
+					  { "shard-id" , shard_id_buf },
+	                                  { nullptr, nullptr } };
+          call(new RGWReadRESTResourceCR(mgr->ctx(),
+                                         mgr->conn,
+                                         mgr->http_manager,
+                                         path,
+                                         pairs,
+                                         &status));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        if (start_marker) {
+          *start_marker = status.markers.start;
+        }
+
+        if (cur_marker) {
+          *cur_marker = status.markers.current;
+        }
+
+        return set_cr_done();
+      }
+
+      return 0;
+    }
+  };
 public:
   SIProviderCRMgr_REST(CephContext *_cct,
                        RGWRESTConn *_conn,
@@ -384,7 +495,6 @@ public:
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
-  RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) override;
 };
 
 RGWCoroutine *SIProviderCRMgr_REST::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
@@ -401,6 +511,18 @@ RGWCoroutine *SIProviderCRMgr_REST::fetch_cr(const SIProvider::stage_id_t& sid, 
 {
   return new FetchCR(this, sid, shard_id,
                      marker, max, result);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
+{
+  return new GetStagesStatusCR(this, sid, shard_id,
+                               marker, nullptr);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker)
+{
+  return new GetStagesStatusCR(this, sid, shard_id,
+                               nullptr, marker);
 }
 
 class SIPClientCRMgr

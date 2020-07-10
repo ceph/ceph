@@ -34,6 +34,7 @@ static inline SIProvider::StageType stage_type_from_str(const string& s)
 void SIProvider::StageInfo::dump(Formatter *f) const
 {
   encode_json("sid", sid, f);
+  encode_json("next_sid", next_sid, f);
   encode_json("type", stage_type_to_str(type), f);
   encode_json("num_shards", num_shards, f);
 }
@@ -41,6 +42,7 @@ void SIProvider::StageInfo::dump(Formatter *f) const
 void SIProvider::StageInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("sid", sid, obj);
+  JSONDecoder::decode_json("next_sid", next_sid, obj);
   string type_str;
   JSONDecoder::decode_json("type", type_str, obj);
   type = stage_type_from_str(type_str);
@@ -185,7 +187,7 @@ SIProvider::stage_id_t SIProvider_Container::get_last_stage() const
   return encode_sid(pids[i], providers[i]->get_last_stage());
 }
 
-int SIProvider_Container::get_next_stage(const stage_id_t& sid, stage_id_t *next_sid)
+int SIProvider_Container::get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) const
 {
   if (pids.empty()) {
     ldout(cct, 20) << "NOTICE: " << __func__ << "() called by pids is empty" << dendl;
@@ -255,6 +257,14 @@ int SIProvider_Container::get_stage_info(const stage_id_t& sid, StageInfo *sinfo
   }
 
   sinfo->sid = sid;
+
+  stage_id_t next_stage;
+  r = get_next_stage(sid, &next_stage);
+  if (r >= 0) {
+    sinfo->next_sid = next_stage;
+  } else {
+    sinfo->next_sid.reset();
+  }
 
   return 0;
 }
