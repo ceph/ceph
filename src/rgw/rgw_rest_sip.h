@@ -89,6 +89,7 @@ class RGWOp_SIP_Fetch : public RGWRESTOp {
   int max;
 
   SIProviderRef sip;
+  SIProvider::TypeHandler *type_handler;
   SIProvider::fetch_result result;
 public:
   RGWOp_SIP_Fetch(string&& _provider) : provider(std::move(_provider)) {}

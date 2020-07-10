@@ -16,10 +16,11 @@ SIProvider_REST::SIProvider_REST(CephContext *_cct,
                                                                     conn(_conn),
                                                                     http_manager(_http_manager),
                                                                     remote_provider_name(_remote_provider_name),
-                                                                    instance(_instance) {
+                                                                    instance(_instance),
+                                                                    proxy_type_provider(this) {
   sip_cr_mgr.reset(new SIProviderCRMgr_REST(cct, conn, http_manager,
                                             remote_provider_name,
-                                            this, instance));
+                                            &proxy_type_provider, instance));
 }
 
 SIProvider::stage_id_t SIProvider_REST::get_first_stage()

@@ -79,6 +79,7 @@ int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fet
 SIProvider_DataInc::SIProvider_DataInc(CephContext *_cct,
 				       RGWSI_DataLog *_datalog_svc) : SIProvider_SingleStage(_cct,
                                                                                              "data.inc",
+                                                                                             std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
                                                                                              SIProvider::StageType::INC,
                                                                                              _cct->_conf->rgw_data_log_num_shards) {
   svc.datalog = _datalog_svc;

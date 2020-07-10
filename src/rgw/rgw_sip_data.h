@@ -51,8 +51,7 @@ static inline SIProvider::Entry siprovider_data_create_entry(const std::string& 
 
 class RGWDatadataManager;
 
-class SIProvider_DataFull : public SIProvider_SingleStage,
-                            public SITypedProviderDefaultHandler<siprovider_data_info>
+class SIProvider_DataFull : public SIProvider_SingleStage
 {
   struct {
     RGWMetadataManager *mgr;
@@ -80,6 +79,7 @@ public:
   SIProvider_DataFull(CephContext *_cct,
                       RGWMetadataManager *meta_mgr) : SIProvider_SingleStage(_cct,
 									     "data.full",
+                                                                             std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
 									     SIProvider::StageType::FULL,
 									     1) {
     meta.mgr = meta_mgr;
@@ -93,8 +93,7 @@ public:
 
 class RGWDataChangesLog;
 
-class SIProvider_DataInc : public SIProvider_SingleStage,
-                           public SITypedProviderDefaultHandler<siprovider_data_info>
+class SIProvider_DataInc : public SIProvider_SingleStage
 {
   struct {
     RGWDataChangesLog *datalog;

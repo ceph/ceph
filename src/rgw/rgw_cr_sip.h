@@ -81,20 +81,20 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
   string remote_provider_name;
   std::optional<string> instance;
 
-  SIProvider *local_provider;
+  SIProvider::TypeHandlerProvider *type_provider;
 
 public:
   SIProviderCRMgr_REST(CephContext *_cct,
                        RGWRESTConn *_conn,
                        RGWHTTPManager *_http_manager,
                        const string& _remote_provider_name,
-                       SIProvider *_local_provider,
+                       SIProvider::TypeHandlerProvider *_type_provider,
                        std::optional<string> _instance) : SIProviderCRMgr(_cct),
                                                           conn(_conn),
                                                           http_manager(_http_manager),
                                                           remote_provider_name(_remote_provider_name),
                                                           instance(_instance.value_or(string())),
-                                                          local_provider(_local_provider) {}
+                                                          type_provider(_type_provider) {}
 
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;

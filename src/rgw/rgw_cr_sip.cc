@@ -315,7 +315,13 @@ struct SIProviderRESTCRs {
           return set_cr_error(-EIO);
         }
 
-        int r = mgr->local_provider->decode_json_results(sid, &p, result);
+        auto type_handler = mgr->type_provider->get_type_handler(sid);
+        if (!type_handler) {
+          ldout(cct, 0) << "ERROR: " << __func__ << "(): get_type_provider for sid=" << sid << " is null, likely a bug" << dendl;
+          return set_cr_error(-EIO);
+        }
+
+        int r = type_handler->decode_json_results(sid, &p, result);
         if (r < 0) {
           ldout(cct, 0) << "ERROR: failed to decode fetch result: bl=" << bl.to_str() << dendl;
           return set_cr_error(r);

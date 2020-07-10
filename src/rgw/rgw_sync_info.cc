@@ -120,6 +120,7 @@ int SIProvider_SingleStage::trim(const stage_id_t& sid, int shard_id, const std:
 SIProvider_Container::SIProvider_Container(CephContext *_cct,
                                            const std::string& _name,
                                            std::vector<SIProviderRef>& _providers) : SIProviderCommon(_cct, _name),
+                                                                                     type_provider(this),
                                                                                      providers(_providers)
 {
   std::map<std::string, int> pcount;
@@ -308,34 +309,17 @@ int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std
   return provider->get_cur_state(psid, shard_id, marker);
 }
 
-int SIProvider_Container::handle_entry(const stage_id_t& sid,
-                                       Entry& entry,
-                                       std::function<int(EntryInfoBase&)> f)
+SIProvider::TypeHandler *SIProvider_Container::TypeProvider::get_type_handler(const stage_id_t& sid)
 {
   SIProviderRef provider;
   stage_id_t psid;
 
-  if (!decode_sid(sid,  &provider, &psid)) {
-    ldout(cct, 20) << __func__ << "() can't decode sid: " << dendl;
-    return -ENOENT;
+  if (!sip->decode_sid(sid,  &provider, &psid)) {
+    ldout(sip->cct, 20) << __func__ << "() can't decode sid: " << dendl;
+    return nullptr;
   }
 
-  return provider->handle_entry(psid, entry, f);
-}
-
-int SIProvider_Container::decode_json_results(const stage_id_t& sid,
-                                              JSONObj *obj,
-                                              SIProvider::fetch_result *result)
-{
-  SIProviderRef provider;
-  stage_id_t psid;
-
-  if (!decode_sid(sid,  &provider, &psid)) {
-    ldout(cct, 20) << __func__ << "() can't decode sid: " << dendl;
-    return -ENOENT;
-  }
-
-  return provider->decode_json_results(psid, obj, result);
+  return provider->get_type_handler(psid);
 }
 
 int SIProvider_Container::trim(const stage_id_t& sid, int shard_id, const std::string& marker)

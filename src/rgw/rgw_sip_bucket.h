@@ -37,8 +37,7 @@ struct siprovider_bucket_entry_info : public SIProvider::EntryInfoBase {
 };
 WRITE_CLASS_ENCODER(siprovider_bucket_entry_info)
 
-class SIProvider_BucketFull : public SIProvider_SingleStage,
-                              public SITypedProviderDefaultHandler<siprovider_bucket_entry_info>
+class SIProvider_BucketFull : public SIProvider_SingleStage
 {
 
   std::string to_marker(const cls_rgw_obj_key& k) const;
@@ -69,6 +68,7 @@ public:
                         rgw::sal::RGWRadosStore *_store,
                         RGWBucketInfo& _bucket_info) : SIProvider_SingleStage(_cct,
 									     "bucket.full",
+                                                                             std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >(),
 									     SIProvider::StageType::FULL,
 									     _bucket_info.layout.current_index.layout.normal.num_shards),
                                                        store(_store),
@@ -98,8 +98,7 @@ public:
   SIProviderRef get(std::optional<std::string> instance) override;
 };
 
-class SIProvider_BucketInc : public SIProvider_SingleStage,
-                              public SITypedProviderDefaultHandler<siprovider_bucket_entry_info>
+class SIProvider_BucketInc : public SIProvider_SingleStage
 {
 
   SIProvider::Entry create_entry(rgw_bi_log_entry& be) const;
@@ -125,6 +124,7 @@ public:
                        rgw::sal::RGWRadosStore *_store,
                        RGWBucketInfo& _bucket_info) : SIProvider_SingleStage(_cct,
 									     "bucket.inc",
+                                                                             std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >(),
 									     SIProvider::StageType::FULL,
 									     _bucket_info.layout.current_index.layout.normal.num_shards),
                                                        store(_store),

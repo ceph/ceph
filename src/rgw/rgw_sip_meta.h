@@ -38,8 +38,7 @@ WRITE_CLASS_ENCODER(siprovider_meta_info)
 
 class RGWMetadataManager;
 
-class SIProvider_MetaFull : public SIProvider_SingleStage,
-                            public SITypedProviderDefaultHandler<siprovider_meta_info>
+class SIProvider_MetaFull : public SIProvider_SingleStage
 {
   struct {
     RGWMetadataManager *mgr;
@@ -76,6 +75,7 @@ public:
   SIProvider_MetaFull(CephContext *_cct,
                       RGWMetadataManager *meta_mgr) : SIProvider_SingleStage(_cct,
 									     "meta.full",
+                                                                             std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >(),
 									     SIProvider::StageType::FULL,
 									     1) {
     meta.mgr = meta_mgr;
@@ -101,8 +101,7 @@ public:
 class RGWSI_MDLog;
 class RGWMetadataLog;
 
-class SIProvider_MetaInc : public SIProvider_SingleStage,
-                           public SITypedProviderDefaultHandler<siprovider_meta_info>
+class SIProvider_MetaInc : public SIProvider_SingleStage
 {
   RGWSI_MDLog *mdlog;
   string period_id;

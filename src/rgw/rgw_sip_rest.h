@@ -17,7 +17,18 @@ class SIProvider_REST : public SIProviderCommon
 
   std::unique_ptr<SIProviderCRMgr_REST> sip_cr_mgr;
 
-  int get_stages(vector<stage_id_t> *stages);
+  /* this is needed so that we can initialize sip_cr_mgr with type
+   * provider at constructor.
+   */
+  class TypeProvider : public SIProvider::TypeHandlerProvider {
+    SIProvider_REST *sip;
+
+  public:
+    TypeProvider(SIProvider_REST *_sip) : sip(_sip) {}
+    SIProvider::TypeHandler *get_type_handler(const SIProvider::stage_id_t& sid) override {
+      return sip->get_type_handler(sid);
+    }
+  } proxy_type_provider;
 
 public:
   SIProvider_REST(CephContext *_cct,

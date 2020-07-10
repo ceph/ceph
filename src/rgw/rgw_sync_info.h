@@ -74,6 +74,28 @@ public:
     bool done{false}; /* stage done */
   };
 
+  class TypeHandler {
+  public:
+    virtual ~TypeHandler() {}
+
+    virtual int handle_entry(const SIProvider::stage_id_t& sid,
+                             SIProvider::Entry& entry,
+                             std::function<int(SIProvider::EntryInfoBase&)> f) = 0;
+
+    virtual int decode_json_results(const stage_id_t& sid,
+                                    JSONObj *obj,
+                                    SIProvider::fetch_result *result) = 0;
+  };
+
+  class TypeHandlerProvider {
+  public:
+    virtual ~TypeHandlerProvider() {}
+
+    virtual TypeHandler *get_type_handler(const stage_id_t& sid) = 0;
+  };
+
+  using TypeHandlerProviderRef = std::shared_ptr<TypeHandlerProvider>;
+
   virtual ~SIProvider() {}
 
   virtual Info get_info() = 0;
@@ -90,19 +112,21 @@ public:
 
   virtual const std::string& get_name() const = 0;
 
-  virtual int handle_entry(const stage_id_t& sid,
-                           Entry& entry,
-                           std::function<int(EntryInfoBase&)> f) = 0;
-  virtual int decode_json_results(const stage_id_t& sid,
-                                  JSONObj *obj,
-                                  SIProvider::fetch_result *result) = 0;
+  virtual TypeHandlerProvider *get_type_provider() = 0;
+  virtual TypeHandler *get_type_handler(const stage_id_t& sid) {
+    auto tp = get_type_provider();
+    if (!tp) {
+      return nullptr;
+    }
+    return tp->get_type_handler(sid);
+  }
 
   virtual int trim(const stage_id_t& sid,
                    int shard_id,
                    const std::string& marker) = 0;
 };
 
-class SIProviderCommon : public virtual SIProvider
+class SIProviderCommon : public SIProvider
 {
 protected:
   CephContext *cct;
@@ -124,6 +148,7 @@ class SIProvider_SingleStage : public SIProviderCommon
 {
 protected:
   StageInfo stage_info;
+  SIProvider::TypeHandlerProviderRef type_provider;
 
   virtual int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int do_get_start_marker(int shard_id, std::string *marker) const = 0;
@@ -132,9 +157,16 @@ protected:
 public:
   SIProvider_SingleStage(CephContext *_cct,
                          const std::string& name,
+                         SIProvider::TypeHandlerProviderRef _type_provider,
                          StageType type,
                          int num_shards) : SIProviderCommon(_cct, name),
-                                           stage_info({name, nullopt, type, num_shards}) {}
+                                           stage_info({name, nullopt, type, num_shards}),
+                                           type_provider(_type_provider) {}
+
+  SIProvider::TypeHandlerProvider *get_type_provider() override {
+    return type_provider.get();
+  }
+
   stage_id_t get_first_stage() override {
     return stage_info.sid;
   }
@@ -169,6 +201,16 @@ using SIProviderRef = std::shared_ptr<SIProvider>;
 
 class SIProvider_Container : public SIProviderCommon
 {
+  friend class TypeProvider;
+
+  class TypeProvider : public SIProvider::TypeHandlerProvider {
+    SIProvider_Container *sip;
+  public:
+    TypeProvider(SIProvider_Container *_sip) : sip(_sip) {}
+
+    SIProvider::TypeHandler *get_type_handler(const stage_id_t& sid) override;
+  } type_provider;
+
 protected:
   std::vector<SIProviderRef> providers;
   std::vector<std::string> pids; /* provider ids */
@@ -198,61 +240,66 @@ public:
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) override;
   int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) override;
 
-  int handle_entry(const stage_id_t& sid,
-                   Entry& entry,
-                   std::function<int(EntryInfoBase&)> f) override;
-  int decode_json_results(const stage_id_t& sid,
-                          JSONObj *obj,
-                          SIProvider::fetch_result *result) override;
+  SIProvider::TypeHandlerProvider *get_type_provider() override {
+    return &type_provider;
+  }
 
   int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 template<class T>
-class SITypedProviderDefaultHandler : public virtual SIProvider
-{
-  struct ExpandedEntry {
-    std::string key;
-    T info;
+class SITypeHandlerProvider_Default : public SIProvider::TypeHandlerProvider {
+  class TypeHandler : public SIProvider::TypeHandler
+  {
+    struct ExpandedEntry {
+      std::string key;
+      T info;
 
-    void decode_json(JSONObj *obj) {
-      JSONDecoder::decode_json("key", key, obj);
-      JSONDecoder::decode_json("info", info, obj);
+      void decode_json(JSONObj *obj) {
+        JSONDecoder::decode_json("key", key, obj);
+        JSONDecoder::decode_json("info", info, obj);
+      }
+    };
+
+  public:
+    TypeHandler() {}
+
+    int handle_entry(const SIProvider::stage_id_t& sid,
+                     SIProvider::Entry& entry,
+                     std::function<int(SIProvider::EntryInfoBase&)> f) override {
+      T t;
+      try {
+        decode(t, entry.data);
+      } catch (buffer::error& err) {
+        return -EINVAL;
+      }
+      return f(t);
     }
-  };
 
+    int decode_json_results(const SIProvider::stage_id_t& sid,
+                            JSONObj *obj,
+                            SIProvider::fetch_result *result) override {
+      std::vector<ExpandedEntry> entries;
+      try {
+        JSONDecoder::decode_json("more", result->more, obj);
+        JSONDecoder::decode_json("done", result->done, obj);
+        JSONDecoder::decode_json("entries", entries, obj);
+      } catch (JSONDecoder::err& e) {
+        return -EINVAL;
+      }
+      for (auto& e : entries) {
+        auto& entry = result->entries.emplace_back();
+        entry.key = std::move(e.key);
+        e.info.encode(entry.data);
+      }
+      return 0;
+    }
+  } type_handler;
 public:
-  SITypedProviderDefaultHandler() {}
+  SITypeHandlerProvider_Default() {}
 
-  int handle_entry(const stage_id_t& sid,
-                   Entry& entry,
-                   std::function<int(EntryInfoBase&)> f) override {
-    T t;
-    try {
-      decode(t, entry.data);
-    } catch (buffer::error& err) {
-      return -EINVAL;
-    }
-    return f(t);
-  }
-
-  int decode_json_results(const stage_id_t& sid,
-                          JSONObj *obj,
-                          SIProvider::fetch_result *result) override {
-    std::vector<ExpandedEntry> entries;
-    try {
-      JSONDecoder::decode_json("more", result->more, obj);
-      JSONDecoder::decode_json("done", result->done, obj);
-      JSONDecoder::decode_json("entries", entries, obj);
-    } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-    }
-    for (auto& e : entries) {
-      auto& entry = result->entries.emplace_back();
-      entry.key = std::move(e.key);
-      e.info.encode(entry.data);
-    }
-    return 0;
+  SIProvider::TypeHandler *get_type_handler(const SIProvider::stage_id_t& sid) override {
+    return &type_handler;
   }
 };
 
