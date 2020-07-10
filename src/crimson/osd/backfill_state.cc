@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <algorithm>
+#include <boost/type_index.hpp>
 
 #include "crimson/osd/backfill_state.h"
 #include "crimson/osd/backfill_facades.h"
@@ -29,6 +30,20 @@ BackfillState::BackfillState(
 {
   logger().debug("{}:{}", __func__, __LINE__);
   backfill_machine.initiate();
+}
+
+template <class S>
+BackfillState::StateHelper<S>::StateHelper()
+{
+  logger().debug("enter {}",
+		 boost::typeindex::type_id<S>().pretty_name());
+}
+
+template <class S>
+BackfillState::StateHelper<S>::~StateHelper()
+{
+  logger().debug("exit {}",
+		 boost::typeindex::type_id<S>().pretty_name());
 }
 
 BackfillState::~BackfillState() = default;
@@ -265,7 +280,6 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
 BackfillState::Enqueuing::Enqueuing(my_context ctx)
   : my_base(ctx)
 {
-  logger().debug("{}", __func__);
   auto& primary_bi = backfill_state().backfill_info;
 
   // update our local interval to cope with recent changes
@@ -336,7 +350,6 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
-  logger().debug("{}", __func__);
   backfill_state().backfill_info.version = \
     peering_state().get_info().last_update;
   backfill_listener().request_primary_scan(
@@ -373,7 +386,6 @@ bool BackfillState::ReplicasScanning::replica_needs_scan(
 BackfillState::ReplicasScanning::ReplicasScanning(my_context ctx)
   : my_base(ctx)
 {
-  logger().debug("{}", __func__);
   for (const auto& bt : peering_state().get_backfill_targets()) {
     if (const auto& pbi = backfill_state().peer_backfill_info.at(bt);
         replica_needs_scan(pbi, backfill_state().backfill_info)) {
@@ -434,7 +446,6 @@ BackfillState::ReplicasScanning::react(ObjectPushed evt)
 BackfillState::Waiting::Waiting(my_context ctx)
   : my_base(ctx)
 {
-  logger().debug("{}: entered Waiting", __func__);
 }
 
 boost::statechart::result
