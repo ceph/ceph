@@ -7,6 +7,7 @@
 #include "include/common_fwd.h"
 #include "include/Context.h"
 #include <atomic>
+#include <memory>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/io_context_strand.hpp>
 #include <boost/asio/post.hpp>
@@ -26,7 +27,7 @@ public:
 
     // ensure all legacy ContextWQ users are dispatched sequentially for
     // backwards compatibility (i.e. might not be concurrent thread-safe)
-    boost::asio::post(m_strand, [this, ctx, r]() {
+    boost::asio::post(*m_strand, [this, ctx, r]() {
       ctx->complete(r);
 
       ceph_assert(m_queued_ops > 0);
@@ -37,7 +38,7 @@ public:
 private:
   CephContext* m_cct;
   boost::asio::io_context& m_io_context;
-  boost::asio::io_context::strand m_strand;
+  std::unique_ptr<boost::asio::io_context::strand> m_strand;
 
   std::atomic<uint64_t> m_queued_ops;
 
