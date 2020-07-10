@@ -4223,6 +4223,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     in->inode.client_ranges[client].range.first = 0;
     in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
     in->inode.client_ranges[client].follows = follows;
+    in->mark_clientwriteable();
     cap->mark_clientwriteable();
   }
   
@@ -4873,6 +4874,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
     pi.inode.client_ranges[client].range.last = pi.inode.get_layout_size_increment();
     pi.inode.client_ranges[client].follows = realm->get_newest_seq();
     changed_ranges = true;
+    in->mark_clientwriteable();
     cap->mark_clientwriteable();
   }
   
@@ -5843,6 +5845,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
       newi->inode.client_ranges[client].range.first = 0;
       newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
       newi->inode.client_ranges[client].follows = follows;
+      newi->mark_clientwriteable();
       cap->mark_clientwriteable();
     }
   }

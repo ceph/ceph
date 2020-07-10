@@ -2992,17 +2992,6 @@ void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
   }
 }
 
-void CInode::adjust_num_caps_notable(int d)
-{
-  if (!num_caps_notable && d > 0)
-    mdcache->open_file_table.add_inode(this);
-  else if (num_caps_notable > 0 && num_caps_notable == -d)
-    mdcache->open_file_table.remove_inode(this);
-
-  num_caps_notable +=d;
-  ceph_assert(num_caps_notable >= 0);
-}
-
 Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
   ceph_assert(last == CEPH_NOSNAP);
@@ -3279,6 +3268,38 @@ bool CInode::issued_caps_need_gather(SimpleLock *lock)
   return false;
 }
 
+void CInode::adjust_num_caps_notable(int d)
+{
+  if (!is_clientwriteable()) {
+    if (!num_caps_notable && d > 0)
+      mdcache->open_file_table.add_inode(this);
+    else if (num_caps_notable > 0 && num_caps_notable == -d)
+      mdcache->open_file_table.remove_inode(this);
+  }
+
+  num_caps_notable +=d;
+  ceph_assert(num_caps_notable >= 0);
+}
+
+void CInode::mark_clientwriteable()
+{
+  if (last != CEPH_NOSNAP)
+    return;
+  if (!state_test(STATE_CLIENTWRITEABLE)) {
+    if (num_caps_notable == 0)
+      mdcache->open_file_table.add_inode(this);
+    state_set(STATE_CLIENTWRITEABLE);
+  }
+}
+
+void CInode::clear_clientwriteable()
+{
+  if (state_test(STATE_CLIENTWRITEABLE)) {
+    if (num_caps_notable == 0)
+      mdcache->open_file_table.remove_inode(this);
+    state_clear(STATE_CLIENTWRITEABLE);
+  }
+}
 
 // =============================================
 
@@ -3396,10 +3417,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // max_size is min of projected, actual
   uint64_t max_size =
-    std::min(oi->client_ranges.count(client) ?
-	oi->client_ranges[client].range.last : 0,
-	pi->client_ranges.count(client) ?
-	pi->client_ranges[client].range.last : 0);
+    std::min(oi->get_client_range(client),
+	     pi->get_client_range(client));
 
   // inline data
   version_t inline_version = 0;
@@ -3751,8 +3770,8 @@ void CInode::encode_cap_message(const MClientCaps::ref &m, Capability *cap)
   }
 
   // max_size is min of projected, actual.
-  uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0;
-  uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0;
+  uint64_t oldms = oi->get_client_range(client);
+  uint64_t newms = pi->get_client_range(client);
   m->max_size = std::min(oldms, newms);
 
   i = pauth ? pi:oi;

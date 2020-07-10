@@ -242,6 +242,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_QUEUEDEXPORTPIN	= (1<<17);
   static const int STATE_TRACKEDBYOFT		= (1<<18);  // tracked by open file table
   static const int STATE_DELAYEDEXPORTPIN	= (1<<19);
+  static const int STATE_CLIENTWRITEABLE	= (1<<22);
+
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -1061,6 +1063,11 @@ public:
   bool is_any_caps_wanted() const;
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
   bool issued_caps_need_gather(SimpleLock *lock);
+
+  // client writeable
+  bool is_clientwriteable() const { return state & STATE_CLIENTWRITEABLE; }
+  void mark_clientwriteable();
+  void clear_clientwriteable();
 
   // -- authority --
   mds_authority_t authority() const override;

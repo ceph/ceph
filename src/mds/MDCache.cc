@@ -325,6 +325,8 @@ void MDCache::remove_inode(CInode *o)
 
   o->clear_scatter_dirty();
 
+  o->clear_clientwriteable();
+
   o->item_open_file.remove_myself();
 
   if (o->state_test(CInode::STATE_QUEUEDEXPORTPIN))
@@ -6341,16 +6343,18 @@ void MDCache::identify_files_to_recover()
     }
     
     bool recover = false;
-    for (map<client_t,client_writeable_range_t>::iterator p = in->inode.client_ranges.begin();
-	 p != in->inode.client_ranges.end();
-	 ++p) {
-      Capability *cap = in->get_client_cap(p->first);
-      if (cap) {
-	cap->mark_clientwriteable();
-      } else {
-	dout(10) << " client." << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
-	recover = true;
-	break;
+    const auto& client_ranges = in->get_projected_inode()->client_ranges;
+    if (!client_ranges.empty()) {
+      in->mark_clientwriteable();
+      for (auto& p : client_ranges) {
+	Capability *cap = in->get_client_cap(p.first);
+	if (cap) {
+	  cap->mark_clientwriteable();
+	} else {
+	  dout(10) << " client." << p.first << " has range " << p.second << " but no cap on " << *in << dendl;
+	  recover = true;
+	  break;
+	}
       }
     }
 

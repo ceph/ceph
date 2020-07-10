@@ -1703,6 +1703,8 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
 
   in->clear_dirty_parent();
 
+  in->clear_clientwriteable();
+
   in->clear_file_locks();
 
   // waiters
@@ -2826,6 +2828,7 @@ void Migrator::import_reverse(CDir *dir)
 
 	in->clear_dirty_parent();
 
+	in->clear_clientwriteable();
 	in->state_clear(CInode::STATE_NEEDSRECOVER);
 
 	in->authlock.clear_gather();
@@ -3183,6 +3186,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   if (in->inode.is_dirty_rstat())
     in->mark_dirty_rstat();
+
+  if (!in->get_inode().client_ranges.empty())
+    in->mark_clientwriteable();
   
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...
