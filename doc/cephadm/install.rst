@@ -108,8 +108,16 @@ or run ``cephadm bootstrap -h`` to see all available options:
 * You can choose the ssh user cephadm will use to connect to hosts by
   using the ``--ssh-user *<user>*`` option. The ssh key will be added
   to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
-  passwordless sudo access. 
+  passwordless sudo access.
 
+* If you are using a container on an authenticated registry that requires
+  login you may add the three arguments ``--registry-url <url of registry>``,
+  ``--registry-username <username of account on registry>``,
+  ``--registry-password <password of account on registry>`` OR
+  ``--registry-json <json file with login info>``. Cephadm will attempt
+  to login to this registry so it may pull your container and then store
+  the login info in its config database so other hosts added to the cluster
+  may also make use of the authenticated registry.
 
 Enable Ceph CLI
 ===============
@@ -422,4 +430,4 @@ See :ref:`orchestrator-cli-placement-spec` for details of the placement specific
 
 Deploying custom containers
 ===========================
-It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard. 
+It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard.

@@ -64,7 +64,7 @@ Synopsis
 |                           [--dashboard-crt DASHBOARD_CRT]
 |                           [--ssh-config SSH_CONFIG]
 |                           [--ssh-private-key SSH_PRIVATE_KEY]
-|                           [--ssh-public-key SSH_PUBLIC_KEY] 
+|                           [--ssh-public-key SSH_PUBLIC_KEY]
 |                           [--ssh-user SSH_USER] [--skip-mon-network]
 |                           [--skip-dashboard] [--dashboard-password-noupdate]
 |                           [--no-minimize-config] [--skip-ping-check]
@@ -72,6 +72,10 @@ Synopsis
 |                           [--allow-fqdn-hostname] [--skip-prepare-host]
 |                           [--orphan-initial-daemons] [--skip-monitoring-stack]
 |                           [--apply-spec APPLY_SPEC]
+|                           [--registry-url REGISTRY_URL]
+|                           [--registry-username REGISTRY_USERNAME]
+|                           [--registry-password REGISTRY_PASSWORD]
+|                           [--registry-json REGISTRY_JSON]
 
 
 
@@ -93,6 +97,10 @@ Synopsis
 
 | **cephadm** **install** [-h] [packages [packages ...]]
 
+| **cephadm** **registry-login** [-h] [--registry-url REGISTRY_URL]
+|                                [--registry-username REGISTRY_USERNAME]
+|                                [--registry-password REGISTRY_PASSWORD]
+|                                [--registry-json REGISTRY_JSON] [--fsid FSID]
 
 
 
@@ -221,6 +229,10 @@ Arguments:
 * [--orphan-initial-daemons]      Do not create initial mon, mgr, and crash service specs
 * [--skip-monitoring-stack]       Do not automatically provision monitoring stack] (prometheus, grafana, alertmanager, node-exporter)
 * [--apply-spec APPLY_SPEC]       Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)
+* [--registry-url REGISTRY_URL]   url of custom registry to login to. e.g. docker.io, quay.io
+* [--registry-username REGISTRY_USERNAME] username of account to login to on custom registry
+* [--registry-password REGISTRY_PASSWORD] password of account to login to on custom registry
+* [--registry-json REGISTRY_JSON] JSON file containing registry login info (see registry-login command documentation)
 
 ceph-volume
 -----------
@@ -360,6 +372,34 @@ Pull the ceph image::
 
     cephadm pull
 
+registry-login
+--------------
+
+Give cephadm login information for an authenticated registry (url, username and password).
+Cephadm will attempt to log the calling host into that registry::
+
+      cephadm registry-login --registry-url [REGISTRY_URL] --registry-username [USERNAME]
+                             --registry-password [PASSWORD]
+
+Can also use a JSON file containing the login info formatted as::
+
+      {
+       "url":"REGISTRY_URL",
+       "username":"REGISTRY_USERNAME",
+       "password":"REGISTRY_PASSWORD"
+      }
+
+and turn it in with command::
+
+      cephadm registry-login --registry-json [JSON FILE]
+
+Arguments:
+
+* [--registry-url REGISTRY_URL]   url of registry to login to. e.g. docker.io, quay.io
+* [--registry-username REGISTRY_USERNAME] username of account to login to on registry
+* [--registry-password REGISTRY_PASSWORD] password of account to login to on registry
+* [--registry-json REGISTRY_JSON] JSON file containing login info for custom registry
+* [--fsid FSID]                   cluster FSID
 
 rm-daemon
 ---------
