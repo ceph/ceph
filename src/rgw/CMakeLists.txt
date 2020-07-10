@@ -89,6 +89,7 @@ set(librgw_common_srcs
   rgw_sip_bucket.cc
   rgw_sip_data.cc
   rgw_sip_meta.cc
+  rgw_sip_rest.cc
   rgw_sync_counters.cc
   rgw_sync_error_repo.cc
   rgw_sync_info.cc
