@@ -8,9 +8,9 @@ CephFS namespaces can be exported over NFS protocol using the
 Requirements
 ============
 
--  Latest Ceph file system with mgr and dashboard enabled
--  'nfs-ganesha', 'nfs-ganesha-ceph' and nfs-ganesha-rados-grace packages
-   (version 2.7.6-2 and above)
+-  Latest Ceph file system with mgr enabled
+-  'nfs-ganesha', 'nfs-ganesha-ceph', 'nfs-ganesha-rados-grace' and
+   'nfs-ganesha-rados-urls' packages (version 3.3 and above)
 
 Create NFS Ganesha Cluster
 ==========================
