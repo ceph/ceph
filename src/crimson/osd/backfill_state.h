@@ -96,6 +96,9 @@ public:
 private:
   template <class S>
   struct StateHelper {
+    StateHelper();
+    ~StateHelper();
+
     BackfillState& backfill_state() {
       return static_cast<S*>(this) \
         ->template context<BackfillMachine>().backfill_state;
