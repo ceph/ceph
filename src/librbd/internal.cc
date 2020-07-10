@@ -23,6 +23,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
 
+#include "librbd/AsioEngine.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -684,8 +685,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       lderr(cct) << "Forced V1 image creation. " << dendl;
       r = create_v1(io_ctx, image_name.c_str(), size, order);
     } else {
-      asio::ContextWQ *op_work_queue;
-      ImageCtx::get_work_queue(cct, &op_work_queue);
+      AsioEngine asio_engine(io_ctx);
 
       ConfigProxy config{cct->_conf};
       api::Config<>::apply_pool_overrides(io_ctx, &config);
@@ -703,7 +703,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       image::CreateRequest<> *req = image::CreateRequest<>::create(
         config, io_ctx, image_name, id, size, opts, create_flags,
         static_cast<cls::rbd::MirrorImageMode>(mirror_image_mode),
-        non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
+        non_primary_global_image_id, primary_mirror_uuid,
+        asio_engine.get_work_queue(), &cond);
       req->send();
 
       r = cond.wait();
@@ -789,15 +790,15 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ConfigProxy config{reinterpret_cast<CephContext *>(c_ioctx.cct())->_conf};
     api::Config<>::apply_pool_overrides(c_ioctx, &config);
 
-    asio::ContextWQ *op_work_queue;
-    ImageCtx::get_work_queue(cct, &op_work_queue);
+    AsioEngine asio_engine(p_ioctx);
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
       config, p_ioctx, parent_id, p_snap_name,
       {cls::rbd::UserSnapshotNamespace{}}, CEPH_NOSNAP, c_ioctx, c_name,
       clone_id, c_opts, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
+      non_primary_global_image_id, primary_mirror_uuid,
+      asio_engine.get_work_queue(), &cond);
     req->send();
 
     r = cond.wait();

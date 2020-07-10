@@ -2,9 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/AsioEngine.h"
+#include "include/stringify.h"
+#include "include/neorados/RADOS.hpp"
+#include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "librbd/asio/ContextWQ.h"
-#include <boost/system/error_code.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -13,43 +15,29 @@
 
 namespace librbd {
 
-AsioEngine::AsioEngine(CephContext* cct)
-  : m_cct(cct) {
-  init();
+AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
+  : m_rados_api(std::make_shared<neorados::RADOS>(
+      neorados::RADOS::make_with_librados(*rados))),
+    m_cct(m_rados_api->cct()),
+    m_io_context(m_rados_api->get_io_context()),
+    m_context_wq(std::make_unique<asio::ContextWQ>(m_io_context)) {
+  ldout(m_cct, 20) << dendl;
+
+  auto rados_threads = m_cct->_conf.get_val<uint64_t>("librados_thread_count");
+  auto rbd_threads = m_cct->_conf.get_val<uint64_t>("rbd_op_threads");
+  if (rbd_threads > rados_threads) {
+    // inherit the librados thread count -- but increase it if librbd wants to
+    // utilize more threads
+    m_cct->_conf.set_val("librados_thread_count", stringify(rbd_threads));
+  }
+}
+
+AsioEngine::AsioEngine(librados::IoCtx& io_ctx)
+  : AsioEngine(std::make_shared<librados::Rados>(io_ctx)) {
 }
 
 AsioEngine::~AsioEngine() {
-  shut_down();
-}
-
-void AsioEngine::init() {
-  auto thread_count = m_cct->_conf.get_val<uint64_t>("rbd_op_threads");
-  m_threads.reserve(thread_count);
-
-  // prevent IO context from exiting if no work is currently scheduled
-  m_work_guard.emplace(boost::asio::make_work_guard(m_io_context));
-
-  ldout(m_cct, 5) << "spawning " << thread_count << " threads" << dendl;
-  for (auto i = 0U; i < thread_count; i++) {
-    m_threads.emplace_back([=] {
-      boost::system::error_code ec;
-      m_io_context.run(ec);
-    });
-  }
-
-  m_work_queue = std::make_unique<asio::ContextWQ>(m_io_context);
-}
-
-void AsioEngine::shut_down() {
-  ldout(m_cct, 5) << "joining threads" << dendl;
-
-  m_work_guard.reset();
-  for (auto& thread : m_threads) {
-    thread.join();
-  }
-  m_threads.clear();
-
-  ldout(m_cct, 5) << "done" << dendl;
+  ldout(m_cct, 20) << dendl;
 }
 
 } // namespace librbd

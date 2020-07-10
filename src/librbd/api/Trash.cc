@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -90,12 +91,12 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 
   ldout(cct, 10) << dendl;
 
-  asio::ContextWQ *op_work_queue;
-  ImageCtx::get_work_queue(cct, &op_work_queue);
+  AsioEngine asio_engine(io_ctx);
+
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
     io_ctx, image_id, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", false,
-    op_work_queue, &ctx);
+    asio_engine.get_work_queue(), &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {
@@ -534,12 +535,11 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
     return -EBUSY;
   }
 
-  asio::ContextWQ *op_work_queue;
-  ImageCtx::get_work_queue(cct, &op_work_queue);
+  AsioEngine asio_engine(io_ctx);
 
   C_SaferCond cond;
   auto req = librbd::trash::RemoveRequest<I>::create(
-      io_ctx, image_id, op_work_queue, force, prog_ctx, &cond);
+      io_ctx, image_id, asio_engine.get_work_queue(), force, prog_ctx, &cond);
   req->send();
 
   r = cond.wait();

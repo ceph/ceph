@@ -62,6 +62,7 @@ struct MockImageCtx {
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
+      asio_engine(image_ctx.asio_engine),
       owner_lock(image_ctx.owner_lock),
       image_lock(image_ctx.image_lock),
       timestamp_lock(image_ctx.timestamp_lock),
@@ -248,6 +249,8 @@ struct MockImageCtx {
            rados::cls::lock::locker_info_t> lockers;
   bool exclusive_locked;
   std::string lock_tag;
+
+  std::shared_ptr<AsioEngine> asio_engine;
 
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;

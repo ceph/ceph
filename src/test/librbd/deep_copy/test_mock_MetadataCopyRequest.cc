@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/GetMetadataRequest.h"
@@ -79,6 +80,8 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
   asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
@@ -91,7 +94,9 @@ public:
     ASSERT_EQ(0, create_image_pp(rbd, m_ioctx, dst_image_name, m_image_size));
     ASSERT_EQ(0, open_image(dst_image_name, &m_dst_image_ctx));
 
-    librbd::ImageCtx::get_work_queue(m_src_image_ctx->cct, &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_src_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   void expect_get_metadata(MockGetMetadataRequest& mock_request,
