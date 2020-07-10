@@ -15,7 +15,8 @@ namespace librbd {
 namespace asio {
 
 ContextWQ::ContextWQ(CephContext* cct, boost::asio::io_context& io_context)
-  : m_cct(cct), m_io_context(io_context), m_strand(io_context),
+  : m_cct(cct), m_io_context(io_context),
+    m_strand(std::make_unique<boost::asio::io_context::strand>(io_context)),
     m_queued_ops(0) {
   ldout(m_cct, 20) << dendl;
 }
@@ -23,6 +24,7 @@ ContextWQ::ContextWQ(CephContext* cct, boost::asio::io_context& io_context)
 ContextWQ::~ContextWQ() {
   ldout(m_cct, 20) << dendl;
   drain();
+  m_strand.reset();
 }
 
 void ContextWQ::drain() {
@@ -40,7 +42,7 @@ void ContextWQ::drain_handler(Context* ctx) {
 
   // new items might be queued while we are trying to drain, so we
   // might need to post the handler multiple times
-  boost::asio::post(m_strand, [this, ctx]() { drain_handler(ctx); });
+  boost::asio::post(*m_strand, [this, ctx]() { drain_handler(ctx); });
 }
 
 } // namespace asio

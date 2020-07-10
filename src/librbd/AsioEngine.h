@@ -45,7 +45,7 @@ public:
 
   inline boost::asio::io_context::strand& get_api_strand() {
     // API client callbacks should never fire concurrently
-    return m_api_strand;
+    return *m_api_strand;
   }
 
   inline asio::ContextWQ* get_work_queue() {
@@ -69,7 +69,7 @@ private:
   CephContext* m_cct;
 
   boost::asio::io_context& m_io_context;
-  boost::asio::io_context::strand m_api_strand;
+  std::unique_ptr<boost::asio::io_context::strand> m_api_strand;
   std::unique_ptr<asio::ContextWQ> m_context_wq;
 };
 
