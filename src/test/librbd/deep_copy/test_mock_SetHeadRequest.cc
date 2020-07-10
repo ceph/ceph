@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librados_test_stub/LibradosTestStub.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "osdc/Striper.h"
@@ -97,6 +98,8 @@ public:
   typedef image::DetachParentRequest<MockTestImageCtx> MockDetachParentRequest;
 
   librbd::ImageCtx *m_image_ctx;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
   asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
@@ -104,7 +107,9 @@ public:
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
 
-    librbd::ImageCtx::get_work_queue(m_image_ctx->cct, &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {

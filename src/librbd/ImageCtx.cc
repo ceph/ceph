@@ -71,11 +71,6 @@ public:
   }
 };
 
-boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
-  auto asio_engine_singleton = ImageCtx::get_asio_engine(cct);
-  return asio_engine_singleton->get_io_context();
-}
-
 } // anonymous namespace
 
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
@@ -91,6 +86,7 @@ boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
       read_only_flags(ro ? IMAGE_READ_ONLY_FLAG_USER : 0U),
       exclusive_locked(false),
       name(image_name),
+      asio_engine(std::make_shared<AsioEngine>(p)),
       image_watcher(NULL),
       journal(NULL),
       owner_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::ImageCtx::owner_lock", this))),
@@ -109,8 +105,7 @@ boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      io_context(get_asio_engine_io_context(cct)),
-      op_work_queue(nullptr),
+      op_work_queue(asio_engine->get_work_queue()),
       plugin_registry(new PluginRegistry<ImageCtx>(this)),
       external_callback_completions(32),
       event_socket_completions(32),
@@ -125,7 +120,6 @@ boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
     // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&header, 0, sizeof(header));
 
-    get_work_queue(cct, &op_work_queue);
     io_image_dispatcher = new io::ImageDispatcher<ImageCtx>(this);
     io_object_dispatcher = new io::ObjectDispatcher<ImageCtx>(this);
 
@@ -897,16 +891,6 @@ boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
     ceph_assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
-  }
-
-  AsioEngine* ImageCtx::get_asio_engine(CephContext* cct) {
-    return &cct->lookup_or_create_singleton_object<AsioEngine>(
-      "librbd::AsioEngine", false, cct);
-  }
-
-  void ImageCtx::get_work_queue(CephContext *cct,
-                                asio::ContextWQ **op_work_queue) {
-    *op_work_queue = get_asio_engine(cct)->get_work_queue();
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
