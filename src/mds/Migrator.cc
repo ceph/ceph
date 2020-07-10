@@ -2868,6 +2868,8 @@ void Migrator::import_reverse(CDir *dir)
 
 	in->clear_dirty_parent();
 
+	in->state_clear(CInode::STATE_NEEDSRECOVER);
+
 	in->authlock.clear_gather();
 	in->linklock.clear_gather();
 	in->dirfragtreelock.clear_gather();
@@ -2906,6 +2908,8 @@ void Migrator::import_reverse(CDir *dir)
 	}
 	if (cap->is_importing())
 	  in->remove_client_cap(q->first);
+	else
+	  cap->clear_clientwriteable();
       }
       in->put(CInode::PIN_IMPORTINGCAPS);
     }
@@ -3278,6 +3282,10 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
 					const map<client_t,Capability::Export> &export_map,
 					map<client_t,Capability::Import> &import_map)
 {
+  const auto& client_ranges = in->get_projected_inode()->client_ranges;
+  auto r = client_ranges.cbegin();
+  bool needs_recover = false;
+
   for (auto& it : export_map) {
     dout(10) << "for client." << it.first << " on " << *in << dendl;
 
@@ -3297,6 +3305,17 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
 	cap->mark_importing();
     }
 
+    if (auth_cap) {
+      while (r != client_ranges.cend() && r->first < it.first) {
+	needs_recover = true;
+	++r;
+      }
+      if (r != client_ranges.cend() && r->first == it.first) {
+	cap->mark_clientwriteable();
+	++r;
+      }
+    }
+
     // Always ask exporter mds to send cap export messages for auth caps.
     // For non-auth caps, ask exporter mds to send cap export messages to
     // clients who haven't opened sessions. The cap export messages will
@@ -3314,6 +3333,13 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
 				  it.second.seq, it.second.mseq - 1, peer,
 				  auth_cap ? CEPH_CAP_FLAG_AUTH : CEPH_CAP_FLAG_RELEASE);
     }
+  }
+
+  if (auth_cap) {
+    if (r != client_ranges.cend())
+      needs_recover = true;
+    if (needs_recover)
+      in->state_set(CInode::STATE_NEEDSRECOVER);
   }
 
   if (peer >= 0) {

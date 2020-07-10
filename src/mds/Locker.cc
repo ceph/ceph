@@ -5416,6 +5416,9 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock, need_issue);
   }
+  else if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+    mds->mdcache->queue_file_recover(in);
+  }
 }
 
 
