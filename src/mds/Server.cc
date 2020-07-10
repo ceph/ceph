@@ -4810,12 +4810,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     pi.inode.mtime = mdr->get_op_stamp();
 
     // adjust client's max_size?
-    CInode::mempool_inode::client_range_map new_ranges;
-    bool max_increased = false;
-    mds->locker->calc_new_client_ranges(cur, pi.inode.size, true, &new_ranges, &max_increased);
-    if (pi.inode.client_ranges != new_ranges) {
-      dout(10) << " client_ranges " << pi.inode.client_ranges << " -> " << new_ranges << dendl;
-      pi.inode.client_ranges = new_ranges;
+    if (mds->locker->calc_new_client_ranges(cur, pi.inode.size)) {
+      dout(10) << " client_ranges "  << cur->get_previous_projected_inode()->client_ranges
+	       << " -> " << pi.inode.client_ranges << dendl;
       changed_ranges = true;
     }
   }
