@@ -494,6 +494,11 @@ struct inode_t {
 
   bool is_dirty_rstat() const { return !(rstat == accounted_rstat); }
 
+  uint64_t get_client_range(client_t client) const {
+    auto it = client_ranges.find(client);
+    return it != client_ranges.end() ? it->second.range.last : 0;
+  }
+
   uint64_t get_max_size() const {
     uint64_t max = 0;
       for (std::map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin();

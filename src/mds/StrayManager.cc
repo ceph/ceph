@@ -188,6 +188,8 @@ void StrayManager::_purge_stray_purged(
     pi.inode->truncate_size = 0;
     pi.inode->truncate_from = 0;
     pi.inode->version = in->pre_dirty();
+    pi.inode->client_ranges.clear();
+    in->clear_clientwriteable();
 
     CDir *dir = dn->get_dir();
     auto pf = dir->project_fnode(mut);
