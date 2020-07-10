@@ -172,6 +172,11 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     delete state;
 
     delete plugin_registry;
+
+    // destroy our AsioEngine via its shared io_context to ensure that we
+    // aren't executing within an AsioEngine-owned strand
+    auto& io_context = asio_engine->get_io_context();
+    boost::asio::post(io_context, [asio_engine=std::move(asio_engine)]() {});
   }
 
   void ImageCtx::init() {
