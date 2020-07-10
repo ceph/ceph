@@ -2387,7 +2387,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(dpp, bci.info);
+  int ret = bihandler->svc.bi->init_index(dpp, bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
   }

@@ -59,8 +59,8 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
   void get_bucket_index_object(const std::string& bucket_oid_base,
                                uint32_t num_shards,
                                int shard_id,
-                               std::optional<uint64_t> gen_id,
-                               std::string* bucket_obj);
+                               uint64_t gen_id,
+                               std::string *bucket_obj);
   int get_bucket_index_object(const std::string& bucket_oid_base,
 			      const std::string& obj_key,
                               uint32_t num_shards, rgw::BucketHashType hash_type,
@@ -120,8 +120,10 @@ public:
     return bucket_shard_index(sharding_key, num_shards);
   }
 
-  int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
-  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, std::optional<uint64_t> gen);
+  int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
+		 const rgw::bucket_index_layout_generation& idx_layout) override;
+  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
+		  uint64_t gen) override;
 
   /* RADOS specific */
 
@@ -146,7 +148,7 @@ public:
                               const RGWBucketInfo& bucket_info,
                               int shard_id,
                               uint32_t num_shards,
-                              std::optional<uint64_t> gen,
+                              uint64_t gen,
                               RGWSI_RADOS::Obj *bucket_obj);
 
   int open_bucket_index(const DoutPrefixProvider *dpp,

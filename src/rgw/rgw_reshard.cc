@@ -545,6 +545,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   //increment generation number
+  bucket_info.layout.target_index->gen = bucket_info.layout.current_index.gen;
   bucket_info.layout.target_index->gen++;
 
   int num_target_shards = bucket_info.layout.target_index->layout.normal.num_shards;
@@ -574,7 +575,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     while (is_truncated) {
       entries.clear();
       ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated);
-      if (ret < 0 && ret == -ENOENT) {
+      if (ret < 0 && ret != -ENOENT) {
         derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
         return ret;
       }
@@ -650,7 +651,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   } else if (out) {
     (*out) << " " << total_entries << std::endl;
   }
-
+  
   ret = target_shards_mgr.finish();
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to reshard" << dendl;
@@ -664,6 +665,11 @@ int RGWBucketReshard::do_reshard(int num_shards,
   ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed writing bucket instance info: " << dendl;
+      return ret;
+  }
+
+  ret = store->svc()->bi->init_index(dpp, bucket_info, bucket_info.layout.current_index);
+  if (ret < 0) {
       return ret;
   }
 
@@ -717,7 +723,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
    // at this point since all we're using a best effort to remove old
    // shard objects
 
-   ret = store->svc()->bi->clean_index(dpp, bucket_info, std::nullopt);
+   ret = store->svc()->bi->clean_index(dpp, bucket_info, bucket_info.layout.current_index.gen);
    if (ret < 0) {
      lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
