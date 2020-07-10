@@ -11,19 +11,18 @@ describe('StatefulTabDirective', () => {
   it('should get and select active tab', () => {
     const nav = new NgbNav('tablist', new NgbNavConfig(), <any>null, null);
     spyOn(nav, 'select');
-    spyOn(window.localStorage, 'getItem').and.returnValue('foo');
     const directive = new StatefulTabDirective(nav);
+    directive.cdStatefulTab = 'bar';
+    window.localStorage.setItem('tabset_bar', 'foo');
     directive.ngOnInit();
-    expect(window.localStorage.getItem).toHaveBeenCalled();
     expect(nav.select).toHaveBeenCalledWith('foo');
   });
 
   it('should store active tab', () => {
-    spyOn(window.localStorage, 'setItem');
     const directive = new StatefulTabDirective(null);
     directive.cdStatefulTab = 'bar';
     const event: NgbNavChangeEvent<string> = { activeId: '', nextId: 'xyz', preventDefault: null };
     directive.onNavChange(event);
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('tabset_bar', 'xyz');
+    expect(window.localStorage.getItem('tabset_bar')).toBe('xyz');
   });
 });
