@@ -113,12 +113,11 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
 }
 
 static void get_bucket_index_objects(const string& bucket_oid_base,
-                                     uint32_t num_shards, std::optional<uint64_t> _gen_id,
+                                     uint32_t num_shards, uint64_t gen_id,
                                      map<int, string> *_bucket_objects,
                                      int shard_id = -1)
 {
   auto& bucket_objects = *_bucket_objects;
-  auto gen_id = _gen_id.value_or(0);
   if (!num_shards) {
     bucket_objects[0] = bucket_oid_base;
   } else {
@@ -203,10 +202,9 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
 void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base,
                                                       uint32_t num_shards,
                                                       int shard_id,
-                                                      std::optional<uint64_t> _gen_id,
+                                                      uint64_t gen_id,
                                                       string *bucket_obj)
 {
-  auto gen_id = _gen_id.value_or(0);
   if (!num_shards) {
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
@@ -286,7 +284,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket_info,
                                                      int shard_id,
                                                      uint32_t num_shards,
-                                                     std::optional<uint64_t> gen,
+                                                     uint64_t gen,
                                                      RGWSI_RADOS::Obj *bucket_obj)
 {
   RGWSI_RADOS::Pool index_pool;
@@ -336,7 +334,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
+int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
 {
   RGWSI_RADOS::Pool index_pool;
 
@@ -349,7 +347,7 @@ int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   map<int, string> bucket_objs;
-  get_bucket_index_objects(dir_oid, bucket_info.layout.current_index.layout.normal.num_shards, std::nullopt, &bucket_objs);
+  get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
   return CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
 				    bucket_objs,
@@ -357,7 +355,7 @@ int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
 }
 
 
-int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info, std::optional<uint64_t> gen)
+int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info, uint64_t gen)
 {
   RGWSI_RADOS::Pool index_pool;
 
@@ -371,7 +369,7 @@ int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info, std::option
 
   std::map<int, std::string> bucket_objs;
   get_bucket_index_objects(dir_oid, bucket_info.layout.current_index.layout.normal.num_shards,
-  gen, &bucket_objs);
+                          gen, &bucket_objs);
 
   return CLSRGWIssueBucketIndexClean(index_pool.ioctx(),
 				     bucket_objs,
