@@ -1807,7 +1807,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       olh.update(next_key, next.is_delete_marker());
       olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
     } else {
-      /* next_key is empty */
+      // next_key is empty, but we need to preserve its name in case this entry
+      // gets resharded, because this key is used for hash placement
+      next_key.name = dest_key.name;
       olh.update(next_key, false);
       olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
       olh.set_exists(false);
