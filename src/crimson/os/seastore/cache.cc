@@ -161,7 +161,6 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     record.extents.push_back(extent_t{std::move(bl)});
   }
 
-  t.read_set.clear();
   return std::make_optional<record_t>(std::move(record));
 }
 
