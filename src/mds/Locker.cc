@@ -2763,6 +2763,12 @@ bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increas
     it = pi->client_ranges.erase(it);
     updated = true;
   }
+  if (updated) {
+    if (pi->client_ranges.empty())
+      in->clear_clientwriteable();
+    else
+      in->mark_clientwriteable();
+  }
   return updated;
 }
 
@@ -3733,11 +3739,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   // increase or zero max_size?
   uint64_t size = m->get_size();
   bool change_max = false;
-  uint64_t old_max;
-  {
-    auto it = latest->client_ranges.find(client);
-    old_max = it != latest->client_ranges.end() ? it->second.range.last: 0;
-  }
+  uint64_t old_max = latest->get_client_range(client);
   uint64_t new_max = old_max;
   
   if (in->is_file()) {
@@ -3854,10 +3856,13 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       cr.range.first = 0;
       cr.range.last = new_max;
       cr.follows = in->first - 1;
+      in->mark_clientwriteable();
       if (cap)
 	cap->mark_clientwriteable();
     } else {
       pi.inode->client_ranges.erase(client);
+      if (pi.inode->client_ranges.empty())
+	in->clear_clientwriteable();
       if (cap)
 	cap->clear_clientwriteable();
     }
