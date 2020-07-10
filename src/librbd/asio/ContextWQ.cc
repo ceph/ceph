@@ -22,6 +22,7 @@ ContextWQ::ContextWQ(CephContext* cct, boost::asio::io_context& io_context)
 
 ContextWQ::~ContextWQ() {
   ldout(m_cct, 20) << dendl;
+  drain();
 }
 
 void ContextWQ::drain() {
