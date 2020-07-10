@@ -1047,12 +1047,12 @@ EOF
 }
 
 # Ganesha Daemons requires nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace
-# nfs-ganesha-rados-urls (version 2.8.3 and above) packages installed. On
+# nfs-ganesha-rados-urls (version 3.3 and above) packages installed. On
 # Fedora>=31 these packages can be installed directly with 'dnf'. For CentOS>=8
 # the packages are available at
 # https://wiki.centos.org/SpecialInterestGroup/Storage
-# Similarly for Ubuntu 16.04 follow the instructions on
-# https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.8
+# Similarly for Ubuntu>=16.04 follow the instructions on
+# https://launchpad.net/~nfs-ganesha
 
 start_ganesha() {
     cluster_id="vstart"
