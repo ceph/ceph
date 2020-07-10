@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_ASIO_CONTEXT_WQ_H
 #define CEPH_LIBRBD_ASIO_CONTEXT_WQ_H
 
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include <atomic>
 #include <boost/asio/io_context.hpp>
@@ -15,7 +16,8 @@ namespace asio {
 
 class ContextWQ {
 public:
-  explicit ContextWQ(boost::asio::io_context& io_context);
+  explicit ContextWQ(CephContext* cct, boost::asio::io_context& io_context);
+  ~ContextWQ();
 
   void drain();
 
@@ -33,6 +35,7 @@ public:
   }
 
 private:
+  CephContext* m_cct;
   boost::asio::io_context& m_io_context;
   boost::asio::io_context::strand m_strand;
 
