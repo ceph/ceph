@@ -5049,6 +5049,57 @@ int main(int argc, const char **argv)
             target.tags.insert(t);
           }
           target.storage_classes.insert(rule.get_storage_class());
+
+          /* Tier options */
+          bool tier_class = false;
+          std::string storage_class = rule.get_storage_class();
+          RGWZoneGroupPlacementTier t{storage_class};
+          RGWZoneGroupPlacementTier *pt = &t;
+
+	  auto ptiter = target.tier_targets.find(storage_class);
+	  if (ptiter != target.tier_targets.end()) {
+            pt = &ptiter->second;
+            tier_class = true;
+          } else if (tier_type_specified && tier_type == "cloud") {
+            /* we support only cloud tier-type for now.
+             * Once set cant be reset. */
+            tier_class = true;
+            pt->tier_type = tier_type;
+          }
+
+          if (tier_class) {
+            if (tier_config_add.size() > 0) {
+              JSONFormattable tconfig;
+              for (auto add : tier_config_add) {
+                int r = tconfig.set(add.first, add.second);
+                if (r < 0) {
+                  cerr << "ERROR: failed to set configurable: " << add << std::endl;
+                  return EINVAL;
+                }
+              }
+              int r = pt->update_params(tconfig);
+              if (r < 0) {
+                cerr << "ERROR: failed to update tier_config options"<< std::endl;
+              }
+            }
+            if (tier_config_rm.size() > 0) {
+              JSONFormattable tconfig;
+              for (auto add : tier_config_rm) {
+                int r = tconfig.set(add.first, add.second);
+                if (r < 0) {
+                  cerr << "ERROR: failed to set configurable: " << add << std::endl;
+                  return EINVAL;
+                }
+              }
+              int r = pt->clear_params(tconfig);
+              if (r < 0) {
+                cerr << "ERROR: failed to update tier_config options"<< std::endl;
+              }
+            }
+
+            target.tier_targets.emplace(std::make_pair(storage_class, *pt));
+          }
+
         } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_RM) {
           if (!opt_storage_class ||
               opt_storage_class->empty()) {

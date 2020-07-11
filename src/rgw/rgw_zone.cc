@@ -2081,4 +2081,88 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
   }
 }
 
+int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
+{
+
+  if (config.exists("endpoint")) {
+    endpoint = config["endpoint"];
+  }
+  if (config.exists("target_path")) {
+    target_path = config["target_path"];
+  }
+  if (config.exists("host_style")) {
+    string s;
+    s = config["host_style"];
+    if (s != "virtual") {
+      host_style = PathStyle;
+    } else {
+      host_style = VirtualStyle;
+    }
+  }
+  if (config.exists("tier_storage_class")) {
+    tier_storage_class = config["tier_storage_class"];
+  }
+  if (config.exists("access_key")) {
+    key.id = config["access_key"];
+  }
+  if (config.exists("secret")) {
+    key.key = config["secret"];
+  }
+  if (config.exists("acls")) {
+    const JSONFormattable& cc = config["acls"];
+    if (cc.is_array()) {
+      for (auto& c : cc.array()) {
+        RGWTierACLMapping m;
+        m.init(c);
+        if (!m.source_id.empty()) {
+          acl_mappings[m.source_id] = m;
+        }
+      }
+    } else {
+      RGWTierACLMapping m;
+      m.init(cc);
+      if (!m.source_id.empty()) {
+        acl_mappings[m.source_id] = m;
+      }
+    }
+  }
+  return 0;
+}
+int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("endpoint")) {
+    endpoint.clear();
+  }
+  if (config.exists("target_path")) {
+    target_path.clear();
+  }
+  if (config.exists("host_style")) {
+    /* default */
+    host_style = PathStyle;
+  }
+  if (config.exists("tier_storage_class")) {
+    tier_storage_class.clear();
+  }
+  if (config.exists("access_key")) {
+    key.id.clear();
+  }
+  if (config.exists("secret")) {
+    key.key.clear();
+  }
+  if (config.exists("acls")) {
+    const JSONFormattable& cc = config["acls"];
+    if (cc.is_array()) {
+      for (auto& c : cc.array()) {
+        RGWTierACLMapping m;
+        m.init(c);
+        acl_mappings.erase(m.source_id);
+      }
+    } else {
+      RGWTierACLMapping m;
+      m.init(cc);
+      acl_mappings.erase(m.source_id);
+    }
+  }
+  return 0;
+}
 
