@@ -23,6 +23,9 @@ SIProvider_REST::SIProvider_REST(CephContext *_cct,
                                             &proxy_type_provider, instance));
 }
 
+SIProvider_REST::~SIProvider_REST() {
+}
+
 SIProvider::stage_id_t SIProvider_REST::get_first_stage()
 {
   std::vector<SIProvider::stage_id_t> stages = get_stages();

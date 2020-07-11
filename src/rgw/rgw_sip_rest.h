@@ -37,6 +37,7 @@ public:
                   RGWHTTPManager *_http_manager,
                   const std::string& _remote_provider_name,
                   std::optional<std::string> _instance);
+  virtual ~SIProvider_REST();
 
   stage_id_t get_first_stage() override;
   stage_id_t get_last_stage() override;
@@ -47,5 +48,24 @@ public:
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) override;
   int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) override;
   int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
+};
+
+class SIProvider_REST_SingleType : public SIProvider_REST
+{
+  SIProvider::TypeHandlerProviderRef type_provider;
+
+public:
+  SIProvider_REST_SingleType(CephContext *_cct,
+                             RGWCoroutinesManager *_cr_mgr,
+                             RGWRESTConn *_conn,
+                             RGWHTTPManager *_http_manager,
+                             const std::string& _remote_provider_name,
+                             std::optional<std::string> _instance,
+                             SIProvider::TypeHandlerProviderRef _type_provider) : SIProvider_REST(_cct, _cr_mgr, _conn,
+                                                                                                  _http_manager, _remote_provider_name,
+                                                                                                  _instance), type_provider(_type_provider) {}
+  SIProvider::TypeHandlerProvider *get_type_provider() override {
+    return type_provider.get();
+  }
 };
 

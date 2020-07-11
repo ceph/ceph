@@ -69,6 +69,9 @@ extern "C" {
 #include "services/svc_meta_be_otp.h"
 #include "services/svc_zone.h"
 
+#include "rgw_sip_meta.h"
+#include "rgw_sip_rest.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -3375,6 +3378,43 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+class SIPRESTMgr : public RGWCoroutinesManager {
+  CephContext *cct;
+  RGWHTTPManager http_manager;
+  RGWCoroutinesManagerRegistry *cr_registry;
+
+  struct {
+    RGWSI_Zone *zone;
+  } svc;
+
+public:
+  SIPRESTMgr(CephContext *_cct,
+             RGWSI_Zone *_zone_svc,
+             RGWCoroutinesManagerRegistry *_cr_registry) : RGWCoroutinesManager(_cct, _cr_registry),
+                                                           cct(_cct),
+                                                           http_manager(_cct, completion_mgr) {
+    svc.zone = _zone_svc;
+    http_manager.start();
+  }
+
+  SIProvider_REST *create(const rgw_zone_id& zid,
+                          const string& remote_provider_name,
+                          std::optional<string> instance,
+                         SIProvider::TypeHandlerProviderRef type_provider) {
+    auto& conn_map = svc.zone->get_zone_conn_map();
+    auto iter = conn_map.find(zid);
+    if (iter == conn_map.end()) {
+      return nullptr;
+    }
+
+    return new SIProvider_REST_SingleType(cct, this,
+                                          iter->second, &http_manager,
+                                          remote_provider_name,
+                                          instance,
+                                          type_provider);
+  }
+};
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -6065,6 +6105,17 @@ int main(int argc, const char **argv)
       break;
     }
     return 0;
+  }
+
+  SIPRESTMgr sip_rest_mgr(store->ctx(), store->svc()->zone, store->getRados()->get_cr_registry());
+
+  auto si_mgr = store->ctl()->si.mgr;
+  for (auto& iter : store->svc()->zone->get_zone_conn_map()) {
+    auto& zid = iter.first;
+
+    auto remote_sip = sip_rest_mgr.create(zid, "meta.full", opt_sip_instance, 
+                                          std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >());
+    si_mgr->register_sip("remote:meta.full", std::make_shared<RGWSIPGen_Single>(remote_sip));
   }
 
   resolve_zone_id_opt(opt_effective_zone_name, opt_effective_zone_id);
