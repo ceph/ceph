@@ -35,7 +35,7 @@
 #include "CDentry.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
-#include "LocalLock.h"
+#include "LocalLockC.h"
 #include "Capability.h"
 #include "SnapRealm.h"
 #include "Mutation.h"
@@ -1035,7 +1035,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static LockType policylock_type;
 
   // FIXME not part of mempool
-  LocalLock  versionlock;
+  LocalLockC  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
   ScatterLock dirfragtreelock;

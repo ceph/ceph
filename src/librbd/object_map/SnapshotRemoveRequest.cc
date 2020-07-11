@@ -91,7 +91,7 @@ void SnapshotRemoveRequest::remove_snapshot() {
 
   librados::ObjectWriteOperation op;
   if (m_next_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   }
   cls_client::object_map_snap_remove(&op, m_snap_object_map);
 

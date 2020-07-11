@@ -307,7 +307,7 @@ void add_verbose_option(boost::program_options::options_description *opt) {
 
 void add_no_error_option(boost::program_options::options_description *opt) {
   opt->add_options()
-    (NO_ERROR.c_str(), po::bool_switch(), "continue after error");
+    (NO_ERR.c_str(), po::bool_switch(), "continue after error");
 }
 
 void add_export_format_option(boost::program_options::options_description *opt) {

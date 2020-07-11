@@ -1179,7 +1179,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   string lock_cookie;
   string lock_description;
   int lock_duration = 0;
-  ClsLockType lock_type = LOCK_EXCLUSIVE;
+  ClsLockType lock_type = ClsLockType::EXCLUSIVE;
 
   map<string, string>::const_iterator i;
   i = opts.find("lock-tag");
@@ -1204,9 +1204,9 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   if (i != opts.end()) {
     const string& type_str = i->second;
     if (type_str.compare("exclusive") == 0) {
-      lock_type = LOCK_EXCLUSIVE;
+      lock_type = ClsLockType::EXCLUSIVE;
     } else if (type_str.compare("shared") == 0) {
-      lock_type = LOCK_SHARED;
+      lock_type = ClsLockType::SHARED;
     } else {
       cerr << "unknown lock type was specified, aborting" << std::endl;
       return -EINVAL;
@@ -1243,7 +1243,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
 
   if (cmd.compare("info") == 0) {
     map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> lockers;
-    ClsLockType type = LOCK_NONE;
+    ClsLockType type = ClsLockType::NONE;
     string tag;
     int ret = rados::cls::lock::get_lock_info(ioctx, oid, lock_name, &lockers, &type, &tag);
     if (ret < 0) {
@@ -1281,7 +1281,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     l.set_description(lock_description);
     int ret;
     switch (lock_type) {
-    case LOCK_SHARED:
+    case ClsLockType::SHARED:
       ret = l.lock_shared(ioctx, oid);
       break;
     default:

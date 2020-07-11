@@ -18,9 +18,9 @@
 
 #include "SimpleLock.h"
 
-class LocalLock : public SimpleLock {
+class LocalLockC : public SimpleLock {
 public:
-  LocalLock(MDSCacheObject *o, LockType *t) : 
+  LocalLockC(MDSCacheObject *o, LockType *t) : 
     SimpleLock(o, t) {
     set_state(LOCK_LOCK); // always.
   }
