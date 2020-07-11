@@ -374,6 +374,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         self.template = TemplateMgr()
 
+        self.requires_post_actions = set()
+
     def shutdown(self):
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -1193,7 +1195,7 @@ you may want to run:
                     bad_hosts.append(r)
 
         refresh(self.cache.get_hosts())
-		
+
         health_changed = False
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
             del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
@@ -1377,7 +1379,7 @@ you may want to run:
                     if dd.daemon_type == 'osd':
                         """
                         The osd count can't be determined by the Placement spec.
-                        It's rather pointless to show a actual/expected representation
+                        Showing an actual/expected representation cannot be determined
                         here. So we're setting running = size for now.
                         """
                         osd_count += 1
@@ -1782,6 +1784,8 @@ you may want to run:
             sd.status = 1
             sd.status_desc = 'starting'
             self.cache.add_daemon(host, sd)
+            if daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
+                self.requires_post_actions.add(daemon_type)
         self.cache.invalidate_host_daemons(host)
         self.cache.update_daemon_config_deps(host, name, deps, start_time)
         self.cache.save_host(host)
@@ -2019,7 +2023,9 @@ you may want to run:
 
         # do daemon post actions
         for daemon_type, daemon_descs in daemons_post.items():
-            self._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
+            if daemon_type in self.requires_post_actions:
+                self.requires_post_actions.remove(daemon_type)
+                self._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
 
     def _add_daemon(self, daemon_type, spec,
                     create_func: Callable[..., T], config_func=None) -> List[T]:
