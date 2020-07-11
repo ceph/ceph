@@ -1402,11 +1402,80 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
 }
 
+void RGWTierACLMapping::dump(Formatter *f) const
+{
+  string s;
+  switch (type) {
+    case ACL_TYPE_EMAIL_USER:
+      s = "email";
+      break;
+    case ACL_TYPE_GROUP:
+      s = "uri";
+      break;
+    default:
+      s = "id";
+      break;
+  }
+  encode_json("type", s, f);
+  encode_json("source_id", source_id, f);
+  encode_json("dest_id", dest_id, f);
+}
+
+void RGWTierACLMapping::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("type", s, obj);
+  if (s == "email") {
+    type = ACL_TYPE_EMAIL_USER;
+  } else if (s == "uri") {
+    type = ACL_TYPE_GROUP;
+  } else {
+    type = ACL_TYPE_CANON_USER;
+  }
+
+  JSONDecoder::decode_json("source_id", source_id, obj);
+  JSONDecoder::decode_json("dest_id", dest_id, obj);
+}
+
+void RGWZoneGroupPlacementTier::dump(Formatter *f) const
+{
+  encode_json("storage_class", storage_class, f);
+  encode_json("tier_type", tier_type, f);
+  encode_json("endpoint", endpoint, f);
+  encode_json("access_key", key.id, f);
+  encode_json("secret", key.key, f);
+  string s = (host_style == PathStyle ? "path" : "virtual");
+  encode_json("host_style", s, f);
+  encode_json("tier_storage_class", tier_storage_class, f);
+  encode_json("target_path", target_path, f);
+  encode_json("acl_mappings", acl_mappings, f);
+}
+
+void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+  JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("endpoint", endpoint, obj);
+  JSONDecoder::decode_json("access_key", key.id, obj);
+  JSONDecoder::decode_json("secret", key.key, obj);
+  string s;
+  JSONDecoder::decode_json("host_style", s, obj);
+  if (s != "virtual") {
+    host_style = PathStyle;
+  } else {
+    host_style = VirtualStyle;
+  }
+  JSONDecoder::decode_json("tier_storage_class", tier_storage_class, obj);
+  JSONDecoder::decode_json("target_path", target_path, obj);
+  JSONDecoder::decode_json("acl_mappings", acl_mappings, obj);
+}
+
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("tags", tags, f);
   encode_json("storage_classes", storage_classes, f);
+  encode_json("tier_targets", tier_targets, f);
 }
 
 void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
@@ -1417,6 +1486,7 @@ void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
   if (storage_classes.empty()) {
     storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
   }
+  JSONDecoder::decode_json("tier_targets", tier_targets, obj);
 }
 
 void RGWZoneGroup::dump(Formatter *f) const

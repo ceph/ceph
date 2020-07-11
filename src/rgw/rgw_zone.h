@@ -679,10 +679,131 @@ struct RGWDefaultZoneGroupInfo {
 };
 WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
+struct RGWTierACLMapping {
+  ACLGranteeTypeEnum type{ACL_TYPE_CANON_USER};
+  std::string source_id;
+  std::string dest_id;
+
+  RGWTierACLMapping() = default;
+
+  RGWTierACLMapping(ACLGranteeTypeEnum t,
+             const string& s,
+             const string& d) : type(t),
+  source_id(s),
+  dest_id(d) {}
+
+  void init(const JSONFormattable& config) {
+    const string& t = config["type"];
+
+    if (t == "email") {
+      type = ACL_TYPE_EMAIL_USER;
+    } else if (t == "uri") {
+      type = ACL_TYPE_GROUP;
+    } else {
+      type = ACL_TYPE_CANON_USER;
+    }
+
+    source_id = config["source_id"];
+    dest_id = config["dest_id"];
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    string s;
+    switch (type) {
+      case ACL_TYPE_EMAIL_USER:
+        s = "email";
+        break;
+      case ACL_TYPE_GROUP:
+        s = "uri";
+        break;
+      default:
+        s = "id";
+        break;
+    }
+    encode(s, bl);
+    encode(source_id, bl);
+    encode(dest_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+      string s;
+     decode(s, bl);
+     if (s == "email") {
+        type = ACL_TYPE_EMAIL_USER;
+     } else if (s == "uri") {
+        type = ACL_TYPE_GROUP;
+     } else {
+        type = ACL_TYPE_CANON_USER;
+     }
+    decode(source_id, bl);
+    decode(dest_id, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWTierACLMapping)
+
+struct RGWZoneGroupPlacementTier {
+  std::string storage_class;
+  std::string tier_type;
+  std::string endpoint;
+  RGWAccessKey key;
+  HostStyle host_style{PathStyle};
+  string tier_storage_class;
+
+  /* Should below be bucket/zone specific?? */
+  string target_path;
+  map<string, RGWTierACLMapping> acl_mappings;
+
+  int update_params(const JSONFormattable& config);
+  int clear_params(const JSONFormattable& config);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(storage_class, bl);
+    encode(tier_type, bl);
+    encode(endpoint, bl);
+    encode(key, bl);
+    string s = (host_style == PathStyle ? "path" : "virtual");
+    encode(s, bl);
+    encode(tier_storage_class, bl);
+    encode(target_path, bl);
+    encode(acl_mappings, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(storage_class, bl);
+    decode(tier_type, bl);
+    decode(endpoint, bl);
+    decode(key, bl);
+    string s;
+    decode(s, bl);
+    if (s != "virtual") {
+      host_style = PathStyle;
+    } else {
+      host_style = VirtualStyle;
+    }
+    decode(tier_storage_class, bl);
+    decode(target_path, bl);
+    decode(acl_mappings, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTier)
+
 struct RGWZoneGroupPlacementTarget {
   std::string name;
   std::set<std::string> tags;
   std::set<std::string> storage_classes;
+  std::map<std::string, RGWZoneGroupPlacementTier> tier_targets;
 
   bool user_permitted(const std::list<std::string>& user_tags) const {
     if (tags.empty()) {
@@ -697,15 +818,16 @@ struct RGWZoneGroupPlacementTarget {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(name, bl);
     encode(tags, bl);
     encode(storage_classes, bl);
+    encode(tier_targets, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(name, bl);
     decode(tags, bl);
     if (struct_v >= 2) {
@@ -713,6 +835,9 @@ struct RGWZoneGroupPlacementTarget {
     }
     if (storage_classes.empty()) {
       storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
+    }
+    if (struct_v >= 3) {
+      decode(tier_targets, bl);
     }
     DECODE_FINISH(bl);
   }
