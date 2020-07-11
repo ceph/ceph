@@ -135,11 +135,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
   if (r == 1) {
     return new HMSMRDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
   }
-  if (r < 0) {
-    derr << __func__ << " zbc_device_is_zoned(" << path << ") failed: "
-	 << cpp_strerror(r) << dendl;
-    goto out_fail;
-  }
+  ceph_assertf(r >= 0, "zbc_device_is_zoned(%s) failed: %d", path.c_str(), r);
 #endif
   if (type == "kernel") {
     return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
@@ -155,7 +151,6 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 
   derr << __func__ << " unknown backend " << type << dendl;
 
-out_fail:
   ceph_abort();
   return NULL;
 }
