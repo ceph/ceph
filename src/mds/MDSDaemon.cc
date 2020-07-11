@@ -115,7 +115,7 @@ public:
     Formatter *f,
     std::ostream& errss,
     ceph::buffer::list& out) override {
-    ceph_abort("shoudl go to call_async");
+    ceph_abort("should go to call_async");
   }
   void call_async(
     std::string_view command,

@@ -47,12 +47,12 @@ basic operations:
 * Demote cold rbd chunk to slow pool:
 
   1. Read object, noting current user_version.
-  2. In memory, run CDC implemenation to fingerprint object.
+  2. In memory, run CDC implementation to fingerprint object.
   3. Write out each resulting extent to an object in the cold pool
      using the CAS class.
   4. Submit operation to base pool:
 
-     * ASSERT_VER with the user verion from the read to fail if the
+     * ASSERT_VER with the user version from the read to fail if the
        object has been mutated since the read.
      * SET_CHUNK for each of the extents to the corresponding object
        in the base pool.
@@ -174,7 +174,7 @@ Testing
 
 We rely really heavily on randomized failure testing.  As such, we need
 to extend that testing to include dedup/manifest support as well.  Here's
-a short list of the the touchpoints:
+a short list of the touchpoints:
 
 * Thrasher tests like qa/suites/rados/thrash/workloads/cache-snaps.yaml
 
@@ -218,6 +218,76 @@ we may want to exploit.
 The dedup-tool needs to be updated to use LIST_SNAPS to discover
 clones as part of leak detection.
 
+An important question is how we deal with the fact that many clones
+will frequently have references to the same backing chunks at the same
+offset.  In particular, make_writeable will generally create a clone
+that shares the same object_manifest_t references with the exception
+of any extents modified in that transaction.  The metadata that
+commits as part of that transaction must therefore map onto the same
+refcount as before because otherwise we'd have to first increment
+refcounts on backing objects (or risk a reference to a dead object)
+Thus, we introduce a simple convention: consecutive clones which
+share a reference at the same offset share the same refcount.  This
+means that a write that invokes make_writeable may decrease refcounts,
+but not increase them.  This has some conquences for removing clones.
+Consider the following sequence ::
+
+  write foo [0, 1024)
+  flush foo ->
+    head: [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=1, refcount(bbb)=1
+  snapshot 10
+  write foo [0, 512) ->
+    head:               [512, 1024) bbb
+    10  : [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=1, refcount(bbb)=1
+  flush foo ->
+    head: [0, 512) ccc, [512, 1024) bbb
+    10  : [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=1, refcount(bbb)=1, refcount(ccc)=1
+  snapshot 20
+  write foo [0, 512) (same contents as the original write)
+    head:               [512, 1024) bbb
+    20  : [0, 512) ccc, [512, 1024) bbb
+    10  : [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=?, refcount(bbb)=1
+  flush foo
+    head: [0, 512) aaa, [512, 1024) bbb
+    20  : [0, 512) ccc, [512, 1024) bbb
+    10  : [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=?, refcount(bbb)=1, refcount(ccc)=1
+
+What should be the refcount for aaa be at the end?  By our
+above rule, it should be two since the two aaa refs are not
+contiguous.  However, consider removing clone 20 ::
+
+  initial:
+    head: [0, 512) aaa, [512, 1024) bbb
+    20  : [0, 512) ccc, [512, 1024) bbb
+    10  : [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=2, refcount(bbb)=1, refcount(ccc)=1
+  trim 20
+    head: [0, 512) aaa, [512, 1024) bbb
+    10  : [0, 512) aaa, [512, 1024) bbb
+    refcount(aaa)=?, refcount(bbb)=1, refcount(ccc)=0
+
+At this point, our rule dictates that refcount(aaa) is 1.
+This means that removing 20 needs to check for refs held by
+the clones on either side which will then match.
+
+See osd_types.h:object_manifest_t::calc_refs_to_drop_on_removal
+for the logic implementing this rule.
+
+This seems complicated, but it gets us two valuable properties:
+
+1) The refcount change from make_writeable will not block on
+   incrementing a ref
+2) We don't need to load the object_manifest_t for every clone
+   to determine how to handle removing one -- just the ones
+   immediately preceeding and suceeding it.
+
+All clone operations will need to consider adjacent chunk_maps
+when adding or removing references.
 
 Cache/Tiering
 -------------
@@ -372,7 +442,7 @@ Operations:
   The purpose of set_redirect is two.
 
   1. Redirect all operation to the target object (like proxy)
-  2. Cache when tier_promote is called (rediect will be cleared at this time).
+  2. Cache when tier_promote is called (redirect will be cleared at this time).
 
 * set-chunk 
 
@@ -383,7 +453,7 @@ Operations:
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
   
         rados -p base_pool set-chunk <source_object> <offset> <length> --target-pool 
-         <caspool> <target_object> <taget-offset> 
+         <caspool> <target_object> <target-offset> 
 
   Returns ENOENT if the object does not exist (TODO: why?)
   Returns EINVAL if the object already is a redirect.

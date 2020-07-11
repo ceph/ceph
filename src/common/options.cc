@@ -166,16 +166,11 @@ int Option::parse_value(
       *out = f;
     }
   } else if (type == Option::TYPE_BOOL) {
-    if (strcasecmp(val.c_str(), "false") == 0) {
-      *out = false;
-    } else if (strcasecmp(val.c_str(), "true") == 0) {
-      *out = true;
+    bool b = strict_strtob(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
     } else {
-      int b = strict_strtol(val.c_str(), 10, error_message);
-      if (!error_message->empty()) {
-	return -EINVAL;
-      }
-      *out = (bool)!!b;
+      *out = b;
     }
   } else if (type == Option::TYPE_ADDR) {
     entity_addr_t addr;
@@ -4437,12 +4432,14 @@ std::vector<Option> get_global_options() {
     // RocksDB sharding in BlueStore dramatically lifted the number of
     // threads spawn during RocksDB's init.
     .set_validator([](std::string *value, std::string *error_message){
-      if (*value != "false") {
+      if (const bool parsed_value = strict_strtob(value->c_str(), error_message);
+	  error_message->empty() && parsed_value) {
         *error_message = "invalid BlueStore sharding configuration."
                          " Be aware any change takes effect only on mkfs!";
         return -EINVAL;
+      } else {
+        return 0;
       }
-      return 0;
     })
 #endif
     .set_description("Enable use of rocksdb column families for bluestore metadata"),
@@ -7995,6 +7992,12 @@ std::vector<Option> get_mds_options() {
     .set_default(128)
     .set_description("maximum number of segments which may be untrimmed"),
 
+    Option("mds_log_warn_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2.0)
+    .set_min(1.0)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("trigger MDS_HEALTH_TRIM warning when the mds log is longer than mds_log_max_segments * mds_log_warn_factor"),
+
     Option("mds_bal_export_pin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("allow setting directory export pins to particular ranks"),
@@ -8641,8 +8644,16 @@ std::vector<Option> get_mds_client_options() {
     .set_default(2)
     .set_min(1)
     .set_description("Size of thread pool for ASIO completions")
+    .add_tag("client"),
+
+    Option("client_shutdown_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(30)
+    .set_min(0)
+    .set_description("timeout for shutting down CephFS")
+    .set_long_description("Timeout for shutting down CephFS via unmount or shutdown.")
     .add_tag("client")
-  });
+    });
 }
 
 

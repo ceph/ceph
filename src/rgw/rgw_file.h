@@ -1950,7 +1950,7 @@ public:
 
   int get_data(buffer::list& _bl) override {
     /* XXX for now, use sharing semantics */
-    _bl.claim(bl);
+    _bl = std::move(bl);
     uint32_t len = _bl.length();
     bytes_written += len;
     return len;
@@ -2489,7 +2489,7 @@ public:
   int get_data(buffer::list& _bl) override {
     /* XXX for now, use sharing semantics */
     uint32_t len = data.length();
-    _bl.claim(data);
+    _bl = std::move(data);
     bytes_written += len;
     return len;
   }
@@ -2498,7 +2498,7 @@ public:
     if (off != real_ofs) {
       eio = true;
     }
-    data.claim(_bl);
+    data = std::move(_bl);
     real_ofs += data.length();
     ofs = off; /* consumed in exec_continue() */
   }

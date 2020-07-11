@@ -2,13 +2,14 @@ import json
 import errno
 import logging
 from collections import defaultdict
+from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory
 from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast
+    Any, Set, TYPE_CHECKING, cast, Iterator
 
 import datetime
 import six
@@ -140,7 +141,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     instance = None
     NATIVE_OPTIONS = []  # type: List[Any]
-    MODULE_OPTIONS = [
+    MODULE_OPTIONS: List[dict] = [
         {
             'name': 'ssh_config_file',
             'type': 'str',
@@ -252,7 +253,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'type': 'bool',
             'default': True,
             'desc': 'manage configs like API endpoints in Dashboard.'
-        }
+        },
+        {
+            'name': 'manage_etc_ceph_ceph_conf',
+            'type': 'bool',
+            'default': False,
+            'desc': 'Manage and own /etc/ceph/ceph.conf on the hosts.',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -287,6 +294,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.prometheus_alerts_path = ''
             self.migration_current = None
             self.config_dashboard = True
+            self.manage_etc_ceph_ceph_conf = True
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -498,23 +506,38 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def config_notify(self):
         """
         This method is called whenever one of our config options is changed.
+
+        TODO: this method should be moved into mgr_module.py
         """
+        module_options_changed: List[str] = []
         for opt in self.MODULE_OPTIONS:
+            old_val = getattr(self, opt['name'], None)
+            new_val = self.get_module_option(opt['name'])
             setattr(self,
                     opt['name'],  # type: ignore
-                    self.get_module_option(opt['name']))  # type: ignore
+                    new_val)  # type: ignore
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
+            if old_val != new_val:
+                module_options_changed.append(opt['name'])
         for opt in self.NATIVE_OPTIONS:
             setattr(self,
                     opt,  # type: ignore
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
 
+        for what in module_options_changed:
+            self.config_notify_one(what)
+
         self.event.set()
 
+    def config_notify_one(self, what):
+        if what == 'manage_etc_ceph_ceph_conf' and self.manage_etc_ceph_ceph_conf:
+            self.cache.distribute_new_etc_ceph_ceph_conf()
+
     def notify(self, notify_type, notify_id):
-        pass
+        if notify_type == "mon_map":
+            self.cache.distribute_new_etc_ceph_ceph_conf()
 
     def pause(self):
         if not self.paused:
@@ -610,7 +633,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self._ssh_options = None
 
         if self.mode == 'root':
-            self.ssh_user = 'root'
+            self.ssh_user = self.get_store('ssh_user', default='root')
         elif self.mode == 'cephadm-package':
             self.ssh_user = 'cephadm'
 
@@ -683,6 +706,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return -errno.EINVAL, "", "empty ssh config provided"
         self.set_store("ssh_config", inbuf)
         self.log.info('Set ssh_config')
+        self._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_write_command(
@@ -695,6 +719,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
+        self._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_read_command(
@@ -788,6 +813,30 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return 0, self.ssh_user, ''
 
     @orchestrator._cli_read_command(
+        'cephadm set-user',
+        'name=user,type=CephString',
+        'Set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
+    def set_ssh_user(self, user):
+        current_user = self.ssh_user
+
+        self.set_store('ssh_user', user)
+        self._reconfig_ssh()
+
+        host = self.cache.get_hosts()[0]
+        r = self._check_host(host)
+        if r is not None:
+            #connection failed reset user
+            self.set_store('ssh_user', current_user)
+            self._reconfig_ssh()
+            return -errno.EINVAL, '', 'ssh connection %s@%s failed' % (user, host)
+
+        msg = 'ssh user set to %s' % user
+        if user != 'root':
+            msg += ' sudo will be used'
+        self.log.info(msg)
+        return 0, msg, ''
+
+    @orchestrator._cli_read_command(
         'cephadm check-host',
         'name=host,type=CephString '
         'name=addr,type=CephString,req=false',
@@ -846,7 +895,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         conn = remoto.Connection(
             n,
             logger=child_logger,
-            ssh_options=self._ssh_options)
+            ssh_options=self._ssh_options,
+            sudo=True if self.ssh_user != 'root' else False)
 
         r = conn.import_module(remotes)
         self._cons[host] = conn, r
@@ -869,6 +919,46 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             executable_path))
         return executable_path
 
+    @contextmanager
+    def _remote_connection(self,
+                           host: str,
+                           addr: Optional[str]=None,
+                           ) -> Iterator[Tuple["BaseConnection", Any]]:
+        if not addr and host in self.inventory:
+            addr = self.inventory.get_addr(host)
+
+        self.offline_hosts_remove(host)
+
+        try:
+            try:
+                conn, connr = self._get_connection(addr)
+            except OSError as e:
+                self._reset_con(host)
+                msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there: {str(e)}"
+                raise execnet.gateway_bootstrap.HostNotFound(msg)
+
+            yield (conn, connr)
+
+        except execnet.gateway_bootstrap.HostNotFound as e:
+            # this is a misleading exception as it seems to be thrown for
+            # any sort of connection failure, even those having nothing to
+            # do with "host not found" (e.g., ssh key permission denied).
+            self.offline_hosts.add(host)
+            self._reset_con(host)
+
+            user = self.ssh_user if self.mode == 'root' else 'cephadm'
+            msg = f'''Failed to connect to {host} ({addr}).
+Check that the host is reachable and accepts connections using the cephadm SSH key
+
+you may want to run:
+> ceph cephadm get-ssh-config > ssh_config
+> ceph config-key get mgr/cephadm/ssh_identity_key > key
+> ssh -F ssh_config -i key {user}@{host}'''
+            raise OrchestratorError(msg) from e
+        except Exception as ex:
+            self.log.exception(ex)
+            raise
+
     def _run_cephadm(self,
                      host: str,
                      entity: str,
@@ -886,20 +976,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
-        if not addr and host in self.inventory:
-            addr = self.inventory.get_addr(host)
-
-        self.offline_hosts_remove(host)
-
-        try:
-            try:
-                conn, connr = self._get_connection(addr)
-            except OSError as e:
-                if error_ok:
-                    self.log.exception('failed to establish ssh connection')
-                    return [], [str("Can't communicate with remote host, possibly because python3 is not installed there")], 1
-                raise execnet.gateway_bootstrap.HostNotFound(str(e)) from e
-
+        with self._remote_connection(host, addr) as tpl:
+            conn, connr = tpl
             assert image or entity
             if not image:
                 daemon_type = entity.split('.', 1)[0]  # type: ignore
@@ -953,9 +1031,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                             host, remotes.PYTHONS, remotes.PATH))
                 try:
                     out, err, code = remoto.process.check(
-                        conn,
-                        [python, '-u'],
-                        stdin=script.encode('utf-8'))
+                    conn,
+                    [python, '-u'],
+                    stdin=script.encode('utf-8'))
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
@@ -986,23 +1064,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         code, '\n'.join(err)))
             return out, err, code
 
-        except execnet.gateway_bootstrap.HostNotFound as e:
-            # this is a misleading exception as it seems to be thrown for
-            # any sort of connection failure, even those having nothing to
-            # do with "host not found" (e.g., ssh key permission denied).
-            self.offline_hosts.add(host)
-            user = 'root' if self.mode == 'root' else 'cephadm'
-            msg = f'''Failed to connect to {host} ({addr}).
-Check that the host is reachable and accepts connections using the cephadm SSH key
-
-you may want to run:
-> ceph cephadm get-ssh-config > ssh_config
-> ceph config-key get mgr/cephadm/ssh_identity_key > key
-> ssh -F ssh_config -i key {user}@{host}'''
-            raise OrchestratorError(msg) from e
-        except Exception as ex:
-            self.log.exception(ex)
-            raise
 
     def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
         return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
@@ -1098,7 +1159,7 @@ you may want to run:
         self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
         return True
 
-    def _refresh_hosts_and_daemons(self):
+    def _refresh_hosts_and_daemons(self) -> None:
         bad_hosts = []
         failures = []
 
@@ -1124,9 +1185,15 @@ you may want to run:
                 r = self._refresh_host_osdspec_previews(host)
                 if r:
                     failures.append(r)
-                    
-        refresh(self.cache.get_hosts())
 
+            if self.cache.host_needs_new_etc_ceph_ceph_conf(host):
+                self.log.debug(f"deploying new /etc/ceph/ceph.conf on `{host}`")
+                r = self._deploy_etc_ceph_ceph_conf(host)
+                if r:
+                    bad_hosts.append(r)
+
+        refresh(self.cache.get_hosts())
+		
         health_changed = False
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
             del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
@@ -1153,7 +1220,7 @@ you may want to run:
         if health_changed:
             self.set_health_checks(self.health_checks)
 
-    def _refresh_host_daemons(self, host):
+    def _refresh_host_daemons(self, host) -> Optional[str]:
         try:
             out, err, code = self._run_cephadm(
                 host, 'mon', 'ls', [], no_fsid=True)
@@ -1206,7 +1273,7 @@ you may want to run:
         self.cache.save_host(host)
         return None
 
-    def _refresh_host_devices(self, host):
+    def _refresh_host_devices(self, host) -> Optional[str]:
         try:
             out, err, code = self._run_cephadm(
                 host, 'osd',
@@ -1236,6 +1303,31 @@ you may want to run:
         self.cache.update_host_devices_networks(host, devices.devices, networks)
         self.update_osdspec_previews(host)
         self.cache.save_host(host)
+        return None
+
+    def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
+        ret, config, err = self.check_mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+
+        try:
+            with self._remote_connection(host) as tpl:
+                conn, connr = tpl
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['mkdir', '-p', '/etc/ceph'])
+                if code:
+                    return f'failed to create /etc/ceph on {host}: {err}'
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['dd', 'of=/etc/ceph/ceph.conf'],
+                    stdin=config.encode('utf-8')
+                )
+                if code:
+                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
+                self.cache.remove_host_needs_new_etc_ceph_ceph_conf(host)
+        except OrchestratorError as e:
+            return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
 
     @trivial_completion
@@ -1378,10 +1470,12 @@ you may want to run:
         }
         name = '%s.%s' % (daemon_type, daemon_id)
         for a in actions[action]:
-            out, err, code = self._run_cephadm(
-                host, name, 'unit',
-                ['--name', name, a],
-                error_ok=True)
+            try:
+                out, err, code = self._run_cephadm(
+                    host, name, 'unit',
+                    ['--name', name, a])
+            except Exception:
+                self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
@@ -1481,7 +1575,7 @@ you may want to run:
                 host, 'osd', 'shell', ['--'] + cmd,
                 error_ok=True)
             if code:
-                raise RuntimeError(
+                raise OrchestratorError(
                     'Unable to affect %s light for %s:%s. Command: %s' % (
                         ident_fault, host, dev, ' '.join(cmd)))
             self.log.info('Set %s light for %s:%s %s' % (

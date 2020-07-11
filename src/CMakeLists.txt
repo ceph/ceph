@@ -294,7 +294,8 @@ list(APPEND mds_files
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
   mds/mdstypes.cc
-  mds/flock.cc)
+  mds/flock.cc
+  mds/cephfs_features.cc)
 
 add_subdirectory(json_spirit)
 
@@ -331,7 +332,14 @@ if(WITH_SEASTAR)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
-  set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member;-Wno-non-virtual-dtor" CACHE STRING "" FORCE)
+  list(APPEND Seastar_CXX_FLAGS
+    "-Wno-error"
+    "-Wno-sign-compare"
+    "-Wno-attributes"
+    "-Wno-pessimizing-move"
+    "-Wno-address-of-packed-member"
+    "-Wno-non-virtual-dtor")
+  set(Seastar_CXX_FLAGS "${Seastar_CXX_FLAGS}" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time

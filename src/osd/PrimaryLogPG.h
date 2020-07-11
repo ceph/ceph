@@ -618,7 +618,7 @@ public:
       explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
       NotifyAck(uint64_t notify_id, uint64_t cookie, ceph::buffer::list& rbl)
 	: watch_cookie(cookie), notify_id(notify_id) {
-	reply_bl.claim(rbl);
+	reply_bl = std::move(rbl);
       }
     };
     std::list<NotifyAck> notify_acks;
@@ -1889,7 +1889,6 @@ public:
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
-  void wait_for_all_missing(OpRequestRef op);
 
   bool check_laggy(OpRequestRef& op);
   bool check_laggy_requeue(OpRequestRef& op);

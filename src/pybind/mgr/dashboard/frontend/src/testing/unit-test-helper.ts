@@ -4,11 +4,11 @@ import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
-import { NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
+import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { configureTestSuite } from 'ng-bullet';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
@@ -180,21 +180,18 @@ export class FormHelper {
 }
 
 /**
- * Use this to mock 'ModalService.show' to make the embedded component with it's fixture usable
+ * Use this to mock 'modalService.open' to make the embedded component with it's fixture usable
  * in tests. The function gives back all needed parts including the modal reference.
  *
  * Please make sure to call this function *inside* your mock and return the reference at the end.
  */
 export function modalServiceShow(componentClass: Type<any>, modalConfig: any) {
-  const ref = new BsModalRef();
-  const fixture = TestBed.createComponent(componentClass);
-  let component = fixture.componentInstance;
-  if (modalConfig.initialState) {
-    component = Object.assign(component, modalConfig.initialState);
+  const modal: NgbModal = TestBed.inject(NgbModal);
+  const modalRef = modal.open(componentClass);
+  if (modalConfig) {
+    Object.assign(modalRef.componentInstance, modalConfig);
   }
-  fixture.detectChanges();
-  ref.content = component;
-  return { ref, fixture, component };
+  return modalRef;
 }
 
 export class FixtureHelper {
@@ -552,6 +549,31 @@ export class Mocks {
       }
     ];
     return rule;
+  }
+
+  static getInventoryDevice(
+    hostname: string,
+    uid: string,
+    path = 'sda',
+    available = false
+  ): InventoryDevice {
+    return {
+      hostname,
+      uid,
+      path,
+      available,
+      sys_api: {
+        vendor: 'AAA',
+        model: 'aaa',
+        size: 1024,
+        rotational: 'false',
+        human_readable_size: '1 KB'
+      },
+      rejected_reasons: [''],
+      device_id: 'AAA-aaa-id0',
+      human_readable_type: 'nvme/ssd',
+      osd_ids: []
+    };
   }
 }
 

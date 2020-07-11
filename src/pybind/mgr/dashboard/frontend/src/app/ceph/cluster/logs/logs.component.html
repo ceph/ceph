@@ -3,8 +3,9 @@
 
   <ul ngbNav
       #nav="ngbNav"
-      class="nav-tabs">
-    <li ngbNavItem>
+      class="nav-tabs"
+      cdStatefulTab="logs">
+    <li ngbNavItem="cluster-logs">
       <a ngbNavLink
          i18n>Cluster Logs</a>
       <ng-template ngbNavContent>
@@ -23,7 +24,7 @@
         </div>
       </ng-template>
     </li>
-    <li ngbNavItem>
+    <li ngbNavItem="audit-logs">
       <a ngbNavLink
          i18n>Audit Logs</a>
       <ng-template ngbNavContent>
@@ -89,12 +90,11 @@
       <label class="col-form-label"
              i18n>Date:</label>
       <div class="input-group">
-        <input type="text"
-               class="form-control"
-               i18n-placeholder
-               placeholder="Datepicker"
-               [bsConfig]="bsConfig"
-               bsDatepicker
+        <input class="form-control"
+               placeholder="YYYY-MM-DD"
+               ngbDatepicker
+               #d="ngbDatepicker"
+               (click)="d.open()"
                [(ngModel)]="selectedDate"
                (ngModelChange)="filterLogs()">
         <span class="input-group-append">
@@ -110,21 +110,15 @@
     <div class="form-group">
       <label class="col-form-label"
              i18n>Time range:</label>
-      <div class="d-inline-flex">
-        <timepicker [showMeridian]="false"
-                    [showSpinners]="false"
-                    [minuteStep]="1"
-                    [(ngModel)]="startTime"
-                    (ngModelChange)="filterLogs()">
-        </timepicker>
-        <span class="middle">&nbsp;&mdash;&nbsp;</span>
-        <timepicker [showMeridian]="false"
-                    [showSpinners]="false"
-                    [minuteStep]="1"
-                    [(ngModel)]="endTime"
-                    (ngModelChange)="filterLogs()">
-        </timepicker>
-      </div>
+      <ngb-timepicker [spinners]="false"
+                      [(ngModel)]="startTime"
+                      (ngModelChange)="filterLogs()"></ngb-timepicker>
+
+      <span class="middle">&nbsp;&mdash;&nbsp;</span>
+
+      <ngb-timepicker [spinners]="false"
+                      [(ngModel)]="endTime"
+                      (ngModelChange)="filterLogs()"></ngb-timepicker>
     </div>
   </div>
 </ng-template>

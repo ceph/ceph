@@ -46,6 +46,7 @@ import json
 import logging
 import os
 import platform
+import pwd
 import random
 import re
 import select
@@ -2417,7 +2418,8 @@ def command_bootstrap():
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks().items():
-            if base_ip in ips:
+            if ipaddress.ip_address(unicode(base_ip)) in \
+                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
@@ -2668,6 +2670,8 @@ def command_bootstrap():
 
     # ssh
     if not args.skip_ssh:
+        cli(['config-key', 'set', 'mgr/cephadm/ssh_user', args.ssh_user])
+
         logger.info('Enabling cephadm module...')
         cli(['mgr', 'module', 'enable', 'cephadm'])
         wait_for_mgr_restart()
@@ -2699,11 +2703,21 @@ def command_bootstrap():
                 f.write(ssh_pub)
             logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
-            logger.info('Adding key to root@localhost\'s authorized_keys...')
-            if not os.path.exists('/root/.ssh'):
-                os.mkdir('/root/.ssh', 0o700)
-            auth_keys_file = '/root/.ssh/authorized_keys'
+            logger.info('Adding key to %s@localhost\'s authorized_keys...' % args.ssh_user)
+            try:
+                s_pwd = pwd.getpwnam(args.ssh_user)
+            except KeyError as e:
+                raise Error('Cannot find uid/gid for ssh-user: %s' % (args.ssh_user))
+            ssh_uid = s_pwd.pw_uid
+            ssh_gid = s_pwd.pw_gid
+            ssh_dir = os.path.join(s_pwd.pw_dir, '.ssh')
+
+            if not os.path.exists(ssh_dir):
+                makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
+                	
+            auth_keys_file = '%s/authorized_keys' % ssh_dir
             add_newline = False
+
             if os.path.exists(auth_keys_file):
                 with open(auth_keys_file, 'r') as f:
                     f.seek(0, os.SEEK_END)
@@ -2711,7 +2725,9 @@ def command_bootstrap():
                         f.seek(f.tell()-1, os.SEEK_SET) # go to last char
                         if f.read() != '\n':
                             add_newline = True
+
             with open(auth_keys_file, 'a') as f:
+                os.fchown(f.fileno(), ssh_uid, ssh_gid) # just in case we created it
                 os.fchmod(f.fileno(), 0o600)  # just in case we created it
                 if add_newline:
                     f.write('\n')
@@ -2786,7 +2802,7 @@ def command_bootstrap():
                         ssh_key = '/etc/ceph/ceph.pub'
                         if args.ssh_public_key:
                             ssh_key = args.ssh_public_key.name
-                        out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, 'root@%s' % split[1]])
+                        out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, '%s@%s' % (args.ssh_user, split[1])])
 
         mounts = {}
         mounts[pathify(args.apply_spec)] = '/tmp/spec.yml:z'
@@ -3106,10 +3122,15 @@ def list_networks():
     #j = json.loads(out)
     #for x in j:
 
-    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
-    return _parse_ip_route(out)
+    res = _list_ipv4_networks()
+    res.update(_list_ipv6_networks())
+    return res
 
-def _parse_ip_route(out):
+def _list_ipv4_networks():
+    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    return _parse_ipv4_route(out)
+
+def _parse_ipv4_route(out):
     r = {}  # type: Dict[str,List[str]]
     p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
@@ -3121,6 +3142,36 @@ def _parse_ip_route(out):
         if net not in r:
             r[net] = []
         r[net].append(ip)
+    return r
+
+def _list_ipv6_networks():
+    routes, _, _ = call_throws([find_executable('ip'), '-6', 'route', 'ls'])
+    ips, _, _ = call_throws([find_executable('ip'), '-6', 'addr', 'ls'])
+    return _parse_ipv6_route(routes, ips)
+
+def _parse_ipv6_route(routes, ips):
+    r = {}  # type: Dict[str,List[str]]
+    route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) pref (\S+)$')
+    ip_p = re.compile(r'^\s+inet6 (\S+)/(.*)scope (.*)$')
+    for line in routes.splitlines():
+        m = route_p.findall(line)
+        if not m or m[0][0].lower() == 'default':
+            continue
+        net = m[0][0]
+        if net not in r:
+            r[net] = []
+
+    for line in ips.splitlines():
+        m = ip_p.findall(line)
+        if not m:
+            continue
+        ip = m[0][0]
+        # find the network it belongs to
+        net = [n for n in r.keys()
+               if ipaddress.ip_address(unicode(ip)) in ipaddress.ip_network(unicode(n))]
+        if net:
+            r[net[0]].append(ip)
+
     return r
 
 def command_list_networks():
@@ -4645,6 +4696,10 @@ def _get_parser():
         '--ssh-public-key',
         type=argparse.FileType('r'),
         help='SSH public key')
+    parser_bootstrap.add_argument(
+        '--ssh-user',
+        default='root',
+        help='set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
 
     parser_bootstrap.add_argument(
         '--skip-mon-network',

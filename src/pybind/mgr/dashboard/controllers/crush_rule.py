@@ -3,7 +3,8 @@ from __future__ import absolute_import
 
 from cherrypy import NotFound
 
-from . import ApiController, RESTController, Endpoint, ReadPermission, UiApiController
+from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, \
+    UiApiController
 from ..security import Scope
 from ..services.ceph_service import CephService
 from .. import mgr
@@ -35,6 +36,7 @@ class CrushRule(RESTController):
 
 
 @UiApiController('/crush_rule', Scope.POOL)
+@ControllerDoc("Dashboard UI helper function; not part of the public API", "CrushRuleUi")
 class CrushRuleUi(CrushRule):
     @Endpoint()
     @ReadPermission

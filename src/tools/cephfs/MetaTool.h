@@ -255,7 +255,6 @@ private:
   int _amend_meta(string &k, inode_meta_t& i, const string& fn, meta_op& op);
   int _show_fn(inode_meta_t& i, const string& fn);
   int _amend_fn(const string& fn, bool confirm);
-  static unsigned long long conv2hexino(const char* ino);
   void usage();
   MetaTool(bool debug=false):
       _debug(debug) {}

@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
@@ -26,7 +26,7 @@ export class OsdCreationPreviewModalComponent {
   formGroup: CdFormGroup;
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
     private osdService: OsdService,
@@ -54,7 +54,7 @@ export class OsdCreationPreviewModalComponent {
         },
         complete: () => {
           this.submitAction.emit();
-          this.bsModalRef.hide();
+          this.activeModal.close();
         }
       });
   }

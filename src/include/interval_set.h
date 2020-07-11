@@ -30,9 +30,10 @@
  * flat_map and btree_map).
  */
 
-template<typename T, typename Map = std::map<T,T>>
+template<typename T, template<typename, typename, typename ...> class C = std::map>
 class interval_set {
  public:
+  using Map = C<T, T>;
   using value_type = typename Map::value_type;
   using offset_type = T;
   using length_type = T;
@@ -730,40 +731,43 @@ private:
 
 // declare traits explicitly because (1) it's templatized, and (2) we
 // want to include _nohead variants.
-template<typename T, typename Map>
-struct denc_traits<interval_set<T,Map>> {
+template<typename T, template<typename, typename, typename ...> class C>
+struct denc_traits<interval_set<T, C>> {
+private:
+  using container_t = interval_set<T, C>;
+public:
   static constexpr bool supported = true;
   static constexpr bool bounded = false;
   static constexpr bool featured = false;
-  static constexpr bool need_contiguous = denc_traits<T,Map>::need_contiguous;
-  static void bound_encode(const interval_set<T,Map>& v, size_t& p) {
+  static constexpr bool need_contiguous = denc_traits<T, C<T,T>>::need_contiguous;
+  static void bound_encode(const container_t& v, size_t& p) {
     v.bound_encode(p);
   }
-  static void encode(const interval_set<T,Map>& v,
+  static void encode(const container_t& v,
 		     ceph::buffer::list::contiguous_appender& p) {
     v.encode(p);
   }
-  static void decode(interval_set<T,Map>& v, ceph::buffer::ptr::const_iterator& p) {
+  static void decode(container_t& v, ceph::buffer::ptr::const_iterator& p) {
     v.decode(p);
   }
   template<typename U=T>
     static typename std::enable_if<sizeof(U) && !need_contiguous>::type
-  decode(interval_set<T,Map>& v, ceph::buffer::list::iterator& p) {
+  decode(container_t& v, ceph::buffer::list::iterator& p) {
     v.decode(p);
   }
-  static void encode_nohead(const interval_set<T,Map>& v,
+  static void encode_nohead(const container_t& v,
 			    ceph::buffer::list::contiguous_appender& p) {
     v.encode_nohead(p);
   }
-  static void decode_nohead(size_t n, interval_set<T,Map>& v,
+  static void decode_nohead(size_t n, container_t& v,
 			    ceph::buffer::ptr::const_iterator& p) {
     v.decode_nohead(n, p);
   }
 };
 
 
-template<class T, typename Map>
-inline std::ostream& operator<<(std::ostream& out, const interval_set<T,Map> &s) {
+template<typename T, template<typename, typename, typename ...> class C>
+inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C> &s) {
   out << "[";
   bool first = true;
   for (const auto& [start, len] : s) {

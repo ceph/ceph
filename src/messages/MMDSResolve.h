@@ -123,7 +123,7 @@ public:
   }
 
   void add_slave_request(metareqid_t reqid, ceph::buffer::list& bl) {
-    slave_requests[reqid].inode_caps.claim(bl);
+    slave_requests[reqid].inode_caps = std::move(bl);
   }
 
   void add_table_commits(int table, const std::set<version_t>& pending_commits) {

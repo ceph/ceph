@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { forkJoin } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -21,7 +21,7 @@ export class OsdScrubModalComponent implements OnInit {
   selected: any[] = [];
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private osdService: OsdService,
     private notificationService: NotificationService,
     private i18n: I18n,
@@ -45,9 +45,9 @@ export class OsdScrubModalComponent implements OnInit {
           })
         );
 
-        this.bsModalRef.hide();
+        this.activeModal.close();
       },
-      () => this.bsModalRef.hide()
+      () => this.activeModal.close()
     );
   }
 }

@@ -1,6 +1,7 @@
 import datetime
 import json
 from contextlib import contextmanager
+from unittest.mock import ANY
 
 import pytest
 
@@ -280,7 +281,7 @@ class TestCephadm(object):
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'prepare', '--bluestore', '--data', '/dev/sdb', '--no-systemd'],
-                env_vars=[], error_ok=True, stdin='{"config": "", "keyring": ""}')
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with('test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
 
 
@@ -332,7 +333,7 @@ class TestCephadm(object):
             dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
-            out = cephadm_module.osd_service.driveselection_to_ceph_volume(dg, ds, [], preview)
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
             assert out in exp_command
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
@@ -629,3 +630,25 @@ class TestCephadm(object):
                     # code will blow up here triggering the BOOM!
                     code, out, err = cephadm_module.check_host('test')
                     assert err is None
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    @mock.patch("remoto.process.check")
+    def test_etc_ceph(self, _check, _get_connection, cephadm_module: CephadmOrchestrator):
+        _get_connection.return_value = mock.Mock(), mock.Mock()
+        _check.return_value = '{}', '', 0
+
+        with with_host(cephadm_module, 'test'):
+            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.set_module_option('manage_etc_ceph_ceph_conf', True)
+            cephadm_module.config_notify()
+            assert cephadm_module.manage_etc_ceph_ceph_conf == True
+
+            cephadm_module._refresh_hosts_and_daemons()
+            _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
+
+            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+
+            cephadm_module.notify('mon_map', mock.MagicMock())
+            assert cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')

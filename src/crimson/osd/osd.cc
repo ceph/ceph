@@ -84,7 +84,7 @@ OSD::OSD(int id, uint32_t nonce,
       local_conf().get_val<std::string>("osd_data"),
       local_conf().get_config_values())},
     shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
-    heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
+    heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
@@ -451,7 +451,8 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<ConfigShowHook>()),
       asok->register_command(make_asok_hook<ConfigGetHook>()),
-      asok->register_command(make_asok_hook<ConfigSetHook>()));
+      asok->register_command(make_asok_hook<ConfigSetHook>()),
+      asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)));
   });
 }
 
@@ -684,7 +685,15 @@ void OSD::handle_authentication(const EntityName& name,
   // todo
 }
 
-MessageRef OSD::get_stats()
+void OSD::update_stats()
+{
+  osd_stat_seq++;
+  osd_stat.up_from = get_up_epoch();
+  osd_stat.hb_peers = heartbeat->get_peers();
+  osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
+}
+
+MessageRef OSD::get_stats() const
 {
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
@@ -699,6 +708,13 @@ MessageRef OSD::get_stats()
     }
   }
   return m;
+}
+
+uint64_t OSD::send_pg_stats()
+{
+  // mgr client sends the report message in background
+  mgrc->report();
+  return osd_stat_seq;
 }
 
 OSD::cached_map_t OSD::get_map() const

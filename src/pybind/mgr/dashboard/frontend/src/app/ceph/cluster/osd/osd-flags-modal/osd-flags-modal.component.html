@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>Cluster-wide OSD Flags</ng-container>
 
@@ -34,7 +34,7 @@
                           (submitAction)="submitAction()"
                           [form]="osdFlagsForm"
                           i18n>Submit</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

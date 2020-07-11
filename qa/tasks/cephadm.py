@@ -1144,20 +1144,25 @@ def task(ctx, config):
     container_registry_mirror = mirrors.get('docker.io',
                                             container_registry_mirror)
 
-    if not container_image_name:
-        raise Exception("Configuration error occurred. "
-                        "The 'image' value is undefined for 'cephadm' task. "
-                        "Please provide corresponding options in the task's "
-                        "config, task 'overrides', or teuthology 'defaults' "
-                        "section.")
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
     ref = None
     if not ctx.ceph[cluster_name].image:
+        if not container_image_name:
+            raise Exception("Configuration error occurred. "
+                            "The 'image' value is undefined for 'cephadm' task. "
+                            "Please provide corresponding options in the task's "
+                            "config, task 'overrides', or teuthology 'defaults' "
+                            "section.")
         sha1 = config.get('sha1')
+        flavor = config.get('flavor', 'default')
+
         if sha1:
-            ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
+            if flavor == "crimson":
+                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
+            else:
+                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
             ref = sha1
         else:
             # hmm, fall back to branch?

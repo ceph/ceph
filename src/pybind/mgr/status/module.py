@@ -9,7 +9,6 @@ import errno
 import fnmatch
 import mgr_util
 import prettytable
-import six
 import json
 
 from mgr_module import MgrModule, HandleCommandResult
@@ -147,7 +146,7 @@ class Module(MgrModule):
                         ])
 
             # Find the standby replays
-            for gid_str, daemon_info in six.iteritems(mdsmap['info']):
+            for gid_str, daemon_info in mdsmap['info'].items():
                 if daemon_info['state'] != "up:standby-replay":
                     continue
 
@@ -257,7 +256,7 @@ class Module(MgrModule):
                                         border=False)
             version_table.left_padding_width = 0
             version_table.right_padding_width = 2
-            for version, daemons in six.iteritems(mds_versions):
+            for version, daemons in mds_versions.items():
                 if output_format in ('json', 'json-pretty'):
                     json_output['mds_version'].append({
                         'version': version,

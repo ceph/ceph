@@ -1064,7 +1064,9 @@ struct error_code;
 
     void reserve(size_t prealloc);
 
-    void claim(list& bl);
+    [[deprecated("in favor of operator=(list&&)")]] void claim(list& bl) {
+      *this = std::move(bl);
+    }
     void claim_append(list& bl);
     void claim_append(list&& bl) {
       claim_append(bl);

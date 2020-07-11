@@ -29,7 +29,7 @@ class IscsiService(CephadmService):
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blacklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
-                     'osd', f'allow rwx pool={spec.pool}'],
+                     'osd', 'allow rwx'],
         })
 
         if spec.ssl_cert:

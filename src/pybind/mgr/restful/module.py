@@ -11,7 +11,6 @@ import inspect
 import tempfile
 import threading
 import traceback
-import six
 import socket
 import fcntl
 
@@ -22,7 +21,6 @@ from uuid import uuid4
 from pecan import jsonify, make_app
 from OpenSSL import crypto
 from pecan.rest import RestController
-from six import iteritems
 from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
@@ -264,7 +262,7 @@ class Module(MgrModule):
     def refresh_keys(self):
         self.keys = {}
         rawkeys = self.get_store_prefix('keys/') or {}
-        for k, v in six.iteritems(rawkeys):
+        for k, v in rawkeys.items():
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):

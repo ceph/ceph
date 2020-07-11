@@ -3,12 +3,16 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbDatepickerModule,
+  NgbNavModule,
+  NgbPopoverModule,
+  NgbTimepickerModule,
+  NgbTooltipModule,
+  NgbTypeaheadModule
+} from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { ModalModule } from 'ngx-bootstrap/modal';
-import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -38,7 +42,7 @@ import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
 import { ActiveAlertListComponent } from './prometheus/active-alert-list/active-alert-list.component';
-import { MonitoringListComponent } from './prometheus/monitoring-list/monitoring-list.component';
+import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus-tabs.component';
 import { RulesListComponent } from './prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
@@ -57,16 +61,15 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     RouterModule,
     FormsModule,
     ReactiveFormsModule,
-    BsDatepickerModule.forRoot(),
-    ModalModule.forRoot(),
     NgbTooltipModule,
     MgrModulesModule,
     NgbTypeaheadModule,
-    TimepickerModule.forRoot(),
+    NgbTimepickerModule,
     TreeModule.forRoot(),
-    BsDatepickerModule.forRoot(),
     NgBootstrapFormValidationModule,
-    CephSharedModule
+    CephSharedModule,
+    NgbDatepickerModule,
+    NgbPopoverModule
   ],
   declarations: [
     HostsComponent,
@@ -85,7 +88,6 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     LogsComponent,
     OsdRecvSpeedModalComponent,
     OsdPgScrubModalComponent,
-    ActiveAlertListComponent,
     OsdRecvSpeedModalComponent,
     SilenceFormComponent,
     SilenceListComponent,
@@ -100,11 +102,11 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,
-    MonitoringListComponent,
     HostFormComponent,
     ServiceDetailsComponent,
     ServiceDaemonListComponent,
-    TelemetryComponent
+    TelemetryComponent,
+    PrometheusTabsComponent
   ]
 })
 export class ClusterModule {}

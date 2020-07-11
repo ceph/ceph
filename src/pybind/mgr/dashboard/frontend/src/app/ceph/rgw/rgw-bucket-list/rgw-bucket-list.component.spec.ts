@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ModalModule } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
 import {
@@ -29,7 +28,6 @@ describe('RgwBucketListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       RouterTestingModule,
-      ModalModule.forRoot(),
       SharedModule,
       NgbNavModule,
       HttpClientTestingModule
@@ -38,7 +36,7 @@ describe('RgwBucketListComponent', () => {
   });
 
   beforeEach(() => {
-    rgwBucketService = TestBed.get(RgwBucketService);
+    rgwBucketService = TestBed.inject(RgwBucketService);
     rgwBucketServiceListSpy = spyOn(rgwBucketService, 'list');
     rgwBucketServiceListSpy.and.returnValue(of(null));
     fixture = TestBed.createComponent(RgwBucketListComponent);

@@ -3,9 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import * as moment from 'moment';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -25,10 +24,10 @@ describe('RbdTrashMoveModalComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      BsDatepickerModule.forRoot()
+      NgbPopoverModule
     ],
     declarations: [RbdTrashMoveModalComponent],
-    providers: [BsModalRef, BsModalService, i18nProviders]
+    providers: [NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {
@@ -57,12 +56,12 @@ describe('RbdTrashMoveModalComponent', () => {
     beforeEach(() => {
       notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
     });
 
     afterEach(() => {
       expect(notificationService.show).toHaveBeenCalledTimes(1);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('with normal delay', () => {

@@ -2527,7 +2527,11 @@ void PGMap::get_health_checks(
         if (pg_response.stuck_since) {
           // Delayed response, check for stuckness
           utime_t last_whatever = pg_response.stuck_since(pg_info);
-          if (last_whatever >= cutoff) {
+          if (last_whatever.is_zero() &&
+            pg_info.last_change >= cutoff) {
+            // still moving, ignore
+            continue;
+          } else if (last_whatever >= cutoff) {
             // Not stuck enough, ignore.
             continue;
           } else {

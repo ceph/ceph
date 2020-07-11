@@ -14,9 +14,6 @@ import os
 import re
 import sys
 
-# Are we running Python 2.x
-_python2 = sys.version_info[0] < 3
-
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
                   name='client.admin')
@@ -160,20 +157,13 @@ class TestRados(object):
         self.rados.delete_pool('foo')
 
     def test_create_utf8(self):
-        if _python2:
-            # Use encoded bytestring
-            poolname = b"\351\273\204"
-        else:
-            poolname = "\u9ec4"
+        poolname = "\u9ec4"
         self.rados.create_pool(poolname)
         assert self.rados.pool_exists(u"\u9ec4")
         self.rados.delete_pool(poolname)
 
     def test_pool_lookup_utf8(self):
-        if _python2:
-            poolname = u'\u9ec4'
-        else:
-            poolname = '\u9ec4'
+        poolname = '\u9ec4'
         self.rados.create_pool(poolname)
         try:
             poolid = self.rados.pool_lookup(poolname)
@@ -1203,11 +1193,7 @@ class TestCommand(object):
         eq(out['bytes_written'], cmd['count'])
 
     def test_ceph_osd_pool_create_utf8(self):
-        if _python2:
-            # Use encoded bytestring
-            poolname = b"\351\273\205"
-        else:
-            poolname = "\u9ec5"
+        poolname = "\u9ec5"
 
         cmd = {"prefix": "osd pool create", "pg_num": 16, "pool": poolname}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')

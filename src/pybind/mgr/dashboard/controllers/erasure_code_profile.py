@@ -3,7 +3,8 @@ from __future__ import absolute_import
 
 from cherrypy import NotFound
 
-from . import ApiController, RESTController, Endpoint, ReadPermission, UiApiController
+from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, \
+    UiApiController
 from ..security import Scope
 from ..services.ceph_service import CephService
 from .. import mgr
@@ -36,6 +37,7 @@ class ErasureCodeProfile(RESTController):
 
 
 @UiApiController('/erasure_code_profile', Scope.POOL)
+@ControllerDoc("Dashboard UI helper function; not part of the public API", "ErasureCodeProfileUi")
 class ErasureCodeProfileUi(ErasureCodeProfile):
     @Endpoint()
     @ReadPermission

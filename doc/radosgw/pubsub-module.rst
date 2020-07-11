@@ -189,6 +189,8 @@ PubSub REST API
 Topics
 ~~~~~~
  
+.. _radosgw-create-a-topic:
+
 Create a Topic
 ``````````````
 
@@ -224,12 +226,14 @@ The endpoint URI may include parameters depending with the type of endpoint:
  - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
  - port defaults to: 5672
  - vhost defaults to: "/"
- - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
  - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
   - "routable": message is considered "delivered" if broker can route to a consumer
+
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
 
 - Kafka endpoint 
 

@@ -8,9 +8,9 @@ CephFS namespaces can be exported over NFS protocol using the
 Requirements
 ============
 
--  Latest Ceph file system with mgr and dashboard enabled
--  'nfs-ganesha', 'nfs-ganesha-ceph' and nfs-ganesha-rados-grace packages
-   (version 2.7.6-2 and above)
+-  Latest Ceph file system with mgr enabled
+-  'nfs-ganesha', 'nfs-ganesha-ceph', 'nfs-ganesha-rados-grace' and
+   'nfs-ganesha-rados-urls' packages (version 3.3 and above)
 
 Create NFS Ganesha Cluster
 ==========================
@@ -45,6 +45,24 @@ Delete NFS Ganesha Cluster
 
 This deletes the deployed cluster.
 
+List NFS Ganesha Cluster
+========================
+
+.. code:: bash
+
+    $ ceph nfs cluster ls
+
+This lists deployed clusters.
+
+Show NFS Ganesha Cluster Information
+====================================
+
+.. code:: bash
+
+    $ ceph nfs cluster info [<clusterid>]
+
+This displays ip and port of deployed cluster.
+
 Create CephFS Export
 ====================
 
@@ -63,6 +81,25 @@ Delete CephFS Export
     $ ceph nfs export delete <clusterid> <binding>
 
 It deletes an export in cluster based on pseudo root name (binding).
+
+List CephFS Export
+==================
+
+.. code:: bash
+
+    $ ceph nfs export ls <clusterid> [--detailed]
+
+It lists export for a cluster. With detailed option enabled it shows entire
+export block.
+
+Get CephFS Export
+=================
+
+.. code:: bash
+
+    $ ceph nfs export get <clusterid> <binding>
+
+It displays export block for a cluster based on pseudo root name (binding).
 
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================

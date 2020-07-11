@@ -96,19 +96,18 @@ The ``dev@ceph.io`` list is for discussion about the development of Ceph,
 its interoperability with other technology, and the operations of the
 project itself.
 
-Ceph development email discussions the list is open to all. Subscribe by
-sending a message to ``dev-request@ceph.io`` with the line: ::
+The email discussion list for Ceph development is open to all. Subscribe by
+sending a message to ``dev-request@ceph.io`` with the following line in the
+body of the message: ::
 
     subscribe ceph-devel
 
-in the body of the message.
-
 The ``ceph-devel@vger.kernel.org`` list is for discussion and patch review
 for the Linux kernel Ceph client component. Note that this list used to
-be an all encompassing list for developers. So when searching archives here
-are the generic devel-ceph archives pre mid-2018.
+be an all-encompassing list for developers. So when searching the archives, 
+remember that this list contains the generic devel-ceph archives pre mid-2018.
 
-Subscription works in the same way, sending a message to
+Subscription works in the same way, by sending a message to
 ``majordomo@vger.kernel.org`` with the line: ::
 
     subscribe ceph-devel

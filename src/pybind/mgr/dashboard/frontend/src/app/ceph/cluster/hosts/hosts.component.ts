@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { HostService } from '../../../shared/api/host.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -23,6 +23,7 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
 import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../shared/services/dep-checker.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
@@ -48,7 +49,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   cdParams = { fromLink: '/hosts' };
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -58,7 +59,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     private router: Router,
     private depCheckerService: DepCheckerService,
@@ -107,7 +108,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             () => this.deleteAction()
           );
         },
-        disable: () => !this.selection.hasSelection
+        disable: (selection: CdTableSelection) =>
+          !selection.hasSelection ||
+          !selection.selected.every((selected) => selected.sources.orchestrator),
+        disableDesc: this.getDeleteDisableDesc.bind(this)
       }
     ];
   }
@@ -151,39 +155,37 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         return { enabled: true, name: label };
       });
       this.modalService.show(FormModalComponent, {
-        initialState: {
-          titleText: this.i18n('Edit Host: {{hostname}}', host),
-          fields: [
-            {
-              type: 'select-badges',
-              name: 'labels',
-              value: host['labels'],
-              label: this.i18n('Labels'),
-              typeConfig: {
-                customBadges: true,
-                options: allLabels,
-                messages: new SelectMessages(
-                  {
-                    empty: this.i18n('There are no labels.'),
-                    filter: this.i18n('Filter or add labels'),
-                    add: this.i18n('Add label')
-                  },
-                  this.i18n
-                )
-              }
+        titleText: this.i18n('Edit Host: {{hostname}}', host),
+        fields: [
+          {
+            type: 'select-badges',
+            name: 'labels',
+            value: host['labels'],
+            label: this.i18n('Labels'),
+            typeConfig: {
+              customBadges: true,
+              options: allLabels,
+              messages: new SelectMessages(
+                {
+                  empty: this.i18n('There are no labels.'),
+                  filter: this.i18n('Filter or add labels'),
+                  add: this.i18n('Add label')
+                },
+                this.i18n
+              )
             }
-          ],
-          submitButtonText: this.i18n('Edit Host'),
-          onSubmit: (values: any) => {
-            this.hostService.update(host['hostname'], values.labels).subscribe(() => {
-              this.notificationService.show(
-                NotificationType.success,
-                this.i18n('Updated Host "{{hostname}}"', host)
-              );
-              // Reload the data table content.
-              this.table.refreshBtn();
-            });
           }
+        ],
+        submitButtonText: this.i18n('Edit Host'),
+        onSubmit: (values: any) => {
+          this.hostService.update(host['hostname'], values.labels).subscribe(() => {
+            this.notificationService.show(
+              NotificationType.success,
+              this.i18n('Updated Host "{{hostname}}"', host)
+            );
+            // Reload the data table content.
+            this.table.refreshBtn();
+          });
         }
       });
     });
@@ -191,7 +193,9 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   getEditDisableDesc(selection: CdTableSelection): string | undefined {
     if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
-      return this.i18n('Host editing is disabled because the host is not managed by Orchestrator.');
+      return this.i18n(
+        'Host editing is disabled because the selected host is not managed by Orchestrator.'
+      );
     }
     return undefined;
   }
@@ -199,17 +203,28 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   deleteAction() {
     const hostname = this.selection.first().hostname;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Host',
-        itemNames: [hostname],
-        actionDescription: 'delete',
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('host/delete', { hostname: hostname }),
-            call: this.hostService.delete(hostname)
-          })
-      }
+      itemDescription: 'Host',
+      itemNames: [hostname],
+      actionDescription: 'delete',
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('host/delete', { hostname: hostname }),
+          call: this.hostService.delete(hostname)
+        })
     });
+  }
+
+  getDeleteDisableDesc(selection: CdTableSelection): string | undefined {
+    if (
+      selection &&
+      selection.hasSelection &&
+      !selection.selected.every((selected) => selected.sources.orchestrator)
+    ) {
+      return this.i18n(
+        'Host deletion is disabled because a selected host is not managed by Orchestrator.'
+      );
+    }
+    return undefined;
   }
 
   getHosts(context: CdTableFetchDataContext) {

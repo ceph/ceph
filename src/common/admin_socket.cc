@@ -465,7 +465,7 @@ int AdminSocket::execute_command(
     inbl,
     [&errss, outbl, &fin](int r, const std::string& err, bufferlist& out) {
       errss << err;
-      outbl->claim(out);
+      *outbl = std::move(out);
       fin.finish(r);
     });
   {

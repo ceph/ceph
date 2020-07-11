@@ -76,6 +76,7 @@ struct btree_lba_manager_test :
       return seastar::do_with(
 	lba_manager->create_transaction(),
 	[this](auto &transaction) {
+	  cache.init();
 	  return cache.mkfs(*transaction
 	  ).safe_then([this, &transaction] {
 	    return lba_manager->mkfs(*transaction);

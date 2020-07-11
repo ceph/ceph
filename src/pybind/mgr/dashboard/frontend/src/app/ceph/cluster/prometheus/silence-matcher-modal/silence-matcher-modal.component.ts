@@ -1,10 +1,10 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Output, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
-import { Observable } from 'rxjs';
-import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
+import { merge, Observable, Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
 
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
@@ -21,6 +21,8 @@ import { PrometheusSilenceMatcherService } from '../../../../shared/services/pro
   styleUrls: ['./silence-matcher-modal.component.scss']
 })
 export class SilenceMatcherModalComponent {
+  @ViewChild(NgbTypeahead, { static: true })
+  typeahead: NgbTypeahead;
   @Output()
   submitAction = new EventEmitter();
 
@@ -31,10 +33,28 @@ export class SilenceMatcherModalComponent {
   possibleValues: string[] = [];
   matcherMatch: AlertmanagerSilenceMatcherMatch = undefined;
 
+  // For typeahead usage
+  valueClick = new Subject<string>();
+  valueFocus = new Subject<string>();
+  search = (text$: Observable<string>) => {
+    return merge(
+      text$.pipe(debounceTime(200), distinctUntilChanged()),
+      this.valueFocus,
+      this.valueClick.pipe(filter(() => !this.typeahead.isPopupOpen()))
+    ).pipe(
+      map((term) =>
+        (term === ''
+          ? this.possibleValues
+          : this.possibleValues.filter((v) => v.toLowerCase().indexOf(term.toLowerCase()) > -1)
+        ).slice(0, 10)
+      )
+    );
+  };
+
   constructor(
     private formBuilder: CdFormBuilder,
     private silenceMatcher: PrometheusSilenceMatcherService,
-    public bsModalRef: BsModalRef
+    public activeModal: NgbActiveModal
   ) {
     this.createForm();
     this.subscribeToChanges();
@@ -43,7 +63,7 @@ export class SilenceMatcherModalComponent {
   private createForm() {
     this.form = this.formBuilder.group({
       name: [null, [Validators.required]],
-      value: [{ value: null, disabled: true }, [Validators.required]],
+      value: [{ value: '', disabled: true }, [Validators.required]],
       isRegex: new FormControl(false)
     });
   }
@@ -76,18 +96,6 @@ export class SilenceMatcherModalComponent {
 
   onSubmit() {
     this.submitAction.emit(this.form.value);
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
-
-  search = (text$: Observable<string>) => {
-    return text$.pipe(
-      debounceTime(200),
-      distinctUntilChanged(),
-      map((term) =>
-        this.possibleValues
-          .filter((v) => v.toLowerCase().indexOf(term.toLowerCase()) > -1)
-          .slice(0, 10)
-      )
-    );
-  };
 }

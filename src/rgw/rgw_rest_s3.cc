@@ -4815,7 +4815,7 @@ discover_aws_flavour(const req_info& info)
   } else {
     route = AwsRoute::QUERY_STRING;
 
-    if (info.args.get("X-Amz-Algorithm") == AWS4_HMAC_SHA256_STR) {
+    if (info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
       /* AWS v4 */
       version = AwsVersion::V4;
     } else if (!info.args.get("AWSAccessKeyId").empty()) {
@@ -5465,8 +5465,8 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     if (now >= exp) {
       throw -EPERM;
     }
-    if (s->info.args.exists("X-Amz-Security-Token")) {
-      session_token = s->info.args.get("X-Amz-Security-Token");
+    if (s->info.args.exists("x-amz-security-token")) {
+      session_token = s->info.args.get("x-amz-security-token");
       if (session_token.size() == 0) {
         throw -EPERM;
       }
@@ -5838,7 +5838,7 @@ rgw::auth::s3::STSEngine::authenticate(
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
-  if (! s->info.args.exists("X-Amz-Security-Token") &&
+  if (! s->info.args.exists("x-amz-security-token") &&
       ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN") &&
       s->auth.s3_postobj_creds.x_amz_security_token.empty()) {
     return result_t::deny();
@@ -5926,7 +5926,7 @@ rgw::auth::s3::STSEngine::authenticate(
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session, token.token_claims);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;

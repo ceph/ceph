@@ -3,11 +3,9 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
-import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { ModalModule } from 'ngx-bootstrap/modal';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '../../shared/services/feature-toggles-guard.service';
@@ -46,9 +44,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     FormsModule,
     ReactiveFormsModule,
     NgbNavModule,
-    BsDatepickerModule.forRoot(),
+    NgbPopoverModule,
     NgbTooltipModule,
-    ModalModule.forRoot(),
     SharedModule,
     RouterModule,
     NgBootstrapFormValidationModule,

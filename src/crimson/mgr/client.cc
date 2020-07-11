@@ -76,9 +76,9 @@ void Client::ms_handle_connect(crimson::net::ConnectionRef c)
   });
 }
 
-void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool is_replace)
+void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace */)
 {
-  gate.dispatch_in_background(__func__, *this, [this, c, is_replace] {
+  gate.dispatch_in_background(__func__, *this, [this, c] {
     if (conn == c) {
       report_timer.cancel();
       return reconnect();
@@ -142,6 +142,7 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::Connection* conn,
 
 void Client::report()
 {
+  with_stats.update_stats();
   gate.dispatch_in_background(__func__, *this, [this] {
     assert(conn);
     auto pg_stats = with_stats.get_stats();

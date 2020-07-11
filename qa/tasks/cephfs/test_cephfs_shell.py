@@ -9,8 +9,6 @@ import logging
 from tempfile import mkstemp as tempfile_mkstemp
 import math
 from six import ensure_str
-from sys import version_info as sys_version_info
-from re import search as re_search
 from time import sleep
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.misc import sudo_write_file
@@ -518,12 +516,7 @@ class TestDU(TestCephFSShell):
         expected_output = r'{}{}{}'.format(size, " +", regfilename)
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + regfilename)
-        if sys_version_info.major >= 3:
-            self.assertRegex(du_output, expected_output)
-        elif sys_version_info.major < 3:
-            assert re_search(expected_output, du_output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   expected_output, du_output)
+        self.assertRegex(du_output, expected_output)
 
     def test_du_works_for_non_empty_dirs(self):
         dirname = 'some_directory'
@@ -540,12 +533,7 @@ class TestDU(TestCephFSShell):
 
         sleep(10)
         du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
-        if sys_version_info.major >= 3:
-            self.assertRegex(du_output, expected_output)
-        elif sys_version_info.major < 3:
-            assert re_search(expected_output, du_output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   expected_output, du_output)
+        self.assertRegex(du_output, expected_output)
 
     def test_du_works_for_empty_dirs(self):
         dirname = 'some_directory'
@@ -556,12 +544,7 @@ class TestDU(TestCephFSShell):
         expected_output = r'{}{}{}'.format(size, " +", dirname)
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
-        if sys_version_info.major >= 3:
-            self.assertRegex(du_output, expected_output)
-        elif sys_version_info.major < 3:
-            assert re_search(expected_output, du_output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   expected_output, du_output)
+        self.assertRegex(du_output, expected_output)
 
     def test_du_works_for_hardlinks(self):
         regfilename = 'some_regfile'
@@ -577,12 +560,7 @@ class TestDU(TestCephFSShell):
         expected_output = r'{}{}{}'.format(size, " +", hlinkname)
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + hlinkname)
-        if sys_version_info.major >= 3:
-            self.assertRegex(du_output, expected_output)
-        elif sys_version_info.major < 3:
-            assert re_search(expected_output, du_output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   expected_output, du_output)
+        self.assertRegex(du_output, expected_output)
 
     def test_du_works_for_softlinks_to_files(self):
         regfilename = 'some_regfile'
@@ -596,12 +574,7 @@ class TestDU(TestCephFSShell):
         expected_output = r'{}{}{}'.format((size), " +", slinkname)
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
-        if sys_version_info.major >= 3:
-            self.assertRegex(du_output, expected_output)
-        elif sys_version_info.major < 3:
-            assert re_search(expected_output, du_output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   expected_output, du_output)
+        self.assertRegex(du_output, expected_output)
 
     def test_du_works_for_softlinks_to_dirs(self):
         dirname = 'some_directory'
@@ -615,12 +588,7 @@ class TestDU(TestCephFSShell):
         expected_output = r'{}{}{}'.format(size, " +", slinkname)
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
-        if sys_version_info.major >= 3:
-            self.assertRegex(du_output, expected_output)
-        elif sys_version_info.major < 3:
-            assert re_search(expected_output, du_output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   expected_output, du_output)
+        self.assertRegex(du_output, expected_output)
 
     # NOTE: tests using these are pretty slow since to this methods sleeps for
     # 15 seconds
@@ -706,12 +674,7 @@ class TestDU(TestCephFSShell):
         du_output = self.get_cephfs_shell_cmd_output('du -r')
 
         for expected_output in expected_patterns_in_output:
-            if sys_version_info.major >= 3:
-                self.assertRegex(du_output, expected_output)
-            elif sys_version_info.major < 3:
-                assert re_search(expected_output, du_output) != None, "\n" + \
-                       "expected_output -\n{}\ndu_output -\n{}\n".format(
-                       expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
 
     def test_du_with_path_in_args(self):
         expected_patterns_in_output, path_to_files = self._setup_files(True,
@@ -723,12 +686,7 @@ class TestDU(TestCephFSShell):
         du_output = self.get_cephfs_shell_cmd_output(args)
 
         for expected_output in expected_patterns_in_output:
-            if sys_version_info.major >= 3:
-                self.assertRegex(du_output, expected_output)
-            elif sys_version_info.major < 3:
-                assert re_search(expected_output, du_output) != None, "\n" +\
-                       "expected_output -\n{}\ndu_output -\n{}\n".format(
-                       expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
 
     def test_du_with_no_args(self):
         expected_patterns_in_output = self._setup_files()
@@ -739,12 +697,7 @@ class TestDU(TestCephFSShell):
             # Since CWD is CephFS root and being non-recursive expect only
             # CWD in DU report.
             if expected_output.find('/') == len(expected_output) - 1:
-                if sys_version_info.major >= 3:
-                    self.assertRegex(du_output, expected_output)
-                elif sys_version_info.major < 3:
-                    assert re_search(expected_output, du_output) != None, "\n" + \
-                        "expected_output -\n{}\ndu_output -\n{}\n".format(
-                        expected_output, du_output)
+                self.assertRegex(du_output, expected_output)
 
 
 class TestDF(TestCephFSShell):
@@ -956,12 +909,7 @@ class TestMisc(TestCephFSShell):
         output = self.mount_a.client_remote.sh(['cephfs-shell', 'ls']).\
             strip()
 
-        if sys_version_info.major >= 3:
-            self.assertRegex(output, dirname)
-        elif sys_version_info.major < 3:
-            assert re_search(dirname, output) != None, "\n" + \
-                   "expected_output -\n{}\ndu_output -\n{}\n".format(
-                   dirname, output)
+        self.assertRegex(output, dirname)
 
     def test_help(self):
         """

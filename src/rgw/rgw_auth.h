@@ -639,6 +639,7 @@ protected:
   const rgw_user user_id;
   string token_policy;
   string role_session_name;
+  std::vector<string> token_claims;
 
 public:
 
@@ -646,11 +647,13 @@ public:
                const Role& role,
                const rgw_user& user_id,
                const string& token_policy,
-               const string& role_session_name)
+               const string& role_session_name,
+               const std::vector<string>& token_claims)
     : role(role),
       user_id(user_id),
       token_policy(token_policy),
-      role_session_name(role_session_name) {}
+      role_session_name(role_session_name),
+      token_claims(token_claims) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -679,7 +682,8 @@ public:
                                       const rgw::auth::RoleApplier::Role& role_name,
                                       const rgw_user& user_id,
                                       const std::string& token_policy,
-                                      const std::string& role_session) const = 0;
+                                      const std::string& role_session,
+                                      const std::vector<string>& token_claims) const = 0;
     };
 };
 

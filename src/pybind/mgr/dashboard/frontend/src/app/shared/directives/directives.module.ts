@@ -8,6 +8,7 @@ import { FormLoadingDirective } from './form-loading.directive';
 import { IopsDirective } from './iops.directive';
 import { MillisecondsDirective } from './milliseconds.directive';
 import { PasswordButtonDirective } from './password-button.directive';
+import { StatefulTabDirective } from './stateful-tab.directive';
 import { TrimDirective } from './trim.directive';
 
 @NgModule({
@@ -21,7 +22,8 @@ import { TrimDirective } from './trim.directive';
     TrimDirective,
     MillisecondsDirective,
     IopsDirective,
-    FormLoadingDirective
+    FormLoadingDirective,
+    StatefulTabDirective
   ],
   exports: [
     AutofocusDirective,
@@ -32,7 +34,8 @@ import { TrimDirective } from './trim.directive';
     TrimDirective,
     MillisecondsDirective,
     IopsDirective,
-    FormLoadingDirective
+    FormLoadingDirective,
+    StatefulTabDirective
   ]
 })
 export class DirectivesModule {}

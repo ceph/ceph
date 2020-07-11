@@ -61,7 +61,7 @@ protected:
     MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
-    lockdata.claim(bl);
+    lockdata = std::move(bl);
   }
   ~MLock() override {}
   

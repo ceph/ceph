@@ -13,14 +13,16 @@ namespace crimson::os {
 
 ThreadPool::ThreadPool(size_t n_threads,
                        size_t queue_sz,
-                       unsigned cpu_id)
+                       long cpu_id)
   : queue_size{round_up_to(queue_sz, seastar::smp::count)},
     pending{queue_size}
 {
   auto queue_max_wait = std::chrono::seconds(local_conf()->threadpool_empty_queue_max_wait);
   for (size_t i = 0; i < n_threads; i++) {
     threads.emplace_back([this, cpu_id, queue_max_wait] {
-      pin(cpu_id);
+      if (cpu_id >= 0) {
+        pin(cpu_id);
+      }
       crimson::os::AlienStore::configure_thread_memory();
       loop(queue_max_wait);
     });
