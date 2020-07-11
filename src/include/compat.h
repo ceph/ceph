@@ -208,6 +208,18 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 
 #include "include/win32/winsock_compat.h"
 
+#include <windows.h>
+
+// There are a few name collisions between Windows headers and Ceph.
+// Updating Ceph definitions would be the prefferable fix in order to avoid
+// confussion, unless it requires too many changes, in which case we're going
+// to redefine Windows values by adding the "WIN32_" prefix.
+#define WIN32_DELETE 0x00010000L
+#undef DELETE
+
+#define WIN32_ERROR 0
+#undef ERROR
+
 typedef _sigset_t sigset_t;
 
 typedef int uid_t;
@@ -226,6 +238,11 @@ typedef union
   char cpuset[CPU_SETSIZE/8];
   size_t _align;
 } cpu_set_t;
+
+struct iovec {
+  void *iov_base;
+  size_t iov_len;
+};
 
 #define SHUT_RD SD_RECEIVE
 #define SHUT_WR SD_SEND
@@ -248,14 +265,26 @@ typedef union
 #define ESTALE 256
 #define EREMOTEIO 257
 
-// O_CLOEXEC is not defined on Windows. Since handles aren't inherited
-// with subprocesses unless explicitly requested, we'll define this
-// flag as a no-op.
-#define O_CLOEXEC 0
+#define IOV_MAX 1024
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+ssize_t readv(int fd, const struct iovec *iov, int iov_cnt);
+ssize_t writev(int fd, const struct iovec *iov, int iov_cnt);
+
+int fsync(int fd);
+ssize_t pread(int fd, void *buf, size_t count, off_t offset);
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
+
+long int lrand48(void);
+
+int pipe(int pipefd[2]);
+
+int posix_memalign(void **memptr, size_t alignment, size_t size);
+
+char *strptime(const char *s, const char *format, struct tm *tm);
 
 int chown(const char *path, uid_t owner, gid_t group);
 int fchown(int fd, uid_t owner, gid_t group);
@@ -263,7 +292,23 @@ int lchown(const char *path, uid_t owner, gid_t group);
 
 #ifdef __cplusplus
 }
+
+// Windows' mkdir doesn't accept a mode argument.
+#define compat_mkdir(pathname, mode) mkdir(pathname)
+
 #endif
+
+// O_CLOEXEC is not defined on Windows. Since handles aren't inherited
+// with subprocesses unless explicitly requested, we'll define this
+// flag as a no-op.
+#define O_CLOEXEC 0
+#define SOCKOPT_VAL_TYPE char*
+
+#else
+
+#define SOCKOPT_VAL_TYPE void*
+
+#define compat_mkdir(pathname, mode) mkdir(pathname, mode)
 
 #endif /* WIN32 */
 

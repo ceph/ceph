@@ -442,7 +442,7 @@ if(WITH_DPDK)
 endif()
 
 if(WIN32)
-  list(APPEND ceph_common_deps ws2_32 mswsock)
+  list(APPEND ceph_common_deps ws2_32 mswsock bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
 endif()
 

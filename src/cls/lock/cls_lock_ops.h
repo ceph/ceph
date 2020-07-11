@@ -18,7 +18,7 @@ struct cls_lock_lock_op
   utime_t duration;
   uint8_t flags;
 
-  cls_lock_lock_op() : type(LOCK_NONE), flags(0) {}
+  cls_lock_lock_op() : type(ClsLockType::NONE), flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
@@ -128,7 +128,7 @@ struct cls_lock_get_info_reply
   ClsLockType lock_type;
   std::string tag;
 
-  cls_lock_get_info_reply() : lock_type(LOCK_NONE) {}
+  cls_lock_get_info_reply() : lock_type(ClsLockType::NONE) {}
 
   void encode(ceph::buffer::list &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
@@ -180,7 +180,7 @@ struct cls_lock_assert_op
   std::string cookie;
   std::string tag;
 
-  cls_lock_assert_op() : type(LOCK_NONE) {}
+  cls_lock_assert_op() : type(ClsLockType::NONE) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
@@ -214,7 +214,7 @@ struct cls_lock_set_cookie_op
   std::string tag;
   std::string new_cookie;
 
-  cls_lock_set_cookie_op() : type(LOCK_NONE) {}
+  cls_lock_set_cookie_op() : type(ClsLockType::NONE) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);

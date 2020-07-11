@@ -90,7 +90,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, SuccessExclusive) {
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", util::get_watcher_lock_tag(),
-                       LOCK_EXCLUSIVE);
+                       ClsLockType::EXCLUSIVE);
 
   C_SaferCond ctx;
   Locker locker;
@@ -117,7 +117,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, SuccessShared) {
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", util::get_watcher_lock_tag(),
-                       LOCK_SHARED);
+                       ClsLockType::SHARED);
 
   C_SaferCond ctx;
   Locker locker;
@@ -143,7 +143,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoError) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, -EINVAL, entity_name_t::CLIENT(1), "",
-                       "", "", LOCK_EXCLUSIVE);
+                       "", "", ClsLockType::EXCLUSIVE);
 
   C_SaferCond ctx;
   Locker locker;
@@ -164,7 +164,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoEmpty) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, -ENOENT, entity_name_t::CLIENT(1), "",
-                       "", "", LOCK_EXCLUSIVE);
+                       "", "", ClsLockType::EXCLUSIVE);
 
   C_SaferCond ctx;
   Locker locker;
@@ -185,7 +185,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoExternalTag) {
 
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", "external tag", LOCK_EXCLUSIVE);
+                       "auto 123", "external tag", ClsLockType::EXCLUSIVE);
 
   C_SaferCond ctx;
   Locker locker;
@@ -207,7 +207,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoIncompatibleShared) {
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", util::get_watcher_lock_tag(),
-                       LOCK_SHARED);
+                       ClsLockType::SHARED);
 
   C_SaferCond ctx;
   Locker locker;
@@ -229,7 +229,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoIncompatibleExclusive) {
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", util::get_watcher_lock_tag(),
-                       LOCK_EXCLUSIVE);
+                       ClsLockType::EXCLUSIVE);
 
   C_SaferCond ctx;
   Locker locker;
@@ -251,7 +251,7 @@ TEST_F(TestMockManagedLockGetLockerRequest, GetLockInfoExternalCookie) {
   InSequence seq;
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "external cookie", util::get_watcher_lock_tag(),
-                       LOCK_EXCLUSIVE);
+                       ClsLockType::EXCLUSIVE);
 
   C_SaferCond ctx;
   Locker locker;

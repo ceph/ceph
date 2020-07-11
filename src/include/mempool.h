@@ -31,6 +31,7 @@
 #include "include/ceph_assert.h"
 #include "include/compact_map.h"
 #include "include/compact_set.h"
+#include "include/compat.h"
 
 
 /*

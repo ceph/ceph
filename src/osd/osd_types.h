@@ -33,6 +33,7 @@
 #include "include/mempool.h"
 
 #include "msg/msg_types.h"
+#include "include/compat.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"

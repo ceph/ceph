@@ -295,7 +295,7 @@ Context *RefreshRequest<I>::handle_v1_get_locks(int *result) {
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
     if (*result == 0) {
-      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+      m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
   if (*result < 0) {
@@ -389,11 +389,11 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   }
 
   if (*result >= 0) {
-    ClsLockType lock_type = LOCK_NONE;
+    ClsLockType lock_type = ClsLockType::NONE;
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
     if (*result == 0) {
-      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+      m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
 
