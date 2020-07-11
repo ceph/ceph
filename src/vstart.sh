@@ -975,7 +975,7 @@ EOF
         ceph_adm config-key set mgr/cephadm/ssh_identity_pub -i ~/.ssh/id_rsa.pub
         ceph_adm mgr module enable cephadm
         ceph_adm orch set backend cephadm
-        ceph_adm orch host add $HOSTNAME
+        ceph_adm orch host add "$(hostname)"
         ceph_adm orch apply crash '*'
         ceph_adm config set mgr mgr/cephadm/allow_ptrace true
     fi
