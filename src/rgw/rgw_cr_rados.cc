@@ -639,6 +639,14 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   rgw_obj dest_obj(dest_bucket_info.bucket, dest_key.value_or(key));
 
+  rgw_obj stat_dest_obj;
+
+  if (!stat_follow_olh) {
+    stat_dest_obj = dest_obj;
+  } else {
+    stat_dest_obj = src_obj;
+  }
+
   std::optional<uint64_t> bytes_transferred;
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
                        user_id.value_or(rgw_user()),
@@ -666,8 +674,10 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
-                       dpp,
+                       dpp, 
                        filter.get(),
+                       stat_follow_olh,
+                       stat_dest_obj,
                        &zones_trace,
                        &bytes_transferred);
 

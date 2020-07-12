@@ -2283,19 +2283,21 @@ class RGWObjFetchCR : public RGWCoroutine {
 
   int try_num{0};
   std::shared_ptr<bool> need_retry;
+  bool stat_follow_olh;
 public:
   RGWObjFetchCR(RGWDataSyncCtx *_sc,
                 rgw_bucket_sync_pipe& _sync_pipe,
                 rgw_obj_key& _key,
                 std::optional<rgw_obj_key> _dest_key,
                 std::optional<uint64_t> _versioned_epoch,
-                rgw_zone_set *_zones_trace) : RGWCoroutine(_sc->cct),
+                rgw_zone_set *_zones_trace, bool _stat_follow_olh) : RGWCoroutine(_sc->cct),
                                               sc(_sc), sync_env(_sc->env),
                                               sync_pipe(_sync_pipe),
                                               key(_key),
                                               dest_key(_dest_key),
                                               versioned_epoch(_versioned_epoch),
-                                              zones_trace(_zones_trace) {
+                                              zones_trace(_zones_trace),
+                                              stat_follow_olh(_stat_follow_olh) {
   }
 
 
@@ -2420,7 +2422,8 @@ public:
                                        key, dest_key, versioned_epoch,
                                        true,
                                        std::static_pointer_cast<RGWFetchObjFilter>(filter),
-                                       zones_trace, sync_env->counters, sync_env->dpp));
+                                       zones_trace, sync_env->counters,
+                                       sync_env->dpp, stat_follow_olh));
         }
         if (retcode < 0) {
           if (*need_retry) {
@@ -2442,7 +2445,8 @@ public:
 
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
-  return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, zones_trace);
+  bool stat_follow_olh = false;
+  return new RGWObjFetchCR(sc, sync_pipe, key, std::nullopt, versioned_epoch, zones_trace, stat_follow_olh);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
@@ -2510,8 +2514,10 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_buck
   }
 
   std::optional<rgw_obj_key> dest_key;
+  bool stat_follow_olh = false;
 
   if (versioned_epoch.value_or(0) == 0) { /* force version if not set */
+    stat_follow_olh = true;
     versioned_epoch = 0;
     dest_key = key;
     if (key.instance.empty()) {
@@ -2519,7 +2525,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_buck
     }
   }
 
-  return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch, zones_trace);
+  return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch, zones_trace, stat_follow_olh);
 }
 
 RGWCoroutine *RGWArchiveDataSyncModule::remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
