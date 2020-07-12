@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
@@ -19,6 +19,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { EmptyPipe } from '../../../shared/pipes/empty.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 
@@ -38,14 +39,14 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
   scopes: Array<string>;
   selection = new CdTableSelection();
 
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   constructor(
     private roleService: RoleService,
     private scopeService: ScopeService,
     private emptyPipe: EmptyPipe,
     private authStorageService: AuthStorageService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
@@ -124,14 +125,14 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
     this.roleService.delete(role).subscribe(
       () => {
         this.getRoles();
-        this.modalRef.hide();
+        this.modalRef.close();
         this.notificationService.show(
           NotificationType.success,
           this.i18n(`Deleted role '{{role_name}}'`, { role_name: role })
         );
       },
       () => {
-        this.modalRef.content.stopLoadingSpinner();
+        this.modalRef.componentInstance.stopLoadingSpinner();
       }
     );
   }
@@ -139,41 +140,37 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
   deleteRoleModal() {
     const name = this.selection.first().name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Role',
-        itemNames: [name],
-        submitAction: () => this.deleteRole(name)
-      }
+      itemDescription: 'Role',
+      itemNames: [name],
+      submitAction: () => this.deleteRole(name)
     });
   }
 
   cloneRole() {
     const name = this.selection.first().name;
     this.modalRef = this.modalService.show(FormModalComponent, {
-      initialState: {
-        fields: [
-          {
-            type: 'text',
-            name: 'newName',
-            value: `${name}_clone`,
-            label: this.i18n('New name'),
-            required: true
-          }
-        ],
-        titleText: this.i18n('Clone Role'),
-        submitButtonText: this.i18n('Clone Role'),
-        onSubmit: (values: object) => {
-          this.roleService.clone(name, values['newName']).subscribe(() => {
-            this.getRoles();
-            this.notificationService.show(
-              NotificationType.success,
-              this.i18n(`Cloned role '{{dst_name}}' from '{{src_name}}'`, {
-                src_name: name,
-                dst_name: values['newName']
-              })
-            );
-          });
+      fields: [
+        {
+          type: 'text',
+          name: 'newName',
+          value: `${name}_clone`,
+          label: this.i18n('New name'),
+          required: true
         }
+      ],
+      titleText: this.i18n('Clone Role'),
+      submitButtonText: this.i18n('Clone Role'),
+      onSubmit: (values: object) => {
+        this.roleService.clone(name, values['newName']).subscribe(() => {
+          this.getRoles();
+          this.notificationService.show(
+            NotificationType.success,
+            this.i18n(`Cloned role '{{dst_name}}' from '{{src_name}}'`, {
+              src_name: name,
+              dst_name: values['newName']
+            })
+          );
+        });
       }
     });
   }

@@ -4,8 +4,6 @@
 #ifndef _MSG_ASYNC_PROTOCOL_V2_
 #define _MSG_ASYNC_PROTOCOL_V2_
 
-#include <boost/container/static_vector.hpp>
-
 #include "Protocol.h"
 #include "crypto_onwire.h"
 #include "frames_v2.h"
@@ -67,13 +65,12 @@ private:
     return statenames[state];
   }
 
-public:
   // TODO: move into auth_meta?
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
-private:
+
   entity_name_t peer_name;
   State state;
-  uint64_t peer_required_features;
+  uint64_t peer_supported_features;  // CEPH_MSGR2_FEATURE_*
 
   uint64_t client_cookie;
   uint64_t server_cookie;
@@ -97,10 +94,12 @@ private:
   using ProtFuncPtr = void (ProtocolV2::*)();
   Ct<ProtocolV2> *bannerExchangeCallback;
 
-  boost::container::static_vector<ceph::msgr::v2::segment_t,
-				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
-  boost::container::static_vector<ceph::bufferlist,
-				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
+  ceph::msgr::v2::FrameAssembler tx_frame_asm;
+  ceph::msgr::v2::FrameAssembler rx_frame_asm;
+
+  ceph::bufferlist rx_preamble;
+  ceph::bufferlist rx_epilogue;
+  ceph::msgr::v2::segment_bls_t rx_segments_data;
   ceph::msgr::v2::Tag next_tag;
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -129,6 +128,9 @@ private:
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         ceph::bufferlist &buffer);
 
+  template <class F>
+  bool append_frame(F& frame);
+
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
   void reset_recv_state();
@@ -140,8 +142,6 @@ private:
   void prepare_send_message(uint64_t features, Message *m);
   out_queue_entry_t _get_next_outgoing();
   ssize_t write_message(Message *m, bool more);
-  void append_keepalive();
-  void append_keepalive_ack(utime_t &timestamp);
   void handle_message_ack(uint64_t seq);
 
   CONTINUATION_DECL(ProtocolV2, _wait_for_peer_banner);
@@ -169,7 +169,9 @@ private:
   Ct<ProtocolV2> *handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r);
+  Ct<ProtocolV2> *_handle_read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r);
+  Ct<ProtocolV2> *_handle_read_frame_epilogue_main();
   Ct<ProtocolV2> *handle_read_frame_dispatch();
   Ct<ProtocolV2> *handle_frame_payload();
 
@@ -251,8 +253,6 @@ private:
   Ct<ProtocolV2> *send_reconnect_ok();
   Ct<ProtocolV2> *server_ready();
 
-  uint32_t get_onwire_size(uint32_t logical_size) const;
-  uint32_t get_epilogue_size() const;
   size_t get_current_msg_size() const;
 };
 

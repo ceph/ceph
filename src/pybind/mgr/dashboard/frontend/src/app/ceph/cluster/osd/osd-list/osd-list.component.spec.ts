@@ -5,9 +5,8 @@ import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
@@ -27,6 +26,7 @@ import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { CephModule } from '../../../ceph.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
@@ -73,19 +73,21 @@ describe('OsdListComponent', () => {
    * we will have to fake its request to be able to open those modals.
    */
   const mockSafeToDestroy = () => {
-    spyOn(TestBed.get(OsdService), 'safeToDestroy').and.callFake(() =>
+    spyOn(TestBed.inject(OsdService), 'safeToDestroy').and.callFake(() =>
       of({ is_safe_to_destroy: true })
     );
   };
 
   const mockSafeToDelete = () => {
-    spyOn(TestBed.get(OsdService), 'safeToDelete').and.callFake(() =>
+    spyOn(TestBed.inject(OsdService), 'safeToDelete').and.callFake(() =>
       of({ is_safe_to_delete: true })
     );
   };
 
   const mockOrchestratorStatus = () => {
-    spyOn(TestBed.get(OrchestratorService), 'status').and.callFake(() => of({ available: true }));
+    spyOn(TestBed.inject(OrchestratorService), 'status').and.callFake(() =>
+      of({ available: true })
+    );
   };
 
   configureTestBed({
@@ -93,10 +95,10 @@ describe('OsdListComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       PerformanceCounterModule,
-      TabsModule.forRoot(),
       ToastrModule.forRoot(),
       CephModule,
       ReactiveFormsModule,
+      NgbDropdownModule,
       RouterTestingModule,
       CoreModule,
       RouterTestingModule
@@ -105,7 +107,7 @@ describe('OsdListComponent', () => {
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
-      BsModalService,
+      ModalService,
       i18nProviders
     ]
   });
@@ -113,8 +115,8 @@ describe('OsdListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdListComponent);
     component = fixture.componentInstance;
-    osdService = TestBed.get(OsdService);
-    modalServiceShowSpy = spyOn(TestBed.get(BsModalService), 'show').and.stub();
+    osdService = TestBed.inject(OsdService);
+    modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.stub();
   });
 
   it('should create', () => {
@@ -358,9 +360,9 @@ describe('OsdListComponent', () => {
 
     it('has all menu entries disabled except create', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
-      const toClassName = TestBed.get(TableActionsComponent).toClassName;
+      const toClassName = TestBed.inject(TableActionsComponent).toClassName;
       const getActionClasses = (action: CdTableAction) =>
-        tableActionElement.query(By.css(`.${toClassName(action.name)} .dropdown-item`)).classes;
+        tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`)).classes;
 
       component.tableActions.forEach((action) => {
         if (action.name === 'Create') {
@@ -428,7 +430,7 @@ describe('OsdListComponent', () => {
     ): void => {
       const osdServiceSpy = spyOn(osdService, osdServiceMethodName).and.callFake(() => EMPTY);
       openActionModal(actionName);
-      const initialState = modalServiceShowSpy.calls.first().args[1].initialState;
+      const initialState = modalServiceShowSpy.calls.first().args[1];
       const submit = initialState.onSubmit || initialState.submitAction;
       submit.call(component);
 

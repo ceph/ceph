@@ -70,10 +70,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
-                   'name=mode,type=CephString,req=false ',
+                   'name=mode,type=CephString,req=false '
+                   'name=namespace_isolated,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
-                    "a specific mode, and in a specific subvolume group",
+                    "a specific mode, in a specific subvolume group and in separate "
+                    "RADOS namespace",
             'perm': 'rw'
         },
         {
@@ -110,6 +112,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Get the metadata of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
             'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolumegroup pin'
+                   ' name=vol_name,type=CephString'
+                   ' name=group_name,type=CephString,req=true'
+                   ' name=pin_type,type=CephChoices,strings=export|distributed|random'
+                   ' name=pin_setting,type=CephString,req=true',
+            'desc': "Set MDS pinning policy for subvolumegroup",
+            'perm': 'rw'
         },
         {
             'cmd': 'fs subvolumegroup snapshot ls '
@@ -154,6 +165,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume snapshot info '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get the metadata of a CephFS subvolume snapshot "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume snapshot rm '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -172,6 +193,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString,req=false '
                    'name=no_shrink,type=CephBool,req=false ',
             'desc': "Resize a CephFS subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume pin'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=pin_type,type=CephChoices,strings=export|distributed|random'
+                   ' name=pin_setting,type=CephString,req=true'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Set MDS pinning policy for subvolume",
             'perm': 'rw'
         },
         {
@@ -240,9 +271,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'nfs export ls '
+                   'name=clusterid,type=CephString '
+                   'name=detailed,type=CephBool,req=false ',
+            'desc': "List exports of a NFS cluster",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'nfs export get '
+                   'name=clusterid,type=CephString '
+                   'name=binding,type=CephString ',
+            'desc': "Fetch a export of a NFS cluster given the pseudo path/binding",
+            'perm': 'r'
+        },
+        {
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
-                   'name=clusterid,type=CephString '
+                   'name=clusterid,type=CephString,goodchars=[A-Za-z0-9-_.] '
                    'name=placement,type=CephString,req=false ',
             'desc': "Create an NFS Cluster",
             'perm': 'rw'
@@ -259,6 +304,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=clusterid,type=CephString ',
             'desc': "Deletes an NFS Cluster",
             'perm': 'rw'
+        },
+        {
+            'cmd': 'nfs cluster ls ',
+            'desc': "List NFS Clusters",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'nfs cluster info '
+                   'name=clusterid,type=CephString,req=false ',
+            'desc': "Displays NFS Cluster info",
+            'perm': 'r'
         },
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -342,7 +398,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         pool_layout=cmd.get('pool_layout', None),
                                         uid=cmd.get('uid', None),
                                         gid=cmd.get('gid', None),
-                                        mode=cmd.get('mode', '755'))
+                                        mode=cmd.get('mode', '755'),
+                                        namespace_isolated=cmd.get('namespace_isolated', False))
 
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
         """
@@ -370,6 +427,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.subvolume_info(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
+        return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
+            group_name=cmd['group_name'], pin_type=cmd['pin_type'],
+            pin_setting=cmd['pin_setting'])
 
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_group_snapshot(vol_name=cmd['vol_name'],
@@ -399,6 +461,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                  group_name=cmd.get('group_name', None),
                                                  force=cmd.get('force', False))
 
+    def _cmd_fs_subvolume_snapshot_info(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_info(vol_name=cmd['vol_name'],
+                                               sub_name=cmd['sub_name'],
+                                               snap_name=cmd['snap_name'],
+                                               group_name=cmd.get('group_name', None))
+
     def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
@@ -408,6 +476,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                         new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
                                         no_shrink=cmd.get('no_shrink', False))
+
+    def _cmd_fs_subvolume_pin(self, inbuf, cmd):
+        return self.vc.subvolume_pin(vol_name=cmd['vol_name'],
+            sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
+            pin_setting=cmd['pin_setting'],
+            group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
         return self.vc.protect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
@@ -439,6 +513,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_export_delete(self, inbuf, cmd):
         return self.fs_export.delete_export(cluster_id=cmd['attach'], pseudo_path=cmd['binding'])
 
+    def _cmd_nfs_export_ls(self, inbuf, cmd):
+        return self.fs_export.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
+
+    def _cmd_nfs_export_get(self, inbuf, cmd):
+        return self.fs_export.get_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
+
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
         return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
                                            placement=cmd.get('placement', None))
@@ -448,3 +528,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_nfs_cluster_delete(self, inbuf, cmd):
         return self.nfs.delete_nfs_cluster(cluster_id=cmd['clusterid'])
+
+    def _cmd_nfs_cluster_ls(self, inbuf, cmd):
+        return self.nfs.list_nfs_cluster()
+
+    def _cmd_nfs_cluster_info(self, inbuf, cmd):
+        return self.nfs.show_nfs_cluster_info(cluster_id=cmd.get('clusterid', None))

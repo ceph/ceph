@@ -4,6 +4,7 @@
 #ifndef RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_CREATE_REQUEST_H
 #define RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_CREATE_REQUEST_H
 
+#include "librbd/internal.h"
 #include "Types.h"
 #include <string>
 
@@ -66,6 +67,7 @@ private:
   Context *m_on_finish;
 
   SyncPoints m_sync_points_copy;
+  librbd::NoOpProgressContext m_prog_ctx;
 
   void send_update_sync_points();
   void handle_update_sync_points(int r);

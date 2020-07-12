@@ -26,7 +26,7 @@ extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
-extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
+extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
 extraopts += -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=/lib/systemd/system
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))

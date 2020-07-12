@@ -22,6 +22,7 @@
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "include/common_fwd.h"
+#include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
@@ -91,9 +92,6 @@ public:
 
     for (auto& p : store.merge_ops) {
       names[p.first] = p.second->name();
-    }
-    for (auto& p : store.cf_handles) {
-      names.erase(p.first);
     }
     for (auto& p : names) {
       store.assoc_name += '.';
@@ -296,7 +294,7 @@ int RocksDBStore::ParseOptionsFromStringStatic(
         return -EINVAL;
       }
     }
-    lgeneric_dout(cct, 0) << " set rocksdb option " << it->first
+    lgeneric_dout(cct, 1) << " set rocksdb option " << it->first
       << " = " << it->second << dendl;
   }
   return 0;
@@ -322,7 +320,7 @@ int RocksDBStore::create_db_dir()
     unique_ptr<rocksdb::Directory> dir;
     env->NewDirectory(path, &dir);
   } else {
-    int r = ::mkdir(path.c_str(), 0755);
+    int r = compat_mkdir(path.c_str(), 0755);
     if (r < 0)
       r = -errno;
     if (r < 0 && r != -EEXIST) {
@@ -414,6 +412,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   if (priv) {
     dout(10) << __func__ << " using custom Env " << priv << dendl;
     opt.env = static_cast<rocksdb::Env*>(priv);
+  } else {
+    env = opt.env;
   }
 
   opt.env->SetAllowNonOwnerAccess(false);
@@ -516,6 +516,7 @@ void RocksDBStore::add_column_family(const std::string& cf_name, uint32_t hash_l
   if (column.handles.size() <= shard_idx)
     column.handles.resize(shard_idx + 1);
   column.handles[shard_idx] = handle;
+  cf_ids_to_prefix.emplace(handle->GetID(), cf_name);
 }
 
 bool RocksDBStore::is_column_family(const std::string& prefix) {
@@ -985,7 +986,6 @@ int RocksDBStore::_test_init(const string& dir)
 RocksDBStore::~RocksDBStore()
 {
   close();
-
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
   }
@@ -1177,6 +1177,71 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
 }
 
+struct RocksDBStore::RocksWBHandler: public rocksdb::WriteBatch::Handler {
+  RocksWBHandler(const RocksDBStore& db) : db(db) {}
+  const RocksDBStore& db;
+  std::stringstream seen;
+  int num_seen = 0;
+
+  void dump(const char* op_name,
+	    uint32_t column_family_id,
+	    const rocksdb::Slice& key_in,
+	    const rocksdb::Slice* value = nullptr) {
+    string prefix;
+    string key;
+    ssize_t size = value ? value->size() : -1;
+    seen << std::endl << op_name << "(";
+
+    if (column_family_id == 0) {
+      db.split_key(key_in, &prefix, &key);
+    } else {
+      auto it = db.cf_ids_to_prefix.find(column_family_id);
+      ceph_assert(it != db.cf_ids_to_prefix.end());
+      prefix = it->second;
+      key = key_in.ToString();
+    }
+    seen << " prefix = " << prefix;
+    seen << " key = " << pretty_binary_string(key);
+    if (size != -1)
+      seen << " value size = " << std::to_string(size);
+    seen << ")";
+    num_seen++;
+  }
+  void Put(const rocksdb::Slice& key,
+	   const rocksdb::Slice& value) override {
+    dump("Put", 0, key, &value);
+  }
+  rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
+			const rocksdb::Slice& value) override {
+    dump("PutCF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+  void SingleDelete(const rocksdb::Slice& key) override {
+    dump("SingleDelete", 0, key);
+  }
+  rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    dump("SingleDeleteCF", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+  void Delete(const rocksdb::Slice& key) override {
+    dump("Delete", 0, key);
+  }
+  rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    dump("DeleteCF", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+  void Merge(const rocksdb::Slice& key,
+	     const rocksdb::Slice& value) override {
+    dump("Merge", 0, key, &value);
+  }
+  rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
+			  const rocksdb::Slice& value) override {
+    dump("MergeCF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+  bool Continue() override { return num_seen < 50; }
+};
+
 int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t) 
 {
   // enable rocksdb breakdown
@@ -1190,16 +1255,16 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
     static_cast<RocksDBTransactionImpl *>(t.get());
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
-  RocksWBHandler bat_txc;
+  RocksWBHandler bat_txc(*this);
   _t->bat.Iterate(&bat_txc);
-  *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
+  *_dout << " Rocksdb transaction: " << bat_txc.seen.str() << dendl;
   
   rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
-    RocksWBHandler rocks_txc;
+    RocksWBHandler rocks_txc(*this);
     _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
-         << " Rocksdb transaction: " << rocks_txc.seen << dendl;
+         << " Rocksdb transaction: " << rocks_txc.seen.str() << dendl;
   }
 
   if (cct->_conf->rocksdb_perf) {
@@ -2634,4 +2699,404 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator()
 {
   return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
     db->NewIterator(rocksdb::ReadOptions(), default_cf));
+}
+
+int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
+				      RocksDBStore::columns_t& to_process_columns)
+{
+  //0. lock db from opening
+  //1. list existing columns
+  //2. apply merge operator to (main + columns) opts
+  //3. prepare std::vector<rocksdb::ColumnFamilyDescriptor> existing_cfs
+  //4. open db, acquire existing column handles
+  //5. calculate missing columns
+  //6. create missing columns
+  //7. construct cf_handles according to new sharding
+  //8. check is all cf_handles are filled
+
+  bool b;
+  std::vector<ColumnFamily> new_sharding_def;
+  char const* error_position;
+  std::string error_msg;
+  b = parse_sharding_def(new_sharding, new_sharding_def, &error_position, &error_msg);
+  if (!b) {
+    dout(1) << __func__ << " bad sharding: " << dendl;
+    dout(1) << __func__ << new_sharding << dendl;
+    dout(1) << __func__ << std::string(error_position - &new_sharding[0], ' ') << "^" << error_msg << dendl;
+    return -EINVAL;
+  }
+
+  //0. lock db from opening
+  std::string stored_sharding_text;
+  rocksdb::ReadFileToString(env,
+			    sharding_def_file,
+			    &stored_sharding_text);
+  if (stored_sharding_text.find("reshardingXcommencingXlocked") == string::npos) {
+    rocksdb::Status status;
+    if (stored_sharding_text.size() != 0)
+      stored_sharding_text += " ";
+    stored_sharding_text += "reshardingXcommencingXlocked";
+    env->CreateDir(sharding_def_dir);
+    status = rocksdb::WriteStringToFile(env, stored_sharding_text,
+					sharding_def_file, true);
+    if (!status.ok()) {
+      derr << __func__ << " cannot write to " << sharding_def_file << dendl;
+      return -EIO;
+    }
+  }
+
+  //1. list existing columns
+
+  rocksdb::Status status;
+  std::vector<std::string> existing_columns;
+  rocksdb::Options opt;
+  int r = load_rocksdb_options(false, opt);
+  if (r) {
+    dout(1) << __func__ << " load rocksdb options failed" << dendl;
+    return r;
+  }
+  status = rocksdb::DB::ListColumnFamilies(rocksdb::DBOptions(opt), path, &existing_columns);
+  if (!status.ok()) {
+    derr << "Unable to list column families: " << status.ToString() << dendl;
+    return -EINVAL;
+  }
+  dout(5) << "existing columns = " << existing_columns << dendl;
+
+  //2. apply merge operator to (main + columns) opts
+  //3. prepare std::vector<rocksdb::ColumnFamilyDescriptor> cfs_to_open
+
+  std::vector<rocksdb::ColumnFamilyDescriptor> cfs_to_open;
+  for (const auto& full_name : existing_columns) {
+    //split col_name to <prefix>-<number>
+    std::string base_name;
+    size_t pos = full_name.find('-');
+    if (std::string::npos == pos)
+      base_name = full_name;
+    else
+      base_name = full_name.substr(0,pos);
+
+    rocksdb::ColumnFamilyOptions cf_opt(opt);
+    // search if we have options for this column
+    std::string options;
+    for (const auto& nsd : new_sharding_def) {
+      if (nsd.name == base_name) {
+	options = nsd.options;
+	break;
+      }
+    }
+    status = rocksdb::GetColumnFamilyOptionsFromString(cf_opt, options, &cf_opt);
+    if (!status.ok()) {
+      derr << __func__ << " failure parsing column options: " << options << dendl;
+      return -EINVAL;
+    }
+    if (base_name != rocksdb::kDefaultColumnFamilyName)
+      install_cf_mergeop(base_name, &cf_opt);
+    cfs_to_open.emplace_back(full_name, cf_opt);
+  }
+
+  //4. open db, acquire existing column handles
+  std::vector<rocksdb::ColumnFamilyHandle*> handles;
+  status = rocksdb::DB::Open(rocksdb::DBOptions(opt),
+			     path, cfs_to_open, &handles, &db);
+  if (!status.ok()) {
+    derr << status.ToString() << dendl;
+    return -EINVAL;
+  }
+  for (size_t i = 0; i < cfs_to_open.size(); i++) {
+    dout(10) << "column " << cfs_to_open[i].name << " handle " << (void*)handles[i] << dendl;
+  }
+
+  //5. calculate missing columns
+  std::vector<std::string> new_sharding_columns;
+  std::vector<std::string> missing_columns;
+  sharding_def_to_columns(new_sharding_def,
+			  new_sharding_columns);
+  dout(5) << "target columns = " << new_sharding_columns << dendl;
+  for (const auto& n : new_sharding_columns) {
+    bool found = false;
+    for (const auto& e : existing_columns) {
+      if (n == e) {
+	found = true;
+	break;
+      }
+    }
+    if (!found) {
+      missing_columns.push_back(n);
+    }
+  }
+  dout(5) << "missing columns = " << missing_columns << dendl;
+
+  //6. create missing columns
+  for (const auto& full_name : missing_columns) {
+    std::string base_name;
+    size_t pos = full_name.find('-');
+    if (std::string::npos == pos)
+      base_name = full_name;
+    else
+      base_name = full_name.substr(0,pos);
+
+    rocksdb::ColumnFamilyOptions cf_opt(opt);
+    // search if we have options for this column
+    std::string options;
+    for (const auto& nsd : new_sharding_def) {
+      if (nsd.name == base_name) {
+	options = nsd.options;
+	break;
+      }
+    }
+    status = rocksdb::GetColumnFamilyOptionsFromString(cf_opt, options, &cf_opt);
+    if (!status.ok()) {
+      derr << __func__ << " failure parsing column options: " << options << dendl;
+      return -EINVAL;
+    }
+    install_cf_mergeop(base_name, &cf_opt);
+    rocksdb::ColumnFamilyHandle *cf;
+    status = db->CreateColumnFamily(cf_opt, full_name, &cf);
+    if (!status.ok()) {
+      derr << __func__ << " Failed to create rocksdb column family: "
+	   << full_name << dendl;
+      return -EINVAL;
+    }
+    dout(10) << "created column " << full_name << " handle = " << (void*)cf << dendl; 
+    existing_columns.push_back(full_name);
+    handles.push_back(cf);
+  }
+
+  //7. construct cf_handles according to new sharding
+  for (size_t i = 0; i < existing_columns.size(); i++) {
+    std::string full_name = existing_columns[i];
+    rocksdb::ColumnFamilyHandle *cf = handles[i];
+    std::string base_name;
+    size_t shard_idx = 0;
+    size_t pos = full_name.find('-');
+    dout(10) << "processing column " << full_name << dendl;
+    if (std::string::npos == pos) {
+      base_name = full_name;
+    } else {
+      base_name = full_name.substr(0,pos);
+      shard_idx = atoi(full_name.substr(pos+1).c_str());
+    }
+    if (rocksdb::kDefaultColumnFamilyName == base_name) {
+      default_cf = handles[i];
+      must_close_default_cf = true;
+      std::unique_ptr<rocksdb::ColumnFamilyHandle, cf_deleter_t> ptr{
+        cf, [](rocksdb::ColumnFamilyHandle*) {}};
+      to_process_columns.emplace(full_name, std::move(ptr));
+    } else {
+      for (const auto& nsd : new_sharding_def) {
+	if (nsd.name == base_name) {
+	  if (shard_idx < nsd.shard_cnt) {
+	    add_column_family(base_name, nsd.hash_l, nsd.hash_h, shard_idx, cf);
+	  } else {
+	    //ignore columns with index larger then shard count
+	  }
+	  break;
+	}
+      }
+      std::unique_ptr<rocksdb::ColumnFamilyHandle, cf_deleter_t> ptr{
+        cf, [this](rocksdb::ColumnFamilyHandle* handle) {
+	  db->DestroyColumnFamilyHandle(handle);
+	}};
+      to_process_columns.emplace(full_name, std::move(ptr));
+    }
+  }
+
+  //8. check if all cf_handles are filled
+  for (const auto& col : cf_handles) {
+    for (size_t i = 0; i < col.second.handles.size(); i++) {
+      if (col.second.handles[i] == nullptr) {
+	derr << "missing handle for column " << col.first << " shard " << i << dendl;
+	return -EIO;
+      }
+    }
+  }
+  return 0;
+}
+
+int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns)
+{
+  std::vector<std::string> new_sharding_columns;
+  for (const auto& [name, handle] : cf_handles) {
+    if (handle.handles.size() == 1) {
+      new_sharding_columns.push_back(name);
+    } else {
+      for (size_t i = 0; i < handle.handles.size(); i++) {
+	new_sharding_columns.push_back(name + "-" + to_string(i));
+      }
+    }
+  }
+
+  for (auto& [name, handle] : current_columns) {
+    auto found = std::find(new_sharding_columns.begin(),
+			   new_sharding_columns.end(),
+			   name) != new_sharding_columns.end();
+    if (found || name == rocksdb::kDefaultColumnFamilyName) {
+      dout(5) << "Column " << name << " is part of new sharding." << dendl;
+      continue;
+    }
+    dout(5) << "Column " << name << " not part of new sharding. Deleting." << dendl;
+
+    // verify that column is empty
+    std::unique_ptr<rocksdb::Iterator> it{
+      db->NewIterator(rocksdb::ReadOptions(), handle.get())};
+    ceph_assert(it);
+    it->SeekToFirst();
+    ceph_assert(!it->Valid());
+
+    if (rocksdb::Status status = db->DropColumnFamily(handle.get()); !status.ok()) {
+      derr << __func__ << " Failed to drop column: "  << name << dendl;
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::resharding_ctrl* ctrl_in)
+{
+
+  resharding_ctrl ctrl = ctrl_in ? *ctrl_in : resharding_ctrl();
+  size_t bytes_in_batch = 0;
+  size_t keys_in_batch = 0;
+  size_t bytes_per_iterator = 0;
+  size_t keys_per_iterator = 0;
+  size_t keys_processed = 0;
+  size_t keys_moved = 0;
+
+  auto flush_batch = [&](rocksdb::WriteBatch* batch) {
+    dout(10) << "flushing batch, " << keys_in_batch << " keys, for "
+             << bytes_in_batch << " bytes" << dendl;
+    rocksdb::WriteOptions woptions;
+    woptions.sync = true;
+    rocksdb::Status s = db->Write(woptions, batch);
+    ceph_assert(s.ok());
+    bytes_in_batch = 0;
+    keys_in_batch = 0;
+    batch->Clear();
+  };
+
+  auto process_column = [&](rocksdb::ColumnFamilyHandle* handle,
+			    const std::string& fixed_prefix)
+  {
+    dout(5) << " column=" << (void*)handle << " prefix=" << fixed_prefix << dendl;
+    std::unique_ptr<rocksdb::Iterator> it{
+      db->NewIterator(rocksdb::ReadOptions(), handle)};
+    ceph_assert(it);
+
+    rocksdb::WriteBatch bat;
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      rocksdb::Slice raw_key = it->key();
+      dout(30) << "key=" << pretty_binary_string(raw_key.ToString()) << dendl;
+      //check if need to refresh iterator
+      if (bytes_per_iterator >= ctrl.bytes_per_iterator ||
+	  keys_per_iterator >= ctrl.keys_per_iterator) {
+	dout(8) << "refreshing iterator" << dendl;
+	bytes_per_iterator = 0;
+	keys_per_iterator = 0;
+	std::string raw_key_str = raw_key.ToString();
+	it.reset(db->NewIterator(rocksdb::ReadOptions(), handle));
+	ceph_assert(it);
+	it->Seek(raw_key_str);
+	ceph_assert(it->Valid());
+	raw_key = it->key();
+      }
+      rocksdb::Slice value = it->value();
+      std::string prefix, key;
+      if (fixed_prefix.size() == 0) {
+	split_key(raw_key, &prefix, &key);
+      } else {
+	prefix = fixed_prefix;
+	key = raw_key.ToString();
+      }
+      keys_processed++;
+      if ((keys_processed % 10000) == 0) {
+	dout(10) << "processed " << keys_processed << " keys, moved " << keys_moved << dendl;
+      }
+      rocksdb::ColumnFamilyHandle* new_handle = get_cf_handle(prefix, key);
+      if (new_handle == nullptr) {
+	new_handle = default_cf;
+      }
+      if (handle == new_handle) {
+	continue;
+      }
+      std::string new_raw_key;
+      if (new_handle == default_cf) {
+	new_raw_key = combine_strings(prefix, key);
+      } else {
+	new_raw_key = key;
+      }
+      bat.Delete(handle, raw_key);
+      bat.Put(new_handle, new_raw_key, value);
+      dout(25) << "moving " << (void*)handle << "/" << pretty_binary_string(raw_key.ToString()) <<
+	" to " << (void*)new_handle << "/" << pretty_binary_string(new_raw_key) <<
+	" size " << value.size() << dendl;
+      keys_moved++;
+      bytes_in_batch += new_raw_key.size() * 2 + value.size();
+      keys_in_batch++;
+      bytes_per_iterator += new_raw_key.size() * 2 + value.size();
+      keys_per_iterator++;
+
+      //check if need to write batch
+      if (bytes_in_batch >= ctrl.bytes_per_batch ||
+	  keys_in_batch >= ctrl.keys_per_batch) {
+	flush_batch(&bat);
+	if (ctrl.unittest_fail_after_first_batch) {
+	  return -1000;
+	}
+      }
+    }
+    if (bat.Count() > 0) {
+      flush_batch(&bat);
+    }
+    return 0;
+  };
+
+  auto close_column_handles = make_scope_guard([this] {
+    cf_handles.clear();
+    close();
+  });
+  columns_t to_process_columns;
+  int r = prepare_for_reshard(new_sharding, to_process_columns);
+  if (r != 0) {
+    dout(1) << "failed to prepare db for reshard" << dendl;
+    return r;
+  }
+
+  for (auto& [name, handle] : to_process_columns) {
+    dout(5) << "Processing column=" << name
+	    << " handle=" << handle.get() << dendl;
+    if (name == rocksdb::kDefaultColumnFamilyName) {
+      ceph_assert(handle.get() == default_cf);
+      r = process_column(default_cf, std::string());
+    } else {
+      std::string fixed_prefix = name.substr(0, name.find('-'));
+      dout(10) << "Prefix: " << fixed_prefix << dendl;
+      r = process_column(handle.get(), fixed_prefix);
+    }
+    if (r != 0) {
+      derr << "Error processing column " << name << dendl;
+      return r;
+    }
+    if (ctrl.unittest_fail_after_processing_column) {
+      return -1001;
+    }
+  }
+
+  r = reshard_cleanup(to_process_columns);
+  if (r != 0) {
+    dout(5) << "failed to cleanup after reshard" << dendl;
+    return r;
+  }
+
+  if (ctrl.unittest_fail_after_successful_processing) {
+    return -1002;
+  }
+  env->CreateDir(sharding_def_dir);
+  if (auto status = rocksdb::WriteStringToFile(env, new_sharding,
+					       sharding_def_file, true);
+      !status.ok()) {
+    derr << __func__ << " cannot write to " << sharding_def_file << dendl;
+    return -EIO;
+  }
+
+  return r;
 }

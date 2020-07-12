@@ -73,6 +73,8 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
+For cephadm, see also :ref:`cephadm-fqdn`.
+
 Host Specification
 ------------------
 
@@ -152,12 +154,12 @@ Create OSDs on a group of devices on a single host::
 
 or::
 
-    ceph orch apply osd -i <json_file/yaml_file> [--preview]
+    ceph orch apply osd -i <json_file/yaml_file>
 
 
 or::
 
-    ceph orch apply osd --use-all-devices [--preview]
+    ceph orch apply osd --all-available-devices
 
 
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
@@ -369,24 +371,20 @@ The ``name`` parameter is an identifier of the group of instances:
 * a CephFS file system for a group of MDS daemons,
 * a zone name for a group of RGWs
 
-Sizing: the ``size`` parameter gives the number of daemons in the cluster
-(e.g. the number of MDS daemons for a particular CephFS file system).
-
 Creating/growing/shrinking/removing services::
 
-    ceph orch {mds,rgw} update <name> <size> [host…]
-    ceph orch {mds,rgw} add <name>
-    ceph orch nfs update <name> <size> [host…]
-    ceph orch nfs add <name> <pool> [--namespace=<namespace>]
-    ceph orch {mds,rgw,nfs} rm <name>
+    ceph orch apply mds <fs_name> [--placement=<placement>]
+    ceph orch apply rgw <realm> <zone> [--subcluster=<subcluster>] [--port=<port>] [--ssl] [--placement=<placement>]
+    ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>]
+    ceph orch rm <service_name> [--force]
 
-e.g., ``ceph orch mds update myfs 3 host1 host2 host3``
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
-Start/stop/reload::
+e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 
-    ceph orch service {stop,start,reload} <type> <name>
+Service Commands::
 
-    ceph orch daemon {start,stop,reload} <type> <daemon-id>
+    ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
     
 .. _orchestrator-cli-service-spec:
     
@@ -406,6 +404,7 @@ to specify the deployment of services. For example:
         - host2
         - host3
     spec: ...
+    unmanaged: false
         
 Where the properties of a service specification are the following:
 
@@ -417,6 +416,10 @@ Where the properties of a service specification are the following:
 * ``service_id`` is the name of the service. Omit the service time
 * ``placement`` is a :ref:`orchestrator-cli-placement-spec`
 * ``spec``: additional specifications for a specific service.
+* ``unmanaged``: If set to ``true``, the orchestrator will not deploy nor
+   remove any daemon associated with this service. Placement and all other
+   properties will be ignored. This is useful, if this service should not
+   be managed temporarily.
 
 Each service type can have different requirements for the spec.
 
@@ -575,6 +578,26 @@ Or with hosts:
         - host1
         - host2
         - host3 
+
+Updating Service Specifications
+===============================
+
+The Ceph Orchestrator maintains a declarative state of each
+service in a ``ServiceSpec``. For certain operations, like updating
+the RGW HTTP port, we need to update the existing
+specification.
+
+1. List the current ``ServiceSpec``::
+
+    ceph orch ls --service_name=<service-name> --export > myservice.yaml
+
+2. Update the yaml file::
+
+    vi myservice.yaml
+
+3. Apply the new ``ServiceSpec``::
+
+    ceph orch apply -i myservice.yaml
 
 Configuring the Orchestrator CLI
 ================================

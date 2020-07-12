@@ -2,9 +2,11 @@ import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { AlertPanelComponent } from '../components/alert-panel/alert-panel.component';
+import { LoadingPanelComponent } from '../components/loading-panel/loading-panel.component';
 import { CdForm } from '../forms/cd-form';
 import { SharedModule } from '../shared.module';
 import { FormLoadingDirective } from './form-loading.directive';
@@ -26,11 +28,14 @@ describe('FormLoadingDirective', () => {
     expect(fixture.debugElement.queryAll(By.css('cd-loading-panel')).length).toEqual(loading);
   };
 
-  configureTestBed({
-    declarations: [TestComponent],
-    imports: [AlertModule.forRoot(), SharedModule],
-    providers: [i18nProviders]
-  });
+  configureTestBed(
+    {
+      declarations: [TestComponent],
+      imports: [SharedModule, NgbAlertModule],
+      providers: [i18nProviders]
+    },
+    [LoadingPanelComponent, AlertPanelComponent]
+  );
 
   afterEach(() => {
     fixture = null;
@@ -50,7 +55,7 @@ describe('FormLoadingDirective', () => {
   it('should show loading component by default', () => {
     expectShown(0, 0, 1);
 
-    const alert = fixture.debugElement.nativeElement.querySelector('cd-loading-panel alert');
+    const alert = fixture.debugElement.nativeElement.querySelector('cd-loading-panel ngb-alert');
     expect(alert.textContent).toBe('Loading form data...');
   });
 

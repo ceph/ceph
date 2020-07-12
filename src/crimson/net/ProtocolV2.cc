@@ -22,6 +22,8 @@
 #include "Interceptor.h"
 #endif
 
+#define CRIMSON_MSGR2_SUPPORTED_FEATURES	(0ull)
+
 using namespace ceph::msgr::v2;
 using crimson::common::local_conf;
 
@@ -143,12 +145,13 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
   });
 }
 
-ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
+ProtocolV2::ProtocolV2(ChainedDispatchersRef& dispatcher,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
   : Protocol(proto_t::v2, dispatcher, conn),
     messenger{messenger},
-    protocol_timer{conn}
+    protocol_timer{conn},
+    tx_frame_asm(&session_stream_handlers, false)
 {}
 
 ProtocolV2::~ProtocolV2() {}
@@ -257,7 +260,7 @@ size_t ProtocolV2::get_current_msg_size() const
 
 seastar::future<Tag> ProtocolV2::read_main_preamble()
 {
-  return read_exactly(FRAME_PREAMBLE_SIZE)
+  return read_exactly(sizeof(preamble_block_t))
     .then([this] (auto bl) {
       if (session_stream_handlers.rx) {
         session_stream_handlers.rx->reset_rx_handler();
@@ -345,7 +348,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
   ).then([this] {
     // TODO: get_epilogue_size()
     ceph_assert(!session_stream_handlers.rx);
-    return read_exactly(FRAME_PLAIN_EPILOGUE_SIZE);
+    return read_exactly(sizeof(epilogue_crc_rev0_block_t));
   }).then([this] (auto bl) {
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
 
@@ -354,7 +357,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
       // TODO
       ceph_assert(false);
     } else {
-      auto& epilogue = *reinterpret_cast<const epilogue_plain_block_t*>(bl.get());
+      auto& epilogue = *reinterpret_cast<const epilogue_crc_rev0_block_t*>(bl.get());
       for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
         const __u32 expected_crc = epilogue.crc_values[idx];
         const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
@@ -376,7 +379,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
     // we do have a mechanism that allows transmitter to start sending message
     // and abort after putting entire data field on wire. This will be used by
     // the kernel client to avoid unnecessary buffering.
-    if (late_flags & FRAME_FLAGS_LATEABRT) {
+    if (late_flags & FRAME_LATE_FLAG_ABORTED) {
       // TODO
       ceph_assert(false);
     }
@@ -386,7 +389,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
 template <class F>
 seastar::future<> ProtocolV2::write_frame(F &frame, bool flush)
 {
-  auto bl = frame.get_buffer(session_stream_handlers);
+  auto bl = frame.get_buffer(tx_frame_asm);
   const auto main_preamble = reinterpret_cast<const preamble_block_t*>(bl.front().c_str());
   logger().trace("{} SEND({}) frame: tag={}, num_segments={}, crc={}",
                  conn, bl.length(), (int)main_preamble->tag,
@@ -444,10 +447,8 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_write();
-    gated_dispatch("ms_handle_remote_reset", [this] {
-      return dispatcher.ms_handle_remote_reset(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatcher->ms_handle_remote_reset(
+	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 }
 
@@ -456,7 +457,7 @@ ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
-  encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
+  encode((uint64_t)CRIMSON_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
   encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
 
   bufferlist bl;
@@ -467,7 +468,7 @@ ProtocolV2::banner_exchange(bool is_connect)
   logger().debug("{} SEND({}) banner: len_payload={}, supported={}, "
                  "required={}, banner=\"{}\"",
                  conn, bl.length(), len_payload,
-                 CEPH_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
+                 CRIMSON_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
                  CEPH_BANNER_V2_PREFIX);
   INTERCEPT_CUSTOM(custom_bp_t::BANNER_WRITE, bp_type_t::WRITE);
   return write_flush(std::move(bl)).then([this] {
@@ -522,7 +523,7 @@ ProtocolV2::banner_exchange(bool is_connect)
                      peer_supported_features, peer_required_features);
 
       // Check feature bit compatibility
-      uint64_t supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
+      uint64_t supported_features = CRIMSON_MSGR2_SUPPORTED_FEATURES;
       uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
       if ((required_features & peer_supported_features) != required_features) {
         logger().error("{} peer does not support all required features"
@@ -881,7 +882,7 @@ void ProtocolV2::execute_connecting()
             abort_protocol();
           }
           if (socket) {
-            gated_dispatch("close_sockect_connecting",
+            gate.dispatch_in_background("close_sockect_connecting", *this,
                            [sock = std::move(socket)] () mutable {
               return sock->close().then([sock = std::move(sock)] {});
             });
@@ -1526,7 +1527,7 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
-  gated_dispatch("execute_accepting", [this] {
+  gate.dispatch_in_background("execute_accepting", *this, [this] {
       return seastar::futurize_invoke([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
@@ -1653,10 +1654,8 @@ void ProtocolV2::execute_establishing(
     accept_me();
   }
 
-  gated_dispatch("ms_handle_accept_establishing", [this] {
-    return dispatcher.ms_handle_accept(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  });
+  dispatcher->ms_handle_accept(
+      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 
   gated_execute("execute_establishing", [this] {
     return seastar::futurize_invoke([this] {
@@ -1751,11 +1750,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  gated_dispatch("ms_handle_accept_replacing", [this] {
-    return dispatcher.ms_handle_accept(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  });
-  gated_dispatch("trigger_replacing",
+  dispatcher->ms_handle_accept(
+      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  gate.dispatch_in_background("trigger_replacing", *this,
                  [this,
                   reconnect,
                   do_reset,
@@ -1786,7 +1783,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       }
 
       if (socket) {
-        gated_dispatch("close_socket_replacing",
+        gate.dispatch_in_background("close_socket_replacing", *this,
                        [sock = std::move(socket)] () mutable {
           return sock->close().then([sock = std::move(sock)] {});
         });
@@ -1851,19 +1848,19 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
 
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
-    bl.append(keepalive_frame.get_buffer(session_stream_handlers));
+    bl.append(keepalive_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2, bp_type_t::WRITE);
   }
 
   if (unlikely(_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
-    bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
+    bl.append(keepalive_ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
   }
 
   if (require_ack && !num_msgs) {
     auto ack_frame = AckFrame::Encode(conn.in_seq);
-    bl.append(ack_frame.get_buffer(session_stream_handlers));
+    bl.append(ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
 
@@ -1892,7 +1889,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
         msg->get_payload(), msg->get_middle(), msg->get_data());
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
-    bl.append(message.get_buffer(session_stream_handlers));
+    bl.append(message.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::MESSAGE, bp_type_t::WRITE);
   });
 
@@ -1907,7 +1904,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // we need to get the size before std::moving segments data
     const size_t cur_msg_size = get_current_msg_size();
-    auto msg_frame = MessageFrame::Decode(std::move(rx_segments_data));
+    auto msg_frame = MessageFrame::Decode(rx_segments_data);
     // XXX: paranoid copy just to avoid oops
     ceph_msg_header2 current_header = msg_frame.header();
 
@@ -1982,9 +1979,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    gated_dispatch("ms_dispatch", [this, msg = std::move(msg_ref)] {
-      return dispatcher.ms_dispatch(&conn, std::move(msg));
-    });
+    std::ignore = dispatcher->ms_dispatch(&conn, std::move(msg_ref));
   });
 }
 
@@ -1993,10 +1988,8 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
   if (dispatch_connect) {
-    gated_dispatch("ms_handle_connect", [this] {
-      return dispatcher.ms_handle_connect(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatcher->ms_handle_connect(
+	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 #ifdef UNIT_TESTS_BUILT
   if (conn.interceptor) {
@@ -2170,8 +2163,22 @@ void ProtocolV2::trigger_close()
   }
 
   protocol_timer.cancel();
-
+  messenger.closing_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+	conn.shared_from_this()));
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
+}
+
+void ProtocolV2::on_closed()
+{
+  messenger.closed_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+	conn.shared_from_this()));
+}
+
+void ProtocolV2::print(std::ostream& out) const
+{
+  out << conn;
 }
 
 } // namespace crimson::net

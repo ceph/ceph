@@ -5,9 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ButtonsModule } from 'ngx-bootstrap/buttons';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsModalService } from 'ngx-bootstrap/modal';
+import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -16,8 +14,10 @@ import { RoleService } from '../../../shared/api/role.service';
 import { SettingsService } from '../../../shared/api/settings.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
+import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { PasswordPolicyService } from './../../../shared/services/password-policy.service';
@@ -30,7 +30,7 @@ describe('UserFormComponent', () => {
   let fixture: ComponentFixture<UserFormComponent>;
   let httpTesting: HttpTestingController;
   let userService: UserService;
-  let modalService: BsModalService;
+  let modalService: ModalService;
   let router: Router;
   let formHelper: FormHelper;
 
@@ -44,33 +44,35 @@ describe('UserFormComponent', () => {
     { path: 'users', component: FakeComponent }
   ];
 
-  configureTestBed({
-    imports: [
-      RouterTestingModule.withRoutes(routes),
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      ComponentsModule,
-      ToastrModule.forRoot(),
-      SharedModule,
-      ButtonsModule.forRoot(),
-      BsDatepickerModule.forRoot()
-    ],
-    declarations: [UserFormComponent, FakeComponent],
-    providers: i18nProviders
-  });
+  configureTestBed(
+    {
+      imports: [
+        RouterTestingModule.withRoutes(routes),
+        HttpClientTestingModule,
+        ReactiveFormsModule,
+        ComponentsModule,
+        ToastrModule.forRoot(),
+        SharedModule,
+        NgbPopoverModule
+      ],
+      declarations: [UserFormComponent, FakeComponent],
+      providers: i18nProviders
+    },
+    [LoadingPanelComponent]
+  );
 
   beforeEach(() => {
-    spyOn(TestBed.get(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));
+    spyOn(TestBed.inject(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));
     fixture = TestBed.createComponent(UserFormComponent);
     component = fixture.componentInstance;
     form = component.userForm;
-    httpTesting = TestBed.get(HttpTestingController);
-    userService = TestBed.get(UserService);
-    modalService = TestBed.get(BsModalService);
-    router = TestBed.get(Router);
+    httpTesting = TestBed.inject(HttpTestingController);
+    userService = TestBed.inject(UserService);
+    modalService = TestBed.inject(ModalService);
+    router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();
-    const notify = TestBed.get(NotificationService);
+    const notify = TestBed.inject(NotificationService);
     spyOn(notify, 'show');
     formHelper = new FormHelper(form);
   });
@@ -176,9 +178,9 @@ describe('UserFormComponent', () => {
 
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
-      spyOn(TestBed.get(RoleService), 'list').and.callFake(() => of(roles));
+      spyOn(TestBed.inject(RoleService), 'list').and.callFake(() => of(roles));
       setUrl('/user-management/users/edit/user1');
-      spyOn(TestBed.get(SettingsService), 'getStandardSettings').and.callFake(() =>
+      spyOn(TestBed.inject(SettingsService), 'getStandardSettings').and.callFake(() =>
         of({
           user_pwd_expiration_warning_1: 10,
           user_pwd_expiration_warning_2: 5,
@@ -215,10 +217,10 @@ describe('UserFormComponent', () => {
     });
 
     it('should alert if user is removing needed role permission', () => {
-      spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       let modalBodyTpl = null;
-      spyOn(modalService, 'show').and.callFake((_content, config) => {
-        modalBodyTpl = config.initialState.bodyTpl;
+      spyOn(modalService, 'show').and.callFake((_content, initialState) => {
+        modalBodyTpl = initialState.bodyTpl;
       });
       formHelper.setValue('roles', ['read-only']);
       component.submit();
@@ -226,7 +228,7 @@ describe('UserFormComponent', () => {
     });
 
     it('should logout if current user roles have been changed', () => {
-      spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       formHelper.setValue('roles', ['user-manager']);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
@@ -237,7 +239,7 @@ describe('UserFormComponent', () => {
     });
 
     it('should submit', () => {
-      spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
       expect(userReq.request.method).toBe('PUT');

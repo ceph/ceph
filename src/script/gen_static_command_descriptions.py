@@ -38,6 +38,7 @@ def cmd_to_sig(cmd):
 
 
 def list_mgr_module(m_name):
+    sys.modules['rados'] = mock.Mock()
     sys.modules['rbd'] = mock.Mock()
     sys.modules['cephfs'] = mock.Mock()
     sys.modules['dateutil'] = mock.Mock()

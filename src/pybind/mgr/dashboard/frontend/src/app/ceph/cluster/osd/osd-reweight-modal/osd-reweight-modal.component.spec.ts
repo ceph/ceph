@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -26,7 +26,7 @@ describe('OsdReweightModalComponent', () => {
       SubmitButtonComponent,
       BackButtonComponent
     ],
-    providers: [OsdService, BsModalRef, CdFormBuilder, i18nProviders]
+    providers: [OsdService, NgbActiveModal, CdFormBuilder, i18nProviders]
   });
 
   beforeEach(() => {
@@ -43,7 +43,9 @@ describe('OsdReweightModalComponent', () => {
     component.osdId = 1;
     component.reweightForm.get('weight').setValue(0.5);
 
-    const osdServiceSpy = spyOn(TestBed.get(OsdService), 'reweight').and.callFake(() => of(true));
+    const osdServiceSpy = spyOn(TestBed.inject(OsdService), 'reweight').and.callFake(() =>
+      of(true)
+    );
     component.reweight();
 
     expect(osdServiceSpy.calls.count()).toBe(1);

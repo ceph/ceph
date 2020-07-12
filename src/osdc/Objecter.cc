@@ -1506,7 +1506,7 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
 }
 
 // sl may be unlocked.
-void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<ceph::shared_mutex> *sl)
+void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *sl)
 {
   // rwlock is locked unique
 
@@ -2853,20 +2853,19 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 		   << " acting " << acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if (acting_primary == -1) {
-      t->osd = -1;
-    } else {
+    if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+                     CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+        !is_write && pi->is_replicated() && acting.size() > 1) {
       int osd;
-      bool read = is_read && !is_write;
-      if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+      ceph_assert(is_read && acting[0] == acting_primary);
+      if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;
 	osd = acting[p];
 	ldout(cct, 10) << " chose random osd." << osd << " of " << acting
 		       << dendl;
-      } else if (read && (t->flags & CEPH_OSD_FLAG_LOCALIZE_READS) &&
-		 acting.size() > 1) {
+      } else {
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
 	int best = -1;
@@ -2889,10 +2888,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	}
 	ceph_assert(best >= 0);
 	osd = acting[best];
-      } else {
-	osd = acting_primary;
       }
       t->osd = osd;
+    } else {
+      t->osd = acting_primary;
     }
   }
   if (legacy_change || unpaused || force_resend) {
@@ -3032,8 +3031,9 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
     if (linger_op->session != s) {
       // NB locking two sessions (s and linger_op->session) at the
       // same time here is only safe because we are the only one that
-      // takes two, and we are holding rwlock for write.  Disable
-      // lockdep because it doesn't know that.
+      // takes two, and we are holding rwlock for write.  We use
+      // std::shared_mutex in OSDSession because lockdep doesn't know
+      // that.
       unique_lock sl(s->lock);
       _session_linger_op_remove(linger_op->session, linger_op);
       _session_linger_op_assign(s, linger_op);
@@ -3404,7 +3404,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << " into existing ceph::buffer of length " << op->outbl->length()
 		    << dendl;
       cb::list t;
-      t.claim(*op->outbl);
+      t = std::move(*op->outbl);
       t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
       bl.begin().copy(bl.length(), t.c_str());
       op->outbl->substr_of(t, 0, bl.length());
@@ -4002,8 +4002,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     PoolOp *op = iter->second;
     ldout(cct, 10) << "have request " << tid << " at " << op << " Op: "
 		   << ceph_pool_op_name(op->pool_op) << dendl;
-    cb::list bl;
-    bl.claim(m->response_data);
+    cb::list bl{std::move(m->response_data)};
     if (m->version > last_seen_osdmap_version)
       last_seen_osdmap_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {
@@ -4315,7 +4314,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents,
     r.assemble_result(cct, *bl, false);
   } else {
     ldout(cct, 15) << "  only one frag" << dendl;
-    bl->claim(resultbl[0]);
+    *bl = std::move(resultbl[0]);
   }
 
   // done

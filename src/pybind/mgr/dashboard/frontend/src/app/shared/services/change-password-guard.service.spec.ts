@@ -24,9 +24,9 @@ describe('ChangePasswordGuardService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(ChangePasswordGuardService);
-    authStorageService = TestBed.get(AuthStorageService);
-    ngZone = TestBed.get(NgZone);
+    service = TestBed.inject(ChangePasswordGuardService);
+    authStorageService = TestBed.inject(AuthStorageService);
+    ngZone = TestBed.inject(NgZone);
   });
 
   it('should be created', () => {
@@ -54,7 +54,7 @@ describe('ChangePasswordGuardService', () => {
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(true);
     spyOn(authStorageService, 'isSSO').and.returnValue(false);
     spyOn(authStorageService, 'getPwdUpdateRequired').and.returnValue(true);
-    const router = TestBed.get(Router);
+    const router = TestBed.inject(Router);
     ngZone.run(() => {
       expect(service.canActivate()).toBeFalsy();
     });

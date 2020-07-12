@@ -330,8 +330,8 @@ void dump_errno(struct req_state *s, int http_ret)
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
-                 const boost::string_ref& val)
+                 const std::string_view& name,
+                 const std::string_view& val)
 {
   try {
     RESTFUL_IO(s)->send_header(name, val);
@@ -342,24 +342,24 @@ void dump_header(struct req_state* const s,
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
+                 const std::string_view& name,
                  ceph::buffer::list& bl)
 {
   return dump_header(s, name, rgw_sanitized_hdrval(bl));
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
+                 const std::string_view& name,
                  const long long val)
 {
   char buf[32];
   const auto len = snprintf(buf, sizeof(buf), "%lld", val);
 
-  return dump_header(s, name, boost::string_ref(buf, len));
+  return dump_header(s, name, std::string_view(buf, len));
 }
 
 void dump_header(struct req_state* const s,
-                 const boost::string_ref& name,
+                 const std::string_view& name,
                  const utime_t& ut)
 {
   char buf[32];
@@ -367,7 +367,7 @@ void dump_header(struct req_state* const s,
 	                    static_cast<long long>(ut.sec()),
                             static_cast<int>(ut.usec() / 10));
 
-  return dump_header(s, name, boost::string_ref(buf, len));
+  return dump_header(s, name, std::string_view(buf, len));
 }
 
 void dump_content_length(struct req_state* const s, const uint64_t len)
@@ -392,7 +392,7 @@ static void dump_chunked_encoding(struct req_state* const s)
 }
 
 void dump_etag(struct req_state* const s,
-               const boost::string_ref& etag,
+               const std::string_view& etag,
                const bool quoted)
 {
   if (etag.empty()) {
@@ -448,7 +448,7 @@ void dump_time_header(struct req_state *s, const char *name, real_time t)
     return;
   }
 
-  return dump_header(s, name, boost::string_ref(timestr, len));
+  return dump_header(s, name, std::string_view(timestr, len));
 }
 
 std::string dump_time_to_str(const real_time& t)
@@ -473,7 +473,7 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
                             (long long)ut.sec(),
                             (long long)ut.nsec());
 
-  return dump_header(s, name, boost::string_ref(buf, len));
+  return dump_header(s, name, std::string_view(buf, len));
 }
 
 void dump_time(struct req_state *s, const char *name, real_time *t)
@@ -748,7 +748,7 @@ void dump_range(struct req_state* const s,
                    static_cast<long long>(total));
   }
 
-  return dump_header(s, "Content-Range", boost::string_ref(range_buf, len));
+  return dump_header(s, "Content-Range", std::string_view(range_buf, len));
 }
 
 
@@ -1850,14 +1850,11 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
       try {
         map<string, bufferlist> uattrs;
         if (auto ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &uattrs, null_yield); ! ret) {
-          if (s->iam_user_policies.empty()) {
-            s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
-          } else {
-          // This scenario can happen when a STS token has a policy, then we need to append other user policies
-          // to the existing ones. (e.g. token returned by GetSessionToken)
           auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
-          s->iam_user_policies.insert(s->iam_user_policies.end(), user_policies.begin(), user_policies.end());
-          }
+          s->iam_user_policies.insert(s->iam_user_policies.end(),
+                                      std::make_move_iterator(user_policies.begin()),
+                                      std::make_move_iterator(user_policies.end()));
+
         }
       } catch (const std::exception& e) {
         lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
@@ -1894,6 +1891,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
     /* is it a 'create bucket' request? */
     if (op_obj->get_type() == RGW_OP_CREATE_BUCKET)
       return 0;
+    
     only_bucket = true;
     break;
   case OP_DELETE:

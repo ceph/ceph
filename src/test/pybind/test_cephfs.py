@@ -4,6 +4,8 @@ import cephfs as libcephfs
 import fcntl
 import os
 import time
+import stat
+import uuid
 from datetime import datetime
 
 cephfs = None
@@ -140,6 +142,35 @@ def test_xattr():
     assert_equal("user.big\x00", ret_buff.decode('utf-8'))
 
 @with_setup(setup_test)
+def test_fxattr():
+    fd = cephfs.open(b'/file-fxattr', 'w', 0o755)
+    assert_raises(libcephfs.OperationNotSupported, cephfs.fsetxattr, fd, "key", b"value", 0)
+    assert_raises(TypeError, cephfs.fsetxattr, "fd", "user.key", b"value", 0)
+    assert_raises(TypeError, cephfs.fsetxattr, fd, "user.key", "value", 0)
+    assert_raises(TypeError, cephfs.fsetxattr, fd, "user.key", b"value", "0")
+    cephfs.fsetxattr(fd, "user.key", b"value", 0)
+    assert_equal(b"value", cephfs.fgetxattr(fd, "user.key"))
+
+    cephfs.fsetxattr(fd, "user.big", b"x" * 300, 0)
+
+    # Default size is 255, get ERANGE
+    assert_raises(libcephfs.OutOfRange, cephfs.fgetxattr, fd, "user.big")
+
+    # Pass explicit size, and we'll get the value
+    assert_equal(300, len(cephfs.fgetxattr(fd, "user.big", 300)))
+
+    cephfs.fremovexattr(fd, "user.key")
+    # user.key is already removed
+    assert_raises(libcephfs.NoData, cephfs.fgetxattr, fd, "user.key")
+
+    # user.big is only listed
+    ret_val, ret_buff = cephfs.flistxattr(fd)
+    assert_equal(9, ret_val)
+    assert_equal("user.big\x00", ret_buff.decode('utf-8'))
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fxattr')
+
+@with_setup(setup_test)
 def test_rename():
     cephfs.mkdir(b"/a", 0o755)
     cephfs.mkdir(b"/a/b", 0o755)
@@ -251,6 +282,36 @@ def test_mount_unmount():
     cephfs.unmount()
     cephfs.mount()
     test_open()
+
+@with_setup(setup_test)
+def test_lxattr():
+    fd = cephfs.open(b'/file-lxattr', 'w', 0o755)
+    cephfs.close(fd)
+    cephfs.setxattr(b"/file-lxattr", "user.key", b"value", 0)
+    cephfs.symlink(b"/file-lxattr", b"/file-sym-lxattr")
+    assert_equal(b"value", cephfs.getxattr(b"/file-sym-lxattr", "user.key"))
+    assert_raises(libcephfs.NoData, cephfs.lgetxattr, b"/file-sym-lxattr", "user.key")
+
+    cephfs.lsetxattr(b"/file-sym-lxattr", "trusted.key-sym", b"value-sym", 0)
+    assert_equal(b"value-sym", cephfs.lgetxattr(b"/file-sym-lxattr", "trusted.key-sym"))
+    cephfs.lsetxattr(b"/file-sym-lxattr", "trusted.big", b"x" * 300, 0)
+
+    # Default size is 255, get ERANGE
+    assert_raises(libcephfs.OutOfRange, cephfs.lgetxattr, b"/file-sym-lxattr", "trusted.big")
+
+    # Pass explicit size, and we'll get the value
+    assert_equal(300, len(cephfs.lgetxattr(b"/file-sym-lxattr", "trusted.big", 300)))
+
+    cephfs.lremovexattr(b"/file-sym-lxattr", "trusted.key-sym")
+    # trusted.key-sym is already removed
+    assert_raises(libcephfs.NoData, cephfs.lgetxattr, b"/file-sym-lxattr", "trusted.key-sym")
+
+    # trusted.big is only listed
+    ret_val, ret_buff = cephfs.llistxattr(b"/file-sym-lxattr")
+    assert_equal(12, ret_val)
+    assert_equal("trusted.big\x00", ret_buff.decode('utf-8'))
+    cephfs.unlink(b'/file-lxattr')
+    cephfs.unlink(b'/file-sym-lxattr')
 
 @with_setup(setup_test)
 def test_mount_root():
@@ -431,3 +492,296 @@ def test_futimens():
 
     cephfs.close(fd)
     cephfs.unlink(b'/file-1')
+
+@with_setup(setup_test)
+def test_fchmod():
+    fd = cephfs.open(b'/file-fchmod', 'w', 0o655)
+    st = cephfs.statx(b'/file-fchmod', libcephfs.CEPH_STATX_MODE, 0)
+    mode = st["mode"] | stat.S_IXUSR
+    cephfs.fchmod(fd, mode)
+    st = cephfs.statx(b'/file-fchmod', libcephfs.CEPH_STATX_MODE, 0)
+    assert_equal(st["mode"] & stat.S_IRWXU, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    assert_raises(TypeError, cephfs.fchmod, "/file-fchmod", stat.S_IXUSR)
+    assert_raises(TypeError, cephfs.fchmod, fd, "stat.S_IXUSR")
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fchmod')
+
+@with_setup(setup_test)
+def test_fchown():
+    fd = cephfs.open(b'/file-fchown', 'w', 0o655)
+    uid = os.getuid()
+    gid = os.getgid()
+    assert_raises(TypeError, cephfs.fchown, b'/file-fchown', uid, gid)
+    assert_raises(TypeError, cephfs.fchown, fd, "uid", "gid")
+    cephfs.fchown(fd, uid, gid)
+    st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
+    assert_equal(st["uid"], uid)
+    assert_equal(st["gid"], gid)
+    cephfs.fchown(fd, 9999, 9999)
+    st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
+    assert_equal(st["uid"], 9999)
+    assert_equal(st["gid"], 9999)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fchown')
+
+@with_setup(setup_test)
+def test_truncate():
+    fd = cephfs.open(b'/file-truncate', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.truncate(b'/file-truncate', 0)
+    stat = cephfs.fsync(fd, 0)
+    st = cephfs.statx(b'/file-truncate', libcephfs.CEPH_STATX_SIZE, 0)
+    assert_equal(st["size"], 0)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-truncate')
+
+@with_setup(setup_test)
+def test_ftruncate():
+    fd = cephfs.open(b'/file-ftruncate', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    assert_raises(TypeError, cephfs.ftruncate, b'/file-ftruncate', 0)
+    cephfs.ftruncate(fd, 0)
+    stat = cephfs.fsync(fd, 0)
+    st = cephfs.fstat(fd)
+    assert_equal(st.st_size, 0)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-ftruncate')
+
+@with_setup(setup_test)
+def test_fallocate():
+    fd = cephfs.open(b'/file-fallocate', 'w', 0o755)
+    assert_raises(TypeError, cephfs.fallocate, b'/file-fallocate', 0, 10)
+    cephfs.fallocate(fd, 0, 10)
+    stat = cephfs.fsync(fd, 0)
+    st = cephfs.fstat(fd)
+    assert_equal(st.st_size, 10)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-fallocate')
+
+@with_setup(setup_test)
+def test_mknod():
+    mode = stat.S_IFIFO | stat.S_IRUSR | stat.S_IWUSR
+    cephfs.mknod(b'/file-fifo', mode)
+    st = cephfs.statx(b'/file-fifo', libcephfs.CEPH_STATX_MODE, 0)
+    assert_equal(st["mode"] & mode, mode)
+    cephfs.unlink(b'/file-fifo')
+
+@with_setup(setup_test)
+def test_lazyio():
+    fd = cephfs.open(b'/file-lazyio', 'w', 0o755)
+    assert_raises(TypeError, cephfs.lazyio, "fd", 1)
+    assert_raises(TypeError, cephfs.lazyio, fd, "1")
+    cephfs.lazyio(fd, 1)
+    cephfs.write(fd, b"1111", 0)
+    assert_raises(TypeError, cephfs.lazyio_propagate, "fd", 0, 4)
+    assert_raises(TypeError, cephfs.lazyio_propagate, fd, "0", 4)
+    assert_raises(TypeError, cephfs.lazyio_propagate, fd, 0, "4")
+    cephfs.lazyio_propagate(fd, 0, 4)
+    st = cephfs.fstat(fd)
+    assert_equal(st.st_size, 4)
+    cephfs.write(fd, b"2222", 4)
+    assert_raises(TypeError, cephfs.lazyio_synchronize, "fd", 0, 8)
+    assert_raises(TypeError, cephfs.lazyio_synchronize, fd, "0", 8)
+    assert_raises(TypeError, cephfs.lazyio_synchronize, fd, 0, "8")
+    cephfs.lazyio_synchronize(fd, 0, 8)
+    st = cephfs.fstat(fd)
+    assert_equal(st.st_size, 8)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-lazyio')
+
+@with_setup(setup_test)
+def test_replication():
+    fd = cephfs.open(b'/file-rep', 'w', 0o755)
+    assert_raises(TypeError, cephfs.get_file_replication, "fd")
+    l_dict = cephfs.get_layout(fd)
+    assert('pool_name' in l_dict.keys())
+    cnt = cephfs.get_file_replication(fd)
+    get_rep_cnt_cmd = "ceph osd pool get " + l_dict["pool_name"] + " size"
+    s=os.popen(get_rep_cnt_cmd).read().strip('\n')
+    size=int(s.split(" ")[-1])
+    assert_equal(cnt, size)
+    cnt = cephfs.get_path_replication(b'/file-rep')
+    assert_equal(cnt, size)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-rep')
+
+@with_setup(setup_test)
+def test_caps():
+    fd = cephfs.open(b'/file-caps', 'w', 0o755)
+    timeout = cephfs.get_cap_return_timeout()
+    assert_equal(timeout, 300)
+    fd_caps = cephfs.debug_get_fd_caps(fd)
+    file_caps = cephfs.debug_get_file_caps(b'/file-caps')
+    assert_equal(fd_caps, file_caps)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-caps')
+
+@with_setup(setup_test)
+def test_setuuid():
+    ses_id_uid = uuid.uuid1()
+    ses_id_str = str(ses_id_uid)
+    cephfs.set_uuid(ses_id_str)
+
+@with_setup(setup_test)
+def test_session_timeout():
+    assert_raises(TypeError, cephfs.set_session_timeout, "300")
+    cephfs.set_session_timeout(300)
+
+@with_setup(setup_test)
+def test_readdirops():
+    cephfs.chdir(b"/")
+    dirs = [b"dir-1", b"dir-2", b"dir-3"]
+    for i in dirs:
+        cephfs.mkdir(i, 0o755)
+    handler = cephfs.opendir(b"/")
+    d1 = cephfs.readdir(handler)
+    d2 = cephfs.readdir(handler)
+    d3 = cephfs.readdir(handler)
+    offset_d4 = cephfs.telldir(handler)
+    d4 = cephfs.readdir(handler)
+    cephfs.rewinddir(handler)
+    d = cephfs.readdir(handler)
+    assert_equal(d.d_name, d1.d_name)
+    cephfs.seekdir(handler, offset_d4)
+    d = cephfs.readdir(handler)
+    assert_equal(d.d_name, d4.d_name)
+    dirs += [b".", b".."]
+    cephfs.rewinddir(handler)
+    d = cephfs.readdir(handler)
+    while d:
+        assert(d.d_name in dirs)
+        dirs.remove(d.d_name)
+        d = cephfs.readdir(handler)
+    assert(len(dirs) == 0)
+    dirs = [b"/dir-1", b"/dir-2", b"/dir-3"]
+    for i in dirs:
+        cephfs.rmdir(i)
+    cephfs.closedir(handler)
+
+def test_preadv_pwritev():
+    fd = cephfs.open(b'file-1', 'w', 0o755)
+    cephfs.pwritev(fd, [b"asdf", b"zxcvb"], 0)
+    cephfs.close(fd)
+    fd = cephfs.open(b'file-1', 'r', 0o755)
+    buf = [bytearray(i) for i in [4, 5]]
+    cephfs.preadv(fd, buf, 0)
+    assert_equal([b"asdf", b"zxcvb"], list(buf))
+    cephfs.close(fd)
+    cephfs.unlink(b'file-1')
+
+@with_setup(setup_test)
+def test_setattrx():
+    fd = cephfs.open(b'file-setattrx', 'w', 0o655)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.close(fd)
+    st = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE, 0)
+    mode = st["mode"] | stat.S_IXUSR
+    assert_raises(TypeError, cephfs.setattrx, b'file-setattrx', "dict", 0, 0)
+
+    time.sleep(1)
+    statx_dict = dict()
+    statx_dict["mode"] = mode
+    statx_dict["uid"] = 9999
+    statx_dict["gid"] = 9999
+    dt = datetime.now()
+    statx_dict["mtime"] = dt
+    statx_dict["atime"] = dt
+    statx_dict["ctime"] = dt
+    statx_dict["size"] = 10
+    statx_dict["btime"] = dt
+    cephfs.setattrx(b'file-setattrx', statx_dict, libcephfs.CEPH_SETATTR_MODE | libcephfs.CEPH_SETATTR_UID |
+                                                  libcephfs.CEPH_SETATTR_GID | libcephfs.CEPH_SETATTR_MTIME |
+                                                  libcephfs.CEPH_SETATTR_ATIME | libcephfs.CEPH_SETATTR_CTIME |
+                                                  libcephfs.CEPH_SETATTR_SIZE | libcephfs.CEPH_SETATTR_BTIME, 0)
+    st1 = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_UID |
+                                         libcephfs.CEPH_STATX_GID | libcephfs.CEPH_STATX_MTIME |
+                                         libcephfs.CEPH_STATX_ATIME | libcephfs.CEPH_STATX_CTIME |
+                                         libcephfs.CEPH_STATX_SIZE | libcephfs.CEPH_STATX_BTIME, 0)
+    assert_equal(mode, st1["mode"])
+    assert_equal(9999, st1["uid"])
+    assert_equal(9999, st1["gid"])
+    assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
+    assert_equal(10, st1["size"])
+    cephfs.unlink(b'file-setattrx')
+
+@with_setup(setup_test)
+def test_fsetattrx():
+    fd = cephfs.open(b'file-fsetattrx', 'w', 0o655)
+    cephfs.write(fd, b"1111", 0)
+    st = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE, 0)
+    mode = st["mode"] | stat.S_IXUSR
+    assert_raises(TypeError, cephfs.fsetattrx, fd, "dict", 0, 0)
+
+    time.sleep(1)
+    statx_dict = dict()
+    statx_dict["mode"] = mode
+    statx_dict["uid"] = 9999
+    statx_dict["gid"] = 9999
+    dt = datetime.now()
+    statx_dict["mtime"] = dt
+    statx_dict["atime"] = dt
+    statx_dict["ctime"] = dt
+    statx_dict["size"] = 10
+    statx_dict["btime"] = dt
+    cephfs.fsetattrx(fd, statx_dict, libcephfs.CEPH_SETATTR_MODE | libcephfs.CEPH_SETATTR_UID |
+                                                  libcephfs.CEPH_SETATTR_GID | libcephfs.CEPH_SETATTR_MTIME |
+                                                  libcephfs.CEPH_SETATTR_ATIME | libcephfs.CEPH_SETATTR_CTIME |
+                                                  libcephfs.CEPH_SETATTR_SIZE | libcephfs.CEPH_SETATTR_BTIME)
+    st1 = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_UID |
+                                         libcephfs.CEPH_STATX_GID | libcephfs.CEPH_STATX_MTIME |
+                                         libcephfs.CEPH_STATX_ATIME | libcephfs.CEPH_STATX_CTIME |
+                                         libcephfs.CEPH_STATX_SIZE | libcephfs.CEPH_STATX_BTIME, 0)
+    assert_equal(mode, st1["mode"])
+    assert_equal(9999, st1["uid"])
+    assert_equal(9999, st1["gid"])
+    assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
+    assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
+    assert_equal(10, st1["size"])
+    cephfs.close(fd)
+    cephfs.unlink(b'file-fsetattrx')
+
+@with_setup(setup_test)
+def test_get_layout():
+    fd = cephfs.open(b'file-get-layout', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    assert_raises(TypeError, cephfs.get_layout, "fd")
+    l_dict = cephfs.get_layout(fd)
+    assert('stripe_unit' in l_dict.keys())
+    assert('stripe_count' in l_dict.keys())
+    assert('object_size' in l_dict.keys())
+    assert('pool_id' in l_dict.keys())
+    assert('pool_name' in l_dict.keys())
+
+    cephfs.close(fd)
+    cephfs.unlink(b'file-get-layout')
+
+@with_setup(setup_test)
+def test_get_default_pool():
+    dp_dict = cephfs.get_default_pool()
+    assert('pool_id' in dp_dict.keys())
+    assert('pool_name' in dp_dict.keys())
+
+@with_setup(setup_test)
+def test_get_pool():
+    dp_dict = cephfs.get_default_pool()
+    assert('pool_id' in dp_dict.keys())
+    assert('pool_name' in dp_dict.keys())
+    assert_equal(cephfs.get_pool_id(dp_dict["pool_name"]), dp_dict["pool_id"])
+    get_rep_cnt_cmd = "ceph osd pool get " + dp_dict["pool_name"] + " size"
+    s=os.popen(get_rep_cnt_cmd).read().strip('\n')
+    size=int(s.split(" ")[-1])
+    assert_equal(cephfs.get_pool_replication(dp_dict["pool_id"]), size)
+
+@with_setup(setup_test)
+def test_disk_quota_exceeeded_error():
+    cephfs.mkdir("/dir-1", 0o755)
+    cephfs.setxattr("/dir-1", "ceph.quota.max_bytes", b"5", 0)
+    fd = cephfs.open(b'/dir-1/file-1', 'w', 0o755)
+    assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz", 0)
+    cephfs.close(fd)
+    cephfs.unlink(b"/dir-1/file-1")

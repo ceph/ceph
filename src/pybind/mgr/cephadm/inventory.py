@@ -4,8 +4,6 @@ import json
 import logging
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set
 
-import six
-
 import orchestrator
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec
@@ -79,10 +77,13 @@ class Inventory:
         self.assert_host(host)
         return self._inventory[host].get('addr', host)
 
-    def filter_by_label(self, label=None) -> Iterator[str]:
+    def filter_by_label(self, label: Optional[str] = '', as_hostspec: bool = False) -> Iterator:
         for h, hostspec in self._inventory.items():
             if not label or label in hostspec.get('labels', []):
-                yield h
+                if as_hostspec:
+                    yield self.spec_from_dict(hostspec)
+                else:
+                    yield h
 
     def spec_from_dict(self, info):
         hostname = info['hostname']
@@ -109,7 +110,7 @@ class SpecStore():
 
     def load(self):
         # type: () -> None
-        for k, v in six.iteritems(self.mgr.get_store_prefix(SPEC_STORE_PREFIX)):
+        for k, v in self.mgr.get_store_prefix(SPEC_STORE_PREFIX).items():
             service_name = k[len(SPEC_STORE_PREFIX):]
             try:
                 v = json.loads(v)
@@ -172,10 +173,11 @@ class HostCache():
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
         self.loading_osdspec_preview = set()  # type: Set[str]
+        self.etc_ceph_ceph_conf_refresh_queue: Set[str] = set()
 
     def load(self):
         # type: () -> None
-        for k, v in six.iteritems(self.mgr.get_store_prefix(HOST_CACHE_PREFIX)):
+        for k, v in self.mgr.get_store_prefix(HOST_CACHE_PREFIX).items():
             host = k[len(HOST_CACHE_PREFIX):]
             if host not in self.mgr.inventory:
                 self.mgr.log.warning('removing stray HostCache host record %s' % (
@@ -213,6 +215,7 @@ class HostCache():
                 if 'last_host_check' in j:
                     self.last_host_check[host] = datetime.datetime.strptime(
                         j['last_host_check'], DATEFMT)
+                self.etc_ceph_ceph_conf_refresh_queue.add(host)
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
                     '%d devices, %d networks' % (
@@ -257,6 +260,7 @@ class HostCache():
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
         self.osdspec_previews_refresh_queue.append(host)
+        self.etc_ceph_ceph_conf_refresh_queue.add(host)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
@@ -271,6 +275,9 @@ class HostCache():
         if host in self.last_device_update:
             del self.last_device_update[host]
         self.mgr.event.set()
+
+    def distribute_new_etc_ceph_ceph_conf(self):
+        self.etc_ceph_ceph_conf_refresh_queue = set(self.mgr.inventory.keys())
 
     def save_host(self, host):
         # type: (str) -> None
@@ -417,6 +424,22 @@ class HostCache():
             seconds=self.mgr.host_check_interval)
         return host not in self.last_host_check or self.last_host_check[host] < cutoff
 
+    def host_needs_new_etc_ceph_ceph_conf(self, host):
+        if not self.mgr.manage_etc_ceph_ceph_conf:
+            return False
+        if self.mgr.paused:
+            return False
+        if host in self.mgr.offline_hosts:
+            return False
+        if host in self.etc_ceph_ceph_conf_refresh_queue:
+            # We're read-only here.
+            # self.etc_ceph_ceph_conf_refresh_queue.remove(host)
+            return True
+        return False
+
+    def remove_host_needs_new_etc_ceph_ceph_conf(self, host):
+        self.etc_ceph_ceph_conf_refresh_queue.remove(host)
+
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None
         assert host in self.daemons
@@ -426,3 +449,14 @@ class HostCache():
         if host in self.daemons:
             if name in self.daemons[host]:
                 del self.daemons[host][name]
+
+    def daemon_cache_filled(self):
+        """
+        i.e. we have checked the daemons for each hosts at least once.
+        excluding offline hosts.
+
+        We're not checking for `host_needs_daemon_refresh`, as this might never be
+        False for all hosts.
+        """
+        return all((h in self.last_daemon_update or h in self.mgr.offline_hosts)
+                   for h in self.get_hosts())

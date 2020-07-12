@@ -183,7 +183,7 @@ public:
 
   template <typename T>
   void start_peering_event_operation(T &&evt, float delay = 0) {
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
@@ -302,9 +302,7 @@ public:
   void on_role_change() final {
     // Not needed yet
   }
-  void on_change(ceph::os::Transaction &t) final {
-    recovery_backend->on_peering_interval_change(t);
-  }
+  void on_change(ceph::os::Transaction &t) final;
   void on_activate(interval_set<snapid_t> to_trim) final;
   void on_activate_complete() final;
   void on_new_interval() final {
@@ -506,6 +504,9 @@ public:
     const OpInfo &op_info,
     Operation *op,
     F &&f) {
+    if (__builtin_expect(stopping, false)) {
+      throw crimson::common::system_shutdown_exception();
+    }
     auto [oid, type] = get_oid_and_lock(*m, op_info);
     return get_locked_obc(op, oid, type)
       .safe_then([f=std::forward<F>(f), type=type](auto obc) {
@@ -553,12 +554,14 @@ private:
 public:
   cached_map_t get_osdmap() { return osdmap; }
   eversion_t next_version() {
-    return eversion_t(projected_last_update.epoch,
+    return eversion_t(get_osdmap_epoch(),
 		      ++projected_last_update.version);
   }
   ShardServices& get_shard_services() final {
     return shard_services;
   }
+  seastar::future<> stop();
+
 private:
   std::unique_ptr<PGBackend> backend;
   std::unique_ptr<RecoveryBackend> recovery_backend;
@@ -620,6 +623,11 @@ public:
   }
 
 private:
+  // instead of seastar::gate, we use a boolean flag to indicate
+  // whether the system is shutting down, as we don't need to track
+  // continuations here.
+  bool stopping = false;
+
   class WaitForActiveBlocker : public BlockerT<WaitForActiveBlocker> {
     PG *pg;
 
@@ -635,6 +643,7 @@ private:
     WaitForActiveBlocker(PG *pg) : pg(pg) {}
     void on_active();
     blocking_future<> wait();
+    seastar::future<> stop();
   } wait_for_active_blocker;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
@@ -650,10 +659,11 @@ private:
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
-  bool is_unreadable_object(const hobject_t &oid) const final {
+  bool is_unreadable_object(const hobject_t &oid,
+			    eversion_t* v = 0) const final {
     return is_missing_object(oid) ||
       !peering_state.get_missing_loc().readable_with_acting(
-	oid, get_actingset());
+	oid, get_actingset(), v);
   }
   const set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();

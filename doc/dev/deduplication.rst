@@ -102,7 +102,7 @@ RadosGW
 
 S3 big data workloads seem like a good opportunity for deduplication.  These
 objects tend to be write once, read mostly objects which don't see partial
-overwrites.  As sugh, it makes sense to fingerprint and dedup up front.
+overwrites.  As such, it makes sense to fingerprint and dedup up front.
 
 Unlike cephfs and rbd, radosgw has a system for storing
 explicit metadata in the head object of a logical s3 object for

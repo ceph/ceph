@@ -1,14 +1,13 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
 import { ClickOutsideModule } from 'ng-click-outside';
-import { PopoverModule } from 'ngx-bootstrap/popover';
-import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../api/prometheus.service';
 import { RbdService } from '../../api/rbd.service';
@@ -32,8 +31,7 @@ describe('NotificationsSidebarComponent', () => {
     imports: [
       HttpClientTestingModule,
       PipesModule,
-      PopoverModule.forRoot(),
-      ProgressbarModule.forRoot(),
+      NgbProgressbarModule,
       RouterTestingModule,
       ToastrModule.forRoot(),
       NoopAnimationsModule,
@@ -75,7 +73,7 @@ describe('NotificationsSidebarComponent', () => {
     beforeEach(() => {
       prometheusReadPermission = 'read';
       configOptReadPermission = 'read';
-      spyOn(TestBed.get(AuthStorageService), 'getPermissions').and.callFake(
+      spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(
         () =>
           new Permissions({
             prometheus: [prometheusReadPermission],
@@ -83,12 +81,14 @@ describe('NotificationsSidebarComponent', () => {
           })
       );
 
-      spyOn(TestBed.get(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) =>
+        fn()
+      );
 
-      prometheusAlertService = TestBed.get(PrometheusAlertService);
+      prometheusAlertService = TestBed.inject(PrometheusAlertService);
       spyOn(prometheusAlertService, 'refresh').and.stub();
 
-      prometheusNotificationService = TestBed.get(PrometheusNotificationService);
+      prometheusNotificationService = TestBed.inject(PrometheusNotificationService);
       spyOn(prometheusNotificationService, 'refresh').and.stub();
     });
 
@@ -130,7 +130,7 @@ describe('NotificationsSidebarComponent', () => {
 
     beforeEach(() => {
       fixture.detectChanges();
-      summaryService = TestBed.get(SummaryService);
+      summaryService = TestBed.inject(SummaryService);
 
       spyOn(component, '_handleTasks').and.callThrough();
     });
@@ -150,7 +150,7 @@ describe('NotificationsSidebarComponent', () => {
 
   describe('Notifications', () => {
     it('should fetch latest notifications', fakeAsync(() => {
-      const notificationService: NotificationService = TestBed.get(NotificationService);
+      const notificationService: NotificationService = TestBed.inject(NotificationService);
       fixture.detectChanges();
 
       expect(component.notifications.length).toBe(0);
@@ -166,7 +166,7 @@ describe('NotificationsSidebarComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      notificationService = TestBed.get(NotificationService);
+      notificationService = TestBed.inject(NotificationService);
       fixture.detectChanges();
     });
 

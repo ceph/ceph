@@ -193,7 +193,7 @@ static ceph::spinlock debug_lock;
     raw_hack_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       realdata = new char[len+align-1];
-      unsigned off = ((unsigned)realdata) & (align-1);
+      unsigned off = ((uintptr_t)realdata) & (align-1);
       if (off)
 	data = realdata + align - off;
       else
@@ -201,7 +201,7 @@ static ceph::spinlock debug_lock;
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      ceph_assert(((unsigned)data & (align-1)) == 0);
+      ceph_assert(((uintptr_t)data & (align-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
@@ -457,21 +457,29 @@ static ceph::spinlock debug_lock;
 
   void buffer::ptr::release()
   {
-    if (_raw) {
-      bdout << "ptr " << this << " release " << _raw << bendl;
-      const bool last_one = (1 == _raw->nref.load(std::memory_order_acquire));
-      if (likely(last_one) || --_raw->nref == 0) {
-        // BE CAREFUL: this is called also for hypercombined ptr_node. After
-        // freeing underlying raw, `*this` can become inaccessible as well!
-        const auto* delete_raw = _raw;
-        _raw = nullptr;
-	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-        ANNOTATE_HAPPENS_AFTER(&delete_raw->nref);
-        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&delete_raw->nref);
-	delete delete_raw;  // dealloc old (if any)
+    // BE CAREFUL: this is called also for hypercombined ptr_node. After
+    // freeing underlying raw, `*this` can become inaccessible as well!
+    //
+    // cache the pointer to avoid unncecessary reloads and repeated
+    // checks.
+    if (auto* const cached_raw = std::exchange(_raw, nullptr);
+	cached_raw) {
+      bdout << "ptr " << this << " release " << cached_raw << bendl;
+      // optimize the common case where a particular `buffer::raw` has
+      // only a single reference. Altogether with initializing `nref` of
+      // freshly fabricated one with `1` through the std::atomic's ctor
+      // (which doesn't impose a memory barrier on the strongly-ordered
+      // x86), this allows to avoid all atomical operations in such case.
+      const bool last_one = \
+        (1 == cached_raw->nref.load(std::memory_order_acquire));
+      if (likely(last_one) || --cached_raw->nref == 0) {
+	bdout << "deleting raw " << static_cast<void*>(cached_raw)
+	      << " len " << cached_raw->len << bendl;
+	ANNOTATE_HAPPENS_AFTER(&cached_raw->nref);
+	ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&cached_raw->nref);
+	delete cached_raw;  // dealloc old (if any)
       } else {
-        ANNOTATE_HAPPENS_BEFORE(&_raw->nref);
-        _raw = nullptr;
+	ANNOTATE_HAPPENS_BEFORE(&cached_raw->nref);
       }
     }
   }
@@ -995,12 +1003,12 @@ static ceph::spinlock debug_lock;
 
     const auto* other_buf = reinterpret_cast<const char*>(other);
     for (const auto& bp : buffers()) {
-      const auto round_length = std::min<size_t>(length, bp.length());
-      if (std::memcmp(bp.c_str(), other_buf, round_length) != 0) {
+      assert(bp.length() <= length);
+      if (std::memcmp(bp.c_str(), other_buf, bp.length()) != 0) {
         return false;
       } else {
-        length -= round_length;
-        other_buf += round_length;
+        length -= bp.length();
+        other_buf += bp.length();
       }
     }
 
@@ -1175,6 +1183,8 @@ static ceph::spinlock debug_lock;
     std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> nb)
   {
     unsigned pos = 0;
+    int mempool = _buffers.front().get_mempool();
+    nb->reassign_to_mempool(mempool);
     for (auto& node : _buffers) {
       nb->copy_in(pos, node.length(), node.c_str(), false);
       pos += node.length();
@@ -1270,24 +1280,13 @@ static ceph::spinlock debug_lock;
     }
   }
 
-  // sort-of-like-assignment-op
-  void buffer::list::claim(list& bl)
-  {
-    // free my buffers
-    clear();
-    claim_append(bl);
-  }
-
   void buffer::list::claim_append(list& bl)
   {
     // steal the other guy's buffers
     _len += bl._len;
     _num += bl._num;
     _buffers.splice_back(bl._buffers);
-    bl._carriage = &always_empty_bptr;
-    bl._buffers.clear_and_dispose();
-    bl._len = 0;
-    bl._num = 0;
+    bl.clear();
   }
 
   void buffer::list::claim_append_piecewise(list& bl)
@@ -1867,6 +1866,7 @@ static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen
   return 0;
 }
 
+#ifndef _WIN32
 int buffer::list::write_fd(int fd) const
 {
   // use writev!
@@ -1946,6 +1946,36 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   }
   return 0;
 }
+#else
+int buffer::list::write_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::write(fd, p->c_str(), p->length() - written);
+      if (r < 0)
+        return -errno;
+
+      written += r;
+    }
+  }
+
+  return 0;
+
+}
+int buffer::list::write_fd(int fd, uint64_t offset) const
+{
+  int r = ::lseek64(fd, offset, SEEK_SET);
+  if (r != offset)
+    return -errno;
+
+  return write_fd(fd);
+}
+#endif
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
@@ -2165,15 +2195,15 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
-  out << "buffer::list(len=" << bl.length() << "," << std::endl;
+  out << "buffer::list(len=" << bl.length() << ",\n";
 
   for (const auto& node : bl.buffers()) {
     out << "\t" << node;
     if (&node != &bl.buffers().back()) {
-      out << "," << std::endl;
+      out << ",\n";
     }
   }
-  out << std::endl << ")";
+  out << "\n)";
   return out;
 }
 

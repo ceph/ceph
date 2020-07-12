@@ -396,7 +396,7 @@ libcephfs_dev() {
 	pkgdesc="Ceph distributed file system client library headers"
 	depends="libcephfs librados-devel"
 
-	_pkg $_includedir/cephfs ceph_ll_client.h libcephfs.h
+	_pkg $_includedir/cephfs ceph_ll_client.h libcephfs.h metrics/Types.h
 	_pkg $_libdir libcephfs.so
 }
 

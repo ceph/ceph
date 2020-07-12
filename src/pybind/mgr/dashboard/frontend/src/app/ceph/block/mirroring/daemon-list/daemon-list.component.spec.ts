@@ -2,10 +2,6 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
-
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
@@ -17,14 +13,7 @@ describe('DaemonListComponent', () => {
 
   configureTestBed({
     declarations: [DaemonListComponent, MirrorHealthColorPipe],
-    imports: [
-      BrowserAnimationsModule,
-      SharedModule,
-      BsDropdownModule.forRoot(),
-      TabsModule.forRoot(),
-      ProgressbarModule.forRoot(),
-      HttpClientTestingModule
-    ],
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule],
     providers: i18nProviders
   });
 

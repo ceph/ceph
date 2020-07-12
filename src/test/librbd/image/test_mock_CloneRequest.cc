@@ -137,7 +137,7 @@ struct CreateRequest<MockTestImageCtx> {
                                cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               ContextWQ *op_work_queue,
+                               asio::ContextWQ *op_work_queue,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -162,7 +162,7 @@ struct RemoveRequest<MockTestImageCtx> {
                                const std::string &image_id,
                                bool force, bool from_trash_remove,
                                ProgressContext &prog_ctx,
-                               ContextWQ *op_work_queue,
+                               asio::ContextWQ *op_work_queue,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -237,8 +237,9 @@ public:
     ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "2"));
 
     ASSERT_EQ(0, open_image(m_image_name, &image_ctx));
+    NoOpProgressContext prog_ctx;
     ASSERT_EQ(0, image_ctx->operations->snap_create(
-                   cls::rbd::UserSnapshotNamespace{}, "snap"));
+                   cls::rbd::UserSnapshotNamespace{}, "snap", 0, prog_ctx));
     if (is_feature_enabled(RBD_FEATURE_LAYERING)) {
       ASSERT_EQ(0, image_ctx->operations->snap_protect(
                      cls::rbd::UserSnapshotNamespace{}, "snap"));

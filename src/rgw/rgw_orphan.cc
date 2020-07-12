@@ -1459,20 +1459,14 @@ int RGWRadosList::do_incomplete_multipart(
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
+  list_op.params.ns = mp_ns;
+  list_op.params.filter = &mp_filter;
+  // use empty string for initial list_op.params.marker
+  // use empty strings for list_op.params.{prefix,delim}
 
   bool is_listing_truncated;
-  std::string empty_string;
-  RGWMultipartUploadEntry next_uploads_marker;
 
   do {
-    RGWMPObj uploads_marker = next_uploads_marker.mp;
-    const std::string& marker_meta = uploads_marker.get_meta();
-    list_op.params.marker = marker_meta;
-    list_op.params.ns = mp_ns;
-    list_op.params.filter = &mp_filter;
-
-    // use empty strings for list_op.params.{prefix,delim}
-
     std::vector<rgw_bucket_dir_entry> objs;
     std::map<string, bool> common_prefixes;
     ret = list_op.list_objects(max_uploads, &objs, &common_prefixes,
@@ -1504,10 +1498,8 @@ int RGWRadosList::do_incomplete_multipart(
 	  " processing incomplete multipart entry " <<
 	  entry << dendl;
       }
-      next_uploads_marker = entry;
 
       // now process the uploads vector
-
       int parts_marker = 0;
       bool is_parts_truncated = false;
       do {
@@ -1540,7 +1532,7 @@ int RGWRadosList::do_incomplete_multipart(
 	}
       } while (is_parts_truncated);
     } // if objs not empty
-  } while(is_listing_truncated);
+  } while (is_listing_truncated);
 
   return 0;
 } // RGWRadosList::do_incomplete_multipart

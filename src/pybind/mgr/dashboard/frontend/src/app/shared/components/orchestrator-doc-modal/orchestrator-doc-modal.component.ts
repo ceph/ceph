@@ -1,21 +1,19 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-orchestrator-doc-modal',
   templateUrl: './orchestrator-doc-modal.component.html',
   styleUrls: ['./orchestrator-doc-modal.component.scss']
 })
-export class OrchestratorDocModalComponent implements OnInit {
+export class OrchestratorDocModalComponent {
   actionDescription: string;
   itemDescription: string;
 
-  constructor(public bsModalRef: BsModalRef) {}
-
-  ngOnInit() {}
+  constructor(public activeModal: NgbActiveModal) {}
 
   onSubmit() {
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
 }

@@ -2,16 +2,15 @@ import { Component, EventEmitter, OnInit, Type, ViewChild } from '@angular/core'
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsetComponent } from 'ngx-bootstrap/tabs';
-import { TooltipDirective } from 'ngx-bootstrap/tooltip';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
+import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
@@ -32,6 +31,7 @@ import { PoolFormInfo } from '../../../shared/models/pool-form-info';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
@@ -53,10 +53,10 @@ interface FormFieldDescription {
   styleUrls: ['./pool-form.component.scss']
 })
 export class PoolFormComponent extends CdForm implements OnInit {
-  @ViewChild('crushInfoTabs') crushInfoTabs: TabsetComponent;
-  @ViewChild('crushDeletionBtn') crushDeletionBtn: TooltipDirective;
-  @ViewChild('ecpInfoTabs') ecpInfoTabs: TabsetComponent;
-  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: TooltipDirective;
+  @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
+  @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
+  @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
+  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
 
   permission: Permission;
   form: CdFormGroup;
@@ -89,11 +89,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
-    private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     private crushRuleService: CrushRuleService,
@@ -334,12 +333,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('crushRule').valueChanges.subscribe((rule) => {
       // The crush rule can only be changed if type 'replicated' is set.
-      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen) {
-        this.crushDeletionBtn.hide();
+      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen()) {
+        this.crushDeletionBtn.close();
       }
       if (!rule) {
         return;
       }
+      this.setCorrectMaxSize(rule);
       this.crushRuleIsUsedBy(rule.rule_name);
       this.replicatedRuleChange();
       this.pgCalc();
@@ -350,8 +350,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('erasureProfile').valueChanges.subscribe((profile) => {
       // The ec profile can only be changed if type 'erasure' is set.
-      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen) {
-        this.ecpDeletionBtn.hide();
+      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen()) {
+        this.ecpDeletionBtn.close();
       }
       if (!profile) {
         return;
@@ -431,17 +431,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   getMaxSize(): number {
-    if (!this.info || this.info.osd_count < 1) {
+    const rule = this.form.getValue('crushRule');
+    if (!this.info) {
       return 0;
     }
-    const osds: number = this.info.osd_count;
-    if (this.form.getValue('crushRule')) {
-      const max: number = this.form.get('crushRule').value.max_size;
-      if (max < osds) {
-        return max;
-      }
+    if (!rule) {
+      const osds = this.info.osd_count;
+      const defaultSize = 3;
+      return Math.min(osds, defaultSize);
     }
-    return osds;
+    return rule.usable_size;
   }
 
   private pgCalc() {
@@ -460,6 +459,19 @@ export class PoolFormComponent extends CdForm implements OnInit {
     if (!this.externalPgChange) {
       this.externalPgChange = oldValue !== newValue;
     }
+  }
+
+  private setCorrectMaxSize(rule: CrushRule = this.form.getValue('crushRule')) {
+    if (!rule) {
+      return;
+    }
+    const domains = CrushNodeSelectionClass.searchFailureDomains(
+      this.info.nodes,
+      rule.steps[0].item_name
+    );
+    const currentDomain = domains[rule.steps[1].type];
+    const usable = currentDomain ? currentDomain.length : rule.max_size;
+    rule.usable_size = Math.min(usable, rule.max_size);
   }
 
   private replicatedPgCalc(pgs: number): number {
@@ -561,14 +573,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   private addModal(modalComponent: Type<any>, reload: (name: string) => void) {
     this.hideOpenTooltips();
-    const modalRef = this.bsModalService.show(modalComponent);
-    modalRef.content.submitAction.subscribe((item: any) => {
+    const modalRef = this.modalService.show(modalComponent);
+    modalRef.componentInstance.submitAction.subscribe((item: any) => {
       reload(item.name);
     });
   }
 
   private hideOpenTooltips() {
-    const hideTooltip = (btn: TooltipDirective) => btn && btn.isOpen && btn.hide();
+    const hideTooltip = (btn: NgbTooltip) => btn && btn.isOpen() && btn.close();
     hideTooltip(this.ecpDeletionBtn);
     hideTooltip(this.crushDeletionBtn);
   }
@@ -618,7 +630,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       deletionBtn: this.ecpDeletionBtn,
       dataName: 'erasureInfo',
       getTabs: () => this.ecpInfoTabs,
-      tabPosition: 1,
+      tabPosition: 'used-by-pools',
       nameAttribute: 'name',
       itemDescription: this.i18n('erasure code profile'),
       reloadFn: () => this.reloadECPs(),
@@ -642,10 +654,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }: {
     value: any;
     usage: string[];
-    deletionBtn: TooltipDirective;
+    deletionBtn: NgbTooltip;
     dataName: string;
-    getTabs: () => TabsetComponent;
-    tabPosition: number;
+    getTabs: () => NgbNav;
+    tabPosition: string;
     nameAttribute: string;
     itemDescription: string;
     reloadFn: Function;
@@ -661,24 +673,22 @@ export class PoolFormComponent extends CdForm implements OnInit {
       setTimeout(() => {
         const tabs = getTabs();
         if (tabs) {
-          tabs.tabs[tabPosition].active = true;
+          tabs.select(tabPosition);
         }
       }, 50);
       return;
     }
     const name = value[nameAttribute];
     this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription,
-        itemNames: [name],
-        submitActionObservable: () => {
-          const deletion = deleteFn(name);
-          deletion.subscribe(() => reloadFn());
-          return this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask(taskName, { name: name }),
-            call: deletion
-          });
-        }
+      itemDescription,
+      itemNames: [name],
+      submitActionObservable: () => {
+        const deletion = deleteFn(name);
+        deletion.subscribe(() => reloadFn());
+        return this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask(taskName, { name: name }),
+          call: deletion
+        });
       }
     });
   }
@@ -708,7 +718,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       deletionBtn: this.crushDeletionBtn,
       dataName: 'crushInfo',
       getTabs: () => this.crushInfoTabs,
-      tabPosition: 2,
+      tabPosition: 'used-by-pools',
       nameAttribute: 'rule_name',
       itemDescription: this.i18n('crush rule'),
       reloadFn: () => this.reloadCrushRules(),
@@ -894,16 +904,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
         }),
         call: this.poolService[this.editing ? URLVerbs.UPDATE : URLVerbs.CREATE](pool)
       })
-      .subscribe(
-        undefined,
-        (resp) => {
+      .subscribe({
+        error: (resp) => {
           if (_.isObject(resp.error) && resp.error.code === '34') {
             this.form.get('pgNum').setErrors({ '34': true });
           }
           this.form.setErrors({ cdSubmitButton: true });
         },
-        () => this.router.navigate(['/pool'])
-      );
+        complete: () => this.router.navigate(['/pool'])
+      });
   }
 
   appSelection() {

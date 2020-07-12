@@ -1391,6 +1391,26 @@ TEST(BufferList, append_bench) {
   }
 }
 
+TEST(BufferList, operator_assign_rvalue) {
+  bufferlist from;
+  {
+    bufferptr ptr(2);
+    from.append(ptr);
+  }
+  bufferlist to;
+  {
+    bufferptr ptr(4);
+    to.append(ptr);
+  }
+  EXPECT_EQ((unsigned)4, to.length());
+  EXPECT_EQ((unsigned)1, to.get_num_buffers());
+  to = std::move(from);
+  EXPECT_EQ((unsigned)2, to.length());
+  EXPECT_EQ((unsigned)1, to.get_num_buffers());
+  EXPECT_EQ((unsigned)0, from.get_num_buffers());
+  EXPECT_EQ((unsigned)0, from.length());
+}
+
 TEST(BufferList, operator_equal) {
   //
   // list& operator= (const list& other)
@@ -1867,26 +1887,6 @@ TEST(BufferList, rebuild_page_aligned) {
     EXPECT_TRUE(bl.is_page_aligned());
     EXPECT_EQ((unsigned)4, bl.get_num_buffers());
   }
-}
-
-TEST(BufferList, claim) {
-  bufferlist from;
-  {
-    bufferptr ptr(2);
-    from.append(ptr);
-  }
-  bufferlist to;
-  {
-    bufferptr ptr(4);
-    to.append(ptr);
-  }
-  EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.get_num_buffers());
-  to.claim(from);
-  EXPECT_EQ((unsigned)2, to.length());
-  EXPECT_EQ((unsigned)1, to.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.length());
 }
 
 TEST(BufferList, claim_append) {

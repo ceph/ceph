@@ -130,8 +130,14 @@ class Device(object):
                     self.sys_api = part
                     break
 
-        # start with lvm since it can use an absolute or relative path
-        lv = lvm.get_lv_from_argument(self.path)
+        # if the path is not absolute, we have 'vg/lv', let's use LV name
+        # to get the LV.
+        if self.path[0] == '/':
+            lv = lvm.get_first_lv(filters={'lv_path': self.path})
+        else:
+            vgname, lvname = self.path.split('/')
+            lv = lvm.get_first_lv(filters={'lv_name': lvname,
+                                           'vg_name': vgname})
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
@@ -246,7 +252,6 @@ class Device(object):
                     # actually unused (not 100% sure) and can simply be removed
                     self.vg_name = vgs[0]
                     self._is_lvm_member = True
-
                     self.lvs.extend(lvm.get_device_lvs(path))
         return self._is_lvm_member
 
@@ -338,16 +343,27 @@ class Device(object):
     def is_partition(self):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'part'
+        elif self.blkid_api:
+            return self.blkid_api['TYPE'] == 'part'
         return False
 
     @property
     def is_device(self):
+        api = None
         if self.disk_api:
-            is_device = self.disk_api['TYPE'] == 'device'
-            is_disk = self.disk_api['TYPE'] == 'disk'
+            api = self.disk_api
+        elif self.blkid_api:
+            api = self.blkid_api
+        if api:
+            is_device = api['TYPE'] == 'device'
+            is_disk = api['TYPE'] == 'disk'
             if is_device or is_disk:
                 return True
         return False
+
+    @property
+    def is_acceptable_device(self):
+        return self.is_device or self.is_partition
 
     @property
     def is_encrypted(self):
@@ -393,9 +409,12 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
-        # reject disks small than 5GB
-        if int(self.sys_api.get('size', 0)) < 5368709120:
-            rejected.append('Insufficient space (<5GB)')
+        if self.is_acceptable_device:
+            # reject disks smaller than 5GB
+            if int(self.sys_api.get('size', 0)) < 5368709120:
+                rejected.append('Insufficient space (<5GB)')
+        else:
+            rejected.append("Device type is not acceptable. It should be raw device or partition")
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
@@ -404,11 +423,11 @@ class Device(object):
 
     def _check_lvm_reject_reasons(self):
         rejected = []
-        available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
-        if self.vgs and not available_vgs:
-            rejected.append('Insufficient space (<5GB) on vgs')
-
-        if not self.vgs:
+        if self.vgs:
+            available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
+            if not available_vgs:
+                rejected.append('Insufficient space (<5GB) on vgs')
+        else:
             # only check generic if no vgs are present. Vgs might hold lvs and
             # that might cause 'locked' to trigger
             rejected.extend(self._check_generic_reject_reasons())

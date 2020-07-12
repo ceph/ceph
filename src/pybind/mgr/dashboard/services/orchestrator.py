@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 import logging
 
+from functools import wraps
 from typing import List, Optional
 
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
@@ -9,7 +10,6 @@ from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from orchestrator import HostSpec
 from .. import mgr
-from ..tools import wraps
 
 logger = logging.getLogger('orchestrator')
 
@@ -66,6 +66,14 @@ class HostManger(ResourceManager):
     def remove(self, hostname: str):
         return self.api.remove_host(hostname)
 
+    @wait_api_result
+    def add_label(self, host: str, label: str) -> Completion:
+        return self.api.add_host_label(host, label)
+
+    @wait_api_result
+    def remove_label(self, host: str, label: str) -> Completion:
+        return self.api.remove_host_label(host, label)
+
 
 class InventoryManager(ResourceManager):
     @wait_api_result
@@ -109,8 +117,8 @@ class OsdManager(ResourceManager):
         return self.api.apply_drivegroups(drive_group_specs)
 
     @wait_api_result
-    def remove(self, osd_ids):
-        return self.api.remove_osds(osd_ids)
+    def remove(self, osd_ids, replace=False, force=False):
+        return self.api.remove_osds(osd_ids, replace, force)
 
     @wait_api_result
     def removing_status(self):

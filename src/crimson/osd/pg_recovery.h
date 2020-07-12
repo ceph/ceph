@@ -22,7 +22,7 @@ public:
     crimson::osd::scheduler::scheduler_class_t klass);
 
   crimson::osd::blocking_future<bool> start_recovery_ops(size_t max_to_start);
-
+  seastar::future<> stop() { return seastar::now(); }
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
@@ -69,6 +69,7 @@ private:
   void _committed_pushed_object(epoch_t epoch,
 				eversion_t last_complete);
   friend class ReplicatedRecoveryBackend;
+  friend class crimson::osd::UrgentRecovery;
   seastar::future<> handle_pull(Ref<MOSDPGPull> m);
   seastar::future<> handle_push(Ref<MOSDPGPush> m);
   seastar::future<> handle_push_reply(Ref<MOSDPGPushReply> m);

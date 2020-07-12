@@ -33,6 +33,7 @@
 #include "include/mempool.h"
 
 #include "msg/msg_types.h"
+#include "include/compat.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
@@ -142,7 +143,7 @@ void dump(ceph::Formatter* f, const osd_alerts_t& alerts);
 
 typedef interval_set<
   snapid_t,
-  mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
+  mempool::osdmap::flat_map> snap_interval_set_t;
 
 
 /**
@@ -3765,8 +3766,7 @@ public:
     bl.reassign_to_mempool(mempool::mempool_osd_pglog);
   }
   void claim(ObjectModDesc &other) {
-    bl.clear();
-    bl.claim(other.bl);
+    bl = std::move(other.bl);
     can_local_rollback = other.can_local_rollback;
     rollback_info_completed = other.rollback_info_completed;
   }
@@ -4022,7 +4022,7 @@ struct OSDOp {
 	ceph::buffer::list bl;
 	bl.push_back(ceph::buffer::ptr_node::create(op.op.xattr.name_len));
 	bl.begin().copy_in(op.op.xattr.name_len, op.indata);
-	op.indata.claim(bl);
+	op.indata = std::move(bl);
       } else if (ceph_osd_op_type_exec(op.op.op) &&
 		 op.op.cls.class_len &&
 		 op.indata.length() >
@@ -4031,7 +4031,7 @@ struct OSDOp {
 	ceph::buffer::list bl;
 	bl.push_back(ceph::buffer::ptr_node::create(len));
 	bl.begin().copy_in(len, op.indata);
-	op.indata.claim(bl);
+	op.indata = std::move(bl);
       } else {
 	op.indata.clear();
       }

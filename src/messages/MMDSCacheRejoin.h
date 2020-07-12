@@ -16,18 +16,15 @@
 #define CEPH_MMDSCACHEREJOIN_H
 
 #include <string_view>
-
-#include "msg/Message.h"
-
 #include "include/types.h"
-
 #include "mds/CInode.h"
 #include "mds/CDir.h"
 #include "mds/mdstypes.h"
+#include "messages/MMDSOp.h"
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public SafeMessage {
+class MMDSCacheRejoin : public MMDSOp {
 public:
   static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
@@ -348,7 +345,7 @@ private:
   static constexpr int COMPAT_VERSION = 1;
 
   MMDSCacheRejoin(int o) : MMDSCacheRejoin() { op = o; }
-  MMDSCacheRejoin() : SafeMessage{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSCacheRejoin() : MMDSOp{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION} {}
   ~MMDSCacheRejoin() override {}
 };
 

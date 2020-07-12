@@ -4,13 +4,13 @@
 #include "librbd/image/DetachChildRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/trash/RemoveRequest.h"
 #include <string>
@@ -73,6 +73,9 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
                              m_parent_spec.pool_id,
                              m_parent_spec.pool_namespace, &m_parent_io_ctx);
   if (r < 0) {
+    if (r == -ENOENT) {
+      r = 0;
+    }
     finish(r);
     return;
   }
@@ -143,7 +146,7 @@ void DetachChildRequest<I>::handle_clone_v2_get_snapshot(int r) {
     }
   }
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     ldout(cct, 5) << "failed to retrieve snapshot: " << cpp_strerror(r)
                   << dendl;
   }

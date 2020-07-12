@@ -4,10 +4,10 @@
 #include "messages/MPing.h"
 #include "common/ceph_argparse.h"
 #include "crimson/auth/DummyAuth.h"
+#include "crimson/common/throttle.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/thread/Throttle.h"
 
 #include <seastar/core/alien.hh>
 #include <seastar/core/app-template.hh>
@@ -38,7 +38,7 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 };
 
 struct Server {
-  crimson::thread::Throttle byte_throttler;
+  crimson::common::Throttle byte_throttler;
   crimson::net::MessengerRef msgr;
   crimson::auth::DummyAuthClientServer dummy_auth;
   struct ServerDispatcher : crimson::net::Dispatcher {
@@ -64,7 +64,7 @@ struct Server {
 };
 
 struct Client {
-  crimson::thread::Throttle byte_throttler;
+  crimson::common::Throttle byte_throttler;
   crimson::net::MessengerRef msgr;
   crimson::auth::DummyAuthClientServer dummy_auth;
   struct ClientDispatcher : crimson::net::Dispatcher {
@@ -181,7 +181,9 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       server.msgr->set_auth_server(&server.dummy_auth);
       return server.msgr->bind(entity_addrvec_t{addr}
       ).then([&server] {
-        return server.msgr->start(&server.dispatcher);
+	auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+	chained_dispatchers->push_back(server.dispatcher);
+        return server.msgr->start(chained_dispatchers);
       }).then([&dispatcher=server.dispatcher, count] {
         return dispatcher.on_reply.wait([&dispatcher, count] {
           return dispatcher.count >= count;
@@ -203,7 +205,9 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       client.msgr->set_require_authorizer(false);
       client.msgr->set_auth_client(&client.dummy_auth);
       client.msgr->set_auth_server(&client.dummy_auth);
-      return client.msgr->start(&client.dispatcher).then(
+      auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+      chained_dispatchers->push_back(client.dispatcher);
+      return client.msgr->start(chained_dispatchers).then(
           [addr, &client, &disp=client.dispatcher, count] {
         auto conn = client.msgr->connect(addr, entity_name_t::TYPE_OSD);
         return seastar::do_until(

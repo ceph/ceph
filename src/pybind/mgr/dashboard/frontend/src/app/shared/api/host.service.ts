@@ -8,10 +8,9 @@ import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class HostService {
   baseURL = 'api/host';
@@ -42,5 +41,13 @@ export class HostService {
 
   getDaemons(hostname: string): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/${hostname}/daemons`);
+  }
+
+  getLabels(): Observable<string[]> {
+    return this.http.get<string[]>('ui-api/host/labels');
+  }
+
+  update(hostname: string, labels: string[]) {
+    return this.http.put(`${this.baseURL}/${hostname}`, { labels: labels });
   }
 }

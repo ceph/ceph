@@ -116,6 +116,7 @@ private:
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
   };
   std::unordered_map<std::string, prefix_shards> cf_handles;
+  std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
 
   void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
 			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
@@ -260,50 +261,7 @@ public:
 
   int64_t estimate_prefix_size(const std::string& prefix,
 			       const std::string& key_prefix) override;
-
-  struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
-    std::string seen ;
-    int num_seen = 0;
-    void Put(const rocksdb::Slice& key,
-                    const rocksdb::Slice& value) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nPut( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) 
-            + " Value size = " + std::to_string(size) + ")";
-      num_seen++;
-    }
-    void SingleDelete(const rocksdb::Slice& key) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      seen += "\nSingleDelete(Prefix = "+ prefix + " Key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-      num_seen++;
-    }
-    void Delete(const rocksdb::Slice& key) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      seen += "\nDelete( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-
-      num_seen++;
-    }
-    void Merge(const rocksdb::Slice& key,
-                      const rocksdb::Slice& value) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nMerge( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + " Value size = " 
-            + std::to_string(size) + ")";
-
-      num_seen++;
-    }
-    bool Continue() override { return num_seen < 50; }
-
-  };
-
+  struct RocksWBHandler;
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;
@@ -519,6 +477,25 @@ err:
   WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 private:
   WholeSpaceIterator get_default_cf_iterator();
+
+  using cf_deleter_t = std::function<void(rocksdb::ColumnFamilyHandle*)>;
+  using columns_t = std::map<std::string,
+			     std::unique_ptr<rocksdb::ColumnFamilyHandle,
+					     cf_deleter_t>>;
+  int prepare_for_reshard(const std::string& new_sharding,
+			  columns_t& to_process_columns);
+  int reshard_cleanup(const columns_t& current_columns);
+public:
+  struct resharding_ctrl {
+    size_t bytes_per_iterator = 10000000; /// amount of data to process before refreshing iterator
+    size_t keys_per_iterator =  10000;
+    size_t bytes_per_batch =    1000000;  /// amount of data before submitting batch
+    size_t keys_per_batch =     1000;
+    bool   unittest_fail_after_first_batch = false;
+    bool   unittest_fail_after_processing_column = false;
+    bool   unittest_fail_after_successful_processing = false;
+  };
+  int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
 };
 
 #endif

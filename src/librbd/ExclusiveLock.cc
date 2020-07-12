@@ -11,6 +11,7 @@
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
 

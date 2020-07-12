@@ -14,12 +14,10 @@ import json
 import logging
 import time
 import datetime
-from six.moves import queue
-
 import sys
-import six
 
 from io import BytesIO
+from queue import Queue
 
 import boto.exception
 import boto.s3.connection
@@ -196,7 +194,7 @@ def ignore_this_entry(cat, bucket, user, out, b_in, err):
     pass
 class requestlog_queue():
     def __init__(self, add):
-        self.q = queue.Queue(1000)
+        self.q = Queue(1000)
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()
@@ -215,7 +213,7 @@ class requestlog_queue():
             if 'Content-Length' in j['o'].headers:
                 bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
-            msg = j['i'].msg if six.PY3 else j['i'].msg.dict
+            msg = j['i'].msg
             if 'content-length'in msg:
                 bytes_in = int(msg['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
@@ -245,7 +243,7 @@ def get_acl(key):
     Helper function to get the xml acl from a key, ensuring that the xml
     version tag is removed from the acl response
     """
-    raw_acl = six.ensure_str(key.get_xml_acl())
+    raw_acl = key.get_xml_acl().decode()
 
     def remove_version(string):
         return string.split(
@@ -800,7 +798,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', six.ensure_str(key.key)],
+        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -813,7 +811,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', six.ensure_str(key.key)],
+        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -1040,7 +1038,7 @@ def task(ctx, config):
     out['placement_pools'].append(rule)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'set'],
-        stdin=BytesIO(six.ensure_binary(json.dumps(out))),
+        stdin=BytesIO(json.dumps(out).encode()),
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'get'])

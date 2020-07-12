@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ModalComponent } from './modal.component';
@@ -10,7 +10,6 @@ describe('ModalComponent', () => {
   let fixture: ComponentFixture<ModalComponent>;
 
   configureTestBed({
-    imports: [ModalModule.forRoot()],
     declarations: [ModalComponent]
   });
 
@@ -34,9 +33,9 @@ describe('ModalComponent', () => {
   });
 
   it('should hide the modal', () => {
-    component.modalRef = new BsModalRef();
-    spyOn(component.modalRef, 'hide');
+    component.modalRef = new NgbActiveModal();
+    spyOn(component.modalRef, 'close');
     component.close();
-    expect(component.modalRef.hide).toHaveBeenCalled();
+    expect(component.modalRef.close).toHaveBeenCalled();
   });
 });

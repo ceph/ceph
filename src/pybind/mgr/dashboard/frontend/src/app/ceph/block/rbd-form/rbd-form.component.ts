@@ -4,7 +4,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-
 import { forkJoin, Observable, ReplaySubject } from 'rxjs';
 import { first, switchMap } from 'rxjs/operators';
 
@@ -26,6 +25,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../../pool/pool';
+import { RBDImageFormat, RbdModel } from '../rbd-list/rbd-model';
 import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
 import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
@@ -200,6 +200,15 @@ export class RbdFormComponent extends CdForm implements OnInit {
     this.rbdForm.get('obj_size').disable();
     this.rbdForm.get('stripingUnit').disable();
     this.rbdForm.get('stripingCount').disable();
+
+    /* RBD Image Format v1 */
+    this.rbdImage.subscribe((image: RbdModel) => {
+      if (image.image_format === RBDImageFormat.V1) {
+        this.rbdForm.get('deep-flatten').disable();
+        this.rbdForm.get('layering').disable();
+        this.rbdForm.get('exclusive-lock').disable();
+      }
+    });
   }
 
   disableForClone() {
@@ -718,7 +727,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
         })
       )
       .subscribe(
-        () => {},
+        () => undefined,
         () => this.rbdForm.setErrors({ cdSubmitButton: true }),
         () => this.router.navigate(['/block/rbd'])
       );

@@ -3,14 +3,15 @@ import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CdTableColumnFilter } from '../../models/cd-table-column-filter';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
+import { CdTableSelection } from '../../models/cd-table-selection';
 import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from './table.component';
 
@@ -42,7 +43,7 @@ describe('TableComponent', () => {
       FormsModule,
       ComponentsModule,
       RouterTestingModule,
-      BsDropdownModule.forRoot(),
+      NgbDropdownModule,
       PipesModule
     ]
   });
@@ -52,7 +53,7 @@ describe('TableComponent', () => {
     component = fixture.componentInstance;
 
     component.data = createFakeData(10);
-    component.columns = [
+    component.localColumns = component.columns = [
       { prop: 'a', name: 'Index', filterable: true },
       { prop: 'b', name: 'Index times ten' },
       { prop: 'c', name: 'Odd?', filterable: true }
@@ -102,6 +103,16 @@ describe('TableComponent', () => {
       expect(eventName).toBe('mouseenter');
       expect(wasCalled).toBe(true);
       done();
+    });
+    component.ngOnInit();
+  });
+
+  it('should call updateSelection on init', () => {
+    component.updateSelection.subscribe((selection: CdTableSelection) => {
+      expect(selection.hasSelection).toBeFalsy();
+      expect(selection.hasSingleSelection).toBeFalsy();
+      expect(selection.hasMultiSelection).toBeFalsy();
+      expect(selection.selected.length).toBe(0);
     });
     component.ngOnInit();
   });
@@ -295,7 +306,7 @@ describe('TableComponent', () => {
 
       beforeEach(() => {
         component.data = [testObject];
-        component.columns = [{ prop: 'obj', name: 'Object' }];
+        component.localColumns = [{ prop: 'obj', name: 'Object' }];
       });
 
       it('should not search through objects as default case', () => {
@@ -366,7 +377,7 @@ describe('TableComponent', () => {
     });
 
     it('should search through arrays', () => {
-      component.columns = [
+      component.localColumns = [
         { prop: 'a', name: 'Index' },
         { prop: 'b', name: 'ArrayColumn' }
       ];
@@ -436,10 +447,8 @@ describe('TableComponent', () => {
   describe('after ngInit', () => {
     const toggleColumn = (prop: string, checked: boolean) => {
       component.toggleColumn({
-        target: {
-          name: prop,
-          checked: checked
-        }
+        prop: prop,
+        isHidden: checked
       });
     };
 
@@ -454,15 +463,15 @@ describe('TableComponent', () => {
     });
 
     it('should have updated the column definitions', () => {
-      expect(component.columns[0].flexGrow).toBe(1);
-      expect(component.columns[1].flexGrow).toBe(2);
-      expect(component.columns[2].flexGrow).toBe(2);
-      expect(component.columns[2].resizeable).toBe(false);
+      expect(component.localColumns[0].flexGrow).toBe(1);
+      expect(component.localColumns[1].flexGrow).toBe(2);
+      expect(component.localColumns[2].flexGrow).toBe(2);
+      expect(component.localColumns[2].resizeable).toBe(false);
     });
 
     it('should have table columns', () => {
       expect(component.tableColumns.length).toBe(3);
-      expect(component.tableColumns).toEqual(component.columns);
+      expect(component.tableColumns).toEqual(component.localColumns);
     });
 
     it('should have a unique identifier which it searches for', () => {

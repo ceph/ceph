@@ -5,9 +5,9 @@
 #include "include/Context.h"
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatch.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include <boost/variant.hpp>

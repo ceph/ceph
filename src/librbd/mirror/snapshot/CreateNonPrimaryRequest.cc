@@ -194,7 +194,7 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
   auto ctx = create_context_callback<
     CreateNonPrimaryRequest<I>,
     &CreateNonPrimaryRequest<I>::handle_create_snapshot>(this);
-  m_image_ctx->operations->snap_create(ns, m_snap_name, ctx);
+  m_image_ctx->operations->snap_create(ns, m_snap_name, 0, m_prog_ctx, ctx);
 }
 
 template <typename I>

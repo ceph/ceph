@@ -50,8 +50,12 @@ class Transaction {
   }
 
   void add_to_retired_set(CachedExtentRef ref) {
-    ceph_assert(retired_set.count(ref->get_paddr()) == 0);
-    retired_set.insert(ref);
+    if (!ref->is_initial_pending()) {
+      // && retired_set.count(ref->get_paddr()) == 0
+      // If it's already in the set, insert here will be a noop,
+      // which is what we want.
+      retired_set.insert(ref);
+    }
   }
 
   void add_to_read_set(CachedExtentRef ref) {
@@ -61,7 +65,7 @@ class Transaction {
 
   void add_fresh_extent(CachedExtentRef ref) {
     fresh_block_list.push_back(ref);
-    ref->set_paddr(make_relative_paddr(offset));
+    ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     write_set.insert(*ref);
   }
@@ -138,7 +142,7 @@ using TransactionRef = std::unique_ptr<Transaction>;
  */
 class Cache {
 public:
-  Cache(SegmentManager &segment_manager) : segment_manager(segment_manager) {}
+  Cache(SegmentManager &segment_manager);
   ~Cache();
 
   TransactionRef get_transaction() {
@@ -187,12 +191,18 @@ public:
       ref->set_io_wait();
       ref->set_paddr(offset);
       ref->state = CachedExtent::extent_state_t::CLEAN;
+
+      /* TODO: crc should be checked against LBA manager */
+      ref->last_committed_crc = ref->get_crc32c();
+
       return segment_manager.read(
 	offset,
 	length,
 	ref->get_bptr()).safe_then(
-	  [ref=std::move(ref)]() mutable {
+	  [this, ref=std::move(ref)]() mutable {
+	    ref->on_clean_read();
 	    ref->complete_io();
+	    add_extent(ref);
 	    return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	      std::move(ref));
 	  },
@@ -220,7 +230,7 @@ public:
 	TCachedExtentRef<T>(static_cast<T*>(&*i)));
     } else {
       return get_extent<T>(offset, length).safe_then(
-	[this, &t](auto ref) mutable {
+	[&t](auto ref) mutable {
 	  t.add_to_read_set(ref);
 	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(std::move(ref));
 	});
@@ -316,6 +326,11 @@ public:
   );
 
   /**
+   * init
+   */
+  void init();
+
+  /**
    * mkfs
    *
    * Alloc initial root node and add to t.  The intention is for other
@@ -328,7 +343,7 @@ public:
   /**
    * close
    *
-   * TODO: currently a noop -- probably should be used to flush dirty blocks
+   * TODO: should flush dirty blocks
    */
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
@@ -340,8 +355,6 @@ public:
    * Intended for use in Journal::delta. For each delta, should decode delta,
    * read relevant block from disk or cache (using correct type), and call
    * CachedExtent::apply_delta marking the extent dirty.
-   *
-   * TODO: currently only handles the ROOT_LOCATION delta.
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
@@ -375,8 +388,23 @@ private:
   /// Add extent to extents handling dirty and refcounting
   void add_extent(CachedExtentRef ref);
 
+  /// Mark exising extent ref dirty -- mainly for replay
+  void mark_dirty(CachedExtentRef ref);
+
   /// Remove extent from extents handling dirty and refcounting
   void retire_extent(CachedExtentRef ref);
+
+  /**
+   * get_extent_by_type
+   *
+   * Based on type, instantiate the correct concrete type
+   * and read in the extent at location offset~length.
+   */
+  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+    extent_types_t type,  ///< [in] type tag
+    paddr_t offset,       ///< [in] starting addr
+    segment_off_t length  ///< [in] length
+  );
 };
 
 }

@@ -127,16 +127,17 @@
           </label>
           <div class="cd-col-form-input">
             <div class="input-group">
-              <input type="text"
-                     class="form-control"
+              <input class="form-control"
                      i18n-placeholder
                      placeholder="Password expiration date..."
-                     [bsConfig]="bsConfig"
-                     [minDate]="minDate"
-                     bsDatepicker
                      id="pwdExpirationDate"
                      name="pwdExpirationDate"
-                     formControlName="pwdExpirationDate">
+                     formControlName="pwdExpirationDate"
+                     [ngbPopover]="popContent"
+                     triggers="manual"
+                     #p="ngbPopover"
+                     (click)="p.open()"
+                     (keypress)="p.close()">
               <span class="input-group-append">
                 <button type="button"
                         class="btn btn-light"
@@ -252,4 +253,9 @@
   <p i18n>If you continue, you will no longer be able to add or remove roles from any user.</p>
 
   <ng-container i18n>Are you sure you want to continue?</ng-container>
+</ng-template>
+
+<ng-template #popContent>
+  <cd-date-time-picker [control]="userForm.get('pwdExpirationDate')"
+                       [hasTime]="false"></cd-date-time-picker>
 </ng-template>

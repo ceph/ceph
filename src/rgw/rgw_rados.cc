@@ -43,6 +43,7 @@
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
+#include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
@@ -1482,8 +1483,7 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
     } catch (buffer::error& err) {
       return -EINVAL;
     }
-    state->bl.clear();
-    state->bl.claim(old);
+    state->bl = std::move(old);
     state->bl.claim_append(more);
     state->p = state->bl.cbegin();
     if ((unsigned)r < chunk)
@@ -3243,14 +3243,17 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw_obj obj;
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
+  boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
+  boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
-  bufferlist extra_data_bl;
+  bufferlist extra_data_bl, manifest_bl;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
+  SourceObjType obj_type{OBJ_TYPE_UNINIT};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -3284,10 +3287,15 @@ public:
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
-      src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+      /* We need the manifest to recompute the ETag for verification */
+      auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+      if (iter != src_attrs.end()) {
+        manifest_bl = std::move(iter->second);
+        src_attrs.erase(iter);
+      }
 
       // filter out olh attributes
-      auto iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
+      iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
       while (iter != src_attrs.end()) {
         if (!boost::algorithm::starts_with(iter->first, RGW_ATTR_OLH_PREFIX)) {
           break;
@@ -3310,6 +3318,57 @@ public:
       constexpr unsigned buffer_size = 512 * 1024;
       buffering = boost::in_place(&*compressor, buffer_size);
       filter = &*buffering;
+    }
+
+    /*
+     * Presently we don't support ETag based verification if encryption is
+     * requested. We can enable simultaneous support once we have a mechanism
+     * to know the sequence in which the filters must be applied.
+     */
+    if (cct->_conf->rgw_sync_obj_etag_verify &&
+        src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+
+      RGWObjManifest manifest;
+
+      auto miter = manifest_bl.cbegin();
+      try {
+        decode(manifest, miter);
+      } catch (buffer::error& err) {
+        ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+        return -EIO;
+      }
+
+      RGWObjManifestRule rule;
+      bool found = manifest.get_rule(0, &rule);
+      if (!found) {
+        lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
+        return -EIO;
+      }
+
+      if (rule.part_size == 0) {
+        /* Atomic object */
+        obj_type = OBJ_TYPE_ATOMIC;
+        etag_verifier_atomic = boost::in_place(cct, filter);
+        filter = &*etag_verifier_atomic;
+      } else {
+        obj_type = OBJ_TYPE_MPU;
+        etag_verifier_mpu = boost::in_place(cct, filter);
+        uint64_t cur_part_ofs = UINT64_MAX;
+
+        /*
+         * We must store the offset of each part to calculate the ETAGs for each
+         * MPU part. These part ETags then become the input for the MPU object
+         * Etag.
+         */
+        for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+          if (cur_part_ofs == mi.get_part_ofs())
+            continue;
+          cur_part_ofs = mi.get_part_ofs();
+          ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
+          etag_verifier_mpu->append_part_ofs(cur_part_ofs);
+        }
+        filter = &*etag_verifier_mpu;
+      }
     }
 
     need_to_process_attrs = false;
@@ -3377,6 +3436,22 @@ public:
 
   uint64_t get_data_len() {
     return data_len;
+  }
+
+  string get_calculated_etag() {
+    if (obj_type == OBJ_TYPE_ATOMIC) {
+      etag_verifier_atomic->calculate_etag();
+      return etag_verifier_atomic->get_calculated_etag();
+    } else if (obj_type == OBJ_TYPE_MPU) {
+      etag_verifier_mpu->calculate_etag();
+      return etag_verifier_mpu->get_calculated_etag();
+    } else {
+      return "";
+    }
+  }
+
+  SourceObjType get_obj_type() {
+    return obj_type;
   }
 };
 
@@ -3932,6 +4007,22 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     set_mtime_weight.init(set_mtime, svc.zone->get_zone_short_id(), pg_ver);
   }
 
+  /* Perform ETag verification is we have computed the object's MD5 sum at our end */
+  if (cb.get_obj_type() != OBJ_TYPE_UNINIT) {
+    string trimmed_etag = etag;
+
+    /* Remove the leading and trailing double quotes from etag */
+    trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
+      trimmed_etag.end());
+
+    if (cb.get_calculated_etag().compare(trimmed_etag)) {
+      ret = -EIO;
+      ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
+        << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+      goto set_err_state;
+    }
+  }
+
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
@@ -3941,6 +4032,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (ret < 0) {
       goto set_err_state;
     }
+
     if (copy_if_newer && canceled) {
       ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.invalidate(dest_obj); /* object was overwritten */
@@ -5253,7 +5345,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
     if (bletag.length() > 0 && bletag[bletag.length() - 1] == '\0') {
       bufferlist newbl;
       bletag.splice(0, bletag.length() - 1, &newbl);
-      bletag.claim(newbl);
+      bletag = std::move(newbl);
     }
   }
 

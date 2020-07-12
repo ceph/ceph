@@ -15,6 +15,7 @@
 #include "os/Transaction.h"
 #include "common/Clock.h"
 
+#include "crimson/common/exception.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/osd_operation.h"
@@ -64,6 +65,10 @@ PGBackend::PGBackend(shard_id_t shard,
 PGBackend::load_metadata_ertr::future<PGBackend::loaded_object_md_t::ref>
 PGBackend::load_metadata(const hobject_t& oid)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   return store->get_attrs(
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, shard}).safe_then(
@@ -124,6 +129,9 @@ PGBackend::mutate_object(
   epoch_t map_epoch,
   std::vector<pg_log_entry_t>&& log_entries)
 {
+  if (__builtin_expect((bool)peering, false)) {
+    throw crimson::common::actingset_changed(peering->is_primary);
+  }
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (obc->obs.exists) {
 #if 0
@@ -377,6 +385,10 @@ seastar::future<> PGBackend::remove(ObjectState& os,
 seastar::future<std::tuple<std::vector<hobject_t>, hobject_t>>
 PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
   return store->list_objects(coll,
                              gstart,
@@ -465,6 +477,10 @@ PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   return store->get_attr(coll, ghobject_t{soid}, key);
 }
 
@@ -499,16 +515,31 @@ maybe_get_omap_vals(
 }
 
 seastar::future<ceph::bufferlist> PGBackend::omap_get_header(
-  crimson::os::CollectionRef& c,
-  const ghobject_t& oid)
+  const crimson::os::CollectionRef& c,
+  const ghobject_t& oid) const
 {
   return store->omap_get_header(c, oid);
+}
+
+seastar::future<> PGBackend::omap_get_header(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  return omap_get_header(coll, ghobject_t{os.oi.soid}).then(
+    [&osd_op] (ceph::bufferlist&& header) {
+      osd_op.outdata = std::move(header);
+      return seastar::now();
+    });
 }
 
 seastar::future<> PGBackend::omap_get_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   std::string start_after;
   uint64_t max_return;
   try {
@@ -551,6 +582,10 @@ seastar::future<> PGBackend::omap_get_vals(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   std::string start_after;
   uint64_t max_return;
   std::string filter_prefix;
@@ -580,13 +615,14 @@ seastar::future<> PGBackend::omap_get_vals(
         const auto& [key, value] = *iter;
         if (key.substr(0, filter_prefix.size()) != filter_prefix) {
           break;
-        } else if (num++ >= max_return ||
+        } else if (num >= max_return ||
             result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
           truncated = true;
           break;
         }
         encode(key, result);
         encode(value, result);
+        ++num;
       }
       encode(num, osd_op.outdata);
       osd_op.outdata.claim_append(result);
@@ -602,6 +638,10 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   std::set<std::string> keys_to_get;
   try {
     auto p = osd_op.indata.cbegin();
@@ -651,6 +691,41 @@ seastar::future<> PGBackend::omap_set_vals(
   return seastar::now();
 }
 
+seastar::future<> PGBackend::omap_set_header(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  maybe_create_new_object(os, txn);
+  txn.omap_setheader(coll->get_cid(), ghobject_t{os.oi.soid}, osd_op.indata);
+  //TODO:
+  //ctx->clean_regions.mark_omap_dirty();
+  //ctx->delta_stats.num_wr++;
+  os.oi.set_flag(object_info_t::FLAG_OMAP);
+  os.oi.clear_omap_digest();
+  return seastar::now();
+}
+
+seastar::future<> PGBackend::omap_remove_range(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  std::string key_begin, key_end;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode(key_begin, p);
+    decode(key_end, p);
+  } catch (buffer::error& e) {
+    throw crimson::osd::invalid_argument{};
+  }
+  txn.omap_rmkeyrange(coll->get_cid(), ghobject_t{os.oi.soid}, key_begin, key_end);
+  //TODO:
+  //ctx->delta_stats.num_wr++;
+  os.oi.clear_omap_digest();
+  return seastar::now();
+}
+
 seastar::future<struct stat> PGBackend::stat(
   CollectionRef c,
   const ghobject_t& oid) const
@@ -666,5 +741,9 @@ PGBackend::fiemap(
   uint64_t len)
 {
   return store->fiemap(c, oid, off, len);
+}
+
+void PGBackend::on_activate_complete() {
+  peering.reset();
 }
 

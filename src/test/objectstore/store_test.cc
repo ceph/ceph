@@ -7597,106 +7597,6 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
-  if (string(GetParam()) != "bluestore")
-    return;
-
-  SetVal(g_conf(), "bluestore_block_size",
-    stringify((uint64_t)2048 * 1024 * 1024).c_str());
-
-  ASSERT_EQ(g_conf().get_val<Option::size_t>("bluefs_alloc_size"),
-	    1024 * 1024U);
-
-  size_t block_size = 0x10000;
-  StartDeferred(block_size);
-
-  int r;
-  coll_t cid;
-  ghobject_t hoid1(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
-  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
-  auto ch = store->create_new_collection(cid);
-
-  {
-    ObjectStore::Transaction t;
-    t.create_collection(cid, 0);
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-  {
-    // create 2x400MB objects in a way that their pextents are interleaved
-    ObjectStore::Transaction t;
-    bufferlist bl;
-
-    bl.append(std::string(block_size * 4, 'a')); // 256KB
-    uint64_t offs = 0;
-    while(offs < (uint64_t)400 * 1024 * 1024) {
-      t.write(cid, hoid1, offs, bl.length(), bl, 0);
-      t.write(cid, hoid2, offs, bl.length(), bl, 0);
-      r = queue_transaction(store, ch, std::move(t));
-      ASSERT_EQ(r, 0);
-      offs += bl.length();
-      if( (offs % (100 * 1024 * 1024)) == 0) {
-       std::cout<<"written " << offs << std::endl;
-      }
-    }
-  }
-  std::cout<<"written 800MB"<<std::endl;
-  {
-    // Partially overwrite objects with 100MB each leaving space
-    // fragmented and occuping still unfragmented space at the end
-    // So we'll have enough free space but it'll lack long enough (e.g. 1MB)
-    // contiguous pextents.
-    ObjectStore::Transaction t;
-    bufferlist bl;
-
-    bl.append(std::string(block_size * 4, 'a'));
-    uint64_t offs = 0;
-    while(offs < 112 * 1024 * 1024) {
-      t.write(cid, hoid1, offs, bl.length(), bl, 0);
-      t.write(cid, hoid2, offs, bl.length(), bl, 0);
-      r = queue_transaction(store, ch, std::move(t));
-      ASSERT_EQ(r, 0);
-      // this will produce high fragmentation if original allocations
-      // were contiguous
-      offs += bl.length();
-      if( (offs % (10 * 1024 * 1024)) == 0) {
-       std::cout<<"written " << offs << std::endl;
-      }
-    }
-  }
-  {
-    // remove one of the object producing much free space
-    // and hence triggering bluefs rebalance.
-    // Which should fail as there is no long enough pextents.
-    ObjectStore::Transaction t;
-    t.remove(cid, hoid2);
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-
-  auto to_sleep = 5 *
-    (int)g_conf().get_val<double>("bluestore_bluefs_balance_interval");
-  std::cout<<"sleeping... " << std::endl;
-  sleep(to_sleep);
-
-  {
-    // touch another object to triggerrebalance
-    ObjectStore::Transaction t;
-    t.touch(cid, hoid1);
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-  {
-    ObjectStore::Transaction t;
-    t.remove(cid, hoid1);
-    t.remove(cid, hoid2);
-    t.remove_collection(cid);
-    cerr << "Cleaning" << std::endl;
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-}
-
 #endif //#if defined(WITH_BLUESTORE)
 
 TEST_P(StoreTest, KVDBHistogramTest) {
@@ -8465,6 +8365,7 @@ TEST_P(StoreTest, SpuriousReadErrorTest) {
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
   }
+  ch = store->open_collection(cid);
 
   cerr << "Injecting CRC error with no retry, expecting EIO" << std::endl;
   SetVal(g_conf(), "bluestore_retry_disk_reads", "0");
@@ -8771,6 +8672,7 @@ void doManySetAttr(ObjectStore* store,
   test_obj.wait_for_done();
 
   std::cout << "done" << std::endl;
+  do_check_fn(store);
   AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
   ceph_assert(admin_socket);
 
@@ -8785,7 +8687,6 @@ void doManySetAttr(ObjectStore* store,
   } else {
     std::cout << std::string(out.c_str(), out.length()) << std::endl;
   }
-  do_check_fn(store);
   test_obj.shutdown();
 }
 
@@ -8805,6 +8706,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
 
       BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
       ceph_assert(bstore);
+      bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       //experimentally it was discovered that this case results in 400+MB spillover
       //using lower 300MB threshold just to be safe enough
@@ -8833,6 +8735,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
 
       BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
       ceph_assert(bstore);
+      bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       ASSERT_EQ(0, logger->get(l_bluefs_slow_used_bytes));
     }
@@ -8858,6 +8761,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
 
       BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
       ceph_assert(bstore);
+      bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       ASSERT_LE(logger->get(l_bluefs_slow_used_bytes), 300 * 1024 * 1024); // see SpilloverTest for 300MB choice rationale
     }

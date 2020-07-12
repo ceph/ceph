@@ -65,6 +65,7 @@ public:
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
+    static const int STATE_EPHEMERAL_RANDOM = (1<<4);
     std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
@@ -111,6 +112,7 @@ public:
     bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
     bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
     bool need_snapflush() const { return (state & STATE_NEED_SNAPFLUSH); }
+    bool is_export_ephemeral_random() const { return (state & STATE_EPHEMERAL_RANDOM); }
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
@@ -445,6 +447,10 @@ private:
   void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, __u8 state) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
+
+    if (in->is_ephemeral_rand()) {
+      state |= fullbit::STATE_EPHEMERAL_RANDOM;
+    }
 
     // make note of where this inode was last journaled
     in->last_journaled = event_seq;

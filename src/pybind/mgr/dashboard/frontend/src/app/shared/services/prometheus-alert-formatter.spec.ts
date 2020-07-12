@@ -1,8 +1,8 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import {
   configureTestBed,
   i18nProviders,
@@ -27,8 +27,8 @@ describe('PrometheusAlertFormatter', () => {
 
   beforeEach(() => {
     prometheus = new PrometheusHelper();
-    service = TestBed.get(PrometheusAlertFormatter);
-    notificationService = TestBed.get(NotificationService);
+    service = TestBed.inject(PrometheusAlertFormatter);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
   });
 

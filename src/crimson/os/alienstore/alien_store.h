@@ -10,9 +10,9 @@
 #include "os/ObjectStore.h"
 #include "osd/osd_types.h"
 
+#include "crimson/os/alienstore/thread_pool.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
-#include "crimson/thread/ThreadPool.h"
 
 namespace ceph::os {
 class Transaction;
@@ -38,7 +38,6 @@ public:
     ObjectMap::ObjectMapIterator iter;
     AlienStore* store;
   };
-  mutable std::unique_ptr<crimson::thread::ThreadPool> tp;
   AlienStore(const std::string& path, const ConfigValues& values);
   ~AlienStore() final;
 
@@ -111,8 +110,11 @@ public:
   seastar::future<FuturizedStore::OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) final;
+
+  static void configure_thread_memory();
 private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
+  mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string path;
   uint64_t used_bytes = 0;
   uuid_d osd_fsid;

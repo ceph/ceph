@@ -4,8 +4,8 @@ import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as moment from 'moment';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -17,6 +17,7 @@ import {
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
+import { Summary } from '../../../shared/models/summary.model';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -36,7 +37,7 @@ describe('RbdTrashListComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       ToastrModule.forRoot()
     ],
     providers: [TaskListService, i18nProviders]
@@ -45,8 +46,8 @@ describe('RbdTrashListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdTrashListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    rbdService = TestBed.get(RbdService);
+    summaryService = TestBed.inject(SummaryService);
+    rbdService = TestBed.inject(RbdService);
     fixture.detectChanges();
   });
 
@@ -57,7 +58,7 @@ describe('RbdTrashListComponent', () => {
   it('should load trash images when summary is trigged', () => {
     spyOn(rbdService, 'listTrash').and.callThrough();
 
-    summaryService['summaryDataSource'].next({ executingTasks: null });
+    summaryService['summaryDataSource'].next(new Summary());
     expect(rbdService.listTrash).toHaveBeenCalled();
   });
 
@@ -91,7 +92,7 @@ describe('RbdTrashListComponent', () => {
       addImage('1');
       addImage('2');
       component.images = images;
-      summaryService['summaryDataSource'].next({ executingTasks: [] });
+      summaryService['summaryDataSource'].next(new Summary());
       spyOn(rbdService, 'listTrash').and.callFake(() =>
         of([{ pool_name: 'rbd', status: 1, value: images }])
       );
@@ -125,7 +126,7 @@ describe('RbdTrashListComponent', () => {
     };
 
     beforeEach(() => {
-      summaryService['summaryDataSource'].next({ executingTasks: [] });
+      summaryService['summaryDataSource'].next(new Summary());
       spyOn(rbdService, 'listTrash').and.callFake(() => {
         of([{ pool_name: 'rbd', status: 1, value: images }]);
       });

@@ -4,9 +4,9 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "tools/rbd_mirror/Threads.h"
 
 #include "ImageMap.h"

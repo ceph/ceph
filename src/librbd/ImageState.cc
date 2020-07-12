@@ -9,6 +9,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
 #include "librbd/image/RefreshRequest.h"
@@ -216,7 +217,7 @@ private:
     auto& thread_pool = m_cct->lookup_or_create_singleton_object<
       ThreadPoolSingleton>("librbd::ImageUpdateWatchers::thread_pool",
 			   false, m_cct);
-    m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::op_work_queue",
+    m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::work_queue",
 				 m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
 				 &thread_pool);
   }
@@ -236,8 +237,7 @@ public:
     : m_cct(cct),
       m_lock(ceph::make_mutex(util::unique_lock_name(
         "librbd::QuiesceWatchers::m_lock", this))) {
-    ThreadPool *thread_pool;
-    ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &m_work_queue);
+    ImageCtx::get_work_queue(m_cct, &m_work_queue);
   }
 
   ~QuiesceWatchers() {
@@ -295,7 +295,7 @@ public:
     notify(UNQUIESCE, on_finish);
   }
 
-  void quiesce_complete() {
+  void quiesce_complete(int r) {
     Context *on_notify = nullptr;
     {
       std::lock_guard locker{m_lock};
@@ -311,14 +311,14 @@ public:
       std::swap(on_notify, m_on_notify);
     }
 
-    on_notify->complete(0);
+    on_notify->complete(r);
   }
 
 private:
   enum EventType {QUIESCE, UNQUIESCE};
 
   CephContext *m_cct;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
 
   ceph::mutex m_lock;
   std::map<uint64_t, QuiesceWatchCtx*> m_watchers;
@@ -980,8 +980,8 @@ void ImageState<I>::notify_unquiesce(Context *on_finish) {
 }
 
 template <typename I>
-void ImageState<I>::quiesce_complete() {
-  m_quiesce_watchers->quiesce_complete();
+void ImageState<I>::quiesce_complete(int r) {
+  m_quiesce_watchers->quiesce_complete(r);
 }
 
 } // namespace librbd

@@ -27,6 +27,11 @@ int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 
   bl.claim_append(bl_head);
 
+  if (bl.length() > head.max_head_size) {
+    CLS_LOG(0, "ERROR: queue_write_head: invalid head size = %u and urgent data size = %u \n", bl.length(), head.bl_urgent_data.length());
+    return -EINVAL;
+  }
+
   int ret = cls_cxx_write2(hctx, 0, bl.length(), &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (ret < 0) {
     CLS_LOG(5, "ERROR: queue_write_head: failed to write head");

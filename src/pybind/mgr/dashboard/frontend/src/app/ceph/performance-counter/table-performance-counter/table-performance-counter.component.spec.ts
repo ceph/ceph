@@ -19,7 +19,7 @@ describe('TablePerformanceCounterComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(TablePerformanceCounterComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
   });
 
@@ -33,7 +33,7 @@ describe('TablePerformanceCounterComponent', () => {
   });
 
   describe('Error handling', () => {
-    const context = new CdTableFetchDataContext(() => {});
+    const context = new CdTableFetchDataContext(() => undefined);
 
     beforeEach(() => {
       spyOn(context, 'error');

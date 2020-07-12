@@ -710,6 +710,16 @@ paired with *PG_DAMAGED* (see above).
 
 See :doc:`pg-repair` for more information.
 
+OSD_TOO_MANY_REPAIRS
+____________________
+
+When a read error occurs and another replica is available it is used to repair
+the error immediately, so that the client can get the object data.  Scrub
+handles errors for data at rest.  In order to identify possible failing disks
+that aren't seeing scrub errors, a count of read repairs is maintained.  If
+it exceeds a config value threshold *mon_osd_warn_num_repaired* default 10,
+this health warning is generated.
+
 LARGE_OMAP_OBJECTS
 __________________
 

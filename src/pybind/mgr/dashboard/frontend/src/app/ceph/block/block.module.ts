@@ -3,14 +3,9 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { ModalModule } from 'ngx-bootstrap/modal';
-import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '../../shared/services/feature-toggles-guard.service';
@@ -43,29 +38,14 @@ import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-p
 import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 
 @NgModule({
-  entryComponents: [
-    RbdDetailsComponent,
-    RbdNamespaceFormModalComponent,
-    RbdSnapshotFormModalComponent,
-    RbdTrashMoveModalComponent,
-    RbdTrashRestoreModalComponent,
-    RbdTrashPurgeModalComponent,
-    IscsiTargetDetailsComponent,
-    IscsiTargetImageSettingsModalComponent,
-    IscsiTargetIqnSettingsModalComponent,
-    IscsiTargetDiscoveryModalComponent
-  ],
   imports: [
     CommonModule,
     MirroringModule,
     FormsModule,
     ReactiveFormsModule,
-    TabsModule.forRoot(),
-    ProgressbarModule.forRoot(),
-    BsDropdownModule.forRoot(),
-    BsDatepickerModule.forRoot(),
-    TooltipModule.forRoot(),
-    ModalModule.forRoot(),
+    NgbNavModule,
+    NgbPopoverModule,
+    NgbTooltipModule,
     SharedModule,
     RouterModule,
     NgBootstrapFormValidationModule,

@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
@@ -16,9 +16,17 @@ describe('ServiceDetailsComponent', () => {
   let fixture: ComponentFixture<ServiceDetailsComponent>;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, RouterTestingModule, TabsModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, NgbNavModule],
     declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
-    providers: [i18nProviders, { provide: SummaryService, useValue: { subscribe: jest.fn() } }]
+    providers: [
+      i18nProviders,
+      {
+        provide: SummaryService,
+        useValue: {
+          subscribeOnce: jest.fn()
+        }
+      }
+    ]
   });
 
   beforeEach(() => {
@@ -30,21 +38,5 @@ describe('ServiceDetailsComponent', () => {
   it('should create', () => {
     fixture.detectChanges();
     expect(component).toBeTruthy();
-  });
-
-  describe('Service details tabset', () => {
-    beforeEach(() => {
-      component.selection.selected = [{ serviceName: 'osd' }];
-      fixture.detectChanges();
-    });
-
-    it('should recognize a tabset child', () => {
-      const tabsetChild = component.tabsetChild;
-      expect(tabsetChild).toBeDefined();
-    });
-
-    it('should show tabs', () => {
-      expect(component.tabsetChild.tabs.map((t) => t.heading)).toEqual(['Daemons']);
-    });
   });
 });

@@ -52,8 +52,8 @@ describe('TaskWrapperService', () => {
 
     beforeEach(() => {
       passed = false;
-      notify = TestBed.get(NotificationService);
-      summaryService = TestBed.get(SummaryService);
+      notify = TestBed.inject(NotificationService);
+      summaryService = TestBed.inject(SummaryService);
       spyOn(notify, 'show');
       spyOn(notify, 'notifyTask').and.stub();
       spyOn(service, '_handleExecutingTasks').and.callThrough();
@@ -61,30 +61,30 @@ describe('TaskWrapperService', () => {
     });
 
     it('should simulate a synchronous task', () => {
-      callWrapTaskAroundCall(200, 'sync').subscribe(null, null, () => (passed = true));
+      callWrapTaskAroundCall(200, 'sync').subscribe({ complete: () => (passed = true) });
       expect(service._handleExecutingTasks).not.toHaveBeenCalled();
       expect(passed).toBeTruthy();
       expect(summaryService.addRunningTask).not.toHaveBeenCalled();
     });
 
     it('should simulate a asynchronous task', () => {
-      callWrapTaskAroundCall(202, 'async').subscribe(null, null, () => (passed = true));
+      callWrapTaskAroundCall(202, 'async').subscribe({ complete: () => (passed = true) });
       expect(service._handleExecutingTasks).toHaveBeenCalled();
       expect(passed).toBeTruthy();
       expect(summaryService.addRunningTask).toHaveBeenCalledTimes(1);
     });
 
     it('should call notifyTask if asynchronous task would have been finished', () => {
-      const taskManager = TestBed.get(TaskManagerService);
+      const taskManager = TestBed.inject(TaskManagerService);
       spyOn(taskManager, 'subscribe').and.callFake((_name, _metadata, onTaskFinished) => {
         onTaskFinished();
       });
-      callWrapTaskAroundCall(202, 'async').subscribe(null, null, () => (passed = true));
+      callWrapTaskAroundCall(202, 'async').subscribe({ complete: () => (passed = true) });
       expect(notify.notifyTask).toHaveBeenCalled();
     });
 
     it('should simulate a task failure', () => {
-      callWrapTaskAroundCall(null, 'async').subscribe(null, () => (passed = true), null);
+      callWrapTaskAroundCall(null, 'async').subscribe({ error: () => (passed = true) });
       expect(service._handleExecutingTasks).not.toHaveBeenCalled();
       expect(passed).toBeTruthy();
       expect(summaryService.addRunningTask).not.toHaveBeenCalled();

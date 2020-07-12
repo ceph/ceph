@@ -1,6 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#ifdef WITH_SEASTAR
+#include "crimson/os/alienstore/alien_store.h"
+#endif
+
 #include "BlueRocksEnv.h"
 #include "BlueFS.h"
 #include "include/stringify.h"
@@ -198,7 +202,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   rocksdb::Status Close() override {
-    Flush();
+    fs->flush(h, true);
 
     // mimic posix env, here.  shrug.
     size_t block_size;
@@ -583,4 +587,12 @@ rocksdb::Status BlueRocksEnv::GetTestDirectory(std::string* path)
   static int foo = 0;
   *path = "temp_" + stringify(++foo);
   return rocksdb::Status::OK();
+}
+
+void BlueRocksEnv::StartThread(void(*function)(void* arg), void* arg)
+{
+#ifdef WITH_SEASTAR
+  crimson::os::AlienStore::configure_thread_memory();
+#endif
+  base_t::StartThread(function, arg);
 }

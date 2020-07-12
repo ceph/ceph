@@ -684,9 +684,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       lderr(cct) << "Forced V1 image creation. " << dendl;
       r = create_v1(io_ctx, image_name.c_str(), size, order);
     } else {
-      ThreadPool *thread_pool;
-      ContextWQ *op_work_queue;
-      ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+      asio::ContextWQ *op_work_queue;
+      ImageCtx::get_work_queue(cct, &op_work_queue);
 
       ConfigProxy config{cct->_conf};
       api::Config<>::apply_pool_overrides(io_ctx, &config);
@@ -790,9 +789,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ConfigProxy config{reinterpret_cast<CephContext *>(c_ioctx.cct())->_conf};
     api::Config<>::apply_pool_overrides(c_ioctx, &config);
 
-    ThreadPool *thread_pool;
-    ContextWQ *op_work_queue;
-    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+    asio::ContextWQ *op_work_queue;
+    ImageCtx::get_work_queue(cct, &op_work_queue);
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
@@ -1396,7 +1394,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     {
       std::shared_lock locker{ictx->image_lock};
       r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
-			         exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
+			         exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED,
 			         cookie, tag, "", utime_t(), 0);
       if (r < 0) {
         return r;

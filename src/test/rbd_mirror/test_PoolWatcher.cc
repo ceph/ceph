@@ -170,10 +170,11 @@ public:
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_name.c_str(),
 						    "", "", pioctx, false);
       ictx->state->open(0);
+      librbd::NoOpProgressContext prog_ctx;
       EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-						 snap_name.c_str()));
+						 snap_name, 0, prog_ctx));
       EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-						  snap_name.c_str()));
+						  snap_name));
       ictx->state->close();
     }
 

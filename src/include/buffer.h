@@ -34,7 +34,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifndef __CYGWIN__
+#if !defined(__CYGWIN__) && !defined(_WIN32)
 # include <sys/mman.h>
 #endif
 
@@ -267,7 +267,7 @@ struct error_code;
 
     // misc
     bool is_aligned(unsigned align) const {
-      return ((long)c_str() & (align-1)) == 0;
+      return ((uintptr_t)c_str() & (align-1)) == 0;
     }
     bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
     bool is_n_align_sized(unsigned align) const
@@ -1064,8 +1064,13 @@ struct error_code;
 
     void reserve(size_t prealloc);
 
-    void claim(list& bl);
+    [[deprecated("in favor of operator=(list&&)")]] void claim(list& bl) {
+      *this = std::move(bl);
+    }
     void claim_append(list& bl);
+    void claim_append(list&& bl) {
+      claim_append(bl);
+    }
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
 
@@ -1132,7 +1137,7 @@ struct error_code;
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
 
-    reserve_t obtain_contiguous_space(unsigned len);
+    reserve_t obtain_contiguous_space(const unsigned len);
 
     /*
      * get a char

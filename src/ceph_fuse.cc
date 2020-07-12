@@ -42,7 +42,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-#include <fuse.h>
+#include "include/ceph_fuse.h"
 #include <fuse_lowlevel.h>
 
 #define dout_context g_ceph_context

@@ -14,8 +14,8 @@ describe('HostService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(HostService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(HostService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
@@ -42,4 +42,11 @@ describe('HostService', () => {
     const req = httpTesting.expectOne(`api/host/${hostname}/devices`);
     expect(req.request.method).toBe('GET');
   });
+
+  it('should update host', fakeAsync(() => {
+    service.update('mon0', ['foo', 'bar']).subscribe();
+    const req = httpTesting.expectOne('api/host/mon0');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ labels: ['foo', 'bar'] });
+  }));
 });

@@ -139,8 +139,7 @@ class CephService(object):
     @classmethod
     def get_pool_name_from_id(cls, pool_id):
         # type: (int) -> Union[str, None]
-        pool = cls.get_pool_by_attribute('pool', pool_id)
-        return pool['pool_name'] if pool is not None else None
+        return mgr.rados.pool_reverse_lookup(pool_id)
 
     @classmethod
     def get_pool_by_attribute(cls, attribute, value):

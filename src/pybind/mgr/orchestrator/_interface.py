@@ -14,13 +14,16 @@ import re
 import time
 import uuid
 
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from functools import wraps
+
+import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     ServiceSpecValidationError, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.hostspec import HostSpec
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
 
@@ -1162,62 +1165,6 @@ class Orchestrator(object):
         raise NotImplementedError()
 
 
-class HostSpec(object):
-    """
-    Information about hosts. Like e.g. ``kubectl get nodes``
-    """
-    def __init__(self,
-                 hostname,  # type: str
-                 addr=None,  # type: Optional[str]
-                 labels=None,  # type: Optional[List[str]]
-                 status=None,  # type: Optional[str]
-                 ):
-        self.service_type = 'host'
-
-        #: the bare hostname on the host. Not the FQDN.
-        self.hostname = hostname  # type: str
-
-        #: DNS name or IP address to reach it
-        self.addr = addr or hostname  # type: str
-
-        #: label(s), if any
-        self.labels = labels or []  # type: List[str]
-
-        #: human readable status
-        self.status = status or ''  # type: str
-
-    def to_json(self):
-        return {
-            'hostname': self.hostname,
-            'addr': self.addr,
-            'labels': self.labels,
-            'status': self.status,
-        }
-
-    @classmethod
-    def from_json(cls, host_spec):
-        _cls = cls(host_spec['hostname'],
-                   host_spec['addr'] if 'addr' in host_spec else None,
-                   host_spec['labels'] if 'labels' in host_spec else None)
-        return _cls
-
-    def __repr__(self):
-        args = [self.hostname]  # type: List[Any]
-        if self.addr is not None:
-            args.append(self.addr)
-        if self.labels:
-            args.append(self.labels)
-        if self.status:
-            args.append(self.status)
-
-        return "<HostSpec>({})".format(', '.join(map(repr, args)))
-
-    def __eq__(self, other):
-        # Let's omit `status` for the moment, as it is still the very same host.
-        return self.hostname == other.hostname and \
-               self.addr == other.addr and \
-               self.labels == other.labels
-
 GenericSpec = Union[ServiceSpec, HostSpec]
 
 def json_to_generic_spec(spec):
@@ -1277,7 +1224,7 @@ class DaemonDescription(object):
                  osdspec_affinity=None,
                  last_deployed=None):
         # Host is at the same granularity as InventoryHost
-        self.hostname = hostname
+        self.hostname: str = hostname
 
         # Not everyone runs in containers, but enough people do to
         # justify having the container_id (runtime id) and container_image
@@ -1293,7 +1240,7 @@ class DaemonDescription(object):
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
-        self.daemon_id = daemon_id
+        self.daemon_id: str = daemon_id
 
         # Service version that was deployed
         self.version = version
@@ -1333,19 +1280,22 @@ class DaemonDescription(object):
                 # TODO: can a DaemonDescription exist without a hostname?
                 raise err
 
-            if self.hostname == self.daemon_id:
-                # daemon_id == "hostname"
+            # use the bare hostname, not the FQDN.
+            host = self.hostname.split('.')[0]
+
+            if host == self.daemon_id:
+                # daemon_id == "host"
                 return self.daemon_id
 
-            elif self.hostname in self.daemon_id:
-                # daemon_id == "service_id.hostname"
-                # daemon_id == "service_id.hostname.random"
-                pre, post = self.daemon_id.rsplit(self.hostname, 1)
+            elif host in self.daemon_id:
+                # daemon_id == "service_id.host"
+                # daemon_id == "service_id.host.random"
+                pre, post = self.daemon_id.rsplit(host, 1)
                 if not pre.endswith('.'):
-                    # '.' sep missing at front of hostname
+                    # '.' sep missing at front of host
                     raise err
                 elif post and not post.startswith('.'):
-                    # '.' sep missing at end of hostname
+                    # '.' sep missing at end of host
                     raise err
                 return pre[:-1]
 
@@ -1373,22 +1323,26 @@ class DaemonDescription(object):
                                                          id=self.daemon_id)
 
     def to_json(self):
-        out = {
-            'hostname': self.hostname,
-            'container_id': self.container_id,
-            'container_image_id': self.container_image_id,
-            'container_image_name': self.container_image_name,
-            'daemon_id': self.daemon_id,
-            'daemon_type': self.daemon_type,
-            'version': self.version,
-            'status': self.status,
-            'status_desc': self.status_desc,
-        }
+        out = OrderedDict()
+        out['daemon_type'] = self.daemon_type
+        out['daemon_id'] = self.daemon_id
+        out['hostname'] = self.hostname
+        out['container_id'] = self.container_id
+        out['container_image_id'] = self.container_image_id
+        out['container_image_name'] = self.container_image_name
+        out['version'] = self.version
+        out['status'] = self.status
+        out['status_desc'] = self.status_desc
+
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
             if getattr(self, k):
                 out[k] = getattr(self, k).strftime(DATEFMT)
-        return {k: v for (k, v) in out.items() if v is not None}
+
+        empty = [k for k, v in out.items() if v is None]
+        for e in empty:
+            del out[e]
+        return out
 
     @classmethod
     @handle_type_error
@@ -1403,6 +1357,13 @@ class DaemonDescription(object):
     def __copy__(self):
         # feel free to change this:
         return DaemonDescription.from_json(self.to_json())
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription'):
+        return dumper.represent_dict(data.to_json().items())
+
+
+yaml.add_representer(DaemonDescription, DaemonDescription.yaml_representer)
 
 class ServiceDescription(object):
     """
@@ -1459,7 +1420,7 @@ class ServiceDescription(object):
     def __repr__(self):
         return f"<ServiceDescription of {self.spec.one_line_str()}>"
 
-    def to_json(self):
+    def to_json(self) -> OrderedDict:
         out = self.spec.to_json()
         status = {
             'container_image_id': self.container_image_id,
@@ -1490,6 +1451,13 @@ class ServiceDescription(object):
             if k in c_status:
                 c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
         return cls(spec=spec, **c_status)
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription'):
+        return dumper.represent_dict(data.to_json().items())
+
+
+yaml.add_representer(ServiceDescription, ServiceDescription.yaml_representer)
 
 
 class InventoryFilter(object):

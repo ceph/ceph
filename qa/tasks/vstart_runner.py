@@ -30,7 +30,6 @@ Alternative usage:
 
 """
 
-from io import BytesIO
 from io import StringIO
 from collections import defaultdict
 import getpass
@@ -48,12 +47,11 @@ from IPy import IP
 from unittest import suite, loader
 import unittest
 import platform
-from teuthology import misc
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
-import six
+from teuthology.contextutil import safe_while
 import logging
 
 def init_log():
@@ -162,8 +160,13 @@ class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr):
         self.args = args
         self.subproc = subproc
-        self.stdout = stdout or BytesIO()
-        self.stderr = stderr or BytesIO()
+        self.stdout = stdout
+        self.stderr = stderr
+        # this variable is meant for instance of this class named fuse_daemon.
+        # child process of the command launched with sudo must be killed,
+        # since killing parent process alone has no impact on the child
+        # process.
+        self.fuse_pid = -1
 
         self.check_status = check_status
         self.exitstatus = self.returncode = None
@@ -181,18 +184,22 @@ class LocalRemoteProcess(object):
         out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
         if isinstance(self.stdout, StringIO):
             self.stdout.write(out.decode(errors='ignore'))
+        elif self.stdout is None:
+            pass
         else:
             self.stdout.write(out)
         if isinstance(self.stderr, StringIO):
             self.stderr.write(err.decode(errors='ignore'))
+        elif self.stderr is None:
+            pass
         else:
             self.stderr.write(err)
 
         self.exitstatus = self.returncode = self.subproc.returncode
 
         if self.exitstatus != 0:
-            sys.stderr.write(six.ensure_str(out))
-            sys.stderr.write(six.ensure_str(err))
+            sys.stderr.write(out.decode())
+            sys.stderr.write(err.decode())
 
         if self.check_status and self.exitstatus != 0:
             raise CommandFailedError(self.args, self.exitstatus)
@@ -206,10 +213,14 @@ class LocalRemoteProcess(object):
             out, err = self.subproc.communicate()
             if isinstance(self.stdout, StringIO):
                 self.stdout.write(out.decode(errors='ignore'))
+            elif self.stdout is None:
+                pass
             else:
                 self.stdout.write(out)
             if isinstance(self.stderr, StringIO):
                 self.stderr.write(err.decode(errors='ignore'))
+            elif self.stderr is None:
+                pass
             else:
                 self.stderr.write(err)
             self.exitstatus = self.returncode = self.subproc.returncode
@@ -222,7 +233,10 @@ class LocalRemoteProcess(object):
         if self.subproc.pid and not self.finished:
             log.info("kill: killing pid {0} ({1})".format(
                 self.subproc.pid, self.args))
-            safe_kill(self.subproc.pid)
+            if self.fuse_pid != -1:
+                safe_kill(self.fuse_pid)
+            else:
+                safe_kill(self.subproc.pid)
         else:
             log.info("kill: already terminated ({0})".format(self.args))
 
@@ -263,18 +277,10 @@ class LocalRemote(object):
     # holding same path. For teuthology, same path still represents
     # different locations as they lie on different machines.
     def put_file(self, src, dst, sudo=False):
-        if sys.version_info.major < 3:
-            exception = shutil.Error
-        elif sys.version_info.major >= 3:
-            exception = shutil.SameFileError
-
         try:
             shutil.copy(src, dst)
-        except exception as e:
-            if sys.version_info.major < 3 and e.message.find('are the same '
-               'file') != -1:
-                return
-            raise e
+        except shutil.SameFileError:
+            pass
 
     # XXX: accepts only two arugments to maintain compatibility with
     # teuthology's mkdtemp.
@@ -301,7 +307,7 @@ class LocalRemote(object):
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
-        if isinstance(args, str) or isinstance(args, six.text_type):
+        if isinstance(args, str):
             args = args.split()
 
         # We'll let sudo be a part of command even omit flag says otherwise in
@@ -347,9 +353,12 @@ class LocalRemote(object):
     def run(self, **kwargs):
         return self._do_run(**kwargs)
 
+    # XXX: omit_sudo is set to True since using sudo can change the ownership
+    # of files which becomes problematic for following executions of
+    # vstart_runner.py.
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
-                env=None, timeout=None, omit_sudo=False):
+                env=None, timeout=None, omit_sudo=True):
         args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
@@ -360,7 +369,7 @@ class LocalRemote(object):
                                              'ceph-coverage')]
 
         # Adjust binary path prefix if given a bare program name
-        if "/" not in args[0]:
+        if not isinstance(args[0], Raw) and "/" not in args[0]:
             # If they asked for a bare binary name, and it exists
             # in our built tree, use the one there.
             local_bin = os.path.join(BIN_PREFIX, args[0])
@@ -383,7 +392,7 @@ class LocalRemote(object):
         else:
             # Sanity check that we've got a list of strings
             for arg in args:
-                if not isinstance(arg, six.string_types):
+                if not isinstance(arg, str):
                     raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
                         arg, arg.__class__
                     ))
@@ -413,7 +422,8 @@ class LocalRemote(object):
 
         return proc
 
-    # XXX: for compatibility keep this method same teuthology.orchestra.remote.sh
+    # XXX: for compatibility keep this method same as teuthology.orchestra.remote.sh
+    # BytesIO is being used just to keep things identical
     def sh(self, script, **kwargs):
         """
         Shortcut for run method.
@@ -422,13 +432,18 @@ class LocalRemote(object):
             my_name = remote.sh('whoami')
             remote_date = remote.sh('date')
         """
+        from io import BytesIO
+
         if 'stdout' not in kwargs:
-            kwargs['stdout'] = StringIO()
+            kwargs['stdout'] = BytesIO()
         if 'args' not in kwargs:
             kwargs['args'] = script
         proc = self.run(**kwargs)
-        return proc.stdout.getvalue()
-
+        out = proc.stdout.getvalue()
+        if isinstance(out, bytes):
+            return out.decode()
+        else:
+            return out
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
@@ -452,9 +467,9 @@ class LocalDaemon(object):
         """
         Return PID as an integer or None if not found
         """
-        ps_txt = six.ensure_str(self.controller.run(
-            args=["ps", "ww", "-u"+str(os.getuid())]
-        ).stdout.getvalue()).strip()
+        ps_txt = self.controller.run(args=["ps", "ww", "-u"+str(os.getuid())],
+                                     stdout=StringIO()).\
+            stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
@@ -585,13 +600,16 @@ class LocalKernelMount(KernelMount):
                 if asok_conf:
                     d = asok_conf.groups(1)[0]
                     break
-        path = "{0}/client.{1}.{2}.asok".format(d, self.client_id, self.fuse_daemon.subproc.pid)
-        log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
+        path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def mount(self, mount_path=None, mount_fs_name=None, mount_options=[]):
+    def mount(self, mount_path=None, mount_fs_name=None, mount_options=[], **kwargs):
         self.setupfs(name=mount_fs_name)
-        self.setup_netns()
+        if opt_use_ns:
+            self.using_namespace = True
+            self.setup_netns()
+        else:
+            self.using_namespace = False
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
@@ -617,26 +635,24 @@ class LocalKernelMount(KernelMount):
         for mount_opt in mount_options:
             opts += ",{0}".format(mount_opt)
 
-        self.client_remote.run(
-            args=[
-                'sudo',
-                'nsenter',
-                '--net=/var/run/netns/{0}'.format(self.netns_name),
-                './bin/mount.ceph',
-                ':{mount_path}'.format(mount_path=mount_path),
-                self.mountpoint,
-                '-v',
-                '-o',
-                opts
-            ],
-            timeout=(30*60),
-            omit_sudo=False,
-        )
+        mount_cmd_args = ['sudo']
+        if self.using_namespace:
+            mount_cmd_args += ['nsenter',
+                               '--net=/var/run/netns/{0}'.format(self.netns_name)]
+        mount_cmd_args += ['./bin/mount.ceph',
+                           ':{mount_path}'.format(mount_path=mount_path),
+                           self.mountpoint, '-v', '-o', opts]
+        self.client_remote.run(args=mount_cmd_args, timeout=(30*60),
+                               omit_sudo=False)
 
         self.client_remote.run(
             args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
 
         self.mounted = True
+
+    def cleanup_netns(self):
+        if self.using_namespace:
+            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
@@ -644,7 +660,7 @@ class LocalKernelMount(KernelMount):
         to make the process killable.
         """
         return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False)
+                                      wait=False, stdout=StringIO())
 
 class LocalFuseMount(FuseMount):
     def __init__(self, ctx, test_dir, client_id, brxnet):
@@ -689,15 +705,18 @@ class LocalFuseMount(FuseMount):
                 if asok_conf:
                     d = asok_conf.groups(1)[0]
                     break
-        path = "{0}/client.{1}.{2}.asok".format(d, self.client_id, self.fuse_daemon.subproc.pid)
-        log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
+        path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         if mountpoint is not None:
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
-        self.setup_netns()
+        if opt_use_ns:
+            self.using_namespace = True
+            self.setup_netns()
+        else:
+            self.using_namespace = False
 
         self.client_remote.run(args=['mkdir', '-p', self.mountpoint])
 
@@ -706,15 +725,14 @@ class LocalFuseMount(FuseMount):
                 args=["mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
                 check_status=False
             )
-            p = self.client_remote.run(
-                args=["ls", "/sys/fs/fuse/connections"],
-                check_status=False
-            )
+
+            p = self.client_remote.run(args=["ls", "/sys/fs/fuse/connections"],
+                                       check_status=False, stdout=StringIO())
             if p.exitstatus != 0:
                 log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
                 return []
 
-            ls_str = six.ensure_str(p.stdout.getvalue().strip())
+            ls_str = p.stdout.getvalue().strip()
             if ls_str:
                 return [int(n) for n in ls_str.split("\n")]
             else:
@@ -725,29 +743,28 @@ class LocalFuseMount(FuseMount):
         pre_mount_conns = list_connections()
         log.info("Pre-mount connections: {0}".format(pre_mount_conns))
 
-        prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
+        prefix = []
+        if self.using_namespace:
+            prefix += ['sudo', 'nsenter',
+                       '--net=/var/run/netns/{0}'.format(self.netns_name),
+                       '--setuid', str(os.getuid())]
+        prefix += [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
             prefix += ["--client_die_on_failed_dentry_invalidate=false"]
-
         if mount_path is not None:
             prefix += ["--client_mountpoint={0}".format(mount_path)]
-
         if mount_fs_name is not None:
             prefix += ["--client_fs={0}".format(mount_fs_name)]
-
         prefix += mount_options;
+        fuse_cmd_args = prefix + ["-f", "--name",
+                                  "client.{0}".format(self.client_id),
+                                  self.mountpoint]
 
-        self.fuse_daemon = self.client_remote.run(args=
-                                            ['nsenter',
-                                             '--net=/var/run/netns/{0}'.format(self.netns_name),
-                                            ] + prefix + [
-                                                "-f",
-                                                "--name",
-                                                "client.{0}".format(self.client_id),
-                                                self.mountpoint
-                                            ], wait=False)
-
-        log.info("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
+        self.fuse_daemon = self.client_remote.run(args=fuse_cmd_args,
+                                                  wait=False, omit_sudo=False)
+        self._set_fuse_daemon_pid()
+        log.info("Mounting client.{0} with pid "
+                 "{1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
@@ -780,6 +797,24 @@ class LocalFuseMount(FuseMount):
         self.gather_mount_info()
 
         self.mounted = True
+    def _set_fuse_daemon_pid(self):
+        # NOTE: When a command <args> is launched with sudo, two processes are
+        # launched, one with sudo in <args> and other without. Make sure we
+        # get the PID of latter one.
+        with safe_while(sleep=1, tries=15) as proceed:
+            while proceed():
+                try:
+                    sock = self.find_admin_socket()
+                except (RuntimeError, CommandFailedError):
+                    continue
+
+                self.fuse_daemon.fuse_pid = int(re.match(".*\.(\d+)\.asok$",
+                                                         sock).group(1))
+                break
+
+    def cleanup_netns(self):
+        if self.using_namespace:
+            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
@@ -787,7 +822,7 @@ class LocalFuseMount(FuseMount):
         to make the process killable.
         """
         return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False)
+                                      wait=False, stdout=StringIO())
 
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
@@ -834,9 +869,9 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
-                                        list(args), **kwargs)
-        return six.ensure_str(proc.stdout.getvalue())
+        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] +\
+                                   list(args), **kwargs, stdout=StringIO())
+        return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -847,12 +882,15 @@ class LocalCephManager(CephManager):
                                         list(args), **kwargs)
         return proc.exitstatus
 
-    def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
+    def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
+                     timeout=None, stdout=None):
+        if stdout is None:
+            stdout = StringIO()
+
         return self.controller.run(
-            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command,
-            check_status=check_status,
-            timeout=timeout
-        )
+            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon",
+                  "{0}.{1}".format(daemon_type, daemon_id)] + command,
+            check_status=check_status, timeout=timeout, stdout=stdout)
 
     def get_mon_socks(self):
         """
@@ -1156,7 +1194,10 @@ class LocalContext(object):
                     self.daemons.daemons[prefixed_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
     def __del__(self):
-        shutil.rmtree(self.teuthology_config['test_path'])
+        test_path = self.teuthology_config['test_path']
+        # opt_create_cluster_only does not create the test path
+        if test_path:
+            shutil.rmtree(test_path)
 
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
@@ -1189,6 +1230,8 @@ def exec_test():
     global opt_log_ps_output
     opt_log_ps_output = False
     use_kernel_client = False
+    global opt_use_ns
+    opt_use_ns = False
     opt_brxnet= None
 
     args = sys.argv[1:]
@@ -1211,6 +1254,8 @@ def exec_test():
             clear_old_log()
         elif f == "--kclient":
             use_kernel_client = True
+        elif f == '--usens':
+            opt_use_ns = True
         elif '--brxnet' in f:
             if re.search(r'=[0-9./]+', f) is None:
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
@@ -1218,9 +1263,9 @@ def exec_test():
             opt_brxnet=f.split('=')[1]
             try:  
                 IP(opt_brxnet)  
-                if IP(opt_brxnet).iptype() is 'PUBLIC':
+                if IP(opt_brxnet).iptype() == 'PUBLIC':
                     raise RuntimeError('is public')
-            except Exception as  e:  
+            except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
         else:
@@ -1243,10 +1288,8 @@ def exec_test():
     remote = LocalRemote()
 
     # Tolerate no MDSs or clients running at start
-    ps_txt = six.ensure_str(remote.run(
-        args=["ps", "-u"+str(os.getuid())],
-        stdout=StringIO()
-    ).stdout.getvalue().strip())
+    ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],
+                        stdout=StringIO()).stdout.getvalue().strip()
     lines = ps_txt.split("\n")[1:]
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
@@ -1303,9 +1346,9 @@ def exec_test():
             p = remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "auth", "get-or-create", client_name,
                                  "osd", "allow rw",
                                  "mds", "allow",
-                                 "mon", "allow r"])
+                                 "mon", "allow r"], stdout=StringIO())
 
-            open("./keyring", "ab").write(p.stdout.getvalue())
+            open("./keyring", "at").write(p.stdout.getvalue())
 
         if use_kernel_client:
             mount = LocalKernelMount(ctx, test_dir, client_id, opt_brxnet)

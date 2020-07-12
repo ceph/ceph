@@ -3,8 +3,6 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -35,8 +33,6 @@ describe('HostsComponent', () => {
       CephSharedModule,
       SharedModule,
       HttpClientTestingModule,
-      TabsModule.forRoot(),
-      BsDropdownModule.forRoot(),
       RouterTestingModule,
       ToastrModule.forRoot(),
       CephModule,
@@ -49,7 +45,7 @@ describe('HostsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HostsComponent);
     component = fixture.componentInstance;
-    hostListSpy = spyOn(TestBed.get(HostService), 'list');
+    hostListSpy = spyOn(TestBed.inject(HostService), 'list');
     fixture.detectChanges();
   });
 
@@ -76,7 +72,8 @@ describe('HostsComponent', () => {
           }
         ],
         hostname: hostname,
-        ceph_version: 'ceph version Development'
+        ceph_version: 'ceph version Development',
+        labels: ['foo', 'bar']
       }
     ];
 
@@ -91,4 +88,72 @@ describe('HostsComponent', () => {
       expect(spans[0].textContent).toBe(hostname);
     });
   }));
+
+  describe('getEditDisableDesc', () => {
+    it('should return message (not managed by Orchestrator)', () => {
+      component.selection.add({
+        sources: {
+          ceph: true,
+          orchestrator: false
+        }
+      });
+      expect(component.getEditDisableDesc(component.selection)).toBe(
+        'Host editing is disabled because the selected host is not managed by Orchestrator.'
+      );
+    });
+
+    it('should return undefined (no selection)', () => {
+      expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
+    });
+
+    it('should return undefined (managed by Orchestrator)', () => {
+      component.selection.add({
+        sources: {
+          ceph: false,
+          orchestrator: true
+        }
+      });
+      expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
+    });
+  });
+
+  describe('getDeleteDisableDesc', () => {
+    it('should return message (not managed by Orchestrator)', () => {
+      component.selection.add({
+        sources: {
+          ceph: false,
+          orchestrator: true
+        }
+      });
+      component.selection.add({
+        sources: {
+          ceph: true,
+          orchestrator: false
+        }
+      });
+      expect(component.getDeleteDisableDesc(component.selection)).toBe(
+        'Host deletion is disabled because a selected host is not managed by Orchestrator.'
+      );
+    });
+
+    it('should return undefined (no selection)', () => {
+      expect(component.getDeleteDisableDesc(component.selection)).toBeUndefined();
+    });
+
+    it('should return undefined (managed by Orchestrator)', () => {
+      component.selection.add({
+        sources: {
+          ceph: false,
+          orchestrator: true
+        }
+      });
+      component.selection.add({
+        sources: {
+          ceph: false,
+          orchestrator: true
+        }
+      });
+      expect(component.getDeleteDisableDesc(component.selection)).toBeUndefined();
+    });
+  });
 });

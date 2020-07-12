@@ -2,12 +2,12 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { ModalService } from '../../../shared/services/modal.service';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
@@ -40,7 +40,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   constructor(
     private rgwUserService: RgwUserService,
-    private bsModalService: BsModalService,
+    private modalService: ModalService,
     private i18n: I18n
   ) {}
 
@@ -109,16 +109,16 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   showKeyModal() {
     const key = this.keysSelection.first();
-    const modalRef = this.bsModalService.show(
+    const modalRef = this.modalService.show(
       key.type === 'S3' ? RgwUserS3KeyModalComponent : RgwUserSwiftKeyModalComponent
     );
     switch (key.type) {
       case 'S3':
-        modalRef.content.setViewing();
-        modalRef.content.setValues(key.ref.user, key.ref.access_key, key.ref.secret_key);
+        modalRef.componentInstance.setViewing();
+        modalRef.componentInstance.setValues(key.ref.user, key.ref.access_key, key.ref.secret_key);
         break;
       case 'Swift':
-        modalRef.content.setValues(key.ref.user, key.ref.secret_key);
+        modalRef.componentInstance.setValues(key.ref.user, key.ref.secret_key);
         break;
     }
   }

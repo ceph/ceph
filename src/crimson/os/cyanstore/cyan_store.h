@@ -68,7 +68,9 @@ public:
   CyanStore(const std::string& path);
   ~CyanStore() final;
 
-  seastar::future<> stop() final {return seastar::now();}
+  seastar::future<> stop() final {
+    return seastar::now();
+  }
   seastar::future<> mount() final;
   seastar::future<> umount() final;
 

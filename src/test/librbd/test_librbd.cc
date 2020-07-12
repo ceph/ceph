@@ -8210,7 +8210,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
     void handle_quiesce() {
       ASSERT_EQ(quiesce_count, unquiesce_count);
       quiesce_count++;
-      rbd_quiesce_complete(image);
+      rbd_quiesce_complete(image, 0);
     }
     void handle_unquiesce() {
       unquiesce_count++;
@@ -8280,7 +8280,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
       void handle_quiesce() override {
         ASSERT_EQ(quiesce_count, unquiesce_count);
         quiesce_count++;
-        image.quiesce_complete();
+        image.quiesce_complete(0);
       }
       void handle_unquiesce() override {
         unquiesce_count++;
@@ -8317,6 +8317,82 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
     ASSERT_EQ(0, image1.snap_remove("snap1"));
     ASSERT_EQ(0, image1.snap_remove("snap2"));
     ASSERT_EQ(0, image1.snap_remove("snap3"));
+  }
+
+  ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, QuiesceWatchError)
+{
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  {
+    librbd::Image image1, image2;
+    ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+    ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+    struct Watcher : public librbd::QuiesceWatchCtx {
+      librbd::Image &image;
+      int r;
+      size_t quiesce_count = 0;
+      size_t unquiesce_count = 0;
+
+      Watcher(librbd::Image &image, int r) : image(image), r(r) {
+      }
+
+      void handle_quiesce() override {
+        quiesce_count++;
+        image.quiesce_complete(r);
+      }
+
+      void handle_unquiesce() override {
+        unquiesce_count++;
+      }
+    } watcher1(image1, -EINVAL), watcher2(image2, 0);
+    uint64_t handle1, handle2;
+
+    ASSERT_EQ(0, image1.quiesce_watch(&watcher1, &handle1));
+    ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
+
+    ASSERT_EQ(-EINVAL, image1.snap_create("snap1"));
+    ASSERT_LT(0U, watcher1.quiesce_count);
+    ASSERT_EQ(0U, watcher1.unquiesce_count);
+    ASSERT_EQ(1U, watcher2.quiesce_count);
+    ASSERT_EQ(1U, watcher2.unquiesce_count);
+
+    PrintProgress prog_ctx;
+    watcher1.quiesce_count = 0;
+    ASSERT_EQ(0, image2.snap_create2("snap2",
+                                     RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
+                                     prog_ctx));
+    ASSERT_LT(0U, watcher1.quiesce_count);
+    ASSERT_EQ(0U, watcher1.unquiesce_count);
+    ASSERT_EQ(2U, watcher2.quiesce_count);
+    ASSERT_EQ(2U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
+
+    ASSERT_EQ(0, image1.snap_create("snap3"));
+    ASSERT_EQ(3U, watcher2.quiesce_count);
+    ASSERT_EQ(3U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image2.snap_create2("snap4", RBD_SNAP_CREATE_SKIP_QUIESCE,
+                                     prog_ctx));
+    ASSERT_EQ(3U, watcher2.quiesce_count);
+    ASSERT_EQ(3U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
+
+    ASSERT_EQ(0, image1.snap_remove("snap2"));
+    ASSERT_EQ(0, image1.snap_remove("snap3"));
+    ASSERT_EQ(0, image1.snap_remove("snap4"));
   }
 
   ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
@@ -8388,7 +8464,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
     thread quiesce1([&image, &watcher]() {
       watcher.wait_for_quiesce_count(1);
       sleep(8);
-      image.quiesce_complete();
+      image.quiesce_complete(0);
     });
 
     ASSERT_EQ(0, image.snap_create("snap1"));
@@ -8406,7 +8482,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
         std::cerr << "waiting for timed out ... " << i << std::endl;
         sleep(1);
       }
-      image.quiesce_complete();
+      image.quiesce_complete(0);
     });
 
     ASSERT_EQ(-ETIMEDOUT, image.snap_create("snap2"));
@@ -8418,7 +8494,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     thread quiesce3([&image, &watcher]() {
       watcher.wait_for_quiesce_count(3);
-      image.quiesce_complete();
+      image.quiesce_complete(0);
     });
 
     std::cerr << "test retry succeeds" << std::endl;
@@ -8435,6 +8511,144 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
   ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
   ioctx.close();
+}
+
+TEST_F(TestLibRBD, WriteZeroes) {
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  // 1s from [0, 256) / length 256
+  char data[256];
+  memset(data, 1, sizeof(data));
+  bufferlist bl;
+  bl.append(data, 256);
+  ASSERT_EQ(256, image.write(0, 256, bl));
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  auto expected_diff = interval_set<uint64_t>{{{0, 256}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // writes zero passed the current end extents.
+  // Now 1s from [0, 192) / length 192
+  ASSERT_EQ(size - 192,
+            image.write_zeroes(192, size - 192, 0U, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 192}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // zero an existing extent and truncate some off the end
+  // Now 1s from [64, 192) / length 192
+  ASSERT_EQ(64, image.write_zeroes(0, 64, 0U, 0));
+
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 192}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  bufferlist expected_bl;
+  expected_bl.append_zero(64);
+  bufferlist sub_bl;
+  sub_bl.substr_of(bl, 0, 128);
+  expected_bl.claim_append(sub_bl);
+  expected_bl.append_zero(size - 192);
+
+  bufferlist read_bl;
+  EXPECT_EQ(size, image.read(0, size, read_bl));
+  EXPECT_EQ(expected_bl, read_bl);
+
+  ASSERT_EQ(0, image.close());
+}
+
+TEST_F(TestLibRBD, WriteZeroesThickProvision) {
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  auto expected_diff = interval_set<uint64_t>{{}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // writes unaligned zeroes as a prepend
+  ASSERT_EQ(128, image.write_zeroes(
+              0, 128, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 128}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  ASSERT_EQ(512, image.write_zeroes(
+              384, 512, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 896}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // prepend with write-same
+  ASSERT_EQ(640, image.write_zeroes(
+              896, 640, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 1536}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // write-same with append
+  ASSERT_EQ(640, image.write_zeroes(
+              1536, 640, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 2176}}};
+  ASSERT_EQ(expected_diff, diff);
+
+  // prepend + write-same + append
+  ASSERT_EQ(768, image.write_zeroes(
+              2176, 768, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 2944}}};
+
+  // write-same
+  ASSERT_EQ(1024, image.write_zeroes(
+              3072, 1024, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0));
+  diff.clear();
+  ASSERT_EQ(0, image.diff_iterate2(nullptr, 0, size, false, false,
+                                   iterate_cb, (void *)&diff));
+  expected_diff = interval_set<uint64_t>{{{0, 4096}}};
+
+  bufferlist expected_bl;
+  expected_bl.append_zero(size);
+
+  bufferlist read_bl;
+  EXPECT_EQ(size, image.read(0, size, read_bl));
+  EXPECT_EQ(expected_bl, read_bl);
+
+  ASSERT_EQ(0, image.close());
 }
 
 // poorman's ceph_assert()

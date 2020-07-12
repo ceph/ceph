@@ -8,10 +8,9 @@ import { tap } from 'rxjs/operators';
 import { Credentials } from '../models/credentials';
 import { LoginResponse } from '../models/login-response';
 import { AuthStorageService } from '../services/auth-storage.service';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class AuthService {
   constructor(

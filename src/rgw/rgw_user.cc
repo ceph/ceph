@@ -1743,7 +1743,8 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.max_buckets_specified) {
     user_info.max_buckets = op_state.get_max_buckets();
   } else {
-    user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+    user_info.max_buckets =
+      cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
   }
 
   user_info.suspended = op_state.get_suspension_status();
@@ -2593,7 +2594,7 @@ public:
              RGWMDLogSyncType type) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y) {
+                optional_yield y) override {
     RGWUserInfo info;
 
     rgw_user user = RGWSI_User::user_from_meta_key(entry);

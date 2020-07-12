@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
 
 import { NfsService } from '../../../shared/api/nfs.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -33,6 +33,8 @@ import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.compo
 export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
+
+  clients: any[] = [];
 
   permission: Permission;
   nfsForm: CdFormGroup;
@@ -68,16 +70,22 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.i18n
   );
 
-  pathDataSource: Observable<any> = Observable.create((observer: any) => {
-    observer.next(this.nfsForm.getValue('path'));
-  }).pipe(
-    mergeMap((token: string) => this.getPathTypeahead(token)),
-    map((val: any) => val.paths)
-  );
+  pathDataSource = (text$: Observable<string>) => {
+    return text$.pipe(
+      debounceTime(200),
+      distinctUntilChanged(),
+      mergeMap((token: string) => this.getPathTypeahead(token)),
+      map((val: any) => val.paths)
+    );
+  };
 
-  bucketDataSource: Observable<any> = Observable.create((observer: any) => {
-    observer.next(this.nfsForm.getValue('path'));
-  }).pipe(mergeMap((token: string) => this.getBucketTypeahead(token)));
+  bucketDataSource = (text$: Observable<string>) => {
+    return text$.pipe(
+      debounceTime(200),
+      distinctUntilChanged(),
+      mergeMap((token: string) => this.getBucketTypeahead(token))
+    );
+  };
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -125,9 +133,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.getData(promises);
     }
 
-    const summary = this.summaryservice.getCurrentSummary();
-    const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-    this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/radosgw/nfs/`;
+    this.summaryservice.subscribeOnce((summary) => {
+      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
+      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/radosgw/nfs/`;
+    });
   }
 
   getData(promises: Observable<any>[]) {
@@ -259,7 +268,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     this.nfsForm.patchValue(res);
     this.setPathValidation();
-    this.nfsClients.resolveModel(res.clients);
+    this.clients = res.clients;
   }
 
   resolveDaemons(daemons: Record<string, any>) {
@@ -521,11 +530,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       });
     }
 
-    action.subscribe(
-      undefined,
-      () => this.nfsForm.setErrors({ cdSubmitButton: true }),
-      () => this.router.navigate(['/nfs'])
-    );
+    action.subscribe({
+      error: () => this.nfsForm.setErrors({ cdSubmitButton: true }),
+      complete: () => this.router.navigate(['/nfs'])
+    });
   }
 
   _buildRequest() {

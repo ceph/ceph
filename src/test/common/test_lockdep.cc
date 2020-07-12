@@ -16,7 +16,7 @@ class lockdep : public ::testing::Test
 {
 protected:
   void SetUp() override {
-#ifdef CEPH_DEBUG_MUTEX
+#ifndef CEPH_DEBUG_MUTEX
     GTEST_SKIP() << "WARNING: CEPH_DEBUG_MUTEX is not defined, lockdep will not work";
 #endif
     CephInitParameters params(CEPH_ENTITY_TYPE_CLIENT);

@@ -6,6 +6,7 @@ from hashlib import md5
 
 import cephfs
 
+from ..pin_util import pin
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
@@ -195,6 +196,9 @@ class SubvolumeBase(object):
                 raise VolumeException(-e.args[0], "Cannot set new size for the subvolume. '{0}'".format(e.args[1]))
         return newsize, subvolstat.st_size
 
+    def pin(self, pin_type, pin_setting):
+        return pin(self.fs, self.base_path, pin_type, pin_setting)
+
     def init_config(self, version, subvolume_type, subvolume_path, subvolume_state):
         self.metadata_mgr.init(version, subvolume_type, subvolume_path, subvolume_state)
         self.metadata_mgr.flush()
@@ -248,6 +252,7 @@ class SubvolumeBase(object):
 
         try:
             data_pool = self.fs.getxattr(subvolpath, 'ceph.dir.layout.pool').decode('utf-8')
+            pool_namespace = self.fs.getxattr(subvolpath, 'ceph.dir.layout.pool_namespace').decode('utf-8')
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
@@ -255,4 +260,5 @@ class SubvolumeBase(object):
             'atime': str(st["atime"]), 'mtime': str(st["mtime"]), 'ctime': str(st["ctime"]),
             'mode': int(st["mode"]), 'data_pool': data_pool, 'created_at': str(st["btime"]),
             'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
-            'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}
+            'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
+            'pool_namespace': pool_namespace}

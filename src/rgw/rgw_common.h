@@ -18,8 +18,7 @@
 #define CEPH_RGW_COMMON_H
 
 #include <array>
-
-#include <boost/utility/string_view.hpp>
+#include <string_view>
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
@@ -544,6 +543,12 @@ enum RGWOpType {
   RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK,
   RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK,
   RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK,
+
+  /*OIDC provider specific*/
+  RGW_OP_CREATE_OIDC_PROVIDER,
+  RGW_OP_DELETE_OIDC_PROVIDER,
+  RGW_OP_GET_OIDC_PROVIDER,
+  RGW_OP_LIST_OIDC_PROVIDERS,
 };
 
 class RGWAccessControlPolicy;
@@ -1721,6 +1726,9 @@ struct req_state : DoutPrefixProvider {
   /// optional coroutine context
   optional_yield yield{null_yield};
 
+  //token claims from STS token for ops log (can be used for Keystone token also)
+  std::vector<string> token_claims;
+
   req_state(CephContext* _cct, RGWEnv* e, rgw::sal::RGWUser* u, uint64_t id);
   ~req_state();
 
@@ -2079,11 +2087,11 @@ extern void parse_csv_string(const string& ival, vector<string>& ovals);
 extern int parse_key_value(string& in_str, string& key, string& val);
 extern int parse_key_value(string& in_str, const char *delim, string& key, string& val);
 
-extern boost::optional<std::pair<boost::string_view, boost::string_view>>
-parse_key_value(const boost::string_view& in_str,
-                const boost::string_view& delim);
-extern boost::optional<std::pair<boost::string_view, boost::string_view>>
-parse_key_value(const boost::string_view& in_str);
+extern boost::optional<std::pair<std::string_view, std::string_view>>
+parse_key_value(const std::string_view& in_str,
+                const std::string_view& delim);
+extern boost::optional<std::pair<std::string_view, std::string_view>>
+parse_key_value(const std::string_view& in_str);
 
 
 /** time parsing */
@@ -2091,7 +2099,7 @@ extern int parse_time(const char *time_str, real_time *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, bool extended_format = true);
 extern string rgw_trim_whitespace(const string& src);
-extern boost::string_view rgw_trim_whitespace(const boost::string_view& src);
+extern std::string_view rgw_trim_whitespace(const std::string_view& src);
 extern string rgw_trim_quotes(const string& val);
 
 extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
@@ -2250,17 +2258,18 @@ extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, st
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
-extern std::string url_decode(const boost::string_view& src_str,
+extern std::string url_decode(const std::string_view& src_str,
                               bool in_query = false);
 extern void url_encode(const std::string& src, string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
+extern std::string url_remove_prefix(const std::string& url); // Removes hhtp, https and www from url
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 
 static inline sha1_digest_t
-calc_hmac_sha1(const boost::string_view& key, const boost::string_view& msg) {
+calc_hmac_sha1(const std::string_view& key, const std::string_view& msg) {
   sha1_digest_t dest;
   calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(),
                  reinterpret_cast<char*>(dest.v));
@@ -2282,7 +2291,7 @@ calc_hmac_sha256(const char *key, const int key_len,
 }
 
 static inline sha256_digest_t
-calc_hmac_sha256(const boost::string_view& key, const boost::string_view& msg) {
+calc_hmac_sha256(const std::string_view& key, const std::string_view& msg) {
   sha256_digest_t dest;
   calc_hmac_sha256(key.data(), key.size(),
                    msg.data(), msg.size(),
@@ -2292,7 +2301,7 @@ calc_hmac_sha256(const boost::string_view& key, const boost::string_view& msg) {
 
 static inline sha256_digest_t
 calc_hmac_sha256(const sha256_digest_t &key,
-                 const boost::string_view& msg) {
+                 const std::string_view& msg) {
   sha256_digest_t dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.v), sha256_digest_t::SIZE,
                    msg.data(), msg.size(),
@@ -2302,7 +2311,7 @@ calc_hmac_sha256(const sha256_digest_t &key,
 
 static inline sha256_digest_t
 calc_hmac_sha256(const std::vector<unsigned char>& key,
-                 const boost::string_view& msg) {
+                 const std::string_view& msg) {
   sha256_digest_t dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
                    msg.data(), msg.size(),
@@ -2313,7 +2322,7 @@ calc_hmac_sha256(const std::vector<unsigned char>& key,
 template<size_t KeyLenN>
 static inline sha256_digest_t
 calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
-                 const boost::string_view& msg) {
+                 const std::string_view& msg) {
   sha256_digest_t dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
                    msg.data(), msg.size(),
@@ -2321,7 +2330,7 @@ calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
   return dest;
 }
 
-extern sha256_digest_t calc_hash_sha256(const boost::string_view& msg);
+extern sha256_digest_t calc_hash_sha256(const std::string_view& msg);
 
 extern ceph::crypto::SHA256* calc_hash_sha256_open_stream();
 extern void calc_hash_sha256_update_stream(ceph::crypto::SHA256* hash,
@@ -2337,7 +2346,7 @@ static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
 static constexpr uint32_t MATCH_POLICY_ARN = 0x04;
 static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 
-extern bool match_policy(boost::string_view pattern, boost::string_view input,
+extern bool match_policy(std::string_view pattern, std::string_view input,
                          uint32_t flag);
 
 extern string camelcase_dash_http_attr(const string& orig);

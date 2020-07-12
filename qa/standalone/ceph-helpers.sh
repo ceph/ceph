@@ -2070,6 +2070,10 @@ function flush_pg_stats()
     seqs=''
     for osd in $ids; do
 	    seq=`ceph tell osd.$osd flush_pg_stats`
+	    if test -z "$seq"
+	    then
+		continue
+	    fi
 	    seqs="$seqs $osd-$seq"
     done
 

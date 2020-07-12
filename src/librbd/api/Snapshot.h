@@ -41,6 +41,9 @@ struct Snapshot {
   static int exists(ImageCtxT *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
 		    const char *snap_name, bool *exists);
 
+  static int create(ImageCtxT *ictx, const char *snap_name, uint32_t flags,
+                    ProgressContext& pctx);
+
   static int remove(ImageCtxT *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
 
   static int get_limit(ImageCtxT *ictx, uint64_t *limit);

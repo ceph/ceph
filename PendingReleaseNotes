@@ -40,13 +40,18 @@
   the commands ``orch ps`` and ``orch ls`` now support ``--format yaml`` and
   ``--format json-pretty``.
 
+* CephFS: Automatic static subtree partitioning policies may now be configured
+  using the new distributed and random ephemeral pinning extended attributes on
+  directories. See the documentation for more information:
+  https://docs.ceph.com/docs/master/cephfs/multimds/
+
 * Cephadm: ``ceph orch apply osd`` supports a ``--preview`` flag that prints a preview of
   the OSD specification before deploying OSDs. This makes it possible to
   verify that the specification is correct, before applying it.
 
 * RGW: The ``radosgw-admin`` sub-commands dealing with orphans --
-  ``radosgw-admin orphans find``, ``radosgw-admin orphans find``,
-  ``radosgw-admin orphans find`` -- have been deprecated. They have
+  ``radosgw-admin orphans find``, ``radosgw-admin orphans finish``, and
+  ``radosgw-admin orphans list-jobs`` -- have been deprecated. They have
   not been actively maintained and they store intermediate results on
   the cluster, which could fill a nearly-full cluster.  They have been
   replaced by a tool, currently considered experimental,
@@ -77,3 +82,13 @@
   librbd to load the plugin by adding the following to your configuration::
 
     rbd_plugins = parent_cache
+
+* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
+  If any OSD has repaired more than this many I/O errors in stored data a
+ ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
+
+* Introduce commands that manipulate required client features of a file system::
+
+    ceph fs required_client_features <fs name> add <feature>
+    ceph fs required_client_features <fs name> rm <feature>
+    ceph fs feature ls

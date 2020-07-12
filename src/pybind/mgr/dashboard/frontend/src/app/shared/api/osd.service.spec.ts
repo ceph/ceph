@@ -14,8 +14,8 @@ describe('OsdService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(OsdService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(OsdService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
@@ -53,6 +53,13 @@ describe('OsdService', () => {
     const req = httpTesting.expectOne('api/osd');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(post_data);
+  });
+
+  it('should call delete', () => {
+    const id = 1;
+    service.delete(id, true, true).subscribe();
+    const req = httpTesting.expectOne(`api/osd/${id}?preserve_id=true&force=true`);
+    expect(req.request.method).toBe('DELETE');
   });
 
   it('should call getList', () => {

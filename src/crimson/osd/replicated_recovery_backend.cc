@@ -45,16 +45,18 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 					   std::move(msg),
 					   pg.get_osdmap_epoch()).then(
 	  [&recovery_waiter] {
-	  return recovery_waiter.wait_for_pull();
+	  return recovery_waiter.wait_for_pull().then([] {
+	    return seastar::make_ready_future<bool>(true);
+	  });
 	});
       } else {
-	return seastar::make_ready_future<>();
+	return seastar::make_ready_future<bool>(false);
       }
-    }().then([this, &pops, &shards, soid, need, &recovery_waiter]() mutable {
-      return [this, &recovery_waiter, soid] {
+    }().then([this, &pops, &shards, soid, need, &recovery_waiter](bool pulled) mutable {
+      return [this, &recovery_waiter, soid, pulled] {
 	if (!recovery_waiter.obc) {
 	  return pg.get_or_load_head_obc(soid).safe_then(
-	    [&recovery_waiter](auto p) {
+	    [&recovery_waiter, pulled](auto p) {
 	    auto& [obc, existed] = p;
 	    logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
 	    recovery_waiter.obc = obc;
@@ -62,7 +64,12 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      // obc is loaded with excl lock
 	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
 	    }
-	    assert(recovery_waiter.obc->get_recovery_read());
+	    bool got = recovery_waiter.obc->get_recovery_read().get0();
+	    assert(pulled ? got : 1);
+	    if (!got) {
+	      return recovery_waiter.obc->get_recovery_read(true)
+	      .then([](bool) { return seastar::now(); });
+	    }
 	    return seastar::make_ready_future<>();
 	  }, crimson::osd::PG::load_obc_ertr::all_same_way(
 	      [this, &recovery_waiter, soid](const std::error_code& e) {
@@ -73,7 +80,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      recovery_waiter.obc = obc;
 	      // obc is loaded with excl lock
 	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-	      assert(recovery_waiter.obc->get_recovery_read());
+	      assert(recovery_waiter.obc->get_recovery_read().get0());
 	      return seastar::make_ready_future<>();
 	    })
 	  );
@@ -638,11 +645,12 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 			    [this, &pop, &pi, first, t, response]
 			    (auto& data_zeros, auto& data,
 			     auto& usable_intervals) {
-      data = pop.data;
-      ceph::bufferlist usable_data;
-      trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, data,
-	  &usable_intervals, &usable_data);
-      data.claim(usable_data);
+      {
+        ceph::bufferlist usable_data;
+        trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, pop.data,
+	    &usable_intervals, &usable_data);
+        data = std::move(usable_data);
+      }
       pi.recovery_progress = pop.after_progress;
       logger().debug("new recovery_info {}, new progress {}",
 	  pi.recovery_info, pi.recovery_progress);

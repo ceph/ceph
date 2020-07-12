@@ -2,15 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
+#include "include/ceph_fuse.h"
 #include "FuseStore.h"
 #include "os/ObjectStore.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 
-#define FUSE_USE_VERSION 30
-#include <fuse.h>
 #include <fuse_lowlevel.h>
-#include "include/ceph_fuse.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -64,7 +62,7 @@ int FuseStore::open_file(string p, struct fuse_file_info *fi,
   }
   OpenFile *o = new OpenFile;
   o->path = p;
-  o->bl.claim(bl);
+  o->bl = std::move(bl);
   open_files[p] = o;
   fi->fh = reinterpret_cast<uint64_t>(o);
   ++o->ref;
@@ -732,7 +730,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   if (pbl) {
     FuseStore::OpenFile *o = new FuseStore::OpenFile;
-    o->bl.claim(*pbl);
+    o->bl = std::move(*pbl);
     fi->fh = reinterpret_cast<uint64_t>(o);
   }
   return 0;
@@ -879,7 +877,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   if (pbl) {
     FuseStore::OpenFile *o = new FuseStore::OpenFile;
-    o->bl.claim(*pbl);
+    o->bl = std::move(*pbl);
     o->dirty = true;
     fi->fh = reinterpret_cast<uint64_t>(o);
   }

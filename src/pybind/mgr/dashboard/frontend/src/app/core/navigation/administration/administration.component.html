@@ -1,7 +1,7 @@
-<div dropdown
-     class="btn-group"
+<div ngbDropdown
+     placement="bottom-right"
      *ngIf="userPermission.read">
-  <a dropdownToggle
+  <a ngbDropdownToggle
      class="dropdown-toggle"
      i18n-title
      title="Dashboard Settings">
@@ -9,18 +9,14 @@
     <span i18n
           class="d-md-none">Dashboard Settings</span>
   </a>
-  <ul *dropdownMenu
-      class="dropdown-menu dropdown-menu-right"
-      role="menu">
-    <li *ngIf="userPermission.read">
-      <a i18n
-         class="dropdown-item"
-         routerLink="/user-management">User management</a>
-    </li>
-    <li *ngIf="configOptPermission.read">
-      <a i18n
-         class="dropdown-item"
-         routerLink="/telemetry">Telemetry configuration</a>
-    </li>
-  </ul>
+  <div ngbDropdownMenu>
+    <button ngbDropdownItem
+            *ngIf="userPermission.read"
+            routerLink="/user-management"
+            i18n>User management</button>
+    <button ngbDropdownItem
+            *ngIf="configOptPermission.read"
+            routerLink="/telemetry"
+            i18n>Telemetry configuration</button>
+  </div>
 </div>

@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -37,7 +37,7 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private i18n: I18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
@@ -59,12 +59,8 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
       this.setResponse(resp);
     });
 
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
+    this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.peerExists = false;
-      if (!data) {
-        return;
-      }
-
       const poolData = data.content_data.pools;
       const pool = poolData.find((o: any) => this.poolName === o['name']);
       this.peerExists = pool && pool['peer_uuids'].length;
@@ -97,13 +93,12 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
       call: this.rbdMirroringService.updatePool(this.poolName, request)
     });
 
-    action.subscribe(
-      undefined,
-      () => this.editModeForm.setErrors({ cdSubmitButton: true }),
-      () => {
+    action.subscribe({
+      error: () => this.editModeForm.setErrors({ cdSubmitButton: true }),
+      complete: () => {
         this.rbdMirroringService.refresh();
-        this.modalRef.hide();
+        this.activeModal.close();
       }
-    );
+    });
   }
 }

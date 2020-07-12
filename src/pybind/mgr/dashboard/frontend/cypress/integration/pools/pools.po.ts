@@ -52,7 +52,7 @@ export class PoolPageHelper extends PageHelper {
       return;
     }
     cy.get('.float-left.mr-2.select-menu-edit').click();
-    cy.get('.popover-content.popover-body').should('be.visible');
+    cy.get('.popover-body').should('be.visible');
     apps.forEach((app) => cy.get('.select-menu-item-content').contains(app).click());
   }
 }

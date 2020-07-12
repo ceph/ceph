@@ -1,5 +1,7 @@
 import { Component, Input, TemplateRef, ViewChild } from '@angular/core';
 
+import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
+
 import { RbdFormModel } from '../rbd-form/rbd-form.model';
 
 @Component({
@@ -12,8 +14,10 @@ export class RbdDetailsComponent {
   selection: RbdFormModel;
   @Input()
   images: any;
+
   @ViewChild('poolConfigurationSourceTpl', { static: true })
   poolConfigurationSourceTpl: TemplateRef<any>;
 
-  constructor() {}
+  @ViewChild(NgbNav, { static: true })
+  nav: NgbNav;
 }

@@ -16,13 +16,13 @@
 #ifndef CEPH_MDISCOVER_H
 #define CEPH_MDISCOVER_H
 
-#include "msg/Message.h"
 #include "include/filepath.h"
+#include "messages/MMDSOp.h"
 
 #include <string>
 
 
-class MDiscover : public SafeMessage {
+class MDiscover : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -50,14 +50,14 @@ private:
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
 protected:
-  MDiscover() : SafeMessage(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
+  MDiscover() : MMDSOp(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,
             filepath& want_path_,
             bool want_base_dir_ = true,
 	    bool path_locked_ = false) :
-    SafeMessage{MSG_MDS_DISCOVER},
+    MMDSOp{MSG_MDS_DISCOVER},
     base_ino(base_ino_),
     base_dir_frag(base_frag_),
     snapid(s),

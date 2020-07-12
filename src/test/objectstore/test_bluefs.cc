@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <random>
 #include <thread>
+#include <stack>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -51,6 +52,36 @@ private:
   static void rm_temp_bdev(string f)
   {
     ::unlink(f.c_str());
+  }
+};
+
+class ConfSaver {
+  std::stack<std::pair<std::string, std::string>> saved_settings;
+  ConfigProxy& conf;
+public:
+  ConfSaver(ConfigProxy& conf) : conf(conf) {
+    conf._clear_safe_to_start_threads();
+  };
+  ~ConfSaver() {
+    conf._clear_safe_to_start_threads();
+    while(saved_settings.size() > 0) {
+      auto& e = saved_settings.top();
+      conf.set_val_or_die(e.first, e.second);
+      saved_settings.pop();
+    }
+    conf.set_safe_to_start_threads();
+    conf.apply_changes(nullptr);
+  }
+  void SetVal(const char* key, const char* val) {
+    std::string skey(key);
+    std::string prev_val;
+    conf.get_val(skey, &prev_val);
+    conf.set_val_or_die(skey, val);
+    saved_settings.emplace(skey, prev_val);
+  }
+  void ApplyChanges() {
+    conf.set_safe_to_start_threads();
+    conf.apply_changes(nullptr);
   }
 };
 
@@ -707,6 +738,45 @@ TEST(BlueFS, test_replay) {
     fs.compact_log();
   }
   fs.umount();
+  // remount and check log can replay safe?
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  fs.umount();
+}
+
+TEST(BlueFS, test_replay_growth) {
+  uint64_t size = 1048576LL * (2 * 1024 + 128);
+  TempBdev bdev{size};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  conf.SetVal("bluefs_min_log_runway", "32768");
+  conf.SetVal("bluefs_max_log_runway", "65536");
+  conf.SetVal("bluefs_allocator", "stupid");
+  conf.SetVal("bluefs_sync_write", "true");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mkdir("dir"));
+
+  char data[2000];
+  BlueFS::FileWriter *h;
+  ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+  for (size_t i = 0; i < 10000; i++) {
+    h->append(data, 2000);
+    fs.fsync(h);
+  }
+  fs.close_writer(h);
+  fs.umount(true); //do not compact on exit!
+
   // remount and check log can replay safe?
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));

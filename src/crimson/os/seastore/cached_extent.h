@@ -48,6 +48,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
 
+  uint32_t last_committed_crc = 0;
 public:
   /**
    *  duplicate_for_write
@@ -81,6 +82,16 @@ public:
   virtual void on_initial_write() {}
 
   /**
+   * on_clean_read
+   *
+   * Called after read of initially written extent.
+   *  State will be CLEAN. Implentation may use this
+   * call to fixup the buffer with the newly available
+   * absolute get_paddr().
+   */
+  virtual void on_clean_read() {}
+
+  /**
    * on_delta_write
    *
    * Called after commit of delta.  State will be DIRTY.
@@ -98,14 +109,16 @@ public:
   virtual extent_types_t get_type() const = 0;
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
+  virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
-    return out << "CachedExtent(addr=" << this
-	       << ", type=" << get_type()
-	       << ", version=" << version
-	       << ", paddr=" << get_paddr()
-	       << ", state=" << state
-	       << ", refcount=" << use_count()
-	       << ")";
+    out << "CachedExtent(addr=" << this
+	<< ", type=" << get_type()
+	<< ", version=" << version
+	<< ", paddr=" << get_paddr()
+	<< ", state=" << state
+	<< ", refcount=" << use_count();
+    print_detail(out);
+    return out << ")";
   }
 
   /**
@@ -117,11 +130,24 @@ public:
   virtual ceph::bufferlist get_delta() = 0;
 
   /**
+   * apply_delta
+   *
    * bl is a delta obtained previously from get_delta.  The versions will
    * match.  Implementation should mutate buffer based on bl.  base matches
    * the address passed on_delta_write.
+   *
+   * Implementation *must* use set_last_committed_crc to update the crc to
+   * what the crc of the buffer would have been at submission.  For physical
+   * extents that use base to adjust internal record-relative deltas, this
+   * means that the crc should be of the buffer after applying the delta,
+   * but before that adjustment.  We do it this way because the crc in the
+   * commit path does not yet know the record base address.
+   *
+   * LogicalCachedExtent overrides this method and provides a simpler
+   * apply_delta override for LogicalCachedExtent implementers.
    */
-  virtual void apply_delta(paddr_t base, ceph::bufferlist &bl) = 0;
+  virtual void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) = 0;
 
   /**
    * Called on dirty CachedExtent implementation after replay.
@@ -194,6 +220,14 @@ public:
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
     return version;
+  }
+
+  /// Returns crc32c of buffer
+  uint32_t get_crc32c(uint32_t crc=1) {
+    return ceph_crc32c(
+      crc,
+      reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
+      get_length());
   }
 
   /// Get ref to raw buffer
@@ -270,6 +304,7 @@ private:
   }
 
 protected:
+  CachedExtent(CachedExtent &&other) = default;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
@@ -277,10 +312,23 @@ protected:
       version(other.version),
       poffset(other.poffset) {}
 
+  struct share_buffer_t {};
+  CachedExtent(const CachedExtent &other, share_buffer_t) :
+    state(other.state),
+    ptr(other.ptr),
+    version(other.version),
+    poffset(other.poffset) {}
+
+
   friend class Cache;
-  template <typename T, typename... Args>
-  static TCachedExtentRef<T> make_cached_extent_ref(Args&&... args) {
-    return new T(std::forward<Args>(args)...);
+  template <typename T>
+  static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
+    return new T(std::move(ptr));
+  }
+
+  /// Sets last_committed_crc
+  void set_last_committed_crc(uint32_t crc) {
+    last_committed_crc = crc;
   }
 
   void set_paddr(paddr_t offset) { poffset = offset; }
@@ -309,7 +357,8 @@ protected:
     } else if (is_mutation_pending()) {
       return addr;
     } else {
-      ceph_assert(get_paddr().is_relative());
+      ceph_assert(is_initial_pending());
+      ceph_assert(get_paddr().is_record_relative());
       return addr - get_paddr();
     }
   }
@@ -380,7 +429,7 @@ public:
 	bottom->get_paddr().add_offset(bottom->get_length()) <= addr)
       ++bottom;
 
-    auto top = extent_index.upper_bound(addr.add_offset(len), paddr_cmp());
+    auto top = extent_index.lower_bound(addr.add_offset(len), paddr_cmp());
     return std::make_pair(
       bottom,
       top

@@ -1,7 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
-
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 
 describe('MgrSummaryPipe', () => {
@@ -12,7 +11,7 @@ describe('MgrSummaryPipe', () => {
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(MgrSummaryPipe);
+    pipe = TestBed.inject(MgrSummaryPipe);
   });
 
   it('create an instance', () => {

@@ -3,7 +3,6 @@
 
 #include "librbd/io/ImageDispatch.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"

@@ -1,4 +1,5 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { CephServiceService } from '../../../shared/api/ceph-service.service';
@@ -72,7 +73,9 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         name: this.i18n('Running'),
         prop: 'status.running',
-        flexGrow: 1
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
       },
       {
         name: this.i18n('Size'),

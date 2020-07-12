@@ -17,9 +17,10 @@
 #include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
+#include "crimson/common/throttle.h"
+#include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Socket.h"
-#include "crimson/thread/Throttle.h"
 
 namespace crimson::net {
 
@@ -33,7 +34,7 @@ class SocketConnection : public Connection {
   SocketMessenger& messenger;
   std::unique_ptr<Protocol> protocol;
 
-  ceph::net::Policy<crimson::thread::Throttle> policy;
+  ceph::net::Policy<crimson::common::Throttle> policy;
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -54,7 +55,7 @@ class SocketConnection : public Connection {
 
  public:
   SocketConnection(SocketMessenger& messenger,
-                   Dispatcher& dispatcher,
+                   ChainedDispatchersRef& dispatcher,
                    bool is_msgr2);
   ~SocketConnection() override;
 

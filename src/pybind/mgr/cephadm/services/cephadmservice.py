@@ -1,5 +1,7 @@
+import json
 import logging
-from typing import TYPE_CHECKING, List
+from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING, List, Callable, Any
 
 from mgr_module import MonCommandFailed
 
@@ -13,15 +15,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class CephadmService:
+class CephadmService(metaclass=ABCMeta):
     """
     Base class for service types. Often providing a create() and config() fn.
     """
+
+    @property
+    @abstractmethod
+    def TYPE(self):
+        pass
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
+        if self.mgr.config_dashboard:
+            self.config_dashboard(daemon_descrs)
+    
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
+        """Config dashboard settings."""
         raise NotImplementedError()
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -36,28 +49,106 @@ class CephadmService:
                                       get_mon_cmd: str,
                                       set_mon_cmd: str,
                                       service_url: str):
-        """A helper to get and set service_url via Dashboard's MON command."""
+        """A helper to get and set service_url via Dashboard's MON command.
+
+           If result of get_mon_cmd differs from service_url, set_mon_cmd will
+           be sent to set the service_url.
+        """
+        def get_set_cmd_dicts(out: str) -> List[dict]:
+            cmd_dict = {
+                'prefix': set_mon_cmd,
+                'value': service_url
+            }
+            return [cmd_dict] if service_url != out else []
+
+        self._check_and_set_dashboard(
+            service_name=service_name,
+            get_cmd=get_mon_cmd,
+            get_set_cmd_dicts=get_set_cmd_dicts
+        )
+
+    def _check_and_set_dashboard(self,
+                                 service_name: str,
+                                 get_cmd: str,
+                                 get_set_cmd_dicts: Callable[[str], List[dict]]):
+        """A helper to set configs in the Dashboard.
+
+        The method is useful for the pattern:
+            - Getting a config from Dashboard by using a Dashboard command. e.g. current iSCSI
+              gateways.
+            - Parse or deserialize previous output. e.g. Dashboard command returns a JSON string.
+            - Determine if the config need to be update. NOTE: This step is important because if a
+              Dashboard command modified Ceph config, cephadm's config_notify() is called. Which
+              kicks the serve() loop and the logic using this method is likely to be called again.
+              A config should be updated only when needed.
+            - Update a config in Dashboard by using a Dashboard command.
+
+        :param service_name: the service name to be used for logging
+        :type service_name: str
+        :param get_cmd: Dashboard command prefix to get config. e.g. dashboard get-grafana-api-url
+        :type get_cmd: str
+        :param get_set_cmd_dicts: function to create a list, and each item is a command dictionary.
+            e.g.
+            [
+                {
+                   'prefix': 'dashboard iscsi-gateway-add',
+                   'service_url': 'http://admin:admin@aaa:5000',
+                   'name': 'aaa'
+                },
+                {
+                    'prefix': 'dashboard iscsi-gateway-add',
+                    'service_url': 'http://admin:admin@bbb:5000',
+                    'name': 'bbb'
+                }
+            ]
+            The function should return empty list if no command need to be sent.
+        :type get_set_cmd_dicts: Callable[[str], List[dict]]
+        """
+
         try:
             _, out, _ = self.mgr.check_mon_command({
-                'prefix': get_mon_cmd
+                'prefix': get_cmd
             })
         except MonCommandFailed as e:
-            logger.warning('Failed to get service URL for %s: %s', service_name, e)
+            logger.warning('Failed to get Dashboard config for %s: %s', service_name, e)
             return
-        if out.strip() != service_url:
+        cmd_dicts = get_set_cmd_dicts(out.strip())
+        for cmd_dict in list(cmd_dicts):
             try:
-                logger.info(
-                    'Setting service URL %s for %s in the Dashboard', service_url, service_name)
-                _, out, _ = self.mgr.check_mon_command({
-                    'prefix': set_mon_cmd,
-                    'value': service_url,
-                })
+                logger.info('Setting Dashboard config for %s: command: %s', service_name, cmd_dict)
+                _, out, _ = self.mgr.check_mon_command(cmd_dict)
             except MonCommandFailed as e:
-                logger.warning('Failed to set service URL %s for %s in the Dashboard: %s',
-                               service_url, service_name, e)
+                logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
+
+
+    def ok_to_stop(self, daemon_ids: List[str]) -> bool:
+        names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+
+        if self.TYPE not in ['mon', 'osd', 'mds']:
+            logger.info('Upgrade: It is presumed safe to stop %s' % names)
+            return True
+
+        ret, out, err = self.mgr.mon_command({
+            'prefix': f'{self.TYPE} ok-to-stop',
+            'ids': daemon_ids,
+        })
+
+        if ret:
+            logger.info(f'It is NOT safe to stop {names}: {err}')
+            return False
+
+        return True
+
+    def pre_remove(self, daemon_id: str) -> None:
+        """
+        Called before the daemon is removed.
+        """
+        pass
 
 class MonService(CephadmService):
+    TYPE = 'mon'
+
     def create(self, name, host, network):
         """
         Create a new monitor on the given host.
@@ -97,8 +188,43 @@ class MonService(CephadmService):
                                        keyring=keyring,
                                        extra_config={'config': extra_config})
 
+    def _check_safe_to_destroy(self, mon_id):
+        # type: (str) -> None
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'quorum_status',
+        })
+        try:
+            j = json.loads(out)
+        except Exception as e:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        if mon_id not in mons:
+            logger.info('Safe to remove mon.%s: not in monmap (%s)' % (
+                mon_id, mons))
+            return
+        new_mons = [m for m in mons if m != mon_id]
+        new_quorum = [m for m in j['quorum_names'] if m != mon_id]
+        if len(new_quorum) > len(new_mons) / 2:
+            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            return
+        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
+
+
+    def pre_remove(self, daemon_id: str) -> None:
+        self._check_safe_to_destroy(daemon_id)
+
+        # remove mon from quorum before we destroy the daemon
+        logger.info('Removing monitor %s from monmap...' % daemon_id)
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'mon rm',
+            'name': daemon_id,
+        })
+
 
 class MgrService(CephadmService):
+    TYPE = 'mgr'
+
     def create(self, mgr_id, host):
         """
         Create a new manager instance on a host.
@@ -116,6 +242,8 @@ class MgrService(CephadmService):
 
 
 class MdsService(CephadmService):
+    TYPE = 'mds'
+
     def config(self, spec: ServiceSpec):
         # ensure mds_join_fs is set for these daemons
         assert spec.service_id
@@ -132,13 +260,15 @@ class MdsService(CephadmService):
             'prefix': 'auth get-or-create',
             'entity': 'mds.' + mds_id,
             'caps': ['mon', 'profile mds',
-                     'osd', 'allow rwx',
+                     'osd', 'allow rw tag cephfs *=*',
                      'mds', 'allow'],
         })
         return self.mgr._create_daemon('mds', mds_id, host, keyring=keyring)
 
 
 class RgwService(CephadmService):
+    TYPE = 'rgw'
+
     def config(self, spec: RGWSpec):
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
@@ -163,8 +293,12 @@ class RgwService(CephadmService):
         if spec.rgw_frontend_ssl_certificate:
             if isinstance(spec.rgw_frontend_ssl_certificate, list):
                 cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
-            else:
+            elif isinstance(spec.rgw_frontend_ssl_certificate, str):
                 cert_data = spec.rgw_frontend_ssl_certificate
+            else:
+                raise OrchestratorError(
+                        'Invalid rgw_frontend_ssl_certificate: %s'
+                        % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
@@ -174,8 +308,12 @@ class RgwService(CephadmService):
         if spec.rgw_frontend_ssl_key:
             if isinstance(spec.rgw_frontend_ssl_key, list):
                 key_data = '\n'.join(spec.rgw_frontend_ssl_key)
+            elif isinstance(spec.rgw_frontend_ssl_certificate, str):
+                key_data = spec.rgw_frontend_ssl_key
             else:
-                key_data = spec.rgw_frontend_ssl_key  # type: ignore
+                raise OrchestratorError(
+                        'Invalid rgw_frontend_ssl_key: %s'
+                        % spec.rgw_frontend_ssl_key)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
@@ -198,6 +336,8 @@ class RgwService(CephadmService):
 
 
 class RbdMirrorService(CephadmService):
+    TYPE = 'rbd-mirror'
+
     def create(self, daemon_id, host) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -210,6 +350,8 @@ class RbdMirrorService(CephadmService):
 
 
 class CrashService(CephadmService):
+    TYPE = 'crash'
+
     def create(self, daemon_id, host) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',

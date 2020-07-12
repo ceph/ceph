@@ -3,8 +3,8 @@
 
 #include "librbd/io/QosImageDispatch.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/FlushTracker.h"
 #include <map>
 

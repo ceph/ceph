@@ -4,7 +4,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
@@ -31,8 +30,6 @@ export class RoleFormComponent extends CdForm implements OnInit {
   cellScopeCheckboxTpl: TemplateRef<any>;
   @ViewChild('cellPermissionCheckboxTpl', { static: true })
   cellPermissionCheckboxTpl: TemplateRef<any>;
-
-  modalRef: BsModalRef;
 
   roleForm: CdFormGroup;
   response: RoleFormModel;

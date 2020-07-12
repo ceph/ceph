@@ -2949,9 +2949,9 @@ void PeeringState::split_into(
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap_epoch();
 
-  child->info.stats.up = up;
+  child->info.stats.up = newup;
   child->info.stats.up_primary = up_primary;
-  child->info.stats.acting = acting;
+  child->info.stats.acting = newacting;
   child->info.stats.acting_primary = primary;
   child->info.stats.mapping_epoch = get_osdmap_epoch();
 
@@ -3085,6 +3085,20 @@ void PeeringState::merge_from(
 	       << " from pool last_dec_*, source pg history was "
 	       << sources.begin()->second->info.history
 	       << dendl;
+
+    // above we have pulled down source's history and we need to check
+    // history.epoch_created again to confirm that source is not a placeholder
+    // too. (peering requires a sane history.same_interval_since value for any
+    // non-newly created pg and below here we know we are basically iterating
+    // back a series of past maps to fake a merge process, hence we need to
+    // fix history.same_interval_since first so that start_peering_interval()
+    // will not complain)
+    if (info.history.epoch_created == 0) {
+      dout(10) << __func__ << " both merge target and source are placeholders,"
+               << " set sis to lec " << info.history.last_epoch_clean
+               << dendl;
+      info.history.same_interval_since = info.history.last_epoch_clean;
+    }
 
     // if the past_intervals start is later than last_epoch_clean, it
     // implies the source repeered again but the target didn't, or

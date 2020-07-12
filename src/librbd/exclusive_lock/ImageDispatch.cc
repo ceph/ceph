@@ -5,7 +5,6 @@
 #include "include/Context.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
@@ -41,9 +40,6 @@ ImageDispatch<I>::~ImageDispatch() {
 
 template <typename I>
 void ImageDispatch<I>::shut_down(Context* on_finish) {
-  // TODO remove when ImageRequestWQ is removed
-  unset_require_lock(io::DIRECTION_BOTH);
-
   // release any IO waiting on exclusive lock
   Contexts on_dispatches;
   {
@@ -63,27 +59,21 @@ void ImageDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 void ImageDispatch<I>::set_require_lock(io::Direction direction,
                                         Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-
   // pause any matching IO from proceeding past this layer
   set_require_lock(direction, true);
 
-  auto ctx = new C_Gather(cct, on_finish);
-
-  // passive wait for in-flight IO to complete
-  m_flush_tracker->flush(ctx->new_sub());
-
-  if (direction != io::DIRECTION_READ) {
-    // push through an flush for any in-flight writes at lower levels
-    auto aio_comp = io::AioCompletion::create_and_start(
-      ctx->new_sub(), util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush(
-      *m_image_ctx, io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK, aio_comp,
-      io::FLUSH_SOURCE_INTERNAL, {});
-    req->send();
+  if (direction == io::DIRECTION_READ) {
+    on_finish->complete(0);
+    return;
   }
 
-  ctx->activate();
+  // push through a flush for any in-flight writes at lower levels
+  auto aio_comp = io::AioCompletion::create_and_start(
+    on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
+  auto req = io::ImageDispatchSpec<I>::create_flush(
+    *m_image_ctx, io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK, aio_comp,
+    io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
 }
 
 template <typename I>
@@ -292,6 +282,7 @@ bool ImageDispatch<I>::needs_exclusive_lock(bool read_op, uint64_t tid,
 
     ceph_assert(m_on_dispatches.empty() || retesting_lock);
     m_on_dispatches.push_back(on_dispatched);
+    locker.unlock();
 
     *dispatch_result = io::DISPATCH_RESULT_RESTART;
     auto ctx = create_context_callback<

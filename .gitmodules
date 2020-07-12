@@ -71,3 +71,6 @@
 	path = src/aws-sdk-cpp
 	url = https://github.com/prateek2211/aws-sdk-cpp
 	branch = aws-ceph-submodule
+[submodule "s3select"]
+	path = src/s3select
+	url = https://github.com/ceph/s3select.git

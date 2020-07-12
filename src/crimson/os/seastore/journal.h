@@ -148,7 +148,7 @@ public:
 	auto ret = next_record_addr();
 	return write_record(rsize, std::move(record)
 	).safe_then([this, ret] {
-	  return ret.add_relative(make_relative_paddr(block_size));
+	  return ret.add_offset(block_size);
 	});
       });
   }

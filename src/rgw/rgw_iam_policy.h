@@ -9,13 +9,13 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/variant.hpp>
 
 #include "common/ceph_time.h"
@@ -122,7 +122,11 @@ static constexpr std::uint64_t iamPutRolePolicy = s3All + 10;
 static constexpr std::uint64_t iamGetRolePolicy = s3All + 11;
 static constexpr std::uint64_t iamListRolePolicies = s3All + 12;
 static constexpr std::uint64_t iamDeleteRolePolicy = s3All + 13;
-static constexpr std::uint64_t iamAll = s3All + 14;
+static constexpr std::uint64_t iamCreateOIDCProvider = s3All + 14;
+static constexpr std::uint64_t iamDeleteOIDCProvider = s3All + 15;
+static constexpr std::uint64_t iamGetOIDCProvider = s3All + 16;
+static constexpr std::uint64_t iamListOIDCProviders = s3All + 17;
+static constexpr std::uint64_t iamAll = s3All + 18;
 
 static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
 static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;
@@ -308,7 +312,7 @@ struct Condition {
 				  * 1000000000)));
       }
 
-      return from_iso_8601(boost::string_ref(s), false);
+      return from_iso_8601(std::string_view(s), false);
     } catch (const std::logic_error& e) {
       return boost::none;
     }

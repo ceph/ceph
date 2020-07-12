@@ -5,9 +5,9 @@
 #include "librbd/watcher/RewatchRequest.h"
 #include "librbd/Utils.h"
 #include "librbd/TaskFinisher.h"
+#include "librbd/asio/ContextWQ.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include <boost/bind.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
@@ -87,11 +87,12 @@ void Watcher::C_NotifyAck::finish(int r) {
 #define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
                            << ": "
 
-Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
+Watcher::Watcher(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
                           const string& oid)
   : m_ioctx(ioctx), m_work_queue(work_queue), m_oid(oid),
     m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_watch_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::Watcher::m_watch_lock", this))),
+    m_watch_lock(ceph::make_shared_mutex(
+      util::unique_lock_name("librbd::Watcher::m_watch_lock", this))),
     m_watch_handle(0), m_notifier(work_queue, ioctx, oid),
     m_watch_state(WATCH_STATE_IDLE), m_watch_ctx(*this) {
 }

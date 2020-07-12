@@ -98,9 +98,14 @@ cdef extern from "rbd/librbd.h" nogil:
         RBD_MAX_BLOCK_NAME_SIZE
         RBD_MAX_IMAGE_NAME_SIZE
 
+        _RBD_SNAP_CREATE_SKIP_QUIESCE "RBD_SNAP_CREATE_SKIP_QUIESCE"
+        _RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR "RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR"
+
         _RBD_SNAP_REMOVE_UNPROTECT "RBD_SNAP_REMOVE_UNPROTECT"
         _RBD_SNAP_REMOVE_FLATTEN "RBD_SNAP_REMOVE_FLATTEN"
         _RBD_SNAP_REMOVE_FORCE "RBD_SNAP_REMOVE_FORCE"
+
+        _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION "RBD_WRITE_ZEROES_FLAG_THICK_PROVISION"
 
     ctypedef void* rados_t
     ctypedef void* rados_ioctx_t
@@ -500,6 +505,8 @@ cdef extern from "rbd/librbd.h" nogil:
     ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
                        const char *buf, int op_flags)
     int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
+    int rbd_write_zeroes(rbd_image_t image, uint64_t ofs, uint64_t len,
+                         int zero_flags, int op_flags)
     int rbd_copy3(rbd_image_t src, rados_ioctx_t dest_io_ctx,
                   const char *destname, rbd_image_options_t dest_opts)
     int rbd_deep_copy(rbd_image_t src, rados_ioctx_t dest_io_ctx,
@@ -507,7 +514,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
                       int *max_snaps)
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
-    int rbd_snap_create(rbd_image_t image, const char *snapname)
+    int rbd_snap_create2(rbd_image_t image, const char *snapname, uint32_t flags,
+			 librbd_progress_fn_t cb, void *cbdata)
     int rbd_snap_remove(rbd_image_t image, const char *snapname)
     int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags,
 			 librbd_progress_fn_t cb, void *cbdata)
@@ -599,7 +607,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_promote(rbd_image_t image, bint force)
     int rbd_mirror_image_demote(rbd_image_t image)
     int rbd_mirror_image_resync(rbd_image_t image)
-    int rbd_mirror_image_create_snapshot(rbd_image_t image, uint64_t *snap_id)
+    int rbd_mirror_image_create_snapshot2(rbd_image_t image, uint32_t flags,
+                                          uint64_t *snap_id)
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
@@ -622,6 +631,8 @@ cdef extern from "rbd/librbd.h" nogil:
                       char *buf, rbd_completion_t c, int op_flags)
     int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
                         rbd_completion_t c)
+    int rbd_aio_write_zeroes(rbd_image_t image, uint64_t off, uint64_t len,
+                             rbd_completion_t c, int zero_flags, int op_flags)
 
     int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb,
                                   rbd_completion_t *c)
@@ -800,9 +811,14 @@ RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_PROVI
 RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES
 RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS = _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
 
+RBD_SNAP_CREATE_SKIP_QUIESCE = _RBD_SNAP_CREATE_SKIP_QUIESCE
+RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR = _RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR
+
 RBD_SNAP_REMOVE_UNPROTECT = _RBD_SNAP_REMOVE_UNPROTECT
 RBD_SNAP_REMOVE_FLATTEN = _RBD_SNAP_REMOVE_FLATTEN
 RBD_SNAP_REMOVE_FORCE = _RBD_SNAP_REMOVE_FORCE
+
+RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION
 
 class Error(Exception):
     pass
@@ -1023,8 +1039,6 @@ def cstr(val, name, encoding="utf-8", opt=False):
     if isinstance(val, bytes):
         return val
     elif isinstance(val, str):
-        return val.encode(encoding)
-    elif sys.version_info < (3, 0) and isinstance(val, unicode):
         return val.encode(encoding)
     else:
         raise InvalidArgument('%s must be a string' % name)
@@ -3928,18 +3942,21 @@ cdef class Image(object):
         return SnapIterator(self)
 
     @requires_not_closed
-    def create_snap(self, name):
+    def create_snap(self, name, flags=0):
         """
         Create a snapshot of the image.
 
         :param name: the name of the snapshot
         :type name: str
-        :raises: :class:`ImageExists`
+        :raises: :class:`ImageExists`, :class:`InvalidArgument`
         """
         name = cstr(name, 'name')
-        cdef char *_name = name
+        cdef:
+            char *_name = name
+            uint32_t _flags = flags
+            librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:
-            ret = rbd_snap_create(self.image, _name)
+            ret = rbd_snap_create2(self.image, _name, _flags, prog_cb, NULL)
         if ret != 0:
             raise make_ex(ret, 'error creating snapshot %s from %s' % (name, self.name))
 
@@ -4404,6 +4421,23 @@ written." % (self.name, ret, length))
             raise make_ex(ret, msg)
 
     @requires_not_closed
+    def write_zeroes(self, offset, length, zero_flags = 0):
+        """
+        Zero the range from the image. By default it will attempt to
+        discard/unmap as much space as possible but any unaligned
+        extent segments will still be zeroed.
+        """
+        cdef:
+            uint64_t _offset = offset, _length = length
+            int _zero_flags = zero_flags
+        with nogil:
+            ret = rbd_write_zeroes(self.image, _offset, _length,
+                                   _zero_flags, 0)
+        if ret < 0:
+            msg = 'error zeroing region %d~%d' % (offset, length)
+            raise make_ex(ret, msg)
+
+    @requires_not_closed
     def flush(self):
         """
         Block until all writes are fully flushed if caching is enabled.
@@ -4804,7 +4838,7 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error to resync image %s' % self.name)
 
     @requires_not_closed
-    def mirror_image_create_snapshot(self):
+    def mirror_image_create_snapshot(self, flags=0):
         """
         Create mirror snapshot.
 
@@ -4813,9 +4847,11 @@ written." % (self.name, ret, length))
         :returns: int - the snapshot Id
         """
         cdef:
+            uint32_t _flags = flags
             uint64_t snap_id
         with nogil:
-            ret = rbd_mirror_image_create_snapshot(self.image, &snap_id)
+            ret = rbd_mirror_image_create_snapshot2(self.image, _flags,
+                                                    &snap_id)
         if ret < 0:
             raise make_ex(ret, 'error creating mirror snapshot for image %s' %
                           self.name)
@@ -5081,6 +5117,34 @@ written." % (self.name, ret, length))
             if ret < 0:
                 raise make_ex(ret, 'error discarding %s %ld~%ld' %
                               (self.name, offset, _length))
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
+
+    @requires_not_closed
+    def aio_write_zeroes(self, offset, length, oncomplete, zero_flags = 0):
+        """
+        Asynchronously Zero the range from the image. By default it will attempt
+        to discard/unmap as much space as possible but any unaligned extent
+        segments will still be zeroed.
+        """
+        cdef:
+            uint64_t _offset = offset
+            size_t _length = length
+            int _zero_flags = zero_flags
+            Completion completion
+
+        completion = self.__get_completion(oncomplete)
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_write_zeroes(self.image, _offset, _length,
+                                           completion.rbd_comp, _zero_flags, 0)
+            if ret < 0:
+                raise make_ex(ret, 'error zeroing %s %ld~%ld' %
+                              (self.name, offset, length))
         except:
             completion.__unpersist()
             raise

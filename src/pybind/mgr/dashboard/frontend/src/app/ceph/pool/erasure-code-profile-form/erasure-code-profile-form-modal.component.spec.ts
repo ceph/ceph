@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -12,10 +12,10 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders
+  i18nProviders,
+  Mocks
 } from '../../../../testing/unit-test-helper';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
-import { CrushNode } from '../../../shared/models/crush-node';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { PoolModule } from '../pool.module';
@@ -29,20 +29,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   let fixtureHelper: FixtureHelper;
   let data: {};
 
-  // Object contains mock functions
-  const mock = {
-    node: (
-      name: string,
-      id: number,
-      type: string,
-      type_id: number,
-      children?: number[],
-      device_class?: string
-    ): CrushNode => {
-      return { name, type, type_id, id, children, device_class };
-    }
-  };
-
   configureTestBed({
     imports: [
       HttpClientTestingModule,
@@ -51,7 +37,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
-    providers: [ErasureCodeProfileService, BsModalRef, i18nProviders]
+    providers: [ErasureCodeProfileService, NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {
@@ -59,7 +45,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
-    ecpService = TestBed.get(ErasureCodeProfileService);
+    ecpService = TestBed.inject(ErasureCodeProfileService);
     data = {
       plugins: ['isa', 'jerasure', 'shec', 'lrc'],
       names: ['ecp1', 'ecp2'],
@@ -70,34 +56,34 @@ describe('ErasureCodeProfileFormModalComponent', () => {
        * ----> 3x osd with ssd
        * --> mix-host
        * ----> hdd-rack
-       * ------> 2x osd-rack with hdd
+       * ------> 5x osd-rack with hdd
        * ----> ssd-rack
-       * ------> 2x osd-rack with ssd
+       * ------> 5x osd-rack with ssd
        */
       nodes: [
         // Root node
-        mock.node('default', -1, 'root', 11, [-2, -3]),
+        Mocks.getCrushNode('default', -1, 'root', 11, [-2, -3]),
         // SSD host
-        mock.node('ssd-host', -2, 'host', 1, [1, 0, 2]),
-        mock.node('osd.0', 0, 'osd', 0, undefined, 'ssd'),
-        mock.node('osd.1', 1, 'osd', 0, undefined, 'ssd'),
-        mock.node('osd.2', 2, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('ssd-host', -2, 'host', 1, [1, 0, 2]),
+        Mocks.getCrushNode('osd.0', 0, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('osd.1', 1, 'osd', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('osd.2', 2, 'osd', 0, undefined, 'ssd'),
         // SSD and HDD mixed devices host
-        mock.node('mix-host', -3, 'host', 1, [-4, -5]),
+        Mocks.getCrushNode('mix-host', -3, 'host', 1, [-4, -5]),
         // HDD rack
-        mock.node('hdd-rack', -4, 'rack', 3, [3, 4, 5, 6, 7]),
-        mock.node('osd2.0', 3, 'osd-rack', 0, undefined, 'hdd'),
-        mock.node('osd2.1', 4, 'osd-rack', 0, undefined, 'hdd'),
-        mock.node('osd2.2', 5, 'osd-rack', 0, undefined, 'hdd'),
-        mock.node('osd2.3', 6, 'osd-rack', 0, undefined, 'hdd'),
-        mock.node('osd2.4', 7, 'osd-rack', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('hdd-rack', -4, 'rack', 3, [3, 4, 5, 6, 7]),
+        Mocks.getCrushNode('osd2.0', 3, 'osd-rack', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('osd2.1', 4, 'osd-rack', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('osd2.2', 5, 'osd-rack', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('osd2.3', 6, 'osd-rack', 0, undefined, 'hdd'),
+        Mocks.getCrushNode('osd2.4', 7, 'osd-rack', 0, undefined, 'hdd'),
         // SSD rack
-        mock.node('ssd-rack', -5, 'rack', 3, [8, 9, 10, 11, 12]),
-        mock.node('osd3.0', 8, 'osd-rack', 0, undefined, 'ssd'),
-        mock.node('osd3.1', 9, 'osd-rack', 0, undefined, 'ssd'),
-        mock.node('osd3.2', 10, 'osd-rack', 0, undefined, 'ssd'),
-        mock.node('osd3.3', 11, 'osd-rack', 0, undefined, 'ssd'),
-        mock.node('osd3.4', 12, 'osd-rack', 0, undefined, 'ssd')
+        Mocks.getCrushNode('ssd-rack', -5, 'rack', 3, [8, 9, 10, 11, 12]),
+        Mocks.getCrushNode('osd3.0', 8, 'osd-rack', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('osd3.1', 9, 'osd-rack', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('osd3.2', 10, 'osd-rack', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('osd3.3', 11, 'osd-rack', 0, undefined, 'ssd'),
+        Mocks.getCrushNode('osd3.4', 12, 'osd-rack', 0, undefined, 'ssd')
       ]
     };
     spyOn(ecpService, 'getInfo').and.callFake(() => of(data));
@@ -400,7 +386,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       submittedEcp['packetsize'] = 2048;
       submittedEcp['technique'] = 'reed_sol_van';
 
-      const taskWrapper = TestBed.get(TaskWrapperService);
+      const taskWrapper = TestBed.inject(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
       spyOn(ecpService, 'create').and.stub();
     });

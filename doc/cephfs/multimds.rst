@@ -135,3 +135,102 @@ directory's export pin. For example:
     setfattr -n ceph.dir.pin -v 0 a/b
     # a/b is now pinned to rank 0 and a/ and the rest of its children are still pinned to rank 1
 
+
+Setting subtree partitioning policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+It is also possible to setup **automatic** static partitioning of subtrees via
+a set of **policies**. In CephFS, this automatic static partitioning is
+referred to as **ephemeral pinning**. Any directory (inode) which is
+ephemerally pinned will be automatically assigned to a particular rank
+according to a consistent hash of its inode number. The set of all
+ephemerally pinned directories should be uniformly distributed across all
+ranks.
+
+Ephemerally pinned directories are so named because the pin may not persist
+once the directory inode is dropped from cache. However, an MDS failover does
+not affect the ephemeral nature of the pinned directory. The MDS records what
+subtrees are ephemerally pinned in its journal so MDS failovers do not drop
+this information.
+
+A directory is either ephemerally pinned or not. Which rank it is pinned to is
+derived from its inode number and a consistent hash. This means that
+ephemerally pinned directories are somewhat evenly spread across the MDS
+cluster. The **consistent hash** also minimizes redistribution when the MDS
+cluster grows or shrinks. So, growing an MDS cluster may automatically increase
+your metadata throughput with no other administrative intervention.
+
+Presently, there are two types of ephemeral pinning:
+
+**Distributed Ephemeral Pins**: This policy indicates that **all** of a
+directory's immediate children should be ephemerally pinned. The canonical
+example would be the ``/home`` directory: we want every user's home directory
+to be spread across the entire MDS cluster. This can be set via:
+
+::
+
+    setfattr -n ceph.dir.pin.distributed -v 1 /cephfs/home
+
+
+**Random Ephemeral Pins**: This policy indicates any descendent sub-directory
+may be ephemerally pinned. This is set through the extended attribute
+``ceph.dir.pin.random`` with the value set to the percentage of directories
+that should be pinned. For example:
+
+::
+
+    setfattr -n ceph.dir.pin.random -v 0.5 /cephfs/tmp
+
+Would cause any directory loaded into cache or created under ``/tmp`` to be
+ephemerally pinned 50 percent of the time.
+
+It is recomended to only set this to small values, like ``.001`` or ``0.1%``.
+Having too many subtrees may degrade performance. For this reason, the config
+``mds_export_ephemeral_random_max`` enforces a cap on the maximum of this
+percentage (default: ``.01``). The MDS returns ``EINVAL`` when attempting to
+set a value beyond this config.
+
+Both random and distributed ephemeral pin policies are off by default in
+Octopus. The features may be enabled via the
+``mds_export_ephemeral_random`` and ``mds_export_ephemeral_distributed``
+configuration options.
+
+Ephemeral pins may override parent export pins and vice versa. What determines
+which policy is followed is the rule of the closest parent: if a closer parent
+directory has a conflicting policy, use that one instead. For example:
+
+::
+
+    mkdir -p foo/bar1/baz foo/bar2
+    setfattr -n ceph.dir.pin -v 0 foo
+    setfattr -n ceph.dir.pin.distributed -v 1 foo/bar1
+
+The ``foo/bar1/baz`` directory will be ephemerally pinned because the
+``foo/bar1`` policy overrides the export pin on ``foo``. The ``foo/bar2``
+directory will obey the pin on ``foo`` normally.
+
+For the reverse situation:
+
+::
+
+    mkdir -p home/{patrick,john}
+    setfattr -n ceph.dir.pin.distributed -v 1 home
+    setfattr -n ceph.dir.pin -v 2 home/patrick
+
+The ``home/patrick`` directory and its children will be pinned to rank 2
+because its export pin overrides the policy on ``home``.
+
+If a directory has an export pin and an ephemeral pin policy, the export pin
+applies to the directory itself and the policy to its children. So:
+
+::
+
+    mkdir -p home/{patrick,john}
+    setfattr -n ceph.dir.pin -v 0 home
+    setfattr -n ceph.dir.pin.distributed -v 1 home
+
+The home directory inode (and all of its directory fragments) will always be
+located on rank 0. All children including ``home/patrick`` and ``home/john``
+will be ephemerally pinned according to the distributed policy. This may only
+matter for some obscure performance advantages. All the same, it's mentioned
+here so the override policy is clear.

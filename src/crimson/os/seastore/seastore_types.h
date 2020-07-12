@@ -6,6 +6,7 @@
 #include <limits>
 #include <iostream>
 
+#include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
 #include "include/cmp.h"
@@ -19,8 +20,10 @@ using segment_id_t = uint32_t;
 constexpr segment_id_t NULL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 1;
 /* Used to denote relative paddr_t */
-constexpr segment_id_t REL_SEG_ID =
+constexpr segment_id_t RECORD_REL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 2;
+constexpr segment_id_t BLOCK_REL_SEG_ID =
+  std::numeric_limits<segment_id_t>::max() - 3;
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
@@ -43,13 +46,38 @@ using record_delta_idx_t = uint32_t;
 constexpr record_delta_idx_t NULL_DELTA_IDX =
   std::numeric_limits<record_delta_idx_t>::max();
 
-// <segment, offset> offset on disk, see SegmentManager
+/**
+ * paddr_t
+ *
+ * <segment, offset> offset on disk, see SegmentManager
+ *
+ * May be absolute, record_relative, or block_relative.
+ *
+ * Blocks get read independently of the surrounding record,
+ * so paddrs embedded directly within a block need to refer
+ * to other blocks within the same record by a block_relative
+ * addr relative to the block's own offset.  By contrast,
+ * deltas to existing blocks need to use record_relative
+ * addrs relative to the first block of the record.
+ *
+ * Fresh extents during a transaction are refered to by
+ * record_relative paddrs.
+ */
 struct paddr_t {
   segment_id_t segment = NULL_SEG_ID;
   segment_off_t offset = NULL_SEG_OFF;
 
   bool is_relative() const {
-    return segment == REL_SEG_ID;
+    return segment == RECORD_REL_SEG_ID ||
+      segment == BLOCK_REL_SEG_ID;
+  }
+
+  bool is_record_relative() const {
+    return segment == RECORD_REL_SEG_ID;
+  }
+
+  bool is_block_relative() const {
+    return segment == BLOCK_REL_SEG_ID;
   }
 
   paddr_t add_offset(segment_off_t o) const {
@@ -58,21 +86,47 @@ struct paddr_t {
 
   paddr_t add_relative(paddr_t o) const {
     assert(o.is_relative());
-    assert(!is_relative());
     return paddr_t{segment, offset + o.offset};
   }
 
+  paddr_t add_block_relative(paddr_t o) const {
+    // special version mainly for documentation purposes
+    assert(o.is_block_relative());
+    return add_relative(o);
+  }
+
+  paddr_t add_record_relative(paddr_t o) const {
+    // special version mainly for documentation purposes
+    assert(o.is_record_relative());
+    return add_relative(o);
+  }
+
+  /**
+   * paddr_t::operator-
+   *
+   * Only defined for record_relative paddr_ts.  Yields a
+   * block_relative address.
+   */
   paddr_t operator-(paddr_t rhs) const {
-    assert(rhs.is_relative() && is_relative());
+    assert(rhs.is_record_relative() && is_record_relative());
     return paddr_t{
-      REL_SEG_ID,
+      BLOCK_REL_SEG_ID,
       offset - rhs.offset
     };
   }
 
+  /**
+   * maybe_relative_to
+   *
+   * Helper for the case where an in-memory paddr_t may be
+   * either block_relative or absolute (not record_relative).
+   *
+   * base must be either absolute or record_relative.
+   */
   paddr_t maybe_relative_to(paddr_t base) const {
-    if (is_relative())
-      return base.add_relative(*this);
+    assert(!base.is_block_relative());
+    if (is_block_relative())
+      return base.add_block_relative(*this);
     else
       return *this;
   }
@@ -87,9 +141,29 @@ struct paddr_t {
 WRITE_CMP_OPERATORS_2(paddr_t, segment, offset)
 WRITE_EQ_OPERATORS_2(paddr_t, segment, offset)
 constexpr paddr_t P_ADDR_NULL = paddr_t{};
-constexpr paddr_t make_relative_paddr(segment_off_t off) {
-  return paddr_t{REL_SEG_ID, off};
+constexpr paddr_t P_ADDR_MIN = paddr_t{0, 0};
+constexpr paddr_t make_record_relative_paddr(segment_off_t off) {
+  return paddr_t{RECORD_REL_SEG_ID, off};
 }
+constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
+  return paddr_t{BLOCK_REL_SEG_ID, off};
+}
+
+struct paddr_le_t {
+  ceph_le32 segment = init_le32(NULL_SEG_ID);
+  ceph_les32 offset = init_les32(NULL_SEG_OFF);
+
+  paddr_le_t() = default;
+  paddr_le_t(ceph_le32 segment, ceph_les32 offset)
+    : segment(segment), offset(offset) {}
+  paddr_le_t(segment_id_t segment, segment_off_t offset)
+    : segment(init_le32(segment)), offset(init_les32(offset)) {}
+  paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
+
+  operator paddr_t() const {
+    return paddr_t{segment, offset};
+  }
+};
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 
@@ -101,10 +175,17 @@ constexpr laddr_t L_ADDR_NULL = std::numeric_limits<laddr_t>::max();
 constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
 constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
 
+using laddr_le_t = ceph_le64;
+
 // logical offset, see LBAManager, TransactionManager
 using extent_len_t = uint32_t;
 constexpr extent_len_t EXTENT_LEN_MAX =
   std::numeric_limits<extent_len_t>::max();
+
+using extent_len_le_t = ceph_le32;
+inline extent_len_le_t init_extent_len_le_t(extent_len_t len) {
+  return init_le32(len);
+}
 
 struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {
   template <typename... T>
@@ -121,13 +202,16 @@ std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs);
 std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
 
 /* identifies type of extent, used for interpretting deltas, managing
- * writeback */
+ * writeback.
+ *
+ * Note that any new extent type needs to be added to
+ * Cache::get_extent_by_type in cache.cc
+ */
 enum class extent_types_t : uint8_t {
-  ROOT_LOCATION = 0, // delta only
-  ROOT = 1,
-  LADDR_INTERNAL = 2,
-  LADDR_LEAF = 3,
-  LBA_BLOCK = 4,
+  ROOT = 0,
+  LADDR_INTERNAL = 1,
+  LADDR_LEAF = 2,
+  ONODE_BLOCK = 3,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
@@ -152,6 +236,8 @@ struct delta_info_t {
   paddr_t paddr;                               ///< physical address
   /* logical address -- needed for repopulating cache -- TODO don't actually need */
   // laddr_t laddr = L_ADDR_NULL;
+  uint32_t prev_crc;
+  uint32_t final_crc;
   segment_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
   ceph::bufferlist bl;                         ///< payload
@@ -161,6 +247,8 @@ struct delta_info_t {
     denc(v.type, p);
     denc(v.paddr, p);
     //denc(v.laddr, p);
+    denc(v.prev_crc, p);
+    denc(v.final_crc, p);
     denc(v.length, p);
     denc(v.pversion, p);
     denc(v.bl, p);
@@ -171,12 +259,18 @@ struct delta_info_t {
     return (
       type == rhs.type &&
       paddr == rhs.paddr &&
+      prev_crc == rhs.prev_crc &&
+      final_crc == rhs.final_crc &&
       length == rhs.length &&
       pversion == rhs.pversion &&
       bl == rhs.bl
     );
   }
+
+  friend std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 };
+
+std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 
 struct record_t {
   std::vector<extent_t> extents;

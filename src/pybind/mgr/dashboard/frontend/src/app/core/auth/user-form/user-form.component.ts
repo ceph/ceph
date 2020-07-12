@@ -2,9 +2,10 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import * as moment from 'moment';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { AuthService } from '../../../shared/api/auth.service';
@@ -22,6 +23,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { CdPwdExpirationSettings } from '../../../shared/models/cd-pwd-expiration-settings';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { PasswordPolicyService } from '../../../shared/services/password-policy.service';
 import { UserFormMode } from './user-form-mode.enum';
@@ -37,7 +39,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
   removeSelfUserReadUpdatePermissionTpl: TemplateRef<any>;
 
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   userForm: CdFormGroup;
   response: UserFormModel;
@@ -52,19 +54,15 @@ export class UserFormComponent extends CdForm implements OnInit {
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
-  minDate: Date;
-  bsConfig = {
-    dateInputFormat: 'YYYY-MM-DD',
-    containerClass: 'theme-default'
-  };
   pwdExpirationSettings: CdPwdExpirationSettings;
+  pwdExpirationFormat = 'YYYY-MM-DD';
 
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private route: ActivatedRoute,
-    private router: Router,
-    private modalService: BsModalService,
+    public router: Router,
+    private modalService: ModalService,
     private roleService: RoleService,
     private userService: UserService,
     private notificationService: NotificationService,
@@ -109,7 +107,7 @@ export class UserFormComponent extends CdForm implements OnInit {
           ]
         ],
         confirmpassword: [''],
-        pwdExpirationDate: [''],
+        pwdExpirationDate: [undefined],
         email: ['', [CdValidators.email]],
         roles: [[]],
         enabled: [true, [Validators.required]],
@@ -128,7 +126,6 @@ export class UserFormComponent extends CdForm implements OnInit {
     } else {
       this.action = this.actionLabels.CREATE;
     }
-    this.minDate = new Date();
 
     const observables = [this.roleService.list(), this.settingsService.getStandardSettings()];
     observableForkJoin(observables).subscribe(
@@ -144,11 +141,9 @@ export class UserFormComponent extends CdForm implements OnInit {
         } else {
           if (this.pwdExpirationSettings.pwdExpirationSpan > 0) {
             const pwdExpirationDateField = this.userForm.get('pwdExpirationDate');
-            const expirationDate = new Date();
-            expirationDate.setDate(
-              this.minDate.getDate() + this.pwdExpirationSettings.pwdExpirationSpan
-            );
-            pwdExpirationDateField.setValue(expirationDate);
+            const expirationDate = moment();
+            expirationDate.add(this.pwdExpirationSettings.pwdExpirationSpan, 'day');
+            pwdExpirationDateField.setValue(expirationDate.format(this.pwdExpirationFormat));
             pwdExpirationDateField.setValidators([Validators.required]);
           }
 
@@ -181,7 +176,12 @@ export class UserFormComponent extends CdForm implements OnInit {
     );
     const expirationDate = response['pwdExpirationDate'];
     if (expirationDate) {
-      this.userForm.get('pwdExpirationDate').setValue(new Date(expirationDate * 1000));
+      const mom = moment(expirationDate * 1000);
+      console.log(this.pwdExpirationFormat, mom.format(this.pwdExpirationFormat));
+
+      this.userForm
+        .get('pwdExpirationDate')
+        .setValue(moment(expirationDate * 1000).format(this.pwdExpirationFormat));
     }
   }
 
@@ -192,13 +192,14 @@ export class UserFormComponent extends CdForm implements OnInit {
     );
     const expirationDate = this.userForm.get('pwdExpirationDate').value;
     if (expirationDate) {
+      const mom = moment(expirationDate, this.pwdExpirationFormat);
       if (
         this.mode !== this.userFormMode.editing ||
-        this.response.pwdExpirationDate !== Number(expirationDate) / 1000
+        this.response.pwdExpirationDate !== mom.unix()
       ) {
-        expirationDate.setHours(23, 59, 59);
+        mom.set({ hour: 23, minute: 59, second: 59 });
       }
-      userFormModel['pwdExpirationDate'] = Number(expirationDate) / 1000;
+      userFormModel['pwdExpirationDate'] = mom.unix();
     }
     return userFormModel;
   }
@@ -209,7 +210,7 @@ export class UserFormComponent extends CdForm implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Created user "{{username}}"', { username: userFormModel.username })
+          this.i18n(`Created user '{{username}}'`, { username: userFormModel.username })
         );
         this.router.navigate(['/user-management/users']);
       },
@@ -226,7 +227,7 @@ export class UserFormComponent extends CdForm implements OnInit {
         buttonText: this.i18n('Continue'),
         bodyTpl: this.removeSelfUserReadUpdatePermissionTpl,
         onSubmit: () => {
-          this.modalRef.hide();
+          this.modalRef.close();
           this.doEditAction();
         },
         onCancel: () => {
@@ -234,7 +235,7 @@ export class UserFormComponent extends CdForm implements OnInit {
           this.userForm.get('roles').reset(this.userForm.get('roles').value);
         }
       };
-      this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
+      this.modalRef = this.modalService.show(ConfirmationModalComponent, initialState);
     } else {
       this.doEditAction();
     }
@@ -284,7 +285,7 @@ export class UserFormComponent extends CdForm implements OnInit {
         } else {
           this.notificationService.show(
             NotificationType.success,
-            this.i18n('Updated user "{{username}}"', { username: userFormModel.username })
+            this.i18n(`Updated user '{{username}}'`, { username: userFormModel.username })
           );
           this.router.navigate(['/user-management/users']);
         }

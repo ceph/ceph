@@ -51,7 +51,7 @@ export class ImagesPageHelper extends PageHelper {
 
     // click on the drop down and selects the move to trash option
     cy.get('.table-actions button.dropdown-toggle').first().click();
-    cy.get('li.move-to-trash').click();
+    cy.get('button.move-to-trash').click();
 
     cy.contains('button', 'Move Image').should('be.visible').click();
 
@@ -71,12 +71,12 @@ export class ImagesPageHelper extends PageHelper {
     cy.contains('button', 'Restore').click();
 
     // wait for pop-up to be visible (checks for title of pop-up)
-    cy.get('#name').should('be.visible');
+    cy.get('cd-modal #name').should('be.visible');
 
     // If a new name for the image is passed, it changes the name of the image
     if (newName !== undefined) {
       // click name box and send new name
-      cy.get('#name').clear().type(newName);
+      cy.get('cd-modal #name').clear().type(newName);
     }
 
     cy.contains('button', 'Restore Image').click();

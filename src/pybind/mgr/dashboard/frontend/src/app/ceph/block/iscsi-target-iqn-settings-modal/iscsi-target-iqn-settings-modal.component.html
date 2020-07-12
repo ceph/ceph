@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>Advanced Settings</ng-container>
 
@@ -26,7 +26,7 @@
         <cd-submit-button i18n
                           [form]="settingsForm"
                           (submitAction)="save()">Confirm</cd-submit-button>
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

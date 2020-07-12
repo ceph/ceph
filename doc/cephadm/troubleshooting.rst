@@ -103,6 +103,7 @@ Cephadm writes small wrappers that run a containers. Refer to
 ``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the
 container execution command.
 
+.. _cephadm-ssh-errors:
 
 ssh errors
 ----------
@@ -155,6 +156,10 @@ Failed to infer CIDR network error
 If you see this error::
 
    ERROR: Failed to infer CIDR network for mon ip ***; pass --skip-mon-network to configure it later
+
+Or this error::
+
+   Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP
 
 This means that you must run a command of this form::
 

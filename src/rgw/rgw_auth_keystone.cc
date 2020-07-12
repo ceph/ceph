@@ -266,9 +266,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
  * Try to validate S3 auth against keystone s3token interface
  */
 std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
-EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_view& access_key_id,
+EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_view& access_key_id,
                              const std::string& string_to_sign,
-                             const boost::string_view& signature) const
+                             const std::string_view& signature) const
 {
   /* prepare keystone url */
   std::string keystone_url = config.get_endpoint_url();
@@ -354,7 +354,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_
 
 std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
                                                                                  const std::string& user_id,
-                                                                                 const boost::string_view& access_key_id) const
+                                                                                 const std::string_view& access_key_id) const
 {
   /*  Fetch from /users/{USER_ID}/credentials/OS-EC2/{ACCESS_KEY_ID} */
   /* Should return json with response key "credential" which contains entry "secret"*/
@@ -374,7 +374,7 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
   keystone_url.append("users/");
   keystone_url.append(user_id);
   keystone_url.append("/credentials/OS-EC2/");
-  keystone_url.append(access_key_id.to_string());
+  keystone_url.append(std::string(access_key_id));
 
   /* get authentication token for Keystone. */
   std::string admin_token;
@@ -444,9 +444,9 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
  */
 std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
 EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
-			    const boost::string_view& access_key_id,
+			    const std::string_view& access_key_id,
                             const std::string& string_to_sign,
-                            const boost::string_view& signature,
+                            const std::string_view& signature,
 			    const signature_factory_t& signature_factory) const
 {
   using server_signature_t = VersionAbstractor::server_signature_t;
@@ -455,7 +455,7 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 
   /* Get a token from the cache if one has already been stored */
   boost::optional<boost::tuple<rgw::keystone::TokenEnvelope, std::string>>
-    t = secret_cache.find(access_key_id.to_string());
+    t = secret_cache.find(std::string(access_key_id));
 
   /* Check that credentials can correctly be used to sign data */
   if (t) {
@@ -480,7 +480,7 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 
     if (secret) {
       /* Add token, secret pair to cache, and set timeout */
-      secret_cache.add(access_key_id.to_string(), *token, *secret);
+      secret_cache.add(std::string(access_key_id), *token, *secret);
     }
   }
 
@@ -527,9 +527,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
 
 rgw::auth::Engine::result_t EC2Engine::authenticate(
   const DoutPrefixProvider* dpp,
-  const boost::string_view& access_key_id,
-  const boost::string_view& signature,
-  const boost::string_view& session_token,
+  const std::string_view& access_key_id,
+  const std::string_view& signature,
+  const std::string_view& session_token,
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,

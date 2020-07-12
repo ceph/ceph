@@ -22,3 +22,24 @@
                          [selection]="expandedRow">
   </cd-rgw-bucket-details>
 </cd-table>
+
+<ng-template #bucketSizeTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.bucket_quota.max_size > 0 && row.bucket_quota.enabled; else noSizeQuota"
+                [total]="row.bucket_quota.max_size"
+                [used]="row.bucket_size">
+  </cd-usage-bar>
+
+  <ng-template #noSizeQuota>No Limit</ng-template>
+</ng-template>
+
+<ng-template #bucketObjectTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.bucket_quota.max_objects > 0 && row.bucket_quota.enabled; else noObjectQuota"
+                [total]="row.bucket_quota.max_objects"
+                [used]="row.num_objects"
+                [isBinary]="false">
+  </cd-usage-bar>
+
+  <ng-template #noObjectQuota>No Limit</ng-template>
+</ng-template>

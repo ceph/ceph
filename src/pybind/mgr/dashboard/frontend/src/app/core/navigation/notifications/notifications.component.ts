@@ -23,11 +23,8 @@ export class NotificationsComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(
-      this.summaryService.subscribe((data: any) => {
-        if (!data) {
-          return;
-        }
-        this.hasRunningTasks = data.executing_tasks.length > 0;
+      this.summaryService.subscribe((summary) => {
+        this.hasRunningTasks = summary.executing_tasks.length > 0;
       })
     );
   }
