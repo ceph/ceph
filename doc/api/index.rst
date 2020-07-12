@@ -23,14 +23,14 @@ Ceph Block Device APIs
 
 See `librbdpy`_.
 
-.. _librbdpy: ../rbd/api/librbdpy
+.. _librbdpy: ../rbd/api/librbdpy.rst
 
 Ceph RADOS Gateway APIs
 =======================
 
 See `librgw-py`_.
 
-.. _librgw-py: ../radosgw/api
+.. _librgw-py: ../radosgw/api.rst
 
 Ceph Object Store APIs
 ======================
@@ -46,7 +46,7 @@ Ceph MON Command API
 
 .. _S3-compatible API: ../radosgw/s3/
 .. _Swift-compatible API: ../radosgw/swift/
-.. _Admin Ops API: ../radosgw/adminops
+.. _Admin Ops API: ../radosgw/adminops.rst
 .. _Mon command API: mon_command_api
 
 
