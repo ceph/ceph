@@ -151,6 +151,11 @@ AsyncConnection::~AsyncConnection()
   if (recv_buf)
     delete[] recv_buf;
   ceph_assert(!delay_state);
+  // protocol must be deallocated in proper EventCenter. This is ensured
+  // by the cleanup() method. We free resources there as the destructor
+  // can be called in any thread. Otherwise Helgrind would complain about
+  // potential race.
+  ceph_assert(!protocol);
 }
 
 int AsyncConnection::get_con_mode() const
@@ -744,6 +749,7 @@ void AsyncConnection::cleanup() {
     delete delay_state;
     delay_state = NULL;
   }
+  protocol.reset();
 }
 
 void AsyncConnection::wakeup_from(uint64_t id)
