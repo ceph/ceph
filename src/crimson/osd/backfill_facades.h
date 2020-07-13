@@ -35,9 +35,12 @@ struct BackfillState::PeeringFacade {
     return peering_state.get_info().log_tail;
   }
 
-  decltype(auto) get_pg_log() const {
-    return peering_state.get_pg_log();
+  template <class... Args>
+  void scan_log_after(Args&&... args) const {
+    peering_state.get_pg_log().get_log().scan_log_after(
+      std::forward<Args>(args)...);
   }
+
   bool is_backfill_target(pg_shard_t peer) const {
     return peering_state.is_backfill_target(peer);
   }
