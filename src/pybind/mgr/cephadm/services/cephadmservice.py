@@ -218,7 +218,7 @@ class CephadmService(metaclass=ABCMeta):
 class MonService(CephadmService):
     TYPE = 'mon'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         """
         Create a new monitor on the given host.
         """
@@ -297,7 +297,7 @@ class MonService(CephadmService):
 class MgrService(CephadmService):
     TYPE = 'mgr'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         """
         Create a new manager instance on a host.
         """
@@ -329,7 +329,7 @@ class MdsService(CephadmService):
             'value': spec.service_id,
         })
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         mds_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
@@ -403,7 +403,7 @@ class RgwService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -421,9 +421,8 @@ class RgwService(CephadmService):
 class RbdMirrorService(CephadmService):
     TYPE = 'rbd-mirror'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
-
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.rbd-mirror.' + daemon_id,
@@ -439,9 +438,8 @@ class RbdMirrorService(CephadmService):
 class CrashService(CephadmService):
     TYPE = 'crash'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
-
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.crash.' + host,

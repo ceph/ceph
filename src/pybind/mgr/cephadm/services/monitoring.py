@@ -12,7 +12,7 @@ class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -75,7 +75,7 @@ class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -142,7 +142,7 @@ class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -229,7 +229,7 @@ class PrometheusService(CephadmService):
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
