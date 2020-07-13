@@ -96,6 +96,14 @@ public:
     return account_quota.max_users == 0 ? UINT32_MAX: account_quota.max_users;
   }
 
+  void set_max_users(uint32_t _max_users) {
+    account_quota.max_users = _max_users;
+  }
+
+  void set_max_roles(uint32_t _max_roles) {
+    account_quota.max_roles = _max_roles;
+  }
+
   void dump(Formatter * const f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<RGWAccountInfo*>& o);
