@@ -698,6 +698,7 @@ private:
       using decayed_t = std::decay_t<decltype(e)>;
       auto&& handler =
         decayed_t::error_t::handle(std::forward<ErrorFunc>(func));
+      static_assert(std::is_invocable_v<decltype(handler), ErrorT>);
       return std::invoke(std::move(handler), std::forward<ErrorT>(e));
     }
   };
