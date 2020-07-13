@@ -425,30 +425,30 @@ class MDCache {
 				snapid_t follows=CEPH_NOSNAP);
 
   // slaves
-  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<mds_rank_t> &slaves, bool safe=false) {
-    uncommitted_masters[reqid].ls = ls;
-    uncommitted_masters[reqid].slaves = slaves;
-    uncommitted_masters[reqid].safe = safe;
+  void add_uncommitted_leader(metareqid_t reqid, LogSegment *ls, set<mds_rank_t> &slaves, bool safe=false) {
+    uncommitted_leaders[reqid].ls = ls;
+    uncommitted_leaders[reqid].slaves = slaves;
+    uncommitted_leaders[reqid].safe = safe;
   }
-  void wait_for_uncommitted_master(metareqid_t reqid, MDSContext *c) {
-    uncommitted_masters[reqid].waiters.push_back(c);
+  void wait_for_uncommitted_leader(metareqid_t reqid, MDSContext *c) {
+    uncommitted_leaders[reqid].waiters.push_back(c);
   }
-  bool have_uncommitted_master(metareqid_t reqid, mds_rank_t from) {
-    auto p = uncommitted_masters.find(reqid);
-    return p != uncommitted_masters.end() && p->second.slaves.count(from) > 0;
+  bool have_uncommitted_leader(metareqid_t reqid, mds_rank_t from) {
+    auto p = uncommitted_leaders.find(reqid);
+    return p != uncommitted_leaders.end() && p->second.slaves.count(from) > 0;
   }
-  void log_master_commit(metareqid_t reqid);
-  void logged_master_update(metareqid_t reqid);
-  void _logged_master_commit(metareqid_t reqid);
-  void committed_master_slave(metareqid_t r, mds_rank_t from);
-  void finish_committed_masters();
+  void log_leader_commit(metareqid_t reqid);
+  void logged_leader_update(metareqid_t reqid);
+  void _logged_leader_commit(metareqid_t reqid);
+  void committed_leader_slave(metareqid_t r, mds_rank_t from);
+  void finish_committed_leaders();
 
   void add_uncommitted_slave(metareqid_t reqid, LogSegment*, mds_rank_t, MDSlaveUpdate *su=nullptr);
   void wait_for_uncommitted_slave(metareqid_t reqid, MDSContext *c) {
     uncommitted_slaves.at(reqid).waiters.push_back(c);
   }
   void finish_uncommitted_slave(metareqid_t reqid, bool assert_exist=true);
-  MDSlaveUpdate* get_uncommitted_slave(metareqid_t reqid, mds_rank_t master);
+  MDSlaveUpdate* get_uncommitted_slave(metareqid_t reqid, mds_rank_t leader);
   void _logged_slave_commit(mds_rank_t from, metareqid_t reqid);
 
   void set_recovery_set(set<mds_rank_t>& s);
@@ -458,15 +458,15 @@ class MDCache {
   void recalc_auth_bits(bool replay);
   void remove_inode_recursive(CInode *in);
 
-  bool is_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    auto p = ambiguous_slave_updates.find(master);
+  bool is_ambiguous_slave_update(metareqid_t reqid, mds_rank_t leader) {
+    auto p = ambiguous_slave_updates.find(leader);
     return p != ambiguous_slave_updates.end() && p->second.count(reqid);
   }
-  void add_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    ambiguous_slave_updates[master].insert(reqid);
+  void add_ambiguous_slave_update(metareqid_t reqid, mds_rank_t leader) {
+    ambiguous_slave_updates[leader].insert(reqid);
   }
-  void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    auto p = ambiguous_slave_updates.find(master);
+  void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t leader) {
+    auto p = ambiguous_slave_updates.find(leader);
     auto q = p->second.find(reqid);
     ceph_assert(q != p->second.end());
     p->second.erase(q);
@@ -474,8 +474,8 @@ class MDCache {
       ambiguous_slave_updates.erase(p);
   }
 
-  void add_rollback(metareqid_t reqid, mds_rank_t master) {
-    resolve_need_rollback[reqid] = master;
+  void add_rollback(metareqid_t reqid, mds_rank_t leader) {
+    resolve_need_rollback[reqid] = leader;
   }
   void finish_rollback(metareqid_t reqid, MDRequestRef& mdr);
 
@@ -943,7 +943,7 @@ class MDCache {
   void repair_dirfrag_stats(CDir *dir);
   void upgrade_inode_snaprealm(CInode *in);
 
-  // my master
+  // my leader
   MDSRank *mds;
 
   // -- my cache --
@@ -1004,9 +1004,9 @@ class MDCache {
   double export_ephemeral_random_max = 0.0;
 
  protected:
-  // track master requests whose slaves haven't acknowledged commit
-  struct umaster {
-    umaster() {}
+  // track leader requests whose slaves haven't acknowledged commit
+  struct uleader {
+    uleader() {}
     set<mds_rank_t> slaves;
     LogSegment *ls = nullptr;
     MDSContext::vec waiters;
@@ -1017,7 +1017,7 @@ class MDCache {
 
   struct uslave {
     uslave() {}
-    mds_rank_t master;
+    mds_rank_t leader;
     LogSegment *ls = nullptr;
     MDSlaveUpdate *su = nullptr;
     MDSContext::vec waiters;
@@ -1168,10 +1168,10 @@ class MDCache {
   map<CInode*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
   map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
 
-  map<metareqid_t, umaster> uncommitted_masters;         // master: req -> slave set
+  map<metareqid_t, uleader> uncommitted_leaders;         // leader: req -> slave set
   map<metareqid_t, uslave> uncommitted_slaves;  // slave: preserve the slave req until seeing commit.
 
-  set<metareqid_t> pending_masters;
+  set<metareqid_t> pending_leaders;
   map<int, set<metareqid_t> > ambiguous_slave_updates;
 
   bool resolves_pending = false;

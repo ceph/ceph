@@ -22,7 +22,7 @@
 
 /*
  * rollback records, for remote/slave updates, which may need to be manually
- * rolled back during journal replay.  (or while active if master fails, but in 
+ * rolled back during journal replay.  (or while active if leader fails, but in
  * that case these records aren't needed.)
  */ 
 struct link_rollback {
@@ -120,16 +120,16 @@ public:
   bufferlist rollback;
   string type;
   metareqid_t reqid;
-  mds_rank_t master;
+  mds_rank_t leader;
   __u8 op;  // prepare, commit, abort
   __u8 origop; // link | rename
 
-  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), master(0), op(0), origop(0) { }
-  ESlaveUpdate(MDLog *mdlog, std::string_view s, metareqid_t ri, int mastermds, int o, int oo) :
+  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), leader(0), op(0), origop(0) { }
+  ESlaveUpdate(MDLog *mdlog, std::string_view s, metareqid_t ri, int leadermds, int o, int oo) :
     LogEvent(EVENT_SLAVEUPDATE),
     type(s),
     reqid(ri),
-    master(mastermds),
+    leader(leadermds),
     op(o), origop(oo) { }
   
   void print(ostream& out) const override {
@@ -139,7 +139,7 @@ public:
     if (origop == LINK) out << " link";
     if (origop == RENAME) out << " rename";
     out << " " << reqid;
-    out << " for mds." << master;
+    out << " for mds." << leader;
     out << commit;
   }
 
