@@ -12,7 +12,7 @@
     },
     "eofline": true,
     "forin": true,
-    "import-blacklist": [true, "rxjs/Rx"],
+    "import-blacklist": [true, "rxjs/Rx", {"@angular/core/testing": ["async"]}],
     "import-spacing": true,
     "indent": [true, "spaces"],
     "interface-over-type-literal": true,
