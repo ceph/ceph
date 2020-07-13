@@ -124,6 +124,7 @@ set(librgw_common_srcs
   rgw_rados.cc
   rgw_resolve.cc
   rgw_rest.cc
+  rgw_rest_account.cc
   rgw_rest_client.cc
   rgw_rest_conn.cc
   rgw_rest_log.cc

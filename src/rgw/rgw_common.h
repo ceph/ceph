@@ -274,6 +274,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_IDENTITY_TOKEN  2401
 
 #define ERR_NO_SUCH_TAG_SET 2402
+#define ERR_ACCOUNT_EXISTS 2403
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)

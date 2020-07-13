@@ -130,6 +130,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
     { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet"}},
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
+    { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
