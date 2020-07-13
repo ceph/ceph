@@ -36,12 +36,94 @@ using std::stringstream;
 using ceph::bufferlist;
 using ceph::Formatter;
 
+void ClusterInfo::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(client_name, bl);
+  encode(cluster_name, bl);
+  encode(fs_name, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ClusterInfo::decode(ceph::buffer::list::const_iterator &iter) {
+  DECODE_START(1, iter);
+  decode(client_name, iter);
+  decode(cluster_name, iter);
+  decode(fs_name, iter);
+  DECODE_FINISH(iter);
+}
+
+void ClusterInfo::dump(ceph::Formatter *f) const {
+  f->dump_string("client_name", client_name);
+  f->dump_string("cluster_name", cluster_name);
+  f->dump_string("fs_name", fs_name);
+}
+
+void ClusterInfo::print(std::ostream& out) const {
+  out << "[client_name=" << client_name << ", cluster_name=" << cluster_name
+      << ", fs_name=" << fs_name << "]" << std::endl;
+}
+
+void Peer::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(uuid, bl);
+  encode(remote, bl);
+  ENCODE_FINISH(bl);
+}
+
+void Peer::decode(ceph::buffer::list::const_iterator &iter) {
+  DECODE_START(1, iter);
+  decode(uuid, iter);
+  decode(remote, iter);
+  DECODE_FINISH(iter);
+}
+
+void Peer::dump(ceph::Formatter *f) const {
+  f->open_object_section(uuid);
+  f->dump_object("remote", remote);
+  f->close_section();
+}
+
+void Peer::print(std::ostream& out) const {
+  out << "[uuid=" << uuid << ", remote=" << remote << "]" << std::endl;
+}
+
+void MirrorInfo::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(mirrored, bl);
+  encode(peers, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorInfo::decode(ceph::buffer::list::const_iterator &iter) {
+  DECODE_START(1, iter);
+  decode(mirrored, iter);
+  decode(peers, iter);
+  DECODE_FINISH(iter);
+}
+
+void MirrorInfo::dump(ceph::Formatter *f) const {
+  f->open_object_section("peers");
+  for (auto &peer : peers) {
+    peer.dump(f);
+  }
+  f->close_section(); // peers
+}
+
+void MirrorInfo::print(std::ostream& out) const {
+  out << "[peers=" << peers << "]" << std::endl;
+}
+
 void Filesystem::dump(Formatter *f) const
 {
   f->open_object_section("mdsmap");
   mds_map.dump(f);
   f->close_section();
   f->dump_int("id", fscid);
+  if (mirror_info.is_mirrored()) {
+    f->open_object_section("mirror_info");
+    mirror_info.dump(f);
+    f->close_section(); // mirror_info
+  }
 }
 
 void FSMap::dump(Formatter *f) const
@@ -694,22 +776,26 @@ void FSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
 
 void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(fscid, bl);
   bufferlist mdsmap_bl;
   mds_map.encode(mdsmap_bl, features);
   encode(mdsmap_bl, bl);
+  encode(mirror_info, bl);
   ENCODE_FINISH(bl);
 }
 
 void Filesystem::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(fscid, p);
   bufferlist mdsmap_bl;
   decode(mdsmap_bl, p);
   auto mdsmap_bl_iter = mdsmap_bl.cbegin();
   mds_map.decode(mdsmap_bl_iter);
+  if (struct_v >= 2) {
+    decode(mirror_info, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -740,6 +826,9 @@ void Filesystem::print(std::ostream &out) const
   out << "Filesystem '" << mds_map.fs_name
       << "' (" << fscid << ")" << std::endl;
   mds_map.print(out);
+  if (mirror_info.is_mirrored()) {
+    mirror_info.print(out);
+  }
 }
 
 bool FSMap::is_any_degraded() const
