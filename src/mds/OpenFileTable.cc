@@ -989,8 +989,13 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
   num_opening_inodes--;
   if (num_opening_inodes == 0) {
     if (prefetch_state == DIR_INODES)  {
-      prefetch_state = DIRFRAGS;
-      _prefetch_dirfrags();
+      if (g_conf().get_val<bool>("mds_oft_prefetch_dirfrags")) {
+	prefetch_state = DIRFRAGS;
+	_prefetch_dirfrags();
+      } else {
+	prefetch_state = FILE_INODES;
+	_prefetch_inodes();
+      }
     } else if (prefetch_state == FILE_INODES) {
       prefetch_state = DONE;
       logseg_destroyed_inos.clear();
