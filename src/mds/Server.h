@@ -165,7 +165,6 @@ public:
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
 
-
   void handle_slave_request(const cref_t<MMDSSlaveRequest> &m);
   void handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m);
   void dispatch_slave_request(MDRequestRef& mdr);
@@ -321,7 +320,6 @@ private:
 
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder *gather);
-  void clear_batch_ops(const MDRequestRef& mdr);
 
   MDSRank *mds;
   MDCache *mdcache;

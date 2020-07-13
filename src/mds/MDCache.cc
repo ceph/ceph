@@ -9653,37 +9653,8 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
-    if (mdr->is_batch_head) {
-      int mask = mdr->client_request->head.args.getattr.mask;
-
-      switch (mdr->client_request->get_op()) {
-	case CEPH_MDS_OP_GETATTR:
-	  {
-	    CInode* in = mdr->in[0];
-	    if (in) {
-	      auto it = in->batch_ops.find(mask);
-	      if (it != in->batch_ops.end()) {
-                it->second->forward(who);
-                in->batch_ops.erase(it);
-	      }
-	    }
-	    break;
-	  }
-	case CEPH_MDS_OP_LOOKUP:
-	  {
-	    if (mdr->dn[0].size()) {
-	      CDentry* dn = mdr->dn[0].back();
-	      auto it = dn->batch_ops.find(mask);
-	      if (it != dn->batch_ops.end()) {
-		it->second->forward(who);
-		dn->batch_ops.erase(it);
-	      }
-	    }
-	    break;
-	  }
-	default:
-	  ceph_abort();
-      }
+    if (mdr->is_batch_head()) {
+      mdr->release_batch_op()->forward(who);
     } else {
       mds->forward_message_mds(mdr->release_client_request(), who);
     }
