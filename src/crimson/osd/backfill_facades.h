@@ -23,8 +23,8 @@ struct BackfillState::PeeringFacade {
     return peering_state.get_backfill_targets();
   }
 
-  decltype(auto) get_peer_info(pg_shard_t peer) const {
-    return peering_state.get_peer_info(peer);
+  decltype(auto) get_peer_last_backfill(pg_shard_t peer) const {
+    return peering_state.get_peer_info(peer).last_backfill;
   }
 
   decltype(auto) get_info() const {
