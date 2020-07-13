@@ -70,6 +70,18 @@ public:
     mutated_block_list.push_back(ref);
     write_set.insert(*ref);
   }
+
+  const auto &get_fresh_block_list() {
+    return fresh_block_list;
+  }
+
+  const auto &get_mutated_block_list() {
+    return mutated_block_list;
+  }
+
+  const auto &get_retired_set() {
+    return retired_set;
+  }
 };
 using TransactionRef = std::unique_ptr<Transaction>;
 
