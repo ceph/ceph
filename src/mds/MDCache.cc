@@ -5454,19 +5454,43 @@ bool MDCache::process_imported_caps()
     return true;
   }
 
-  for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
-    CInode *in = get_inode(p->first);
+  for (auto& p : cap_imports) {
+    CInode *in = get_inode(p.first);
     if (in) {
       ceph_assert(in->is_auth());
-      cap_imports_missing.erase(p->first);
+      cap_imports_missing.erase(p.first);
       continue;
     }
-    if (cap_imports_missing.count(p->first) > 0)
+    if (cap_imports_missing.count(p.first) > 0)
       continue;
 
+    uint64_t parent_ino = 0;
+    std::string_view d_name;
+    for (auto& q : p.second) {
+      for (auto& r : q.second) {
+	auto &icr = r.second;
+	if (icr.capinfo.pathbase &&
+	    icr.path.length() > 0 &&
+	    icr.path.find('/') == string::npos) {
+	  parent_ino = icr.capinfo.pathbase;
+	  d_name = icr.path;
+	  break;
+	}
+      }
+      if (parent_ino)
+	break;
+    }
+
+    dout(10) << "  opening missing ino " << p.first << dendl;
     cap_imports_num_opening++;
-    dout(10) << "  opening missing ino " << p->first << dendl;
-    open_ino(p->first, (int64_t)-1, new C_MDC_RejoinOpenInoFinish(this, p->first), false);
+    auto fin = new C_MDC_RejoinOpenInoFinish(this, p.first);
+    if (parent_ino) {
+      vector<inode_backpointer_t> ancestors;
+      ancestors.push_back(inode_backpointer_t(parent_ino, string{d_name}, 0));
+      open_ino(p.first, (int64_t)-1, fin, false, false, &ancestors);
+    } else {
+      open_ino(p.first, (int64_t)-1, fin, false);
+    }
     if (!(cap_imports_num_opening % 1000))
       mds->heartbeat_reset();
   }
