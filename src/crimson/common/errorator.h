@@ -192,7 +192,7 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
       } catch (const ErrorT& obj) {
         return std::invoke(std::forward<Func>(func), obj);
       }
-      assert("exception type mismatch – impossible!" == nullptr);
+      ceph_abort_msg("exception type mismatch – impossible!");
     };
   }
 
@@ -747,7 +747,7 @@ public:
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
