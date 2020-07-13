@@ -4911,6 +4911,119 @@ TEST_P(StoreTest, HashCollisionTest) {
   ASSERT_EQ(r, 0);
 }
 
+TEST_P(StoreTest, HashCollisionSorting) {
+  if (string(GetParam()) == "kstore") // TODO: fix kstore
+    return;
+
+  char buf121664318_1[] = {18, -119, -121, -111, 0};
+  char buf121664318_2[] = {19, 127, -121, 32, 0};
+  char buf121664318_3[] = {19, -118, 15, 19, 0};
+  char buf121664318_4[] = {28, 27, -116, -113, 0};
+  char buf121664318_5[] = {28, 27, -115, -124, 0};
+
+  char buf121666222_1[] = {18, -119, -120, -111, 0};
+  char buf121666222_2[] = {19, 127, -120, 32, 0};
+  char buf121666222_3[] = {19, -118, 15, 30, 0};
+  char buf121666222_4[] = {29, 17, -126, -113, 0};
+  char buf121666222_5[] = {29, 17, -125, -124, 0};
+
+  std::map<uint32_t, std::vector<std::string>> object_names = {
+    {121664318, {{buf121664318_1},
+                 {buf121664318_2},
+                 {buf121664318_3},
+                 {buf121664318_4},
+                 {buf121664318_5}}},
+    {121666222, {{buf121666222_1},
+                 {buf121666222_2},
+                 {buf121666222_3},
+                 {buf121666222_4},
+                 {buf121666222_5}}}};
+
+  int64_t poolid = 111;
+  coll_t cid = coll_t(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    int r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  std::set<ghobject_t> created;
+  for (auto &[hash, names] : object_names) {
+    for (auto &name : names) {
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP),
+                                string(),
+                                hash,
+                                poolid,
+                                string()));
+      ASSERT_EQ(hash, hoid.hobj.get_hash());
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      int r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+      created.insert(hoid);
+    }
+  }
+
+  vector<ghobject_t> objects;
+  int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
+                                 INT_MAX, &objects, 0);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(created.size(), objects.size());
+  auto it = objects.begin();
+  for (auto &hoid : created) {
+    ASSERT_EQ(hoid, *it);
+    it++;
+  }
+
+  for (auto i = created.begin(); i != created.end(); i++) {
+    auto j = i;
+    for (j++; j != created.end(); j++) {
+      std::set<ghobject_t> created_sub(i, j);
+      objects.clear();
+      ghobject_t next;
+      r = store->collection_list(ch, *i, ghobject_t::get_max(),
+                                 created_sub.size(),
+                                 &objects, &next);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(created_sub.size(), objects.size());
+      it = objects.begin();
+      for (auto &hoid : created_sub) {
+        ASSERT_EQ(hoid, *it);
+        it++;
+      }
+      if (j == created.end()) {
+        ASSERT_TRUE(next.is_max());
+      } else {
+        ASSERT_EQ(*j, next);
+      }
+    }
+  }
+
+  for (auto i = created.begin(); i != created.end(); i++) {
+    auto j = i;
+    for (j++; j != created.end(); j++) {
+      std::set<ghobject_t> created_sub(i, j);
+      objects.clear();
+      ghobject_t next;
+      r = store->collection_list(ch, *i, *j, INT_MAX, &objects, &next);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(created_sub.size(), objects.size());
+      it = objects.begin();
+      for (auto &hoid : created_sub) {
+        ASSERT_EQ(hoid, *it);
+        it++;
+      }
+      if (j == created.end()) {
+        ASSERT_TRUE(next.is_max());
+      } else {
+        ASSERT_EQ(*j, next);
+      }
+    }
+  }
+}
+
 TEST_P(StoreTest, ScrubTest) {
   int64_t poolid = 111;
   coll_t cid(spg_t(pg_t(0, poolid),shard_id_t(1)));
