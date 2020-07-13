@@ -936,6 +936,8 @@ static inline bool has_all_tags(const lc_op& rule_action,
   for (const auto& tag : object_tags.get_tags()) {
     const auto& rule_tags = rule_action.obj_tags->get_tags();
     const auto& iter = rule_tags.find(tag.first);
+    if(iter == rule_tags.end())
+        continue;
     if(iter->second == tag.second)
     {
       tag_count++;
