@@ -108,7 +108,7 @@ void BackfillState::Enqueuing::maybe_update_range()
       primary_bi.version >= pg().get_projected_last_update()) {
     logger().info("{}: bi is current", __func__);
     ceph_assert(primary_bi.version == pg().get_projected_last_update());
-  } else if (primary_bi.version >= peering_state().get_info().log_tail) {
+  } else if (primary_bi.version >= peering_state().get_log_tail()) {
 #if 0
     if (peering_state().get_pg_log().get_log().empty() &&
         pg().get_projected_log().empty()) {
@@ -284,7 +284,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 
   // update our local interval to cope with recent changes
   primary_bi.begin = backfill_state().last_backfill_started;
-  if (primary_bi.version < peering_state().get_info().log_tail) {
+  if (primary_bi.version < peering_state().get_log_tail()) {
     // it might be that the OSD is so flooded with modifying operations
     // that backfill will be spinning here over and over. For the sake
     // of performance and complexity we don't synchronize with entire PG.
@@ -350,8 +350,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
-  backfill_state().backfill_info.version = \
-    peering_state().get_info().last_update;
+  backfill_state().backfill_info.version = peering_state().get_last_update();
   backfill_listener().request_primary_scan(
     backfill_state().backfill_info.begin);
 }
