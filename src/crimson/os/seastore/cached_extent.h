@@ -171,6 +171,10 @@ public:
   TCachedExtentRef<T> cast() {
     return TCachedExtentRef<T>(static_cast<T*>(this));
   }
+  template <typename T>
+  TCachedExtentRef<const T> cast() const {
+    return TCachedExtentRef<const T>(static_cast<const T*>(this));
+  }
 
   /// Returns true if extent is part of an open transaction
   bool is_pending() const {
