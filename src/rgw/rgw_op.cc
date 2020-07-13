@@ -6431,10 +6431,12 @@ void RGWListMultipart::execute()
   mp.init(s->object.name, upload_id);
   meta_oid = mp.get_meta();
 
-  op_ret = get_multipart_info(store, s, meta_oid, &policy, nullptr, nullptr);
+  multipart_upload_info upload_info;
+  op_ret = get_multipart_info(store, s, meta_oid, &policy, nullptr, &upload_info);
   if (op_ret < 0)
     return;
 
+  storage_class = upload_info.dest_placement.get_storage_class();
   op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);
 }

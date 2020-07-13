@@ -1798,6 +1798,7 @@ public:
 class RGWListMultipart : public RGWOp {
 protected:
   string upload_id;
+  string storage_class;
   map<uint32_t, RGWUploadPartInfo> parts;
   int max_parts;
   int marker;
