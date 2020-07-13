@@ -111,7 +111,6 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  // TODO: probably unused, removed
   using complete_transaction_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using complete_transaction_ret = complete_transaction_ertr::future<>;
