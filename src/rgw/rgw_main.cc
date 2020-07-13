@@ -21,6 +21,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
+#include "rgw_rest_account.h"
 #include "rgw_rest_admin.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
@@ -444,7 +445,8 @@ int radosgw_Main(int argc, const char **argv)
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     admin_resource->register_resource("bucket", new RGWRESTMgr_Bucket);
-  
+    admin_resource->register_resource("account", new RGWRESTMgr_Account);
+
     /*Registering resource for /admin/metadata */
     admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
