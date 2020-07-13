@@ -524,7 +524,7 @@ class Remote(object):
 
 
 def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
-                     logfile=None, timeout=20):
+                     logfile=None, timeout=60):
     """
     Return either VirtualConsole or PhysicalConsole depending on name.
     """
