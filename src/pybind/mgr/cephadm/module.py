@@ -168,22 +168,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_prometheus',
-            'default': 'docker.io/prom/prometheus:v2.18.1',
+            'default': 'registry.suse.com/caasp/v5/prometheus-server:2.18.0',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_grafana',
-            'default': 'docker.io/ceph/ceph-grafana:6.7.4',
+            'default': 'registry.suse.com/ses/7/ceph/grafana:7.0.3',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_alertmanager',
-            'default': 'docker.io/prom/alertmanager:v0.20.0',
+            'default': 'registry.suse.com/caasp/v5/prometheus-alertmanager:0.16.2',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_node_exporter',
-            'default': 'docker.io/prom/node-exporter:v0.18.1',
+            'default': 'registry.suse.com/caasp/v5/prometheus-node-exporter:0.17.0',
             'desc': 'Prometheus container image',
         },
         {
