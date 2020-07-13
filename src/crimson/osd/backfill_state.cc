@@ -127,7 +127,7 @@ void BackfillState::Enqueuing::maybe_update_range()
                    primary_bi.version,
                    pg().get_projected_last_update());
     logger().debug("{}: scanning pg log first", __func__);
-    peering_state().get_pg_log().get_log().scan_log_after(primary_bi.version,
+    peering_state().scan_log_after(primary_bi.version,
       [&](const pg_log_entry_t& e) {
         logger().debug("maybe_update_range(lambda): updating from version {}",
                        e.version);
