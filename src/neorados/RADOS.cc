@@ -789,7 +789,7 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = 0; // Should be in Op.
+  auto flags = op->op.flags;
 
   ZTracer::Trace trace;
   if (trace_info) {
@@ -811,7 +811,7 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = 0; // Should be in Op.
+  auto flags = op->op.flags;
   ceph::real_time mtime;
   if (op->mtime)
     mtime = *op->mtime;
