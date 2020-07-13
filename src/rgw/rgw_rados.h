@@ -1016,12 +1016,14 @@ public:
         RGWAccessListFilter *filter;
         bool list_versions;
 	bool allow_unordered;
+	bool enforce_max; // return max # requested if at all possible
 
         Params() :
 	  enforce_ns(true),
 	  filter(NULL),
 	  list_versions(false),
-	  allow_unordered(false)
+	  allow_unordered(false),
+	  enforce_max(false)
 	{}
       } params;
 

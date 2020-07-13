@@ -1968,19 +1968,34 @@ int RGWRados::Bucket::List::list_objects_ordered(
       " INFO end of outer loop, truncated=" << truncated <<
       ", count=" << count << ", attempt=" << attempt << dendl;
 
-    if (!truncated || count >= (max + 1) / 2) {
-      // if we finished listing, or if we're returning at least half the
-      // requested entries, that's enough; S3 and swift protocols allow
-      // returning fewer than max entries
-      break;
-    } else if (attempt > 8 && count >= 1) {
-      // if we've made at least 8 attempts and we have some, but very
-      // few, results, return with what we have
-      break;
+    if (params.enforce_max) {
+      // swift protocol obligates us to return max if we can
+      if (!truncated || count == max) {
+	break;
+      }
+    } else {
+      // s3 protocol allows us to return fewer than requested, so
+      // we'll try to balance between # returned and iterations
+      if (!truncated || count >= (max + 1) / 2) {
+	// if we finished listing, or if we're returning at least half the
+	// requested entries, that's enough; S3 and swift protocols allow
+	// returning fewer than max entries
+	break;
+      } else if (attempt > 8 && count >= 1) {
+	// if we've made at least 8 attempts and we have some, but very
+	// few, results, return with what we have
+	break;
+      }
     }
   } // for (uint16_t attempt...
 
 done:
+
+  ldout(cct, 10) << "RGWRados::Bucket::List::" << __func__ <<
+    " INFO returning " <<
+    result->size() << " entry(ies) and " <<
+    (common_prefixes ? common_prefixes->size() : 0) <<
+    " common prefix(es)" << dendl;
 
   if (is_truncated) {
     *is_truncated = truncated;

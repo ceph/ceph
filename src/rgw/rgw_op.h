@@ -841,6 +841,7 @@ protected:
   int default_max;
   bool is_truncated;
   bool allow_unordered;
+  bool enforce_max; // return max if possible
 
   int shard_id;
 
@@ -849,7 +850,8 @@ protected:
 public:
   RGWListBucket() : bucket(nullptr), list_versions(false), max(0),
                     default_max(0), is_truncated(false),
-		    allow_unordered(false), shard_id(-1) {}
+		    allow_unordered(false), enforce_max(false),
+		    shard_id(-1) {}
   ~RGWListBucket() { delete bucket; }
   int verify_permission() override;
   void pre_exec() override;
@@ -865,7 +867,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_container_stats() { return false; }
-};
+}; // class RGWListBucket
 
 class RGWGetBucketLogging : public RGWOp {
 public:
@@ -2456,17 +2458,30 @@ static inline int parse_value_and_bound(
     char *endptr;
     output = strtol(input.c_str(), &endptr, 10);
     if (endptr) {
-      if (endptr == input.c_str()) return -EINVAL;
-      while (*endptr && isspace(*endptr)) // ignore white space
+      if (endptr == input.c_str()) {
+	// if no numeric characters, invalid input
+	return -EINVAL;
+      }
+      while (*endptr && isspace(*endptr)) { // ignore white space
         endptr++;
+      }
       if (*endptr) {
+	// if after skipping white-space we're not at the null
+	// terminating character, then there are one/more illegal
+	// characters
         return -EINVAL;
       }
     }
-    if(output > upper_bound) {
-      output = upper_bound;
+
+    // if the default values is greater than the upper-bound, it
+    // becomes the upper-bound; for example, Swift's default value for
+    // bucket listing is 10,000
+    const long true_upper_bound = std::max(upper_bound, default_val);
+
+    if (output > true_upper_bound) {
+      output = true_upper_bound;
     }
-    if(output < lower_bound) {
+    if (output < lower_bound) {
       output = lower_bound;
     }
   } else {
