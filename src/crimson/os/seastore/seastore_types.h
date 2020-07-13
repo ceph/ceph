@@ -237,8 +237,8 @@ struct delta_info_t {
   paddr_t paddr;                               ///< physical address
   /* logical address -- needed for repopulating cache -- TODO don't actually need */
   // laddr_t laddr = L_ADDR_NULL;
-  uint32_t prev_crc;
-  uint32_t final_crc;
+  uint32_t prev_crc = 0;
+  uint32_t final_crc = 0;
   segment_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
   ceph::bufferlist bl;                         ///< payload
