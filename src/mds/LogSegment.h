@@ -88,7 +88,7 @@ class LogSegment {
   MDSContext* purged_cb = nullptr;
 
   map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
-  set<metareqid_t> uncommitted_masters;
+  set<metareqid_t> uncommitted_leaders;
   set<metareqid_t> uncommitted_slaves;
   set<dirfrag_t> uncommitted_fragments;
 

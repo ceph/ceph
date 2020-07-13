@@ -111,19 +111,19 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  // master ops with possibly uncommitted slaves
-  for (set<metareqid_t>::iterator p = uncommitted_masters.begin();
-       p != uncommitted_masters.end();
+  // leader ops with possibly uncommitted slaves
+  for (set<metareqid_t>::iterator p = uncommitted_leaders.begin();
+       p != uncommitted_leaders.end();
        ++p) {
     dout(10) << "try_to_expire waiting for slaves to ack commit on " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_master(*p, gather_bld.new_sub());
+    mds->mdcache->wait_for_uncommitted_leader(*p, gather_bld.new_sub());
   }
 
   // slave ops that haven't been committed
   for (set<metareqid_t>::iterator p = uncommitted_slaves.begin();
        p != uncommitted_slaves.end();
        ++p) {
-    dout(10) << "try_to_expire waiting for master to ack OP_FINISH on " << *p << dendl;
+    dout(10) << "try_to_expire waiting for leader to ack OP_FINISH on " << *p << dendl;
     mds->mdcache->wait_for_uncommitted_slave(*p, gather_bld.new_sub());
   }
 
@@ -2121,7 +2121,7 @@ void EUpdate::update_segment()
     segment->sessionmapv = cmapv;
 
   if (had_slaves)
-    segment->uncommitted_masters.insert(reqid);
+    segment->uncommitted_leaders.insert(reqid);
 }
 
 void EUpdate::replay(MDSRank *mds)
@@ -2131,9 +2131,9 @@ void EUpdate::replay(MDSRank *mds)
   
   if (had_slaves) {
     dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
-    segment->uncommitted_masters.insert(reqid);
+    segment->uncommitted_leaders.insert(reqid);
     set<mds_rank_t> slaves;
-    mds->mdcache->add_uncommitted_master(reqid, segment, slaves, true);
+    mds->mdcache->add_uncommitted_leader(reqid, segment, slaves, true);
   }
   
   if (client_map.length()) {
@@ -2237,10 +2237,10 @@ void EOpen::replay(MDSRank *mds)
 
 void ECommitted::replay(MDSRank *mds)
 {
-  if (mds->mdcache->uncommitted_masters.count(reqid)) {
+  if (mds->mdcache->uncommitted_leaders.count(reqid)) {
     dout(10) << "ECommitted.replay " << reqid << dendl;
-    mds->mdcache->uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
-    mds->mdcache->uncommitted_masters.erase(reqid);
+    mds->mdcache->uncommitted_leaders[reqid].ls->uncommitted_leaders.erase(reqid);
+    mds->mdcache->uncommitted_leaders.erase(reqid);
   } else {
     dout(10) << "ECommitted.replay " << reqid << " -- didn't see original op" << dendl;
   }
@@ -2475,7 +2475,7 @@ void ESlaveUpdate::encode(bufferlist &bl, uint64_t features) const
   encode(stamp, bl);
   encode(type, bl);
   encode(reqid, bl);
-  encode(master, bl);
+  encode(leader, bl);
   encode(op, bl);
   encode(origop, bl);
   encode(commit, bl, features);
@@ -2490,7 +2490,7 @@ void ESlaveUpdate::decode(bufferlist::const_iterator &bl)
     decode(stamp, bl);
   decode(type, bl);
   decode(reqid, bl);
-  decode(master, bl);
+  decode(leader, bl);
   decode(op, bl);
   decode(origop, bl);
   decode(commit, bl);
@@ -2507,7 +2507,7 @@ void ESlaveUpdate::dump(Formatter *f) const
   f->dump_int("rollback length", rollback.length());
   f->dump_string("type", type);
   f->dump_stream("metareqid") << reqid;
-  f->dump_int("master", master);
+  f->dump_int("leader", leader);
   f->dump_int("op", op);
   f->dump_int("original op", origop);
 }
@@ -2523,20 +2523,20 @@ void ESlaveUpdate::replay(MDSRank *mds)
   auto&& segment = get_segment();
   switch (op) {
   case ESlaveUpdate::OP_PREPARE:
-    dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds." << master 
+    dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds." << leader
 	     << ": applying commit, saving rollback info" << dendl;
     su = new MDSlaveUpdate(origop, rollback);
     commit.replay(mds, segment, su);
-    mds->mdcache->add_uncommitted_slave(reqid, segment, master, su);
+    mds->mdcache->add_uncommitted_slave(reqid, segment, leader, su);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
-    dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master << dendl;
+    dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << leader << dendl;
     mds->mdcache->finish_uncommitted_slave(reqid, false);
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
-    dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master
+    dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << leader
 	     << ": applying rollback commit blob" << dendl;
     commit.replay(mds, segment);
     mds->mdcache->finish_uncommitted_slave(reqid, false);

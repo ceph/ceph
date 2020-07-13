@@ -2448,75 +2448,75 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
 
 /*
- * some handlers for master requests with slaves.  we need to make 
- * sure slaves journal commits before we forget we mastered them and
- * remove them from the uncommitted_masters map (used during recovery
+ * some handlers for leader requests with slaves.  we need to make
+ * sure slaves journal commits before we forget we leadered them and
+ * remove them from the uncommitted_leaders map (used during recovery
  * to commit|abort slaves).
  */
-struct C_MDC_CommittedMaster : public MDCacheLogContext {
+struct C_MDC_CommittedLeader : public MDCacheLogContext {
   metareqid_t reqid;
-  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : MDCacheLogContext(s), reqid(r) {}
+  C_MDC_CommittedLeader(MDCache *s, metareqid_t r) : MDCacheLogContext(s), reqid(r) {}
   void finish(int r) override {
-    mdcache->_logged_master_commit(reqid);
+    mdcache->_logged_leader_commit(reqid);
   }
 };
 
-void MDCache::log_master_commit(metareqid_t reqid)
+void MDCache::log_leader_commit(metareqid_t reqid)
 {
-  dout(10) << "log_master_commit " << reqid << dendl;
-  uncommitted_masters[reqid].committing = true;
+  dout(10) << "log_leader_commit " << reqid << dendl;
+  uncommitted_leaders[reqid].committing = true;
   mds->mdlog->start_submit_entry(new ECommitted(reqid), 
-				 new C_MDC_CommittedMaster(this, reqid));
+				 new C_MDC_CommittedLeader(this, reqid));
 }
 
-void MDCache::_logged_master_commit(metareqid_t reqid)
+void MDCache::_logged_leader_commit(metareqid_t reqid)
 {
-  dout(10) << "_logged_master_commit " << reqid << dendl;
-  ceph_assert(uncommitted_masters.count(reqid));
-  uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
-  mds->queue_waiters(uncommitted_masters[reqid].waiters);
-  uncommitted_masters.erase(reqid);
+  dout(10) << "_logged_leader_commit " << reqid << dendl;
+  ceph_assert(uncommitted_leaders.count(reqid));
+  uncommitted_leaders[reqid].ls->uncommitted_leaders.erase(reqid);
+  mds->queue_waiters(uncommitted_leaders[reqid].waiters);
+  uncommitted_leaders.erase(reqid);
 }
 
 // while active...
 
-void MDCache::committed_master_slave(metareqid_t r, mds_rank_t from)
+void MDCache::committed_leader_slave(metareqid_t r, mds_rank_t from)
 {
-  dout(10) << "committed_master_slave mds." << from << " on " << r << dendl;
-  ceph_assert(uncommitted_masters.count(r));
-  uncommitted_masters[r].slaves.erase(from);
-  if (!uncommitted_masters[r].recovering && uncommitted_masters[r].slaves.empty())
-    log_master_commit(r);
+  dout(10) << "committed_leader_slave mds." << from << " on " << r << dendl;
+  ceph_assert(uncommitted_leaders.count(r));
+  uncommitted_leaders[r].slaves.erase(from);
+  if (!uncommitted_leaders[r].recovering && uncommitted_leaders[r].slaves.empty())
+    log_leader_commit(r);
 }
 
-void MDCache::logged_master_update(metareqid_t reqid)
+void MDCache::logged_leader_update(metareqid_t reqid)
 {
-  dout(10) << "logged_master_update " << reqid << dendl;
-  ceph_assert(uncommitted_masters.count(reqid));
-  uncommitted_masters[reqid].safe = true;
-  auto p = pending_masters.find(reqid);
-  if (p != pending_masters.end()) {
-    pending_masters.erase(p);
-    if (pending_masters.empty())
+  dout(10) << "logged_leader_update " << reqid << dendl;
+  ceph_assert(uncommitted_leaders.count(reqid));
+  uncommitted_leaders[reqid].safe = true;
+  auto p = pending_leaders.find(reqid);
+  if (p != pending_leaders.end()) {
+    pending_leaders.erase(p);
+    if (pending_leaders.empty())
       process_delayed_resolve();
   }
 }
 
 /*
- * Master may crash after receiving all slaves' commit acks, but before journalling
+ * Leader may crash after receiving all slaves' commit acks, but before journalling
  * the final commit. Slaves may crash after journalling the slave commit, but before
- * sending commit ack to the master. Commit masters with no uncommitted slave when
+ * sending commit ack to the leader. Commit leaders with no uncommitted slave when
  * resolve finishes.
  */
-void MDCache::finish_committed_masters()
+void MDCache::finish_committed_leaders()
 {
-  for (map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
-       p != uncommitted_masters.end();
+  for (map<metareqid_t, uleader>::iterator p = uncommitted_leaders.begin();
+       p != uncommitted_leaders.end();
        ++p) {
     p->second.recovering = false;
     if (!p->second.committing && p->second.slaves.empty()) {
-      dout(10) << "finish_committed_masters " << p->first << dendl;
-      log_master_commit(p->first);
+      dout(10) << "finish_committed_leaders " << p->first << dendl;
+      log_leader_commit(p->first);
     }
   }
 }
@@ -2525,8 +2525,8 @@ void MDCache::finish_committed_masters()
  * at end of resolve... we must journal a commit|abort for all slave
  * updates, before moving on.
  * 
- * this is so that the master can safely journal ECommitted on ops it
- * masters when it reaches up:active (all other recovering nodes must
+ * this is so that the leader can safely journal ECommitted on ops it
+ * leaders when it reaches up:active (all other recovering nodes must
  * complete resolve before that happens).
  */
 struct C_MDC_SlaveCommit : public MDCacheLogContext {
@@ -2793,8 +2793,8 @@ void MDCache::send_slave_resolves()
     for (map<metareqid_t, uslave>::iterator p = uncommitted_slaves.begin();
 	 p != uncommitted_slaves.end();
 	 ++p) {
-      mds_rank_t master = p->second.master;
-      auto &m = resolves[master];
+      mds_rank_t leader = p->second.leader;
+      auto &m = resolves[leader];
       if (!m) m = make_message<MMDSResolve>();
       m->add_slave_request(p->first, false);
     }
@@ -2810,11 +2810,11 @@ void MDCache::send_slave_resolves()
       if (!mdr->slave_did_prepare() && !mdr->committing) {
 	continue;
       }
-      mds_rank_t master = mdr->slave_to_mds;
-      if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
+      mds_rank_t leader = mdr->slave_to_mds;
+      if (resolve_set.count(leader) || is_ambiguous_slave_update(p->first, leader)) {
 	dout(10) << " including uncommitted " << *mdr << dendl;
-	if (!resolves.count(master))
-	  resolves[master] = make_message<MMDSResolve>();
+	if (!resolves.count(leader))
+	  resolves[leader] = make_message<MMDSResolve>();
 	if (!mdr->committing &&
 	    mdr->has_more() && mdr->more()->is_inode_exporter) {
 	  // re-send cap exports
@@ -2824,9 +2824,9 @@ void MDCache::send_slave_resolves()
 	  bufferlist bl;
           MMDSResolve::slave_inode_cap inode_caps(in->ino(), cap_map);
           encode(inode_caps, bl);
-	  resolves[master]->add_slave_request(p->first, bl);
+	  resolves[leader]->add_slave_request(p->first, bl);
 	} else {
-	  resolves[master]->add_slave_request(p->first, mdr->committing);
+	  resolves[leader]->add_slave_request(p->first, mdr->committing);
 	}
       }
     }
@@ -3039,29 +3039,29 @@ void MDCache::handle_mds_failure(mds_rank_t who)
     }
     
     // failed node is slave?
-    if (mdr->is_master() && !mdr->committing) {
+    if (mdr->is_leader() && !mdr->committing) {
       if (mdr->more()->srcdn_auth_mds == who) {
-	dout(10) << " master request " << *mdr << " waiting for rename srcdn's auth mds."
+	dout(10) << " leader request " << *mdr << " waiting for rename srcdn's auth mds."
 		 << who << " to recover" << dendl;
 	ceph_assert(mdr->more()->witnessed.count(who) == 0);
 	if (mdr->more()->is_ambiguous_auth)
 	  mdr->clear_ambiguous_auth();
 	// rename srcdn's auth mds failed, all witnesses will rollback
 	mdr->more()->witnessed.clear();
-	pending_masters.erase(p->first);
+	pending_leaders.erase(p->first);
       }
 
       if (mdr->more()->witnessed.count(who)) {
 	mds_rank_t srcdn_auth = mdr->more()->srcdn_auth_mds;
 	if (srcdn_auth >= 0 && mdr->more()->waiting_on_slave.count(srcdn_auth)) {
-	  dout(10) << " master request " << *mdr << " waiting for rename srcdn's auth mds."
+	  dout(10) << " leader request " << *mdr << " waiting for rename srcdn's auth mds."
 		   << mdr->more()->srcdn_auth_mds << " to reply" << dendl;
 	  // waiting for the slave (rename srcdn's auth mds), delay sending resolve ack
 	  // until either the request is committing or the slave also fails.
 	  ceph_assert(mdr->more()->waiting_on_slave.size() == 1);
-	  pending_masters.insert(p->first);
+	  pending_leaders.insert(p->first);
 	} else {
-	  dout(10) << " master request " << *mdr << " no longer witnessed by slave mds."
+	  dout(10) << " leader request " << *mdr << " no longer witnessed by slave mds."
 		   << who << " to recover" << dendl;
 	  if (srcdn_auth >= 0)
 	    ceph_assert(mdr->more()->witnessed.count(srcdn_auth) == 0);
@@ -3072,7 +3072,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
       }
       
       if (mdr->more()->waiting_on_slave.count(who)) {
-	dout(10) << " master request " << *mdr << " waiting for slave mds." << who
+	dout(10) << " leader request " << *mdr << " waiting for slave mds." << who
 		 << " to recover" << dendl;
 	// retry request when peer recovers
 	mdr->more()->waiting_on_slave.erase(who);
@@ -3085,8 +3085,8 @@ void MDCache::handle_mds_failure(mds_rank_t who)
     }
   }
 
-  for (map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
-       p != uncommitted_masters.end();
+  for (map<metareqid_t, uleader>::iterator p = uncommitted_leaders.begin();
+       p != uncommitted_leaders.end();
        ++p) {
     // The failed MDS may have already committed the slave update
     if (p->second.slaves.count(who)) {
@@ -3229,13 +3229,13 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
   if (!m->slave_requests.empty()) {
     if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
       for (auto p = m->slave_requests.begin(); p != m->slave_requests.end(); ++p) {
-	if (uncommitted_masters.count(p->first) && !uncommitted_masters[p->first].safe) {
+	if (uncommitted_leaders.count(p->first) && !uncommitted_leaders[p->first].safe) {
 	  ceph_assert(!p->second.committing);
-	  pending_masters.insert(p->first);
+	  pending_leaders.insert(p->first);
 	}
       }
 
-      if (!pending_masters.empty()) {
+      if (!pending_leaders.empty()) {
 	dout(10) << " still have pending updates, delay processing slave resolve" << dendl;
 	delayed_resolve[from] = m;
 	return;
@@ -3244,7 +3244,7 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 
     auto ack = make_message<MMDSResolveAck>();
     for (const auto &p : m->slave_requests) {
-      if (uncommitted_masters.count(p.first)) {  //mds->sessionmap.have_completed_request(p.first)) {
+      if (uncommitted_leaders.count(p.first)) {  //mds->sessionmap.have_completed_request(p.first)) {
 	// COMMIT
 	if (p.second.committing) {
 	  // already committing, waiting for the OP_COMMITTED slave reply
@@ -3253,7 +3253,7 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 	  dout(10) << " ambiguous slave request " << p << " will COMMIT" << dendl;
 	  ack->add_commit(p.first);
 	}
-	uncommitted_masters[p.first].slaves.insert(from);   // wait for slave OP_COMMITTED before we log ECommitted
+	uncommitted_leaders[p.first].slaves.insert(from);   // wait for slave OP_COMMITTED before we log ECommitted
 
 	if (p.second.inode_caps.length() > 0) {
 	  // slave wants to export caps (rename)
@@ -3417,7 +3417,7 @@ void MDCache::maybe_resolve_finish()
 
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
   disambiguate_my_imports();
-  finish_committed_masters();
+  finish_committed_leaders();
 
   if (resolve_done) {
     ceph_assert(mds->is_resolve());
@@ -3467,7 +3467,7 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
       finish_uncommitted_slave(p.first);
     } else {
       MDRequestRef mdr = request_get(p.first);
-      // information about master imported caps
+      // information about leader imported caps
       if (p.second.length() > 0)
 	mdr->more()->inode_import.share(p.second);
 
@@ -3517,7 +3517,7 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
   }
 }
 
-void MDCache::add_uncommitted_slave(metareqid_t reqid, LogSegment *ls, mds_rank_t master, MDSlaveUpdate *su)
+void MDCache::add_uncommitted_slave(metareqid_t reqid, LogSegment *ls, mds_rank_t leader, MDSlaveUpdate *su)
 {
   auto const &ret = uncommitted_slaves.emplace(std::piecewise_construct,
                                                std::forward_as_tuple(reqid),
@@ -3525,7 +3525,7 @@ void MDCache::add_uncommitted_slave(metareqid_t reqid, LogSegment *ls, mds_rank_
   ceph_assert(ret.second);
   ls->uncommitted_slaves.insert(reqid);
   uslave &u = ret.first->second;
-  u.master = master;
+  u.leader = leader;
   u.ls = ls;
   u.su = su;
   if (su == nullptr) {
@@ -3592,13 +3592,13 @@ void MDCache::finish_uncommitted_slave(metareqid_t reqid, bool assert_exist)
   delete su;
 }
 
-MDSlaveUpdate* MDCache::get_uncommitted_slave(metareqid_t reqid, mds_rank_t master)
+MDSlaveUpdate* MDCache::get_uncommitted_slave(metareqid_t reqid, mds_rank_t leader)
 {
 
   MDSlaveUpdate* su = nullptr;
   auto it = uncommitted_slaves.find(reqid);
   if (it != uncommitted_slaves.end() &&
-      it->second.master == master) {
+      it->second.leader == leader) {
     su = it->second.su;
   }
   return su;

@@ -510,9 +510,9 @@ void MDRequestImpl::_dump(Formatter *f) const
       f->close_section(); // client_info
     } else if (is_slave() && _slave_request) { // replies go to an existing mdr
       f->dump_string("op_type", "slave_request");
-      f->open_object_section("master_info");
-      f->dump_stream("master") << _slave_request->get_orig_source();
-      f->close_section(); // master_info
+      f->open_object_section("leader_info");
+      f->dump_stream("leader") << _slave_request->get_orig_source();
+      f->close_section(); // leader_info
 
       f->open_object_section("request_info");
       f->dump_int("attempt", _slave_request->get_attempt());

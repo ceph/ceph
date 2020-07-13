@@ -2706,7 +2706,7 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
   
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     metareqid_t r = m->get_reqid();
-    if (!mdcache->have_uncommitted_master(r, from)) {
+    if (!mdcache->have_uncommitted_leader(r, from)) {
       dout(10) << "handle_slave_request_reply ignoring slave reply from mds."
 	       << from << " reqid " << r << dendl;
       return;
@@ -2718,7 +2718,7 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
 
   if (m->get_op() == MMDSSlaveRequest::OP_COMMITTED) {
     metareqid_t r = m->get_reqid();
-    mdcache->committed_master_slave(r, from);
+    mdcache->committed_leader_slave(r, from);
     return;
   }
 
@@ -2732,7 +2732,7 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
   switch (m->get_op()) {
   case MMDSSlaveRequest::OP_XLOCKACK:
     {
-      // identify lock, master request
+      // identify lock, leader request
       SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
 					       m->get_object_info());
       mdr->more()->slaves.insert(from);
@@ -2751,7 +2751,7 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
     
   case MMDSSlaveRequest::OP_WRLOCKACK:
     {
-      // identify lock, master request
+      // identify lock, leader request
       SimpleLock *lock = mds->locker->get_lock(m->get_lock_type(),
 					       m->get_object_info());
       mdr->more()->slaves.insert(from);
@@ -6483,7 +6483,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
     dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
+    mdcache->add_uncommitted_leader(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
   if (inc) {
@@ -6514,7 +6514,7 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   ceph_assert(g_conf()->mds_kill_link_at != 3);
 
   if (!mdr->more()->witnessed.empty())
-    mdcache->logged_master_update(mdr->reqid);
+    mdcache->logged_leader_update(mdr->reqid);
 
   if (inc) {
     // link the new dentry
@@ -6594,7 +6594,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 
   mdr->auth_pin(targeti);
 
-  //ceph_abort();  // test hack: make sure master can handle a slave that fails to prepare...
+  //ceph_abort();  // test hack: make sure leader can handle a slave that fails to prepare...
   ceph_assert(g_conf()->mds_kill_link_at != 5);
 
   // journal it
@@ -6765,7 +6765,7 @@ struct C_MDS_LoggedLinkRollback : public ServerLogContext {
   }
 };
 
-void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr)
+void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr)
 {
   link_rollback rollback;
   auto p = rbl.cbegin();
@@ -6778,7 +6778,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
 
   ceph_assert(g_conf()->mds_kill_link_at != 9);
 
-  mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
+  mdcache->add_rollback(rollback.reqid, leader); // need to finish this update before resolve finishes
   ceph_assert(mdr || mds->is_resolve());
 
   MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
@@ -6835,7 +6835,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   }
 
   // journal it
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, master,
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, leader,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::LINK);
   mdlog->start_entry(le);
   le->commit.add_dir_context(parent);
@@ -7085,7 +7085,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
     dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
+    mdcache->add_uncommitted_leader(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
   if (straydn) {
@@ -7164,7 +7164,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dout(10) << "_unlink_local_finish " << *dn << dendl;
 
   if (!mdr->more()->witnessed.empty())
-    mdcache->logged_master_update(mdr->reqid);
+    mdcache->logged_leader_update(mdr->reqid);
 
   CInode *strayin = NULL;
   bool hadrealm = false;
@@ -7459,7 +7459,7 @@ struct C_MDS_LoggedRmdirRollback : public ServerLogContext {
   }
 };
 
-void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr)
+void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr)
 {
   // unlink the other rollback methods, the rmdir rollback is only
   // needed to record the subtree changes in the journal for inode
@@ -7471,7 +7471,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef&
   decode(rollback, p);
   
   dout(10) << "do_rmdir_rollback on " << rollback.reqid << dendl;
-  mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
+  mdcache->add_rollback(rollback.reqid, leader); // need to finish this update before resolve finishes
   ceph_assert(mdr || mds->is_resolve());
 
   CDir *dir = mdcache->get_dirfrag(rollback.src_dir);
@@ -7510,7 +7510,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef&
   }
 
 
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rmdir_rollback", rollback.reqid, master,
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rmdir_rollback", rollback.reqid, leader,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RMDIR);
   mdlog->start_entry(le);
   
@@ -7635,15 +7635,15 @@ public:
 
 /** handle_client_rename
  *
- * rename master is the destdn auth.  this is because cached inodes
+ * rename leader is the destdn auth.  this is because cached inodes
  * must remain connected.  thus, any replica of srci, must also
  * replicate destdn, and possibly straydn, so that srci (and
  * destdn->inode) remain connected during the rename.
  *
- * to do this, we freeze srci, then master (destdn auth) verifies that
+ * to do this, we freeze srci, then leader (destdn auth) verifies that
  * all other nodes have also replciated destdn and straydn.  note that
  * destdn replicas need not also replicate srci.  this only works when 
- * destdn is master.
+ * destdn is leader.
  *
  * This function takes responsibility for the passed mdr.
  */
@@ -8046,7 +8046,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     le->reqid = mdr->reqid;
     le->had_slaves = true;
     
-    mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
+    mdcache->add_uncommitted_leader(mdr->reqid, mdr->ls, mdr->more()->witnessed);
     // no need to send frozen auth pin to recovring auth MDS of srci
     mdr->more()->is_remote_frozen_authpin = false;
   }
@@ -8068,7 +8068,7 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
   dout(10) << "_rename_finish " << *mdr << dendl;
 
   if (!mdr->more()->witnessed.empty())
-    mdcache->logged_master_update(mdr->reqid);
+    mdcache->logged_leader_update(mdr->reqid);
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);
@@ -8886,7 +8886,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       mdr->set_ambiguous_auth(srcdnl->get_inode());
 
       // just mark the source inode as ambiguous auth if more than two MDS are involved.
-      // the master will send another OP_RENAMEPREP slave request later.
+      // the leader will send another OP_RENAMEPREP slave request later.
       if (mdr->slave_request->witnesses.size() > 1) {
 	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
 	reply_witness = true;
@@ -9175,7 +9175,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
-    // witness list from the master, and they failed before we tried prep again.
+    // witness list from the leader, and they failed before we tried prep again.
     if (mdr->more()->rollback_bl.length()) {
       if (mdr->more()->is_inode_exporter) {
 	dout(10) << " reversing inode export of " << *in << dendl;
@@ -9189,7 +9189,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       } else
 	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr, true);
     } else {
-      dout(10) << " rollback_bl empty, not rollback back rename (master failed after getting extra witnesses?)" << dendl;
+      dout(10) << " rollback_bl empty, not rollback back rename (leader failed after getting extra witnesses?)" << dendl;
       // singleauth
       if (mdr->more()->is_ambiguous_auth) {
 	if (srcdn->is_auth())
@@ -9257,7 +9257,7 @@ struct C_MDS_LoggedRenameRollback : public ServerLogContext {
   }
 };
 
-void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr,
+void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr,
 				bool finish_mdr)
 {
   rename_rollback rollback;
@@ -9266,7 +9266,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
   // need to finish this update before sending resolve to claim the subtree
-  mdcache->add_rollback(rollback.reqid, master);
+  mdcache->add_rollback(rollback.reqid, leader);
 
   MutationRef mut(new MutationImpl(nullptr, utime_t(), rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
@@ -9492,7 +9492,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     dout(0) << "  desti back to " << *target << dendl;
   
   // journal it
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_rollback", rollback.reqid, master,
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_rollback", rollback.reqid, leader,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RENAME);
   mdlog->start_entry(le);
 

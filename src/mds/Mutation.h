@@ -159,7 +159,7 @@ public:
     return lock == last_locked;
   }
 
-  bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
+  bool is_leader() const { return slave_to_mds == MDS_RANK_NONE; }
   bool is_slave() const { return slave_to_mds != MDS_RANK_NONE; }
 
   client_t get_client() const {
@@ -399,7 +399,7 @@ struct MDRequestImpl : public MutationImpl {
   Session *session = nullptr;
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
-  // -- i am a client (master) request
+  // -- i am a client (leader) request
   ceph::cref_t<MClientRequest> client_request; // client request (if any)
 
   // tree and depth info of path1 and path2

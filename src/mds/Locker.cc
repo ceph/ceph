@@ -242,7 +242,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if ((lock->get_type() == CEPH_LOCK_ISNAP ||
 	   lock->get_type() == CEPH_LOCK_IPOLICY) &&
 	  mds->is_cluster_degraded() &&
-	  mdr->is_master() &&
+	  mdr->is_leader() &&
 	  !mdr->is_queued_for_replay()) {
 	// waiting for recovering mds, to guarantee replayed requests and mksnap/setlayout
 	// get processed in proper order.
@@ -283,8 +283,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	CDentry *dn = static_cast<CDentry*>(object);
 	if (!dn->is_auth())
 	  continue;
-	if (mdr->is_master()) {
-	  // master.  wrlock versionlock so we can pipeline dentry updates to journal.
+	if (mdr->is_leader()) {
+	  // leader.  wrlock versionlock so we can pipeline dentry updates to journal.
 	  lov.add_wrlock(&dn->versionlock, i + 1);
 	} else {
 	  // slave.  exclusively lock the dentry version (i.e. block other journal updates).
@@ -297,8 +297,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	CInode *in = static_cast<CInode*>(object);
 	if (!in->is_auth())
 	  continue;
-	if (mdr->is_master()) {
-	  // master.  wrlock versionlock so we can pipeline inode updates to journal.
+	if (mdr->is_leader()) {
+	  // leader.  wrlock versionlock so we can pipeline inode updates to journal.
 	  lov.add_wrlock(&in->versionlock, i + 1);
 	} else {
 	  // slave.  exclusively lock the inode version (i.e. block other journal updates).
@@ -313,7 +313,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	mustpin.insert(object);
       } else if (!object->is_auth() &&
 		 !lock->can_wrlock(_client) &&  // we might have to request a scatter
-		 !mdr->is_slave()) {           // if we are slave (remote_wrlock), the master already authpinned
+		 !mdr->is_slave()) {           // if we are slave (remote_wrlock), the leader already authpinned
 	dout(15) << " will also auth_pin " << *object
 		 << " in case we need to request a scatter" << dendl;
 	mustpin.insert(object);
@@ -556,7 +556,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	continue;
       }
 
-      ceph_assert(mdr->is_master());
+      ceph_assert(mdr->is_leader());
       if (lock->needs_recover()) {
 	if (mds->is_cluster_degraded()) {
 	  if (!mdr->is_queued_for_replay()) {
@@ -1414,7 +1414,7 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
    *
    * We can defer while freezing without causing a deadlock.  Honor
    * scatter_wanted flag here.  This will never get deferred by the
-   * checks above due to the auth_pin held by the master.
+   * checks above due to the auth_pin held by the leader.
    */
   if (lock->is_scatterlock()) {
     ScatterLock *slock = static_cast<ScatterLock *>(lock);
