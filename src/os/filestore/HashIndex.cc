@@ -96,6 +96,13 @@ static void append_escaped(const string &in, S *out)
   out->append(hexbyte, ptr - &hexbyte[0]);
 }
 
+template<typename S>
+static void append_unescaped(const string &in, S *out)
+{
+  out->append(in);
+  out->append("!");
+}
+
 template<typename T>
 static void _key_encode_shard(shard_id_t shard, T *key)
 {
@@ -103,7 +110,7 @@ static void _key_encode_shard(shard_id_t shard, T *key)
 }
 
 template<typename S>
-static void get_object_key(const ghobject_t& oid, S *key)
+static void get_object_key(bool bluestore_order, const ghobject_t& oid, S *key)
 {
   key->clear();
 
@@ -119,7 +126,11 @@ static void get_object_key(const ghobject_t& oid, S *key)
   _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
   _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
 
-  append_escaped(oid.hobj.nspace, key);
+  if (bluestore_order) {
+    append_escaped(oid.hobj.nspace, key);
+  } else {
+    append_unescaped(oid.hobj.nspace, key);
+  }
 
   if (oid.hobj.get_key().length()) {
     // is a key... could be < = or >.
@@ -128,14 +139,22 @@ static void get_object_key(const ghobject_t& oid, S *key)
     int r = oid.hobj.get_key().compare(oid.hobj.oid.name);
     if (r) {
       key->append(r > 0 ? ">" : "<");
-      append_escaped(oid.hobj.oid.name, key);
+      if (bluestore_order) {
+        append_escaped(oid.hobj.oid.name, key);
+      } else {
+        append_unescaped(oid.hobj.oid.name, key);
+      }
     } else {
       // same as no key
       key->append("=");
     }
   } else {
     // no key
-    append_escaped(oid.hobj.oid.name, key);
+    if (bluestore_order) {
+      append_escaped(oid.hobj.oid.name, key);
+    } else {
+      append_unescaped(oid.hobj.oid.name, key);
+    }
     key->append("=");
   }
 
@@ -1190,6 +1209,8 @@ int HashIndex::get_path_contents_by_hash_bitwise(
   if (r < 0)
     return r;
   // bitwise sort
+  bool bluestore_order =
+    cct->_conf.get_val<bool>("filestore_bluestore_list_order");
   for (map<string, ghobject_t>::iterator i = rev_objects.begin();
        i != rev_objects.end();
        ++i) {
@@ -1197,7 +1218,7 @@ int HashIndex::get_path_contents_by_hash_bitwise(
       continue;
     string hash_prefix = get_path_str(i->second);
     string key;
-    get_object_key(i->second, &key);
+    get_object_key(bluestore_order, i->second, &key);
     hash_prefixes->insert(hash_prefix);
     objects->insert({{hash_prefix, key}, i->second});
   }

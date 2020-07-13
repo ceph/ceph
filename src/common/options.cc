@@ -5103,6 +5103,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("filestore_bluestore_list_order", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("List objects in the same order as BlueStore"),
+
     Option("journal_dio", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
