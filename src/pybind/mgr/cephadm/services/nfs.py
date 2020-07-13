@@ -72,7 +72,7 @@ class NFSService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]):
+    def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> str:
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = daemon_spec.spec
