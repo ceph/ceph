@@ -185,6 +185,11 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
  * We use ! as a terminator for strings; this works because it is < #
  * and will get escaped if it is present in the string.
  *
+ * NOTE: There is a bug in this implementation: due to implicit
+ * character type conversion in comparison it may produce unexpected
+ * ordering. Unfortunately fixing the bug would mean invalidating the
+ * keys in existing deployments.
+ *
  */
 template<typename S>
 static void append_escaped(const string &in, S *out)
@@ -192,11 +197,11 @@ static void append_escaped(const string &in, S *out)
   char hexbyte[in.length() * 3 + 1];
   char* ptr = &hexbyte[0];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i <= '#') {
+    if (*i <= '#') { // bug: unexpected result for *i > 0x7f
       *ptr++ = '#';
       *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
       *ptr++ = "0123456789abcdef"[*i & 0x0f];
-    } else if (*i >= '~') {
+    } else if (*i >= '~') { // bug: unexpected result for *i > 0x7f
       *ptr++ = '~';
       *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
       *ptr++ = "0123456789abcdef"[*i & 0x0f];
