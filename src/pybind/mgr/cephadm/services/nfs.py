@@ -118,20 +118,16 @@ class NFSGanesha(object):
         self.daemon_id = daemon_id
         self.spec = spec
 
-    def get_daemon_name(self):
-        # type: () -> str
+    def get_daemon_name(self) -> str:
         return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
-    def get_rados_user(self):
-        # type: () -> str
+    def get_rados_user(self) -> str:
         return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
-    def get_keyring_entity(self):
-        # type: () -> str
+    def get_keyring_entity(self) -> str:
         return utils.name_to_config_section(self.get_rados_user())
 
-    def get_or_create_keyring(self, entity=None):
-        # type: (Optional[str]) -> str
+    def get_or_create_keyring(self, entity: Optional[str] = None) -> str:
         if not entity:
             entity = self.get_keyring_entity()
 
@@ -147,8 +143,7 @@ class NFSGanesha(object):
                             % (entity, ret, err))
         return keyring
 
-    def update_keyring_caps(self, entity=None):
-        # type: (Optional[str]) -> None
+    def update_keyring_caps(self, entity: Optional[str] = None) -> None:
         if not entity:
             entity = self.get_keyring_entity()
 
@@ -169,8 +164,7 @@ class NFSGanesha(object):
                     'Unable to update keyring caps %s: %s %s' \
                             % (entity, ret, err))
 
-    def create_rados_config_obj(self, clobber=False):
-        # type: (Optional[bool]) -> None
+    def create_rados_config_obj(self, clobber: Optional[bool] = False) -> None:
         obj = self.spec.rados_config_name()
 
         with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
@@ -191,8 +185,7 @@ class NFSGanesha(object):
                 logger.info('Creating rados config object: %s' % obj)
                 ioctx.write_full(obj, ''.encode('utf-8'))
 
-    def get_ganesha_conf(self):
-        # type: () -> str
+    def get_ganesha_conf(self) -> str:
         context = dict(user=self.get_rados_user(),
                        nodeid=self.get_daemon_name(),
                        pool=self.spec.pool,
@@ -200,8 +193,7 @@ class NFSGanesha(object):
                        url=self.spec.rados_config_location())
         return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
-    def get_cephadm_config(self):
-        # type: () -> Dict
+    def get_cephadm_config(self) -> Dict[str, Any]:
         config = {'pool' : self.spec.pool} # type: Dict
         if self.spec.namespace:
             config['namespace'] = self.spec.namespace
