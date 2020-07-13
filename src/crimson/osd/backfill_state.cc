@@ -70,7 +70,7 @@ BackfillState::Initial::Initial(my_context ctx)
                  backfill_state().last_backfill_started);
   for (const auto& bt : peering_state().get_backfill_targets()) {
     logger().debug("{}: target shard {} from {}",
-                   __func__, bt, peering_state().get_peer_info(bt).last_backfill);
+                   __func__, bt, peering_state().get_peer_last_backfill(bt));
   }
   ceph_assert(peering_state().get_backfill_targets().size());
   ceph_assert(!backfill_state().last_backfill_started.is_max());
@@ -86,7 +86,7 @@ BackfillState::Initial::react(const BackfillState::Triggered& evt)
   // initialize BackfillIntervals
   for (const auto& bt : peering_state().get_backfill_targets()) {
     backfill_state().peer_backfill_info[bt].reset(
-      peering_state().get_peer_info(bt).last_backfill);
+      peering_state().get_peer_last_backfill(bt));
   }
   backfill_state().backfill_info.reset(backfill_state().last_backfill_started);
   if (Enqueuing::all_enqueued(peering_state(),
@@ -156,7 +156,7 @@ void BackfillState::Enqueuing::trim_backfill_infos()
 {
   for (const auto& bt : peering_state().get_backfill_targets()) {
     backfill_state().peer_backfill_info[bt].trim_to(
-      std::max(peering_state().get_peer_info(bt).last_backfill,
+      std::max(peering_state().get_peer_last_backfill(bt),
                backfill_state().last_backfill_started));
   }
   backfill_state().backfill_info.trim_to(
@@ -265,11 +265,10 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
       }
       result.pbi_targets.insert(bt);
     } else {
-      const pg_info_t& pinfo = peering_state().get_peer_info(bt);
       // Only include peers that we've caught up to their backfill line
       // otherwise, they only appear to be missing this object
       // because their peer_bi.begin > backfill_info.begin.
-      if (primary_bi.begin > pinfo.last_backfill) {
+      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt)) {
         backfill_state().progress_tracker->enqueue_push(primary_bi.begin);
         backfill_listener().enqueue_push(bt, primary_bi.begin, obj_v);
       }
