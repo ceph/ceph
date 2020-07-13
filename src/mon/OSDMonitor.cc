@@ -7649,7 +7649,6 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       *ss << "prepare_pool_crush_rule: " << pool_type
 	 << " is not a known pool type";
       return -EINVAL;
-      break;
     }
   } else {
     if (!osdmap.crush->ruleset_exists(*crush_rule)) {
