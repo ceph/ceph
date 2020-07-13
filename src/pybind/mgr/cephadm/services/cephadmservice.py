@@ -109,7 +109,7 @@ class CephadmService(metaclass=ABCMeta):
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         raise NotImplementedError()
 
-    def _inventory_get_addr(self, hostname: str):
+    def _inventory_get_addr(self, hostname: str) -> str:
         """Get a host's address with its hostname."""
         return self.mgr.inventory.get_addr(hostname)
 
@@ -248,7 +248,7 @@ class MonService(CephadmService):
                 'who': 'mon',
                 'key': 'public_network',
             })
-            network = network.strip() # type: ignore
+            network = network.strip() if network else network
             if not network:
                 raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
             if '/' not in network:
@@ -260,8 +260,7 @@ class MonService(CephadmService):
 
         return self.mgr._create_daemon(daemon_spec)
 
-    def _check_safe_to_destroy(self, mon_id):
-        # type: (str) -> None
+    def _check_safe_to_destroy(self, mon_id: str) -> None:
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'quorum_status',
         })
