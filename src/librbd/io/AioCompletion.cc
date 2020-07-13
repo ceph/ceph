@@ -107,15 +107,11 @@ void AioCompletion::complete() {
     } else {
       complete_cb(rbd_comp, complete_arg);
       complete_event_socket();
+      notify_callbacks_complete();
     }
   } else {
     complete_event_socket();
-  }
-  state = AIO_STATE_COMPLETE;
-
-  {
-    std::unique_lock<std::mutex> locker(lock);
-    cond.notify_all();
+    notify_callbacks_complete();
   }
 
   if (image_dispatcher_ctx != nullptr) {
@@ -263,6 +259,7 @@ void AioCompletion::complete_external_callback() {
   boost::asio::dispatch(ictx->asio_engine->get_api_strand(), [this]() {
       complete_cb(rbd_comp, complete_arg);
       complete_event_socket();
+      notify_callbacks_complete();
       put();
     });
 }
@@ -272,6 +269,13 @@ void AioCompletion::complete_event_socket() {
     ictx->event_socket_completions.push(this);
     ictx->event_socket.notify();
   }
+}
+
+void AioCompletion::notify_callbacks_complete() {
+  state = AIO_STATE_COMPLETE;
+
+  std::unique_lock<std::mutex> locker(lock);
+  cond.notify_all();
 }
 
 } // namespace io

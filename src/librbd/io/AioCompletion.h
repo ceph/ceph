@@ -181,7 +181,7 @@ private:
   void queue_complete();
   void complete_external_callback();
   void complete_event_socket();
-
+  void notify_callbacks_complete();
 };
 
 class C_AioRequest : public Context {
