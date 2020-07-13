@@ -157,6 +157,11 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
  * We use ! as a terminator for strings; this works because it is < #
  * and will get escaped if it is present in the string.
  *
+ * NOTE: There is a bug in this implementation: due to implicit
+ * character type conversion in comparison it may produce unexpected
+ * ordering. Unfortunately fixing the bug would mean invalidating the
+ * keys in existing deployments. Instead we do additional sorting
+ * where it is needed.
  */
 template<typename S>
 static void append_escaped(const string &in, S *out)
@@ -164,11 +169,11 @@ static void append_escaped(const string &in, S *out)
   char hexbyte[in.length() * 3 + 1];
   char* ptr = &hexbyte[0];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i <= '#') {
+    if (*i <= '#') { // bug: unexpected result for *i > 0x7f
       *ptr++ = '#';
       *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
       *ptr++ = "0123456789abcdef"[*i & 0x0f];
-    } else if (*i >= '~') {
+    } else if (*i >= '~') { // bug: unexpected result for *i > 0x7f
       *ptr++ = '~';
       *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
       *ptr++ = "0123456789abcdef"[*i & 0x0f];
@@ -349,13 +354,15 @@ static int get_key_shared_blob(const string& key, uint64_t *sbid)
 }
 
 template<typename S>
-static int get_key_object(const S& key, ghobject_t *oid)
+static void _key_encode_prefix(const ghobject_t& oid, S *key)
 {
-  int r;
-  const char *p = key.c_str();
+  _key_encode_shard(oid.shard_id, key);
+  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
+  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+}
 
-  if (key.length() < 1 + 8 + 4)
-    return -1;
+static const char *_key_decode_prefix(const char *p, ghobject_t *oid)
+{
   p = _key_decode_shard(p, &oid->shard_id);
 
   uint64_t pool;
@@ -366,6 +373,22 @@ static int get_key_object(const S& key, ghobject_t *oid)
   p = _key_decode_u32(p, &hash);
 
   oid->hobj.set_bitwise_key_u32(hash);
+
+  return p;
+}
+
+#define ENCODED_KEY_PREFIX_LEN (1 + 8 + 4)
+
+template<typename S>
+static int get_key_object(const S& key, ghobject_t *oid)
+{
+  int r;
+  const char *p = key.c_str();
+
+  if (key.length() < ENCODED_KEY_PREFIX_LEN)
+    return -1;
+
+  p = _key_decode_prefix(p, oid);
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
@@ -415,7 +438,7 @@ static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
 {
   key->clear();
 
-  size_t max_len = 1 + 8 + 4 +
+  size_t max_len = ENCODED_KEY_PREFIX_LEN +
                   (oid.hobj.nspace.length() * 3 + 1) +
                   (oid.hobj.get_key().length() * 3 + 1) +
                    1 + // for '<', '=', or '>'
@@ -423,9 +446,7 @@ static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
                    8 + 8 + 1;
   key->reserve(max_len);
 
-  _key_encode_shard(oid.shard_id, key);
-  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
-  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+  _key_encode_prefix(oid, key);
 
   append_escaped(oid.hobj.nspace, key);
 
@@ -648,6 +669,122 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
     out << " " << BlueStore::Buffer::get_flag_name(b.flags);
   return out << ")";
 }
+
+namespace {
+
+/*
+ * Due to a bug in key string encoding (see a comment for append_escaped)
+ * the KeyValueDB iterator does not lexicographically sort the same
+ * way that ghobject_t does: objects with the same hash may have wrong order.
+ *
+ * This is the iterator wrapper that fixes the keys order.
+ */
+
+class CollectionListIterator {
+public:
+  CollectionListIterator(const KeyValueDB::Iterator &it)
+    : m_it(it), m_chunk_iter(m_chunk.end()) {
+  }
+
+  bool valid() const {
+    return m_chunk_iter != m_chunk.end();
+  }
+
+  const ghobject_t &oid() const {
+    ceph_assert(valid());
+
+    return m_chunk_iter->first;
+  }
+
+  const std::string &key() const {
+    ceph_assert(valid());
+
+    return m_chunk_iter->second;
+  }
+
+  void lower_bound(const std::string &key) {
+    ghobject_t oid;
+    int r = get_key_object(key, &oid);
+    ceph_assert(r != -1);
+
+    std::string pkey;
+    _key_encode_prefix(oid, &pkey);
+
+    m_it->lower_bound(pkey);
+    m_chunk_iter = m_chunk.end();
+    if (!get_next_chunk()) {
+      return;
+    }
+
+    if (this->oid().shard_id != oid.shard_id ||
+        this->oid().hobj.pool != oid.hobj.pool ||
+        this->oid().hobj.get_bitwise_key_u32() != oid.hobj.get_bitwise_key_u32()) {
+      return;
+    }
+
+    m_chunk_iter = m_chunk.lower_bound(oid);
+    if (m_chunk_iter == m_chunk.end()) {
+      get_next_chunk();
+    }
+  }
+
+  void upper_bound(const std::string &key) {
+    lower_bound(key);
+
+    if (valid() && this->key() == key) {
+      next();
+    }
+  }
+
+  void next() {
+    ceph_assert(valid());
+
+    m_chunk_iter++;
+    if (m_chunk_iter == m_chunk.end()) {
+      get_next_chunk();
+    }
+  }
+
+private:
+  KeyValueDB::Iterator m_it;
+  std::map<ghobject_t, std::string> m_chunk;
+  std::map<ghobject_t, std::string>::iterator m_chunk_iter;
+
+  bool get_next_chunk() {
+    if (!m_it->valid()) {
+      return false;
+    }
+
+    ghobject_t oid;
+    int r = get_key_object(m_it->key(), &oid);
+    ceph_assert(r != -1);
+
+    m_chunk.clear();
+    while (true) {
+      m_chunk.insert({oid, m_it->key()});
+
+      m_it->next();
+      if (!m_it->valid()) {
+        break;
+      }
+
+      ghobject_t next;
+      r = get_key_object(m_it->key(), &next);
+      ceph_assert(r != -1);
+      if (next.shard_id != oid.shard_id ||
+          next.hobj.pool != oid.hobj.pool ||
+          next.hobj.get_bitwise_key_u32() != oid.hobj.get_bitwise_key_u32()) {
+        break;
+      }
+      oid = next;
+    }
+
+    m_chunk_iter = m_chunk.begin();
+    return true;
+  }
+};
+
+} // anonymous namespace
 
 // Garbage Collector
 
@@ -10483,11 +10620,11 @@ int BlueStore::_collection_list(
   auto start_time = mono_clock::now();
   int r = 0;
   ghobject_t static_next;
-  KeyValueDB::Iterator it;
+  std::unique_ptr<CollectionListIterator> it;
   string temp_start_key, temp_end_key;
   string start_key, end_key;
   bool set_next = false;
-  string pend;
+  ghobject_t pend;
   bool temp;
 
   if (!pnext)
@@ -10504,7 +10641,7 @@ int BlueStore::_collection_list(
     << " and " << pretty_binary_string(start_key)
     << " to " << pretty_binary_string(end_key)
     << " start " << start << dendl;
-  it = db->get_iterator(PREFIX_OBJ);
+  it = std::make_unique<CollectionListIterator>(db->get_iterator(PREFIX_OBJ));
   if (start == ghobject_t() ||
     start.hobj == hobject_t() ||
     start == c->cid.get_min_hobj()) {
@@ -10525,26 +10662,30 @@ int BlueStore::_collection_list(
     it->lower_bound(k);
   }
   if (end.hobj.is_max()) {
-    pend = temp ? temp_end_key : end_key;
+    if (temp)
+      get_key_object(temp_end_key, &pend);
+    else
+      get_key_object(end_key, &pend);
   } else {
-    get_object_key(cct, end, &end_key);
     if (end.hobj.is_temp()) {
       if (temp)
-	pend = end_key;
+        pend = end;
       else
-	goto out;
+        goto out;
     } else {
-      pend = temp ? temp_end_key : end_key;
+      if (temp)
+        get_key_object(temp_end_key, &pend);
+      else
+        pend = end;
     }
   }
-  dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
+  dout(20) << __func__ << " pend " << pend << dendl;
   while (true) {
-    if (!it->valid() || it->key() >= pend) {
+    if (!it->valid() || it->oid() >= pend) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
-	dout(20) << __func__ << " key " << pretty_binary_string(it->key())
-	         << " >= " << end << dendl;
+	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
 	  break;
@@ -10552,8 +10693,11 @@ int BlueStore::_collection_list(
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
 	temp = false;
 	it->upper_bound(start_key);
-	pend = end_key;
-	dout(30) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
+        if (end.hobj.is_max())
+          get_key_object(end_key, &pend);
+        else
+          pend = end;
+	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
       }
       break;
@@ -10563,9 +10707,7 @@ int BlueStore::_collection_list(
       it->next();
       continue;
     }
-    ghobject_t oid;
-    int r = get_key_object(it->key(), &oid);
-    ceph_assert(r == 0);
+    ghobject_t oid = it->oid();
     dout(20) << __func__ << " oid " << oid << " end " << end << dendl;
     if (ls->size() >= (unsigned)max) {
       dout(20) << __func__ << " reached max " << max << dendl;
