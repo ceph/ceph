@@ -134,6 +134,7 @@ TransactionManager::submit_transaction(
   return journal.submit_record(std::move(*record)).safe_then(
     [this, t=std::move(t)](paddr_t addr) mutable {
       cache.complete_commit(*t, addr);
+      lba_manager.complete_transaction(*t);
     },
     submit_transaction_ertr::pass_further{},
     crimson::ct_error::all_same_way([](auto e) {
