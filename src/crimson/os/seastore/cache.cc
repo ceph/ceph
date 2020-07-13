@@ -117,6 +117,10 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   // Add new copy of mutated blocks, set_io_wait to block until written
   record.deltas.reserve(t.mutated_block_list.size());
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      logger().debug("try_construct_record: ignoring invalid {}", *i);
+      continue;
+    }
     logger().debug("try_construct_record: mutating {}", *i);
     add_extent(i);
     i->prepare_write();
@@ -188,12 +192,20 @@ void Cache::complete_commit(
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      logger().debug("complete_commit: ignoring invalid {}", *i);
+      continue;
+    }
     i->state = CachedExtent::extent_state_t::DIRTY;
     logger().debug("complete_commit: mutated {}", *i);
     i->on_delta_write(final_block_start);
   }
 
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      logger().debug("complete_commit: ignoring invalid {}", *i);
+      continue;
+    }
     i->complete_io();
   }
 }
