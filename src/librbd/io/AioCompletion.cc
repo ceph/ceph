@@ -105,15 +105,11 @@ void AioCompletion::complete() {
     } else {
       complete_cb(rbd_comp, complete_arg);
       complete_event_socket();
+      notify_callbacks_complete();
     }
   } else {
     complete_event_socket();
-  }
-  state = AIO_STATE_COMPLETE;
-
-  {
-    std::unique_lock<std::mutex> locker(lock);
-    cond.notify_all();
+    notify_callbacks_complete();
   }
 
   // note: possible for image to be closed after op marked finished
@@ -260,6 +256,7 @@ void AioCompletion::complete_external_callback() {
     while (ictx->external_callback_completions.pop(aio_comp)) {
       aio_comp->complete_cb(aio_comp->rbd_comp, aio_comp->complete_arg);
       aio_comp->complete_event_socket();
+      aio_comp->notify_callbacks_complete();
     }
 
     ictx->external_callback_in_progress.store(false);
@@ -276,6 +273,13 @@ void AioCompletion::complete_event_socket() {
     ictx->event_socket_completions.push(this);
     ictx->event_socket.notify();
   }
+}
+
+void AioCompletion::notify_callbacks_complete() {
+  state = AIO_STATE_COMPLETE;
+
+  std::unique_lock<std::mutex> locker(lock);
+  cond.notify_all();
 }
 
 } // namespace io
