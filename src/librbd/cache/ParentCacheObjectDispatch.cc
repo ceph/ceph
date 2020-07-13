@@ -26,17 +26,20 @@ namespace cache {
 
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
-    I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialized(false), m_connecting(false) {
+    I* image_ctx)
+  : m_image_ctx(image_ctx),
+    m_lock(ceph::make_mutex(
+      "librbd::cache::ParentCacheObjectDispatch::lock", true, false)) {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
-  std::string controller_path =
-    ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
+  auto controller_path = image_ctx->cct->_conf.template get_val<std::string>(
+    "immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
 }
 
 template <typename I>
 ParentCacheObjectDispatch<I>::~ParentCacheObjectDispatch() {
-    delete m_cache_client;
+  delete m_cache_client;
+  m_cache_client = nullptr;
 }
 
 template <typename I>
@@ -52,18 +55,10 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
     return;
   }
 
-  Context* create_session_ctx = new LambdaContext([this, on_finish](int ret) {
-    m_connecting.store(false);
-    if (on_finish != nullptr) {
-      on_finish->complete(ret);
-    }
-  });
-
-  m_connecting.store(true);
-  create_cache_session(create_session_ctx, false);
-
   m_image_ctx->io_object_dispatcher->register_dispatch(this);
-  m_initialized = true;
+
+  std::unique_lock locker{m_lock};
+  create_cache_session(on_finish, false);
 }
 
 template <typename I>
@@ -77,35 +72,17 @@ bool ParentCacheObjectDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
-  ceph_assert(m_initialized);
   string oid = data_object_name(m_image_ctx, object_no);
 
   /* if RO daemon still don't startup, or RO daemon crash,
    * or session occur any error, try to re-connect daemon.*/
+  std::unique_lock locker{m_lock};
   if (!m_cache_client->is_session_work()) {
-    if (!m_connecting.exchange(true)) {
-      /* Since we don't have a giant lock protecting the full re-connect process,
-       * if thread A first passes the if (!m_cache_client->is_session_work()),
-       * thread B could have also passed it and reconnected
-       * before thread A resumes and executes if (!m_connecting.exchange(true)).
-       * This will result in thread A re-connecting a working session.
-       * So, we need to check if session is normal again. If session work,
-       * we need set m_connecting to false. */
-      if (!m_cache_client->is_session_work()) {
-        Context* on_finish = new LambdaContext([this](int ret) {
-          m_connecting.store(false);
-        });
-        create_cache_session(on_finish, true);
-      } else {
-        m_connecting.store(false);
-      }
-    }
+    create_cache_session(nullptr, true);
     ldout(cct, 5) << "Parent cache try to re-connect to RO daemon. "
                   << "dispatch current request to lower object layer" << dendl;
     return false;
   }
-
-  ceph_assert(m_cache_client->is_session_work());
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
@@ -165,18 +142,29 @@ int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
 }
 
 template <typename I>
-int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool is_reconnect) {
+void ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish,
+                                                       bool is_reconnect) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  if (m_connecting) {
+    return;
+  }
+  m_connecting = true;
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
   Context* register_ctx = new LambdaContext([this, cct, on_finish](int ret) {
     if (ret < 0) {
       lderr(cct) << "Parent cache fail to register client." << dendl;
-    } else {
-      ceph_assert(m_cache_client->is_session_work());
     }
     handle_register_client(ret < 0 ? false : true);
-    on_finish->complete(ret);
+
+    ceph_assert(m_connecting);
+    m_connecting = false;
+
+    if (on_finish != nullptr) {
+      on_finish->complete(0);
+    }
   });
 
   Context* connect_ctx = new LambdaContext(
@@ -197,21 +185,19 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
     delete m_cache_client;
 
     // create new CacheClient to connect RO daemon.
-    std::string controller_path =
-      ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
+    auto controller_path = cct->_conf.template get_val<std::string>(
+      "immutable_object_cache_sock");
     m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
   }
 
   m_cache_client->run();
-
   m_cache_client->connect(connect_ctx);
-  return 0;
 }
 
 template <typename I>
 int ParentCacheObjectDispatch<I>::read_object(
-        std::string file_path, ceph::bufferlist* read_data, uint64_t offset,
-        uint64_t length, Context *on_finish) {
+    std::string file_path, ceph::bufferlist* read_data, uint64_t offset,
+    uint64_t length, Context *on_finish) {
 
   auto *cct = m_image_ctx->cct;
   ldout(cct, 20) << "file path: " << file_path << dendl;
