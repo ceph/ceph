@@ -429,6 +429,21 @@ COMMAND_WITH_FLAG("fs set_default name=fs_name,type=CephString",
 COMMAND("fs set-default name=fs_name,type=CephString",
 	"set the default to the named filesystem",
 	"fs", "rw")
+COMMAND("fs mirror enable "
+	"name=fs_name,type=CephString ",
+	"enable mirroring for a ceph filesystem", "mds", "rw")
+COMMAND("fs mirror disable "
+	"name=fs_name,type=CephString ",
+	"disable mirroring for a ceph filesystem", "mds", "rw")
+COMMAND("fs mirror peer_add "
+	"name=fs_name,type=CephString "
+	"name=remote_cluster_spec,type=CephString "
+	"name=remote_fs_name,type=CephString",
+	"add a mirror peer for a ceph filesystem", "mds", "rw")
+COMMAND("fs mirror peer_remove "
+	"name=fs_name,type=CephString "
+	"name=uuid,type=CephString ",
+	"remove a mirror peer for a ceph filesystem", "mds", "rw")
 
 /*
  * Monmap commands
