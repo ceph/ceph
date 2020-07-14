@@ -319,7 +319,7 @@ class MgrService(CephadmService):
 class MdsService(CephadmService):
     TYPE = 'mds'
 
-    def config(self, spec: ServiceSpec):
+    def config(self, spec: ServiceSpec) -> None:
         # ensure mds_join_fs is set for these daemons
         assert spec.service_id
         ret, out, err = self.mgr.check_mon_command({
@@ -348,7 +348,7 @@ class MdsService(CephadmService):
 class RgwService(CephadmService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec):
+    def config(self, spec: RGWSpec) -> None:
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
