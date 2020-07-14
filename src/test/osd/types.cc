@@ -1918,6 +1918,24 @@ void ci_ref_test(
   }
 }
 
+void ci_ref_test_on_modify(
+  object_manifest_t l,
+  object_manifest_t to_remove,
+  ObjectCleanRegions clean_regions,
+  object_ref_delta_t expected_delta)
+{
+  {
+    object_ref_delta_t delta;
+    to_remove.calc_refs_to_drop_on_modify(
+      &l,
+      clean_regions,
+      delta);
+    ASSERT_EQ(
+      expected_delta,
+      delta);
+  }
+}
+
 hobject_t mk_hobject(string name)
 {
   return hobject_t(
@@ -2026,6 +2044,40 @@ TEST(chunk_info_test, calc_refs_g_l_match_no_this) {
     mk_manifest({{4096, {0, 1024, "foo"}}}),
     mk_delta({{"foo", -1}, {"bar", -1}}));
 
+}
+
+TEST(chunk_info_test, calc_refs_modify_mismatch) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 1024);
+  clean_regions.mark_data_region_dirty(512, 1024);
+  ci_ref_test_on_modify(
+    mk_manifest({{512, {2048, 1024, "foo"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "bar"}}, {512, {2048, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}, {"ttt", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_modify_match) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 1024);
+  clean_regions.mark_data_region_dirty(512, 1024);
+  clean_regions.mark_data_region_dirty(4096, 1024);
+  ci_ref_test_on_modify(
+    mk_manifest({{512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    mk_manifest({{0, {0, 1024, "bar"}}, {512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_modify_no_snap) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 1024);
+  clean_regions.mark_data_region_dirty(512, 1024);
+  ci_ref_test_on_modify(
+    mk_manifest({}),
+    mk_manifest({{0, {0, 1024, "bar"}}, {512, {2048, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}, {"ttt", -1}}));
 }
 
 /*
