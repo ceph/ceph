@@ -1847,7 +1847,7 @@ you may want to run:
             'rgw': self.rgw_service.config,
             'nfs': self.nfs_service.config,
             'iscsi': self.iscsi_service.config,
-        }.get(service_type)
+        }.get(service_type)  # type: ignore
 
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
