@@ -9,6 +9,7 @@
 #include "common/Finisher.h"
 #include "common/async/context_pool.h"
 #include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/thread.hpp>
 #include <errno.h>
 
@@ -222,6 +223,18 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
       str << "]}";
       outbl->append(str.str());
       return 0;
+    } else if ((*j_it)->get_data() == "osd blacklist") {
+      auto op_it = parser.find("blacklistop");
+      if (!op_it.end() && (*op_it)->get_data() == "add") {
+        uint32_t expire = 0;
+        auto expire_it = parser.find("expire");
+        if (!expire_it.end()) {
+          expire = boost::lexical_cast<uint32_t>((*expire_it)->get_data());
+        }
+
+        auto addr_it = parser.find("addr");
+        return blacklist_add((*addr_it)->get_data(), expire);
+      }
     }
   }
   return -ENOSYS;
