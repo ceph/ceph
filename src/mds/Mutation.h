@@ -28,7 +28,7 @@
 
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
-#include "messages/MMDSSlaveRequest.h"
+#include "messages/MMDSPeerRequest.h"
 #include "messages/MClientReply.h"
 
 class LogSegment;
@@ -118,10 +118,10 @@ public:
   // keep our default values synced with MDRequestParam's
   MutationImpl() : TrackedOp(nullptr, utime_t()) {}
   MutationImpl(OpTracker *tracker, utime_t initiated,
-	       const metareqid_t &ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
+	       const metareqid_t &ri, __u32 att=0, mds_rank_t peer_to=MDS_RANK_NONE)
     : TrackedOp(tracker, initiated),
       reqid(ri), attempt(att),
-      slave_to_mds(slave_to) {}
+      peer_to_mds(peer_to) {}
   ~MutationImpl() override {
     ceph_assert(!locking);
     ceph_assert(!lock_cache);
@@ -159,8 +159,8 @@ public:
     return lock == last_locked;
   }
 
-  bool is_leader() const { return slave_to_mds == MDS_RANK_NONE; }
-  bool is_slave() const { return slave_to_mds != MDS_RANK_NONE; }
+  bool is_leader() const { return peer_to_mds == MDS_RANK_NONE; }
+  bool is_peer() const { return peer_to_mds != MDS_RANK_NONE; }
 
   client_t get_client() const {
     if (reqid.name.is_client())
@@ -222,8 +222,8 @@ public:
   __u32 attempt = 0;      // which attempt for this request
   LogSegment *ls = nullptr;  // the log segment i'm committing to
 
-  // flag mutation as slave
-  mds_rank_t slave_to_mds = MDS_RANK_NONE;  // this is a slave request if >= 0.
+  // flag mutation as peer
+  mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
 
   ceph::unordered_map<MDSCacheObject*, ObjectState> object_states;
   int num_pins = 0;
@@ -282,17 +282,17 @@ struct MDRequestImpl : public MutationImpl {
   struct More {
     More() {}
 
-    int slave_error = 0;
-    std::set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
-    std::set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
+    int peer_error = 0;
+    std::set<mds_rank_t> peers;           // mds nodes that have peer requests to me (implies client_request)
+    std::set<mds_rank_t> waiting_on_peer; // peers i'm waiting for peerreq replies from.
 
     // for rename/link/unlink
     std::set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
     std::map<MDSCacheObject*,version_t> pvmap;
 
-    bool has_journaled_slaves = false;
-    bool slave_update_journaled = false;
-    bool slave_rolling_back = false;
+    bool has_journaled_peers = false;
+    bool peer_update_journaled = false;
+    bool peer_rolling_back = false;
     
     // for rename
     std::set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
@@ -318,8 +318,8 @@ struct MDRequestImpl : public MutationImpl {
     sr_t *srci_srnode = nullptr;
     sr_t *desti_srnode = nullptr;
 
-    // called when slave commits or aborts
-    Context *slave_commit = nullptr;
+    // called when peer commits or aborts
+    Context *peer_commit = nullptr;
     ceph::buffer::list rollback_bl;
 
     MDSContext::vec waiting_for_finish;
@@ -352,15 +352,15 @@ struct MDRequestImpl : public MutationImpl {
     metareqid_t reqid;
     __u32 attempt = 0;
     ceph::cref_t<MClientRequest> client_req;
-    ceph::cref_t<Message> triggering_slave_req;
-    mds_rank_t slave_to = MDS_RANK_NONE;
+    ceph::cref_t<Message> triggering_peer_req;
+    mds_rank_t peer_to = MDS_RANK_NONE;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op = -1;
   };
   MDRequestImpl(const Params* params, OpTracker *tracker) :
     MutationImpl(tracker, params->initiated,
-		 params->reqid, params->attempt, params->slave_to),
+		 params->reqid, params->attempt, params->peer_to),
     item_session_request(this), client_request(params->client_req),
     internal_op(params->internal_op) {}
   ~MDRequestImpl() override;
@@ -368,8 +368,8 @@ struct MDRequestImpl : public MutationImpl {
   More* more();
   bool has_more() const;
   bool has_witnesses();
-  bool slave_did_prepare();
-  bool slave_rolling_back();
+  bool peer_did_prepare();
+  bool peer_rolling_back();
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
@@ -394,7 +394,7 @@ struct MDRequestImpl : public MutationImpl {
   void dump(ceph::Formatter *f) const override;
 
   ceph::cref_t<MClientRequest> release_client_request();
-  void reset_slave_request(const ceph::cref_t<MMDSSlaveRequest>& req=nullptr);
+  void reset_peer_request(const ceph::cref_t<MMDSPeerRequest>& req=nullptr);
 
   Session *session = nullptr;
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
@@ -430,8 +430,8 @@ struct MDRequestImpl : public MutationImpl {
   // inos we did a embedded cap release on, and may need to eval if we haven't since reissued
   std::map<vinodeno_t, ceph_seq_t> cap_releases;
 
-  // -- i am a slave request
-  ceph::cref_t<MMDSSlaveRequest> slave_request; // slave request (if one is pending; implies slave == true)
+  // -- i am a peer request
+  ceph::cref_t<MMDSPeerRequest> peer_request; // peer request (if one is pending; implies peer == true)
 
   // -- i am an internal op
   int internal_op;
@@ -453,12 +453,12 @@ private:
   mutable ceph::spinlock msg_lock;
 };
 
-struct MDSlaveUpdate {
-  MDSlaveUpdate(int oo, ceph::buffer::list &rbl) :
+struct MDPeerUpdate {
+  MDPeerUpdate(int oo, ceph::buffer::list &rbl) :
     origop(oo) {
     rollback = std::move(rbl);
   }
-  ~MDSlaveUpdate() {
+  ~MDPeerUpdate() {
     if (waiter)
       waiter->complete(0);
   }

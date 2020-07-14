@@ -29,7 +29,7 @@
 #include "events/ESessions.h"
 
 #include "events/EUpdate.h"
-#include "events/ESlaveUpdate.h"
+#include "events/EPeerUpdate.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
 #include "events/EPurged.h"
@@ -82,7 +82,7 @@ std::string_view LogEvent::get_type_str() const
   case EVENT_SESSIONS_OLD: return "SESSIONS_OLD";
   case EVENT_SESSIONS: return "SESSIONS";
   case EVENT_UPDATE: return "UPDATE";
-  case EVENT_SLAVEUPDATE: return "SLAVEUPDATE";
+  case EVENT_PEERUPDATE: return "PEERUPDATE";
   case EVENT_OPEN: return "OPEN";
   case EVENT_COMMITTED: return "COMMITTED";
   case EVENT_PURGED: return "PURGED";
@@ -108,7 +108,7 @@ const std::map<std::string, LogEvent::EventType> LogEvent::types = {
   {"SESSIONS_OLD", EVENT_SESSIONS_OLD},
   {"SESSIONS", EVENT_SESSIONS},
   {"UPDATE", EVENT_UPDATE},
-  {"SLAVEUPDATE", EVENT_SLAVEUPDATE},
+  {"PEERUPDATE", EVENT_PEERUPDATE},
   {"OPEN", EVENT_OPEN},
   {"COMMITTED", EVENT_COMMITTED},
   {"PURGED", EVENT_PURGED},
@@ -174,8 +174,8 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, 
   case EVENT_UPDATE:
     le = std::make_unique<EUpdate>();
     break;
-  case EVENT_SLAVEUPDATE:
-    le = std::make_unique<ESlaveUpdate>();
+  case EVENT_PEERUPDATE:
+    le = std::make_unique<EPeerUpdate>();
     break;
   case EVENT_OPEN:
     le = std::make_unique<EOpen>();

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,13 +7,13 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
-#ifndef CEPH_MDS_ESLAVEUPDATE_H
-#define CEPH_MDS_ESLAVEUPDATE_H
+#ifndef CEPH_MDS_EPEERUPDATE_H
+#define CEPH_MDS_EPEERUPDATE_H
 
 #include <string_view>
 
@@ -21,10 +21,10 @@
 #include "EMetaBlob.h"
 
 /*
- * rollback records, for remote/slave updates, which may need to be manually
+ * rollback records, for remote/peer updates, which may need to be manually
  * rolled back during journal replay.  (or while active if leader fails, but in
  * that case these records aren't needed.)
- */ 
+ */
 struct link_rollback {
   metareqid_t reqid;
   inodeno_t ino;
@@ -73,7 +73,7 @@ struct rename_rollback {
     string dname;
     char remote_d_type;
     utime_t old_ctime;
-    
+
     drec() : remote_d_type((char)S_IFREG) {}
 
     void encode(bufferlist& bl) const;
@@ -99,19 +99,19 @@ WRITE_CLASS_ENCODER(rename_rollback::drec)
 WRITE_CLASS_ENCODER(rename_rollback)
 
 
-class ESlaveUpdate : public LogEvent {
+class EPeerUpdate : public LogEvent {
 public:
   const static int OP_PREPARE = 1;
   const static int OP_COMMIT = 2;
   const static int OP_ROLLBACK = 3;
-  
+
   const static int LINK = 1;
   const static int RENAME = 2;
   const static int RMDIR = 3;
 
   /*
    * we journal a rollback metablob that contains the unmodified metadata
-   * too, because we may be updating previously dirty metadata, which 
+   * too, because we may be updating previously dirty metadata, which
    * will allow old log segments to be trimmed.  if we end of rolling back,
    * those updates could be lost.. so we re-journal the unmodified metadata,
    * and replay will apply _either_ commit or rollback.
@@ -124,14 +124,14 @@ public:
   __u8 op;  // prepare, commit, abort
   __u8 origop; // link | rename
 
-  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), leader(0), op(0), origop(0) { }
-  ESlaveUpdate(MDLog *mdlog, std::string_view s, metareqid_t ri, int leadermds, int o, int oo) :
-    LogEvent(EVENT_SLAVEUPDATE),
+  EPeerUpdate() : LogEvent(EVENT_PEERUPDATE), leader(0), op(0), origop(0) { }
+  EPeerUpdate(MDLog *mdlog, std::string_view s, metareqid_t ri, int leadermds, int o, int oo) :
+    LogEvent(EVENT_PEERUPDATE),
     type(s),
     reqid(ri),
     leader(leadermds),
     op(o), origop(oo) { }
-  
+
   void print(ostream& out) const override {
     if (type.length())
       out << type << " ";
@@ -148,10 +148,10 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(std::list<ESlaveUpdate*>& ls);
+  static void generate_test_instances(std::list<EPeerUpdate*>& ls);
 
   void replay(MDSRank *mds) override;
 };
-WRITE_CLASS_ENCODER_FEATURES(ESlaveUpdate)
+WRITE_CLASS_ENCODER_FEATURES(EPeerUpdate)
 
 #endif
