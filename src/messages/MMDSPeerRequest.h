@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,19 +7,19 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
-#ifndef CEPH_MMDSSLAVEREQUEST_H
-#define CEPH_MMDSSLAVEREQUEST_H
+#ifndef CEPH_MMDSPEERREQUEST_H
+#define CEPH_MMDSPEERREQUEST_H
 
 #include "mds/mdstypes.h"
 #include "messages/MMDSOp.h"
 
-class MMDSSlaveRequest : public MMDSOp {
+class MMDSPeerRequest : public MMDSOp {
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
@@ -56,7 +56,7 @@ public:
 
 
   static const char *get_opname(int o) {
-    switch (o) { 
+    switch (o) {
     case OP_XLOCK: return "xlock";
     case OP_XLOCKACK: return "xlock_ack";
     case OP_UNXLOCK: return "unxlock";
@@ -110,7 +110,7 @@ public:
   // for locking
   __u16 lock_type;  // lock object type
   MDSCacheObjectInfo object_info;
-  
+
   // for authpins
   std::vector<MDSCacheObjectInfo> authpins;
 
@@ -165,12 +165,12 @@ public:
   ceph::buffer::list& get_lock_data() { return inode_export; }
 
 protected:
-  MMDSSlaveRequest() : MMDSOp{MSG_MDS_SLAVE_REQUEST, HEAD_VERSION, COMPAT_VERSION} { }
-  MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
-    MMDSOp{MSG_MDS_SLAVE_REQUEST, HEAD_VERSION, COMPAT_VERSION},
+  MMDSPeerRequest() : MMDSOp{MSG_MDS_PEER_REQUEST, HEAD_VERSION, COMPAT_VERSION} { }
+  MMDSPeerRequest(metareqid_t ri, __u32 att, int o) :
+    MMDSOp{MSG_MDS_PEER_REQUEST, HEAD_VERSION, COMPAT_VERSION},
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
-  ~MMDSSlaveRequest() override {}
+  ~MMDSPeerRequest() override {}
 
 public:
   void encode_payload(uint64_t features) override {
@@ -215,16 +215,16 @@ public:
     decode(desti_snapbl, p);
   }
 
-  std::string_view get_type_name() const override { return "slave_request"; }
+  std::string_view get_type_name() const override { return "peer_request"; }
   void print(std::ostream& out) const override {
-    out << "slave_request(" << reqid
+    out << "peer_request(" << reqid
 	<< "." << attempt
-	<< " " << get_opname(op) 
+	<< " " << get_opname(op)
 	<< ")";
-  }  
+  }
 private:
   template<class T, typename... Args>
-  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);	
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

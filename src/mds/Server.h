@@ -45,10 +45,10 @@ class MetricsHandler;
 enum {
   l_mdss_first = 1000,
   l_mdss_dispatch_client_request,
-  l_mdss_dispatch_slave_request,
+  l_mdss_dispatch_peer_request,
   l_mdss_handle_client_request,
   l_mdss_handle_client_session,
-  l_mdss_handle_slave_request,
+  l_mdss_handle_peer_request,
   l_mdss_req_create_latency,
   l_mdss_req_getattr_latency,
   l_mdss_req_getfilelock_latency,
@@ -165,11 +165,11 @@ public:
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      MDRequestRef& mdr);
 
-  void handle_slave_request(const cref_t<MMDSSlaveRequest> &m);
-  void handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m);
-  void dispatch_slave_request(MDRequestRef& mdr);
-  void handle_slave_auth_pin(MDRequestRef& mdr);
-  void handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack);
+  void handle_peer_request(const cref_t<MMDSPeerRequest> &m);
+  void handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m);
+  void dispatch_peer_request(MDRequestRef& mdr);
+  void handle_peer_auth_pin(MDRequestRef& mdr);
+  void handle_peer_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
 
   // some helpers
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
@@ -242,11 +242,11 @@ public:
   void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
-  void handle_slave_link_prep(MDRequestRef& mdr);
-  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
-  void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
-  void _committed_slave(MDRequestRef& mdr);  // use for rename, too
-  void handle_slave_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
+  void handle_peer_link_prep(MDRequestRef& mdr);
+  void _logged_peer_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
+  void _commit_peer_link(MDRequestRef& mdr, int r, CInode *targeti);
+  void _committed_peer(MDRequestRef& mdr);  // use for rename, too
+  void handle_peer_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr);
   void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
 			     map<client_t,ref_t<MClientSnap>>& split);
@@ -260,10 +260,10 @@ public:
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
   bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn);
-  void handle_slave_rmdir_prep(MDRequestRef& mdr);
-  void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
-  void _commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
-  void handle_slave_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack);
+  void handle_peer_rmdir_prep(MDRequestRef& mdr);
+  void _logged_peer_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
+  void _commit_peer_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
+  void handle_peer_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
   void do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr);
   void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 
@@ -294,12 +294,12 @@ public:
   void _rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // slaving
-  void handle_slave_rename_prep(MDRequestRef& mdr);
-  void handle_slave_rename_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
-  void handle_slave_rename_notify_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
-  void _slave_rename_sessions_flushed(MDRequestRef& mdr);
-  void _logged_slave_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void handle_peer_rename_prep(MDRequestRef& mdr);
+  void handle_peer_rename_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void handle_peer_rename_notify_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void _peer_rename_sessions_flushed(MDRequestRef& mdr);
+  void _logged_peer_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _commit_peer_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, map<client_t,ref_t<MClientSnap>> splits[2],

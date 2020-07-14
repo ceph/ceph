@@ -155,11 +155,11 @@ public:
   WRITE_CLASS_ENCODER(lock_bls)
 
   // authpins, xlocks
-  struct slave_reqid {
+  struct peer_reqid {
     metareqid_t reqid;
     __u32 attempt;
-    slave_reqid() : attempt(0) {}
-    slave_reqid(const metareqid_t& r, __u32 a)
+    peer_reqid() : attempt(0) {}
+    peer_reqid(const metareqid_t& r, __u32 a)
       : reqid(r), attempt(a) {}
     void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
@@ -202,16 +202,16 @@ public:
     encode(bl, inode_base);
   }
   void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
-    authpinned_inodes[ino].push_back(slave_reqid(ri, attempt));
+    authpinned_inodes[ino].push_back(peer_reqid(ri, attempt));
   }
   void add_inode_frozen_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
-    frozen_authpin_inodes[ino] = slave_reqid(ri, attempt);
+    frozen_authpin_inodes[ino] = peer_reqid(ri, attempt);
   }
   void add_inode_xlock(vinodeno_t ino, int lt, const metareqid_t& ri, __u32 attempt) {
-    xlocked_inodes[ino][lt] = slave_reqid(ri, attempt);
+    xlocked_inodes[ino][lt] = peer_reqid(ri, attempt);
   }
   void add_inode_wrlock(vinodeno_t ino, int lt, const metareqid_t& ri, __u32 attempt) {
-    wrlocked_inodes[ino][lt].push_back(slave_reqid(ri, attempt));
+    wrlocked_inodes[ino][lt].push_back(peer_reqid(ri, attempt));
   }
 
   void add_scatterlock_state(CInode *in) {
@@ -246,11 +246,11 @@ public:
   }
   void add_dentry_authpin(dirfrag_t df, std::string_view dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {
-    authpinned_dentries[df][string_snap_t(dname, last)].push_back(slave_reqid(ri, attempt));
+    authpinned_dentries[df][string_snap_t(dname, last)].push_back(peer_reqid(ri, attempt));
   }
   void add_dentry_xlock(dirfrag_t df, std::string_view dname, snapid_t last,
 			const metareqid_t& ri, __u32 attempt) {
-    xlocked_dentries[df][string_snap_t(dname, last)] = slave_reqid(ri, attempt);
+    xlocked_dentries[df][string_snap_t(dname, last)] = peer_reqid(ri, attempt);
   }
 
   // -- encoding --
@@ -330,12 +330,12 @@ public:
   ceph::buffer::list inode_locks;
   std::map<dirfrag_t, ceph::buffer::list> dirfrag_bases;
 
-  std::map<vinodeno_t, std::list<slave_reqid> > authpinned_inodes;
-  std::map<vinodeno_t, slave_reqid> frozen_authpin_inodes;
-  std::map<vinodeno_t, std::map<__s32, slave_reqid> > xlocked_inodes;
-  std::map<vinodeno_t, std::map<__s32, std::list<slave_reqid> > > wrlocked_inodes;
-  std::map<dirfrag_t, std::map<string_snap_t, std::list<slave_reqid> > > authpinned_dentries;
-  std::map<dirfrag_t, std::map<string_snap_t, slave_reqid> > xlocked_dentries;
+  std::map<vinodeno_t, std::list<peer_reqid> > authpinned_inodes;
+  std::map<vinodeno_t, peer_reqid> frozen_authpin_inodes;
+  std::map<vinodeno_t, std::map<__s32, peer_reqid> > xlocked_inodes;
+  std::map<vinodeno_t, std::map<__s32, std::list<peer_reqid> > > wrlocked_inodes;
+  std::map<dirfrag_t, std::map<string_snap_t, std::list<peer_reqid> > > authpinned_dentries;
+  std::map<dirfrag_t, std::map<string_snap_t, peer_reqid> > xlocked_dentries;
 
 private:
   template<class T, typename... Args>
@@ -354,9 +354,9 @@ WRITE_CLASS_ENCODER(MMDSCacheRejoin::dirfrag_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_weak)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::lock_bls)
-WRITE_CLASS_ENCODER(MMDSCacheRejoin::slave_reqid)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::peer_reqid)
 
-inline std::ostream& operator<<(std::ostream& out, const MMDSCacheRejoin::slave_reqid& r) {
+inline std::ostream& operator<<(std::ostream& out, const MMDSCacheRejoin::peer_reqid& r) {
   return out << r.reqid << '.' << r.attempt;
 }
 

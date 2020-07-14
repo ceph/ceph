@@ -26,7 +26,7 @@
 #include "MDSRank.h"
 #include "MDSMap.h"
 #include "messages/MInodeFileCaps.h"
-#include "messages/MMDSSlaveRequest.h"
+#include "messages/MMDSPeerRequest.h"
 #include "Migrator.h"
 #include "msg/Messenger.h"
 #include "osdc/Objecter.h"
@@ -259,7 +259,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	    }
 	  }
 	} else {
-	  // if the lock is the latest locked one, it's possible that slave mds got the lock
+	  // if the lock is the latest locked one, it's possible that peer mds got the lock
 	  // while there are recovering mds.
 	  if (!mdr->is_xlocked(lock) || mdr->is_last_locked(lock))
 	    wait = true;
@@ -287,7 +287,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  // leader.  wrlock versionlock so we can pipeline dentry updates to journal.
 	  lov.add_wrlock(&dn->versionlock, i + 1);
 	} else {
-	  // slave.  exclusively lock the dentry version (i.e. block other journal updates).
+	  // peer.  exclusively lock the dentry version (i.e. block other journal updates).
 	  // this makes rollback safe.
 	  lov.add_xlock(&dn->versionlock, i + 1);
 	}
@@ -301,7 +301,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  // leader.  wrlock versionlock so we can pipeline inode updates to journal.
 	  lov.add_wrlock(&in->versionlock, i + 1);
 	} else {
-	  // slave.  exclusively lock the inode version (i.e. block other journal updates).
+	  // peer.  exclusively lock the inode version (i.e. block other journal updates).
 	  // this makes rollback safe.
 	  lov.add_xlock(&in->versionlock, i + 1);
 	}
@@ -313,7 +313,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	mustpin.insert(object);
       } else if (!object->is_auth() &&
 		 !lock->can_wrlock(_client) &&  // we might have to request a scatter
-		 !mdr->is_slave()) {           // if we are slave (remote_wrlock), the leader already authpinned
+		 !mdr->is_peer()) {           // if we are peer (remote_wrlock), the leader already authpinned
 	dout(15) << " will also auth_pin " << *object
 		 << " in case we need to request a scatter" << dendl;
 	mustpin.insert(object);
@@ -461,13 +461,13 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if (mds->is_cluster_degraded() &&
 	  !mds->mdsmap->is_clientreplay_or_active_or_stopping(p.first)) {
 	dout(10) << " mds." << p.first << " is not active" << dendl;
-	if (mdr->more()->waiting_on_slave.empty())
+	if (mdr->more()->waiting_on_peer.empty())
 	  mds->wait_for_active_peer(p.first, new C_MDS_RetryRequest(mdcache, mdr));
 	return false;
       }
       
-      auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt,
-						MMDSSlaveRequest::OP_AUTHPIN);
+      auto req = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt,
+						MMDSPeerRequest::OP_AUTHPIN);
       for (auto& o : p.second) {
 	dout(10) << " req remote auth_pin of " << *o << dendl;
 	MDSCacheObjectInfo info;
@@ -485,7 +485,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       mds->send_message_mds(req, p.first);
 
       // put in waiting list
-      auto ret = mdr->more()->waiting_on_slave.insert(p.first);
+      auto ret = mdr->more()->waiting_on_peer.insert(p.first);
       ceph_assert(ret.second);
     }
     return false;
@@ -632,7 +632,7 @@ void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
 void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
 			 bool drop_rdlocks)
 {
-  set<mds_rank_t> slaves;
+  set<mds_rank_t> peers;
 
   for (auto it = mut->locks.begin(); it != mut->locks.end(); ) {
     SimpleLock *lock = it->lock;
@@ -646,13 +646,13 @@ void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
 	  pneed_issue->insert(static_cast<CInode*>(obj));
       } else {
 	ceph_assert(lock->get_sm()->can_remote_xlock);
-	slaves.insert(obj->authority().first);
+	peers.insert(obj->authority().first);
 	lock->put_xlock();
 	mut->locks.erase(it++);
       }
     } else if (it->is_wrlock() || it->is_remote_wrlock()) {
       if (it->is_remote_wrlock()) {
-	slaves.insert(it->wrlock_target);
+	peers.insert(it->wrlock_target);
 	it->clear_remote_wrlock();
       }
       if (it->is_wrlock()) {
@@ -680,13 +680,13 @@ void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
     }
   }
 
-  for (set<mds_rank_t>::iterator p = slaves.begin(); p != slaves.end(); ++p) {
+  for (set<mds_rank_t>::iterator p = peers.begin(); p != peers.end(); ++p) {
     if (!mds->is_cluster_degraded() ||
 	mds->mdsmap->get_state(*p) >= MDSMap::STATE_REJOIN) {
       dout(10) << "_drop_non_rdlocks dropping remote locks on mds." << *p << dendl;
-      auto slavereq = make_message<MMDSSlaveRequest>(mut->reqid, mut->attempt,
-						     MMDSSlaveRequest::OP_DROPLOCKS);
-      mds->send_message_mds(slavereq, *p);
+      auto peerreq = make_message<MMDSPeerRequest>(mut->reqid, mut->attempt,
+						     MMDSPeerRequest::OP_DROPLOCKS);
+      mds->send_message_mds(peerreq, *p);
     }
   }
 }
@@ -903,8 +903,8 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *d
     return;
   }
 
-  if (mdr->has_more() && !mdr->more()->slaves.empty()) {
-    dout(10) << " there are slaves requests for " << *mdr << ", noop" << dendl;
+  if (mdr->has_more() && !mdr->more()->peers.empty()) {
+    dout(10) << " there are peers requests for " << *mdr << ", noop" << dendl;
     return;
   }
 
@@ -1846,21 +1846,21 @@ void Locker::remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestR
   if (mds->is_cluster_degraded() &&
       !mds->mdsmap->is_clientreplay_or_active_or_stopping(target)) {
     dout(7) << " mds." << target << " is not active" << dendl;
-    if (mut->more()->waiting_on_slave.empty())
+    if (mut->more()->waiting_on_peer.empty())
       mds->wait_for_active_peer(target, new C_MDS_RetryRequest(mdcache, mut));
     return;
   }
 
   // send lock request
   mut->start_locking(lock, target);
-  mut->more()->slaves.insert(target);
-  auto r = make_message<MMDSSlaveRequest>(mut->reqid, mut->attempt, MMDSSlaveRequest::OP_WRLOCK);
+  mut->more()->peers.insert(target);
+  auto r = make_message<MMDSPeerRequest>(mut->reqid, mut->attempt, MMDSPeerRequest::OP_WRLOCK);
   r->set_lock_type(lock->get_type());
   lock->get_parent()->set_object_info(r->get_object_info());
   mds->send_message_mds(r, target);
 
-  ceph_assert(mut->more()->waiting_on_slave.count(target) == 0);
-  mut->more()->waiting_on_slave.insert(target);
+  ceph_assert(mut->more()->waiting_on_peer.count(target) == 0);
+  mut->more()->waiting_on_peer.insert(target);
 }
 
 void Locker::remote_wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut)
@@ -1878,10 +1878,10 @@ void Locker::remote_wrlock_finish(const MutationImpl::lock_iterator& it, Mutatio
 	  << " " << *lock->get_parent()  << dendl;
   if (!mds->is_cluster_degraded() ||
       mds->mdsmap->get_state(target) >= MDSMap::STATE_REJOIN) {
-    auto slavereq = make_message<MMDSSlaveRequest>(mut->reqid, mut->attempt, MMDSSlaveRequest::OP_UNWRLOCK);
-    slavereq->set_lock_type(lock->get_type());
-    lock->get_parent()->set_object_info(slavereq->get_object_info());
-    mds->send_message_mds(slavereq, target);
+    auto peerreq = make_message<MMDSPeerRequest>(mut->reqid, mut->attempt, MMDSPeerRequest::OP_UNWRLOCK);
+    peerreq->set_lock_type(lock->get_type());
+    lock->get_parent()->set_object_info(peerreq->get_object_info());
+    mds->send_message_mds(peerreq, target);
   }
 }
 
@@ -1941,7 +1941,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
   } else {
     // replica
     ceph_assert(lock->get_sm()->can_remote_xlock);
-    ceph_assert(!mut->slave_request);
+    ceph_assert(!mut->peer_request);
     
     // wait for single auth
     if (lock->get_parent()->is_ambiguous_auth()) {
@@ -1955,21 +1955,21 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
     if (mds->is_cluster_degraded() &&
 	!mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
       dout(7) << " mds." << auth << " is not active" << dendl;
-      if (mut->more()->waiting_on_slave.empty())
+      if (mut->more()->waiting_on_peer.empty())
 	mds->wait_for_active_peer(auth, new C_MDS_RetryRequest(mdcache, mut));
       return false;
     }
 
     // send lock request
-    mut->more()->slaves.insert(auth);
+    mut->more()->peers.insert(auth);
     mut->start_locking(lock, auth);
-    auto r = make_message<MMDSSlaveRequest>(mut->reqid, mut->attempt, MMDSSlaveRequest::OP_XLOCK);
+    auto r = make_message<MMDSPeerRequest>(mut->reqid, mut->attempt, MMDSPeerRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
     mds->send_message_mds(r, auth);
 
-    ceph_assert(mut->more()->waiting_on_slave.count(auth) == 0);
-    mut->more()->waiting_on_slave.insert(auth);
+    ceph_assert(mut->more()->waiting_on_peer.count(auth) == 0);
+    mut->more()->waiting_on_peer.insert(auth);
 
     return false;
   }
@@ -2032,10 +2032,10 @@ void Locker::xlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *m
     mds_rank_t auth = lock->get_parent()->authority().first;
     if (!mds->is_cluster_degraded() ||
 	mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
-      auto slavereq = make_message<MMDSSlaveRequest>(mut->reqid, mut->attempt, MMDSSlaveRequest::OP_UNXLOCK);
-      slavereq->set_lock_type(lock->get_type());
-      lock->get_parent()->set_object_info(slavereq->get_object_info());
-      mds->send_message_mds(slavereq, auth);
+      auto peerreq = make_message<MMDSPeerRequest>(mut->reqid, mut->attempt, MMDSPeerRequest::OP_UNXLOCK);
+      peerreq->set_lock_type(lock->get_type());
+      lock->get_parent()->set_object_info(peerreq->get_object_info());
+      mds->send_message_mds(peerreq, auth);
     }
     // others waiting?
     lock->finish_waiters(SimpleLock::WAIT_STABLE |

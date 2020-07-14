@@ -35,7 +35,7 @@ public:
   /*void print(ostream& out) const {
     out << "resolve_ack.size()
 	<< "+" << ambiguous_imap.size()
-	<< " imports +" << slave_requests.size() << " slave requests)";
+	<< " imports +" << peer_requests.size() << " peer requests)";
   }
   */
   

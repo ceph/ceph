@@ -32,7 +32,7 @@ class CDir;
 class CInode;
 class CDentry;
 class MDSRank;
-struct MDSlaveUpdate;
+struct MDPeerUpdate;
 
 class LogSegment {
  public:
@@ -89,7 +89,7 @@ class LogSegment {
 
   map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
   set<metareqid_t> uncommitted_leaders;
-  set<metareqid_t> uncommitted_slaves;
+  set<metareqid_t> uncommitted_peers;
   set<dirfrag_t> uncommitted_fragments;
 
   // client request ids

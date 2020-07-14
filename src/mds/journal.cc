@@ -23,7 +23,7 @@
 #include "events/ENoOp.h"
 
 #include "events/EUpdate.h"
-#include "events/ESlaveUpdate.h"
+#include "events/EPeerUpdate.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
 #include "events/EPurged.h"
@@ -111,20 +111,20 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  // leader ops with possibly uncommitted slaves
+  // leader ops with possibly uncommitted peers
   for (set<metareqid_t>::iterator p = uncommitted_leaders.begin();
        p != uncommitted_leaders.end();
        ++p) {
-    dout(10) << "try_to_expire waiting for slaves to ack commit on " << *p << dendl;
+    dout(10) << "try_to_expire waiting for peers to ack commit on " << *p << dendl;
     mds->mdcache->wait_for_uncommitted_leader(*p, gather_bld.new_sub());
   }
 
-  // slave ops that haven't been committed
-  for (set<metareqid_t>::iterator p = uncommitted_slaves.begin();
-       p != uncommitted_slaves.end();
+  // peer ops that haven't been committed
+  for (set<metareqid_t>::iterator p = uncommitted_peers.begin();
+       p != uncommitted_peers.end();
        ++p) {
     dout(10) << "try_to_expire waiting for leader to ack OP_FINISH on " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_slave(*p, gather_bld.new_sub());
+    mds->mdcache->wait_for_uncommitted_peer(*p, gather_bld.new_sub());
   }
 
   // uncommitted fragments
@@ -1072,7 +1072,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
+void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1364,15 +1364,15 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     if (olddir) {
       if (olddir->authority() != CDIR_AUTH_UNDEF &&
 	  renamed_diri->authority() == CDIR_AUTH_UNDEF) {
-	ceph_assert(slaveup); // auth to non-auth, must be slave prepare
+	ceph_assert(peerup); // auth to non-auth, must be peer prepare
         frag_vec_t leaves;
 	renamed_diri->dirfragtree.get_leaves(leaves);
 	for (const auto& leaf : leaves) {
 	  CDir *dir = renamed_diri->get_dirfrag(leaf);
 	  ceph_assert(dir);
 	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
-	    // preserve subtree bound until slave commit
-	    slaveup->olddirs.insert(dir->inode);
+	    // preserve subtree bound until peer commit
+	    peerup->olddirs.insert(dir->inode);
 	  else
 	    dir->state_set(CDir::STATE_AUTH);
 
@@ -1386,8 +1386,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       // see if we can discard the subtree we renamed out of
       CDir *root = mds->mdcache->get_subtree_root(olddir);
       if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
-	if (slaveup) // preserve the old dir until slave commit
-	  slaveup->olddirs.insert(olddir->inode);
+	if (peerup) // preserve the old dir until peer commit
+	  peerup->olddirs.insert(olddir->inode);
 	else
 	  mds->mdcache->try_trim_non_auth_subtree(root);
       }
@@ -1432,8 +1432,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     dout(10) << " unlinked set contains " << unlinked << dendl;
     for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
       CInode *in = p->first;
-      if (slaveup) { // preserve unlinked inodes until slave commit
-	slaveup->unlinked.insert(in);
+      if (peerup) { // preserve unlinked inodes until peer commit
+	peerup->unlinked.insert(in);
 	if (in->snaprealm)
 	  in->snaprealm->adjust_parent();
       } else
@@ -2074,7 +2074,7 @@ void EUpdate::encode(bufferlist &bl, uint64_t features) const
   encode(client_map, bl);
   encode(cmapv, bl);
   encode(reqid, bl);
-  encode(had_slaves, bl);
+  encode(had_peers, bl);
   ENCODE_FINISH(bl);
 }
  
@@ -2089,7 +2089,7 @@ void EUpdate::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 3)
     decode(cmapv, bl);
   decode(reqid, bl);
-  decode(had_slaves, bl);
+  decode(had_peers, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2103,7 +2103,7 @@ void EUpdate::dump(Formatter *f) const
   f->dump_int("client map length", client_map.length());
   f->dump_int("client map version", cmapv);
   f->dump_stream("reqid") << reqid;
-  f->dump_string("had slaves", had_slaves ? "true" : "false");
+  f->dump_string("had peers", had_peers ? "true" : "false");
 }
 
 void EUpdate::generate_test_instances(std::list<EUpdate*>& ls)
@@ -2120,7 +2120,7 @@ void EUpdate::update_segment()
   if (client_map.length())
     segment->sessionmapv = cmapv;
 
-  if (had_slaves)
+  if (had_peers)
     segment->uncommitted_leaders.insert(reqid);
 }
 
@@ -2129,11 +2129,11 @@ void EUpdate::replay(MDSRank *mds)
   auto&& segment = get_segment();
   metablob.replay(mds, segment);
   
-  if (had_slaves) {
-    dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
+  if (had_peers) {
+    dout(10) << "EUpdate.replay " << reqid << " had peers, expecting a matching ECommitted" << dendl;
     segment->uncommitted_leaders.insert(reqid);
-    set<mds_rank_t> slaves;
-    mds->mdcache->add_uncommitted_leader(reqid, segment, slaves, true);
+    set<mds_rank_t> peers;
+    mds->mdcache->add_uncommitted_leader(reqid, segment, peers, true);
   }
   
   if (client_map.length()) {
@@ -2277,7 +2277,7 @@ void ECommitted::generate_test_instances(std::list<ECommitted*>& ls)
 }
 
 // -----------------------
-// ESlaveUpdate
+// EPeerUpdate
 
 void link_rollback::encode(bufferlist &bl) const
 {
@@ -2469,7 +2469,7 @@ void rename_rollback::generate_test_instances(std::list<rename_rollback*>& ls)
   ls.back()->stray.remote_d_type = IFTODT(S_IFREG);
 }
 
-void ESlaveUpdate::encode(bufferlist &bl, uint64_t features) const
+void EPeerUpdate::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(3, 3, bl);
   encode(stamp, bl);
@@ -2483,7 +2483,7 @@ void ESlaveUpdate::encode(bufferlist &bl, uint64_t features) const
   ENCODE_FINISH(bl);
 } 
 
-void ESlaveUpdate::decode(bufferlist::const_iterator &bl)
+void EPeerUpdate::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
@@ -2498,7 +2498,7 @@ void ESlaveUpdate::decode(bufferlist::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void ESlaveUpdate::dump(Formatter *f) const
+void EPeerUpdate::dump(Formatter *f) const
 {
   f->open_object_section("metablob");
   commit.dump(f);
@@ -2512,38 +2512,38 @@ void ESlaveUpdate::dump(Formatter *f) const
   f->dump_int("original op", origop);
 }
 
-void ESlaveUpdate::generate_test_instances(std::list<ESlaveUpdate*>& ls)
+void EPeerUpdate::generate_test_instances(std::list<EPeerUpdate*>& ls)
 {
-  ls.push_back(new ESlaveUpdate());
+  ls.push_back(new EPeerUpdate());
 }
 
-void ESlaveUpdate::replay(MDSRank *mds)
+void EPeerUpdate::replay(MDSRank *mds)
 {
-  MDSlaveUpdate *su;
+  MDPeerUpdate *su;
   auto&& segment = get_segment();
   switch (op) {
-  case ESlaveUpdate::OP_PREPARE:
-    dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds." << leader
+  case EPeerUpdate::OP_PREPARE:
+    dout(10) << "EPeerUpdate.replay prepare " << reqid << " for mds." << leader
 	     << ": applying commit, saving rollback info" << dendl;
-    su = new MDSlaveUpdate(origop, rollback);
+    su = new MDPeerUpdate(origop, rollback);
     commit.replay(mds, segment, su);
-    mds->mdcache->add_uncommitted_slave(reqid, segment, leader, su);
+    mds->mdcache->add_uncommitted_peer(reqid, segment, leader, su);
     break;
 
-  case ESlaveUpdate::OP_COMMIT:
-    dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << leader << dendl;
-    mds->mdcache->finish_uncommitted_slave(reqid, false);
+  case EPeerUpdate::OP_COMMIT:
+    dout(10) << "EPeerUpdate.replay commit " << reqid << " for mds." << leader << dendl;
+    mds->mdcache->finish_uncommitted_peer(reqid, false);
     break;
 
-  case ESlaveUpdate::OP_ROLLBACK:
-    dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << leader
+  case EPeerUpdate::OP_ROLLBACK:
+    dout(10) << "EPeerUpdate.replay abort " << reqid << " for mds." << leader
 	     << ": applying rollback commit blob" << dendl;
     commit.replay(mds, segment);
-    mds->mdcache->finish_uncommitted_slave(reqid, false);
+    mds->mdcache->finish_uncommitted_peer(reqid, false);
     break;
 
   default:
-    mds->clog->error() << "invalid op in ESlaveUpdate";
+    mds->clog->error() << "invalid op in EPeerUpdate";
     mds->damaged();
     ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
