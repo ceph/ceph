@@ -1061,6 +1061,13 @@ location is::
 After running the above command, Ceph Dashboard is able to find the NFS-Ganesha
 configuration objects and we can start manage the exports through the Web UI.
 
+.. note::
+
+    A separate pool for the NFS shares should be used. Otherwise it can cause the
+    `known issue <https://tracker.ceph.com/issues/46176>`_ with listing of shares
+    if the NFS objects are stored together with a lot of other objects in a single
+    pool.
+
 
 Support for Multiple NFS-Ganesha Clusters
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
