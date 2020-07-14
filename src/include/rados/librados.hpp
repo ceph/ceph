@@ -520,7 +520,6 @@ inline namespace v14_2_0 {
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
-    void tier_flush();
 
 
     friend class IoCtx;
@@ -735,6 +734,12 @@ inline namespace v14_2_0 {
      * triggering a promote on the OSD (that is then evicted).
      */
     void cache_evict();
+
+    /**
+     * flush a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_flush();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
