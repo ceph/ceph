@@ -70,3 +70,18 @@ TEST(Striper, GetNumObj)
   numobjs = Striper::get_num_objects(l, size);
   ASSERT_EQ(6u, numobjs);
 }
+
+TEST(Striper, GetFileOffset)
+{
+  file_layout_t l;
+
+  l.object_size = 262144;
+  l.stripe_unit = 4096;
+  l.stripe_count = 3;
+
+  uint64_t object_no = 100;
+  uint64_t object_off = 200000;
+  uint64_t file_offset = Striper::get_file_offset(
+          g_ceph_context, &l, object_no, object_off);
+  ASSERT_EQ(26549568u, file_offset);
+}
