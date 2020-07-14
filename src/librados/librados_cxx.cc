@@ -631,6 +631,13 @@ void librados::ObjectReadOperation::cache_evict()
   o->cache_evict();
 }
 
+void librados::ObjectReadOperation::tier_flush()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_flush();
+}
+
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
 						  uint64_t tgt_version,
@@ -667,13 +674,6 @@ void librados::ObjectWriteOperation::unset_manifest()
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->unset_manifest();
-}
-
-void librados::ObjectWriteOperation::tier_flush()
-{
-  ceph_assert(impl);
-  ::ObjectOperation *o = &impl->o;
-  o->tier_flush();
 }
 
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)

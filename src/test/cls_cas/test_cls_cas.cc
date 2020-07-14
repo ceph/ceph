@@ -310,8 +310,7 @@ TEST(chunk_refs_t, size)
   for (size_t i = 1; i <= max; ++i) {
     hobject_t h(sobject_t(object_t("foo"s + stringify(i)), i));
     h.pool = i > pool_cutoff ? i : (i & pool_mask);
-    bool ret = r.get(h);
-    ASSERT_TRUE(ret);
+    r.get(h);
     if (count_bits(i) <= 2) {
       bufferlist bl;
       r.dynamic_encode(bl, 512);
