@@ -522,12 +522,14 @@ class VolumeClient(CephfsClient):
     def list_subvolume_groups(self, **kwargs):
         volname = kwargs['vol_name']
         ret     = 0, '[]', ""
+        volume_exists = False
         try:
             with open_volume(self, volname) as fs_handle:
+                volume_exists = True
                 groups = listdir(fs_handle, self.volspec.base_dir)
                 ret = 0, name_to_json(groups), ""
         except VolumeException as ve:
-            if not ve.errno == -errno.ENOENT:
+            if not ve.errno == -errno.ENOENT or not volume_exists:
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
