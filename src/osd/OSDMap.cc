@@ -6081,7 +6081,6 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   switch (pool->get_type()) {
   case pg_pool_t::TYPE_REPLICATED:
     return pool->get_size();
-    break;
   case pg_pool_t::TYPE_ERASURE:
   {
     auto& ecp =
