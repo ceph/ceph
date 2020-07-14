@@ -76,6 +76,7 @@ private:
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo bucket_info;
   std::map<string, bufferlist> bucket_attrs;
+  rgw::bucket_index_layout_generation prev_index;
 
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
