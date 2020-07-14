@@ -2337,8 +2337,8 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 
       /* only remove it if it's a different bucket instance */
       if (orig_info.bucket.bucket_id != bucket.bucket_id) {
-        int r = svc.bi->clean_index(dpp, info, info.layout.current_index.gen);
-        if (r < 0) {
+	int r = svc.bi->clean_index(dpp, info, info.layout.current_index);
+	if (r < 0) {
 	  ldpp_dout(dpp, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
 	}
         r = ctl.bucket->remove_bucket_instance_info(info.bucket, info, null_yield, dpp);
