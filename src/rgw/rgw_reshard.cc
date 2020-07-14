@@ -644,6 +644,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   //overwrite current_index for the next reshard process
+  const auto prev_index = bucket_info.layout.current_index;
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
   bucket_info.layout.resharding = rgw::BucketReshardState::None;
@@ -657,6 +658,18 @@ int RGWBucketReshard::do_reshard(int num_shards,
   if (ret < 0) {
       return ret;
   }
+
+  // resharding successful, so remove old bucket index shards; use
+  // best effort and don't report out an error; the lock isn't needed
+  // at this point since all we're using a best effor to to remove old
+  // shard objects
+
+  ret = store->svc()->bi->clean_index(bucket_info, prev_index);
+  if (ret < 0) {
+    lderr(store->ctx()) << "Error: " << __func__ <<
+    " failed to clean up old shards; " <<
+    "RGWRados::clean_bucket_index returned " << ret << dendl;
+}
 
   return 0;
   // NB: some error clean-up is done by ~BucketInfoReshardUpdate
@@ -704,18 +717,6 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   reshard_lock.unlock();
 
-   // resharding successful, so remove old bucket index shards; use
-   // best effort and don't report out an error; the lock isn't needed
-   // at this point since all we're using a best effor to to remove old
-   // shard objects
-
-   ret = store->svc()->bi->clean_index(bucket_info, bucket_info.layout.current_index.gen);
-   if (ret < 0) {
-     lderr(store->ctx()) << "Error: " << __func__ <<
-      " failed to clean up old shards; " <<
-     "RGWRados::clean_bucket_index returned " << ret << dendl;
-  }
-
   ldout(store->ctx(), 1) << __func__ <<
     " INFO: reshard of bucket \"" << bucket_info.bucket.name << "\" completed successfully" << dendl;
 
@@ -730,7 +731,7 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->svc()->bi->clean_index(bucket_info, bucket_info.layout.target_index->gen);
+  int ret2 = store->svc()->bi->clean_index(bucket_info, bucket_info.layout.current_index);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
