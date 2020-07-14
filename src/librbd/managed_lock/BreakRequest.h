@@ -58,6 +58,9 @@ private:
    * BLACKLIST (skip if disabled)
    *    |
    *    v
+   * WAIT_FOR_OSD_MAP
+   *    |
+   *    v
    * BREAK_LOCK
    *    |
    *    v
@@ -98,6 +101,9 @@ private:
 
   void send_blacklist();
   void handle_blacklist(int r);
+
+  void wait_for_osd_map();
+  void handle_wait_for_osd_map(int r);
 
   void send_break_lock();
   void handle_break_lock(int r);
