@@ -10711,7 +10711,7 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 
   if (empty) {
     std::lock_guard l{sdata->sdata_wait_lock};
-    sdata->sdata_cond.notify_one();
+    sdata->sdata_cond.notify_all();
   }
 }
 
