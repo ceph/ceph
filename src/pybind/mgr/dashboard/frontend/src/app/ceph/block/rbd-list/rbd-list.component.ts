@@ -24,7 +24,7 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
-import { RbdModel } from './rbd-model';
+import { RBDImageFormat, RbdModel } from './rbd-model';
 
 const BASE_URL = 'block/rbd';
 
@@ -71,8 +71,10 @@ export class RbdListComponent implements OnInit {
   private createRbdFromTask(pool: string, name: string): RbdModel {
     const model = new RbdModel();
     model.id = '-1';
+    model.unique_id = '-1';
     model.name = name;
     model.pool_name = pool;
+    model.image_format = RBDImageFormat.V2;
     return model;
   }
 
@@ -134,7 +136,11 @@ export class RbdListComponent implements OnInit {
       permission: 'delete',
       icon: 'fa-trash-o',
       click: () => this.trashRbdModal(),
-      name: this.actionLabels.TRASH
+      name: this.actionLabels.TRASH,
+      disable: (selection: CdTableSelection) =>
+        !selection.first() ||
+        !selection.hasSingleSelection ||
+        selection.first().image_format === RBDImageFormat.V1
     };
     this.tableActions = [
       addAction,

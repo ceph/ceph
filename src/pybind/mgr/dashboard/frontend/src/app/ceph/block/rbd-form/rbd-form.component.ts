@@ -21,6 +21,7 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { RBDImageFormat, RbdModel } from '../rbd-list/rbd-model';
 import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
 import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
@@ -188,6 +189,15 @@ export class RbdFormComponent implements OnInit {
     this.rbdForm.get('obj_size').disable();
     this.rbdForm.get('stripingUnit').disable();
     this.rbdForm.get('stripingCount').disable();
+
+    /* RBD Image Format v1 */
+    this.rbdImage.subscribe((image: RbdModel) => {
+      if (image.image_format === RBDImageFormat.V1) {
+        this.rbdForm.get('deep-flatten').disable();
+        this.rbdForm.get('layering').disable();
+        this.rbdForm.get('exclusive-lock').disable();
+      }
+    });
   }
 
   disableForClone() {

@@ -105,7 +105,15 @@ class Rbd(RESTController):
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
             stat['name'] = image_name
-            stat['id'] = img.id()
+            if img.old_format():
+                stat['unique_id'] = '{}/{}'.format(pool_name, stat['block_name_prefix'])
+                stat['id'] = stat['unique_id']
+                stat['image_format'] = 1
+            else:
+                stat['unique_id'] = '{}/{}'.format(pool_name, img.id())
+                stat['id'] = img.id()
+                stat['image_format'] = 2
+
             stat['pool_name'] = pool_name
             features = img.features()
             stat['features'] = features
