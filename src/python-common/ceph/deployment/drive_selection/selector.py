@@ -1,7 +1,7 @@
 import logging
 
 try:
-    from typing import List, Optional, Iterator, Tuple, Dict
+    from typing import List, Optional
 except ImportError:
     pass
 
@@ -17,12 +17,11 @@ class DriveSelection(object):
     def __init__(self,
                  spec,  # type: DriveGroupSpec
                  disks,  # type: List[Device]
-                 daemons=None,  # type: Iterator[Tuple[str, Dict[str, "DaemonDescription"]]]
+                 existing_daemons=None,  # type: Optional[int]
                  ):
         self.disks = disks.copy()
         self.spec = spec
-        self.daemons = daemons
-        self.osds_for_spec = self.find_osds_in_spec()
+        self.existing_daemons = existing_daemons or 0
 
         if self.spec.data_devices.paths:  # type: ignore
             # re: type: ignore there is *always* a path attribute assigned to DeviceSelection
@@ -36,17 +35,6 @@ class DriveSelection(object):
             self._wal = self.assign_devices(self.spec.wal_devices)
             self._db = self.assign_devices(self.spec.db_devices)
             self._journal = self.assign_devices(self.spec.journal_devices)
-
-    def find_osds_in_spec(self) -> List["DaemonDescription"]:
-        osds: List["DaemonDescription"] = []
-        if not self.daemons:
-            return osds
-        for host, dm in self.daemons:
-            for name, dd in dm.items():
-                if dd.daemon_type == 'osd':
-                    if dd.osdspec_affinity == self.spec.service_id:
-                        osds.append(dd)
-        return osds
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -81,7 +69,7 @@ class DriveSelection(object):
         """
         limit = device_filter.limit or 0
 
-        if limit > 0 and len_devices >= limit:
+        if limit > 0 and (len_devices + self.existing_daemons >= limit):
             logger.info("Refuse to add {} due to limit policy of <{}>".format(
                 disk_path, limit))
             return True
