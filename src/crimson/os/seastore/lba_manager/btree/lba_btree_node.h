@@ -13,6 +13,11 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+struct op_context_t {
+  Cache &cache;
+  Transaction &trans;
+};
+
 /**
  * lba_map_val_t
  *
@@ -58,8 +63,7 @@ struct LBANode : CachedExtent {
    * Returns mappings within range [addr, addr+len)
    */
   virtual lookup_range_ret lookup_range(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t addr,
     extent_len_t len) = 0;
 
@@ -76,8 +80,7 @@ struct LBANode : CachedExtent {
     >;
   using insert_ret = insert_ertr::future<LBAPinRef>;
   virtual insert_ret insert(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     lba_map_val_t val) = 0;
 
@@ -92,8 +95,7 @@ struct LBANode : CachedExtent {
     crimson::ct_error::input_output_error>;
   using find_hole_ret = find_hole_ertr::future<laddr_t>;
   virtual find_hole_ret find_hole(
-    Cache &cache,
-    Transaction &t,
+    op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) = 0;
@@ -117,8 +119,7 @@ struct LBANode : CachedExtent {
     std::optional<lba_map_val_t>(const lba_map_val_t &v)
     >;
   virtual mutate_mapping_ret mutate_mapping(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) = 0;
 
@@ -134,7 +135,8 @@ struct LBANode : CachedExtent {
     LBANodeRef,
     LBANodeRef,
     laddr_t>
-  make_split_children(Cache &cache, Transaction &t) = 0;
+  make_split_children(
+    op_context_t c) = 0;
 
   /**
    * make_full_merge
@@ -143,7 +145,8 @@ struct LBANode : CachedExtent {
    * Precondition: at_min_capacity() && right.at_min_capacity()
    */
   virtual LBANodeRef make_full_merge(
-    Cache &cache, Transaction &t, LBANodeRef &right) = 0;
+    op_context_t c,
+    LBANodeRef &right) = 0;
 
   /**
    * make_balanced
@@ -157,7 +160,8 @@ struct LBANode : CachedExtent {
     LBANodeRef,
     laddr_t>
   make_balanced(
-    Cache &cache, Transaction &t, LBANodeRef &right,
+    op_context_t c,
+    LBANodeRef &right,
     bool prefer_left) = 0;
 
   virtual bool at_max_capacity() const = 0;
@@ -173,8 +177,7 @@ using LBANodeRef = LBANode::LBANodeRef;
  * Fetches node at depth of the appropriate type.
  */
 Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c, ///< [in] context structure
   depth_t depth,  ///< [in] depth of node to fetch
   paddr_t offset, ///< [in] physical addr of node
   paddr_t base    ///< [in] depending on user, block addr or record addr

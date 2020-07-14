@@ -27,8 +27,7 @@ std::ostream &LBAInternalNode::print_detail(std::ostream &out) const
 }
 
 LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t addr,
   extent_len_t len)
 {
@@ -38,18 +37,16 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
   return crimson::do_for_each(
     std::move(begin),
     std::move(end),
-    [this, &cache, &t, &result, addr, len](const auto &val) mutable {
+    [this, c, &result, addr, len](const auto &val) mutable {
       return get_lba_btree_extent(
-	cache,
-	t,
+	c,
 	depth-1,
 	val.get_val(),
 	get_paddr()).safe_then(
-	  [&cache, &t, &result, addr, len](auto extent) mutable {
+	  [c, &result, addr, len](auto extent) mutable {
 	    // TODO: add backrefs to ensure cache residence of parents
 	    return extent->lookup_range(
-	      cache,
-	      t,
+	      c,
 	      addr,
 	      len).safe_then(
 		[&result](auto pin_list) mutable {
@@ -64,46 +61,41 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
 }
 
 LBAInternalNode::insert_ret LBAInternalNode::insert(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t laddr,
   lba_map_val_t val)
 {
   auto insertion_pt = get_containing_child(laddr);
   return get_lba_btree_extent(
-    cache,
-    t,
+    c,
     depth-1,
     insertion_pt->get_val(),
     get_paddr()).safe_then(
-      [this, insertion_pt, &cache, &t, laddr, val=std::move(val)](
+      [this, insertion_pt, c, laddr, val=std::move(val)](
 	auto extent) mutable {
 	return extent->at_max_capacity() ?
-	  split_entry(cache, t, laddr, insertion_pt, extent) :
+	  split_entry(c, laddr, insertion_pt, extent) :
 	  insert_ertr::make_ready_future<LBANodeRef>(std::move(extent));
-      }).safe_then([&cache, &t, laddr, val=std::move(val)](
+      }).safe_then([c, laddr, val=std::move(val)](
 		     LBANodeRef extent) mutable {
-	return extent->insert(cache, t, laddr, val);
+	return extent->insert(c, laddr, val);
       });
 }
 
 LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t laddr,
   mutate_func_t &&f)
 {
   return get_lba_btree_extent(
-    cache,
-    t,
+    c,
     depth-1,
     get_containing_child(laddr)->get_val(),
     get_paddr()
-  ).safe_then([this, &cache, &t, laddr](LBANodeRef extent) {
+  ).safe_then([this, c, laddr](LBANodeRef extent) {
     if (extent->at_min_capacity()) {
       return merge_entry(
-	cache,
-	t,
+	c,
 	laddr,
 	get_containing_child(laddr),
 	extent);
@@ -111,14 +103,13 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
       return merge_ertr::make_ready_future<LBANodeRef>(
 	std::move(extent));
     }
-  }).safe_then([&cache, &t, laddr, f=std::move(f)](LBANodeRef extent) mutable {
-    return extent->mutate_mapping(cache, t, laddr, std::move(f));
+  }).safe_then([c, laddr, f=std::move(f)](LBANodeRef extent) mutable {
+    return extent->mutate_mapping(c, laddr, std::move(f));
   });
 }
 
 LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t min,
   laddr_t max,
   extent_len_t len)
@@ -131,28 +122,26 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
     bounds.first,
     bounds.second,
     L_ADDR_NULL,
-    [this, &cache, &t, len](auto &i, auto &e, auto &ret) {
+    [this, c, len](auto &i, auto &e, auto &ret) {
       return crimson::do_until(
-	[this, &cache, &t, &i, &e, &ret, len] {
+	[this, c, &i, &e, &ret, len] {
 	  if (i == e) {
 	    return find_hole_ertr::make_ready_future<std::optional<laddr_t>>(
 	      std::make_optional<laddr_t>(L_ADDR_NULL));
 	  }
 	  return get_lba_btree_extent(
-	    cache,
-	    t,
+	    c,
 	    depth-1,
 	    i->get_val(),
 	    get_paddr()
-	  ).safe_then([&cache, &t, &i, len](auto extent) mutable {
+	  ).safe_then([c, &i, len](auto extent) mutable {
 	    logger().debug(
 	      "LBAInternalNode::find_hole extent {} lb {} ub {}",
 	      *extent,
 	      i->get_key(),
 	      i->get_next_key_or_max());
 	    return extent->find_hole(
-	      cache,
-	      t,
+	      c,
 	      i->get_key(),
 	      i->get_next_key_or_max(),
 	      len);
@@ -188,17 +177,19 @@ void LBAInternalNode::resolve_relative_addrs(paddr_t base) {
 
 LBAInternalNode::split_ret
 LBAInternalNode::split_entry(
-  Cache &c, Transaction &t, laddr_t addr,
+  op_context_t c,
+  laddr_t addr,
   internal_iterator_t iter, LBANodeRef entry)
 {
   if (!is_pending()) {
-    auto mut = c.duplicate_for_write(t, this)->cast<LBAInternalNode>();
+    auto mut = c.cache.duplicate_for_write(
+      c.trans, this)->cast<LBAInternalNode>();
     auto mut_iter = mut->iter_idx(iter->get_offset());
-    return mut->split_entry(c, t, addr, mut_iter, entry);
+    return mut->split_entry(c, addr, mut_iter, entry);
   }
 
   ceph_assert(!at_max_capacity());
-  auto [left, right, pivot] = entry->make_split_children(c, t);
+  auto [left, right, pivot] = entry->make_split_children(c);
 
   journal_update(
     iter,
@@ -210,7 +201,7 @@ LBAInternalNode::split_entry(
     maybe_generate_relative(right->get_paddr()),
     maybe_get_delta_buffer());
 
-  c.retire_extent(t, entry);
+  c.cache.retire_extent(c.trans, entry);
 
   logger().debug(
     "LBAInternalNode::split_entry *this {} left {} right {}",
@@ -225,13 +216,14 @@ LBAInternalNode::split_entry(
 
 LBAInternalNode::merge_ret
 LBAInternalNode::merge_entry(
-  Cache &c, Transaction &t, laddr_t addr,
+  op_context_t c,
+  laddr_t addr,
   internal_iterator_t iter, LBANodeRef entry)
 {
   if (!is_pending()) {
-    auto mut = c.duplicate_for_write(t, this)->cast<LBAInternalNode>();
+    auto mut = c.cache.duplicate_for_write(c.trans, this)->cast<LBAInternalNode>();
     auto mut_iter = mut->iter_idx(iter->get_offset());
-    return mut->merge_entry(c, t, addr, mut_iter, entry);
+    return mut->merge_entry(c, addr, mut_iter, entry);
   }
 
   logger().debug(
@@ -242,11 +234,10 @@ LBAInternalNode::merge_entry(
   auto donor_iter = donor_is_left ? iter - 1 : iter + 1;
   return get_lba_btree_extent(
     c,
-    t,
     depth - 1,
     donor_iter->get_val(),
     get_paddr()
-  ).safe_then([this, &c, &t, addr, iter, entry, donor_iter, donor_is_left](
+  ).safe_then([this, c, addr, iter, entry, donor_iter, donor_is_left](
 		auto donor) mutable {
     auto [l, r] = donor_is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
@@ -255,7 +246,6 @@ LBAInternalNode::merge_entry(
     if (donor->at_min_capacity()) {
       auto replacement = l->make_full_merge(
 	c,
-	t,
 	r);
 
       journal_update(
@@ -264,8 +254,8 @@ LBAInternalNode::merge_entry(
 	maybe_get_delta_buffer());
       journal_remove(riter, maybe_get_delta_buffer());
 
-      c.retire_extent(t, l);
-      c.retire_extent(t, r);
+      c.cache.retire_extent(c.trans, l);
+      c.cache.retire_extent(c.trans, r);
       return split_ertr::make_ready_future<LBANodeRef>(replacement);
     } else {
       logger().debug(
@@ -275,7 +265,6 @@ LBAInternalNode::merge_entry(
       auto [replacement_l, replacement_r, pivot] =
 	l->make_balanced(
 	  c,
-	  t,
 	  r,
 	  !donor_is_left);
 
@@ -289,8 +278,8 @@ LBAInternalNode::merge_entry(
 	maybe_generate_relative(replacement_r->get_paddr()),
 	maybe_get_delta_buffer());
 
-      c.retire_extent(t, l);
-      c.retire_extent(t, r);
+      c.cache.retire_extent(c.trans, l);
+      c.cache.retire_extent(c.trans, r);
       return split_ertr::make_ready_future<LBANodeRef>(
 	addr >= pivot ? replacement_r : replacement_l
       );
@@ -318,8 +307,7 @@ std::ostream &LBALeafNode::print_detail(std::ostream &out) const
 }
 
 LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t addr,
   extent_len_t len)
 {
@@ -342,19 +330,15 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
 }
 
 LBALeafNode::insert_ret LBALeafNode::insert(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t laddr,
   lba_map_val_t val)
 {
   ceph_assert(!at_max_capacity());
 
   if (!is_pending()) {
-    return cache.duplicate_for_write(t, this)->cast<LBALeafNode>()->insert(
-      cache,
-      t,
-      laddr,
-      val);
+    return c.cache.duplicate_for_write(c.trans, this
+    )->cast<LBALeafNode>()->insert(c, laddr, val);
   }
 
   val.paddr = maybe_generate_relative(val.paddr);
@@ -381,16 +365,14 @@ LBALeafNode::insert_ret LBALeafNode::insert(
 }
 
 LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
-  Cache &cache,
-  Transaction &transaction,
+  op_context_t c,
   laddr_t laddr,
   mutate_func_t &&f)
 {
   if (!is_pending()) {
-    return cache.duplicate_for_write(transaction, this)->cast<LBALeafNode>(
+    return c.cache.duplicate_for_write(c.trans, this)->cast<LBALeafNode>(
     )->mutate_mapping(
-      cache,
-      transaction,
+      c,
       laddr,
       std::move(f));
   }
@@ -419,8 +401,7 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
 }
 
 LBALeafNode::find_hole_ret LBALeafNode::find_hole(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   laddr_t min,
   laddr_t max,
   extent_len_t len)
@@ -470,8 +451,7 @@ LBALeafNode::get_leaf_entries(laddr_t addr, extent_len_t len)
 }
 
 Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
-  Cache &cache,
-  Transaction &t,
+  op_context_t c,
   depth_t depth,
   paddr_t offset,
   paddr_t base) {
@@ -481,8 +461,8 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
       "get_lba_btree_extent: reading internal at offset {}, depth {}",
       offset,
       depth);
-    return cache.get_extent<LBAInternalNode>(
-      t,
+    return c.cache.get_extent<LBAInternalNode>(
+      c.trans,
       offset,
       LBA_BLOCK_SIZE).safe_then([depth](auto ret) {
 	ret->set_depth(depth);
@@ -494,8 +474,8 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
       "get_lba_btree_extent: reading leaf at offset {}, depth {}",
       offset,
       depth);
-    return cache.get_extent<LBALeafNode>(
-      t,
+    return c.cache.get_extent<LBALeafNode>(
+      c.trans,
       offset,
       LBA_BLOCK_SIZE).safe_then([offset, depth](auto ret) {
 	logger().debug(
