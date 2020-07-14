@@ -7,6 +7,8 @@
 #include "Protocol.h"
 #include "crypto_onwire.h"
 #include "frames_v2.h"
+#include "common/Timer.h"
+#include "common/ceph_mutex.h"
 
 class ProtocolV2 : public Protocol {
 private:
@@ -113,6 +115,9 @@ private:
 
   bool keepalive;
   bool write_in_progress = false;
+  ceph::mutex th_limit_lock = ceph::make_mutex("ProtocolV2::th_limit_lock");
+  SafeTimer th_timer;
+  Context* th_message_callback;
 
   std::ostream& _conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *pcontinuation);

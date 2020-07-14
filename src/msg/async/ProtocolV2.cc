@@ -97,10 +97,17 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       tx_frame_asm(&session_stream_handlers, false),
       rx_frame_asm(&session_stream_handlers, false),
       next_tag(static_cast<Tag>(0)),
-      keepalive(false) {
+      keepalive(false),
+      th_timer(cct, th_limit_lock, false) {
+  th_timer.init();
+  th_message_callback = new LambdaContext([this]() {
+    ldout(cct, 1) << __func__ << " Throttler Limit has been hit. "
+		  << "Some message processing may be significantly delayed." << dendl;});
 }
 
 ProtocolV2::~ProtocolV2() {
+  std::lock_guard l(th_limit_lock);
+  th_timer.shutdown();
 }
 
 void ProtocolV2::connect() {
@@ -279,6 +286,8 @@ size_t ProtocolV2::get_current_msg_size() const {
 void ProtocolV2::reset_throttle() {
   if (state > THROTTLE_MESSAGE && state <= THROTTLE_DONE &&
       connection->policy.throttler_messages) {
+    //if timer event exists, cancel it
+    th_timer.cancel_event(th_message_callback);
     ldout(cct, 10) << __func__ << " releasing " << 1
                    << " message to policy throttler "
                    << connection->policy.throttler_messages->get_current()
@@ -288,6 +297,8 @@ void ProtocolV2::reset_throttle() {
   }
   if (state > THROTTLE_BYTES && state <= THROTTLE_DONE) {
     if (connection->policy.throttler_bytes) {
+      //if timer event exists, cancel it
+      th_timer.cancel_event(th_message_callback);
       const size_t cur_msg_size = get_current_msg_size();
       ldout(cct, 10) << __func__ << " releasing " << cur_msg_size
                      << " bytes to policy throttler "
@@ -297,6 +308,8 @@ void ProtocolV2::reset_throttle() {
     }
   }
   if (state > THROTTLE_DISPATCH_QUEUE && state <= THROTTLE_DONE) {
+    //if timer event exists, cancel it
+    th_timer.cancel_event(th_message_callback);
     const size_t cur_msg_size = get_current_msg_size();
     ldout(cct, 10)
         << __func__ << " releasing " << cur_msg_size
@@ -1520,6 +1533,10 @@ CtPtr ProtocolV2::throttle_message() {
                      << connection->policy.throttler_messages->get_current()
                      << "/" << connection->policy.throttler_messages->get_max()
                      << " failed, just wait." << dendl;
+      //We don't want too many different logs when throttle limit hits. So if a timer event
+      //already exists, cancel it and add a new timer event after 30s, for this throttle limit hit.
+      th_timer.cancel_event(th_message_callback);
+      th_timer.add_event_after(30, th_message_callback);
       // following thread pool deal with th full message queue isn't a
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
@@ -1551,6 +1568,10 @@ CtPtr ProtocolV2::throttle_bytes() {
                        << connection->policy.throttler_bytes->get_current()
                        << "/" << connection->policy.throttler_bytes->get_max()
                        << " failed, just wait." << dendl;
+	//We don't want too many different logs when throttle limit hits. So if a timer event
+	//already exists, cancel it and add a new timer event after 30s, for this throttle limit hit.
+	th_timer.cancel_event(th_message_callback);
+	th_timer.add_event_after(30, th_message_callback);
         // following thread pool deal with th full message queue isn't a
         // short time, so we can wait a ms.
         if (connection->register_time_events.empty()) {
@@ -1580,6 +1601,10 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
           << connection->dispatch_queue->dispatch_throttler.get_current() << "/"
           << connection->dispatch_queue->dispatch_throttler.get_max()
           << " failed, just wait." << dendl;
+      //We don't want too many different logs when throttle limit hits. So if a timer event
+      //already exists, cancel it and add a new timer event after 30s, for this throttle limit hit.
+      th_timer.cancel_event(th_message_callback);
+      th_timer.add_event_after(30, th_message_callback);
       // following thread pool deal with th full message queue isn't a
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
