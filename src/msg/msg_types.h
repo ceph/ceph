@@ -368,10 +368,8 @@ struct entity_addr_t {
     switch (u.sa.sa_family) {
     case AF_INET:
       return ntohs(u.sin.sin_port);
-      break;
     case AF_INET6:
       return ntohs(u.sin6.sin6_port);
-      break;
     }
     return 0;
   }
