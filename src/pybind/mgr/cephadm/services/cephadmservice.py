@@ -1,4 +1,6 @@
+import json
 import logging
+from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any
 
 from mgr_module import MonCommandFailed
@@ -13,10 +15,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class CephadmService:
+class CephadmService(metaclass=ABCMeta):
     """
     Base class for service types. Often providing a create() and config() fn.
     """
+
+    @property
+    @abstractmethod
+    def TYPE(self):
+        pass
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
@@ -113,7 +121,34 @@ class CephadmService:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
 
+
+    def ok_to_stop(self, daemon_ids: List[str]) -> bool:
+        names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+
+        if self.TYPE not in ['mon', 'osd', 'mds']:
+            logger.info('Upgrade: It is presumed safe to stop %s' % names)
+            return True
+
+        ret, out, err = self.mgr.mon_command({
+            'prefix': f'{self.TYPE} ok-to-stop',
+            'ids': daemon_ids,
+        })
+
+        if ret:
+            logger.info(f'It is NOT safe to stop {names}: {err}')
+            return False
+
+        return True
+
+    def pre_remove(self, daemon_id: str) -> None:
+        """
+        Called before the daemon is removed.
+        """
+        pass
+
 class MonService(CephadmService):
+    TYPE = 'mon'
+
     def create(self, name, host, network):
         """
         Create a new monitor on the given host.
@@ -153,8 +188,43 @@ class MonService(CephadmService):
                                        keyring=keyring,
                                        extra_config={'config': extra_config})
 
+    def _check_safe_to_destroy(self, mon_id):
+        # type: (str) -> None
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'quorum_status',
+        })
+        try:
+            j = json.loads(out)
+        except Exception as e:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        if mon_id not in mons:
+            logger.info('Safe to remove mon.%s: not in monmap (%s)' % (
+                mon_id, mons))
+            return
+        new_mons = [m for m in mons if m != mon_id]
+        new_quorum = [m for m in j['quorum_names'] if m != mon_id]
+        if len(new_quorum) > len(new_mons) / 2:
+            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            return
+        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
+
+
+    def pre_remove(self, daemon_id: str) -> None:
+        self._check_safe_to_destroy(daemon_id)
+
+        # remove mon from quorum before we destroy the daemon
+        logger.info('Removing monitor %s from monmap...' % daemon_id)
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'mon rm',
+            'name': daemon_id,
+        })
+
 
 class MgrService(CephadmService):
+    TYPE = 'mgr'
+
     def create(self, mgr_id, host):
         """
         Create a new manager instance on a host.
@@ -172,6 +242,8 @@ class MgrService(CephadmService):
 
 
 class MdsService(CephadmService):
+    TYPE = 'mds'
+
     def config(self, spec: ServiceSpec):
         # ensure mds_join_fs is set for these daemons
         assert spec.service_id
@@ -188,13 +260,15 @@ class MdsService(CephadmService):
             'prefix': 'auth get-or-create',
             'entity': 'mds.' + mds_id,
             'caps': ['mon', 'profile mds',
-                     'osd', 'allow rwx',
+                     'osd', 'allow rw tag cephfs *=*',
                      'mds', 'allow'],
         })
         return self.mgr._create_daemon('mds', mds_id, host, keyring=keyring)
 
 
 class RgwService(CephadmService):
+    TYPE = 'rgw'
+
     def config(self, spec: RGWSpec):
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
@@ -262,6 +336,8 @@ class RgwService(CephadmService):
 
 
 class RbdMirrorService(CephadmService):
+    TYPE = 'rbd-mirror'
+
     def create(self, daemon_id, host) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -274,6 +350,8 @@ class RbdMirrorService(CephadmService):
 
 
 class CrashService(CephadmService):
+    TYPE = 'crash'
+
     def create(self, daemon_id, host) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',

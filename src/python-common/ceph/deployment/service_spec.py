@@ -1,10 +1,11 @@
 import fnmatch
 import re
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from functools import wraps
 from typing import Optional, Dict, Any, List, Union, Callable, Iterator
 
 import six
+import yaml
 
 from ceph.deployment.hostspec import HostSpec
 
@@ -38,7 +39,7 @@ def handle_type_error(method):
             return method(cls, *args, **kwargs)
         except (TypeError, AttributeError) as e:
             error_msg = '{}: {}'.format(cls.__name__, e)
-        raise ServiceSpecValidationError(error_msg)
+            raise ServiceSpecValidationError(error_msg)
     return inner
 
 
@@ -151,11 +152,7 @@ class PlacementSpec(object):
         self.hosts = []  # type: List[HostPlacementSpec]
 
         if hosts:
-            if all([isinstance(host, HostPlacementSpec) for host in hosts]):
-                self.hosts = hosts  # type: ignore
-            else:
-                self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
-                              for x in hosts if x]
+            self.set_hosts(hosts)
 
         self.count = count  # type: Optional[int]
 
@@ -181,7 +178,11 @@ class PlacementSpec(object):
     def set_hosts(self, hosts):
         # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
-        self.hosts = hosts
+        if all([isinstance(host, HostPlacementSpec) for host in hosts]):
+            self.hosts = hosts  # type: ignore
+        else:
+            self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
+                          for x in hosts if x]
 
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
         return self.filter_matching_hostspecs(_get_hosts_func(as_hostspec=True))
@@ -425,6 +426,35 @@ class ServiceSpec(object):
         # then, the real type is: (dict) -> ServiceSpecs
         """
         Initialize 'ServiceSpec' object data from a json structure
+
+        There are two valid styles for service specs:
+
+        the "old" style:
+
+        .. code:: yaml
+
+            service_type: nfs
+            service_id: foo
+            pool: mypool
+            namespace: myns
+
+        and the "new" style:
+
+        .. code:: yaml
+
+            service_type: nfs
+            service_id: foo
+            spec:
+              pool: mypool
+              namespace: myns
+
+        In https://tracker.ceph.com/issues/45321 we decided that we'd like to
+        prefer the new style as it is more readable and provides a better
+        understanding of what fields are special for a give service type.
+
+        Note, we'll need to stay compatible with both versions for the
+        the next two major releases (octoups, pacific).
+
         :param json_spec: A valid dict with ServiceSpec
         """
 
@@ -470,20 +500,34 @@ class ServiceSpec(object):
         return n
 
     def to_json(self):
-        # type: () -> Dict[str, Any]
+        # type: () -> OrderedDict[str, Any]
+        ret: OrderedDict[str, Any] = OrderedDict()
+        ret['service_type'] = self.service_type
+        if self.service_id:
+            ret['service_id'] = self.service_id
+        ret['service_name'] = self.service_name()
+        ret['placement'] = self.placement.to_json()
+        if self.unmanaged:
+            ret['unmanaged'] = self.unmanaged
+
         c = {}
-        for key, val in self.__dict__.items():
+        for key, val in sorted(self.__dict__.items(), key=lambda tpl: tpl[0]):
+            if key in ret:
+                continue
             if hasattr(val, 'to_json'):
                 val = val.to_json()
             if val:
                 c[key] = val
-
-        c['service_name'] = self.service_name()
-        return c
+        if c:
+            ret['spec'] = c
+        return ret
 
     def validate(self):
         if not self.service_type:
             raise ServiceSpecValidationError('Cannot add Service: type required')
+
+        if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
+            raise ServiceSpecValidationError('Cannot add Service: id required')
 
         if self.placement is not None:
             self.placement.validate()
@@ -494,13 +538,12 @@ class ServiceSpec(object):
     def one_line_str(self):
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
 
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec'):
+        return dumper.represent_dict(data.to_json().items())
 
-def servicespec_validate_add(self: ServiceSpec):
-    # This must not be a method of ServiceSpec, otherwise you'll hunt
-    # sub-interpreter affinity bugs.
-    ServiceSpec.validate(self)
-    if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
-        raise ServiceSpecValidationError('Cannot add Service: id required')
+
+yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
@@ -523,11 +566,12 @@ class NFSServiceSpec(ServiceSpec):
         #: RADOS namespace where NFS client recovery data is stored in the pool.
         self.namespace = namespace
 
-    def validate_add(self):
-        servicespec_validate_add(self)
+    def validate(self):
+        super(NFSServiceSpec, self).validate()
 
         if not self.pool:
-            raise ServiceSpecValidationError('Cannot add NFS: No Pool specified')
+            raise ServiceSpecValidationError(
+                'Cannot add NFS: No Pool specified')
 
     def rados_config_name(self):
         # type: () -> str
@@ -541,6 +585,9 @@ class NFSServiceSpec(ServiceSpec):
             url += self.namespace + '/'
         url += self.rados_config_name()
         return url
+
+
+yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
 
 
 class RGWSpec(ServiceSpec):
@@ -604,6 +651,9 @@ class RGWSpec(ServiceSpec):
         return f'beast {" ".join(ports)}'
 
 
+yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
+
+
 class IscsiServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'iscsi',
@@ -648,3 +698,6 @@ class IscsiServiceSpec(ServiceSpec):
         if not self.api_password:
             raise ServiceSpecValidationError(
                 'Cannot add ISCSI: No Api password specified')
+
+
+yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)

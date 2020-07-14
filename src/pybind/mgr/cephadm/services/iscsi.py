@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 class IscsiService(CephadmService):
+    TYPE = 'iscsi'
+
     def config(self, spec: IscsiServiceSpec):
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
@@ -23,11 +25,11 @@ class IscsiService(CephadmService):
     def create(self, igw_id, host, spec) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': utils.name_to_auth_entity('iscsi') + '.' + igw_id,
+            'entity': utils.name_to_auth_entity('iscsi', igw_id),
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blacklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
-                     'osd', f'allow rwx pool={spec.pool}'],
+                     'osd', 'allow rwx'],
         })
 
         if spec.ssl_cert:

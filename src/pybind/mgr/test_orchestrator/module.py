@@ -7,7 +7,7 @@ import functools
 import itertools
 from subprocess import check_output, CalledProcessError
 
-from ceph.deployment.service_spec import NFSServiceSpec, ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, IscsiServiceSpec
 
 try:
     from typing import Callable, List, Sequence, Tuple
@@ -162,7 +162,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _get_ceph_daemons(self):
         # type: () -> List[orchestrator.DaemonDescription]
         """ Return ceph daemons on the running host."""
-        types = ("mds", "osd", "mon", "rgw", "mgr", "nfs")
+        types = ("mds", "osd", "mon", "rgw", "mgr", "nfs", "iscsi")
         out = map(str, check_output(['ps', 'aux']).splitlines())
         processes = [p for p in out if any(
             [('ceph-{} '.format(t) in p) for t in types])]
@@ -325,6 +325,16 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("apply_nfs")
     def apply_nfs(self, spec):
+        pass
+
+    @deferred_write("add_iscsi")
+    def add_iscsi(self, spec):
+        # type: (IscsiServiceSpec) -> None
+        pass
+
+    @deferred_write("apply_iscsi")
+    def apply_iscsi(self, spec):
+        # type: (IscsiServiceSpec) -> None
         pass
 
     @deferred_write("add_mds")
