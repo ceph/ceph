@@ -1452,13 +1452,10 @@ int KvFlatBtreeAsync::set_op(const string &key, const bufferlist &val,
 	  case -ESUICIDE:
 	    if (verbose) cout << client_name << " IS SUICIDING!" << std::endl;
 	    return ret;
-	    break;
 	  case 1:
 	    return set_op(key, val, update_on_existing, idata);
-	    break;
 	  case 2:
 	    return err;
-	    break;
 	  }
         }
       } while (err < 0 && err != -EBALANCE && err != -ENOENT);
@@ -1572,10 +1569,8 @@ int KvFlatBtreeAsync::remove_op(const string &key, index_data &idata,
           case -ESUICIDE:
             if (verbose) cout << client_name << " IS SUICIDING!" << std::endl;
             return err;
-            break;
           case 1:
             return remove_op(key, idata, next_idata);
-            break;
           case 2:
             return err;
 	    break;
