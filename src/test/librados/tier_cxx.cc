@@ -4556,6 +4556,72 @@ TEST_F(LibRadosTwoPoolsPP, ManifestTestSnapCreate) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestRedirectAfterPromote) {
+  // skip test if not yet octopus 
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("base chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("BASE CHUNK");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+
+  // set-redirect
+  {
+    ObjectWriteOperation op;
+    op.set_redirect("bar", cache_ioctx, 0);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // promote
+  {
+    ObjectWriteOperation op;
+    op.tier_promote();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // write
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 0));
+  }
+
+  // read and verify the object (redirect)
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('a', bl[0]);
+  }
+
+  // read and verify the object (redirect)
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, cache_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ('B', bl[0]);
+  }
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
