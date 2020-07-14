@@ -261,16 +261,12 @@ private:
       switch (state) {
       case ECBackend::RecoveryOp::IDLE:
 	return "IDLE";
-	break;
       case ECBackend::RecoveryOp::READING:
 	return "READING";
-	break;
       case ECBackend::RecoveryOp::WRITING:
 	return "WRITING";
-	break;
       case ECBackend::RecoveryOp::COMPLETE:
 	return "COMPLETE";
-	break;
       default:
 	ceph_abort();
 	return "";
