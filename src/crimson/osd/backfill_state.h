@@ -13,7 +13,6 @@
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 
-#include "osd/PeeringState.h"
 #include "osd/recovery_types.h"
 
 namespace crimson::osd {
