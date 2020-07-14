@@ -549,7 +549,6 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       py_module_registry->notify_all("fs_map", "");
       handle_fs_map(ref_cast<MFSMap>(m));
       return false; // I shall let this pass through for Client
-      break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
 
