@@ -339,6 +339,7 @@ private:
   get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
     extent_types_t type,  ///< [in] type tag
     paddr_t offset,       ///< [in] starting addr
+    laddr_t laddr,        ///< [in] logical address if logical
     segment_off_t length  ///< [in] length
   );
 };

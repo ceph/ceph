@@ -235,8 +235,7 @@ constexpr extent_version_t EXTENT_VERSION_NULL = 0;
 struct delta_info_t {
   extent_types_t type = extent_types_t::NONE;  ///< delta type
   paddr_t paddr;                               ///< physical address
-  /* logical address -- needed for repopulating cache -- TODO don't actually need */
-  // laddr_t laddr = L_ADDR_NULL;
+  laddr_t laddr = L_ADDR_NULL;                 ///< logical address
   uint32_t prev_crc = 0;
   uint32_t final_crc = 0;
   segment_off_t length = NULL_SEG_OFF;         ///< extent length
@@ -247,7 +246,7 @@ struct delta_info_t {
     DENC_START(1, 1, p);
     denc(v.type, p);
     denc(v.paddr, p);
-    //denc(v.laddr, p);
+    denc(v.laddr, p);
     denc(v.prev_crc, p);
     denc(v.final_crc, p);
     denc(v.length, p);
@@ -260,6 +259,7 @@ struct delta_info_t {
     return (
       type == rhs.type &&
       paddr == rhs.paddr &&
+      laddr == rhs.laddr &&
       prev_crc == rhs.prev_crc &&
       final_crc == rhs.final_crc &&
       length == rhs.length &&

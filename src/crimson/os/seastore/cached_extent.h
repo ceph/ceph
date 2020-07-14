@@ -533,6 +533,7 @@ public:
   void set_pin(LBAPinRef &&npin) {
     assert(!pin);
     pin = std::move(npin);
+    laddr = pin->get_laddr();
   }
 
   bool has_pin() const {
@@ -545,8 +546,12 @@ public:
   }
 
   laddr_t get_laddr() const {
-    assert(pin);
-    return pin->get_laddr();
+    assert(laddr != L_ADDR_NULL);
+    return laddr;
+  }
+
+  void set_laddr(laddr_t nladdr) {
+    laddr = nladdr;
   }
 
   void apply_delta_and_adjust_crc(
@@ -562,6 +567,7 @@ protected:
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
 
 private:
+  laddr_t laddr = L_ADDR_NULL;
   LBAPinRef pin;
 };
 

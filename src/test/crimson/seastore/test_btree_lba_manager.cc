@@ -64,6 +64,7 @@ struct btree_lba_manager_test :
     return journal.submit_record(std::move(*record)).safe_then(
       [this, t=std::move(t)](paddr_t addr) mutable {
 	cache.complete_commit(*t, addr);
+	lba_manager->complete_transaction(*t);
       },
       crimson::ct_error::all_same_way([](auto e) {
 	ceph_assert(0 == "Hit error submitting to journal");

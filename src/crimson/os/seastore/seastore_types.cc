@@ -78,6 +78,7 @@ std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs)
   return lhs << "delta_info_t("
 	     << "type: " << rhs.type
 	     << ", paddr: " << rhs.paddr
+	     << ", laddr: " << rhs.laddr
 	     << ", prev_crc: " << rhs.prev_crc
 	     << ", final_crc: " << rhs.final_crc
 	     << ", length: " << rhs.length

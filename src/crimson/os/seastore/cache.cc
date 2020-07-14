@@ -131,6 +131,9 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       delta_info_t{
 	i->get_type(),
 	i->get_paddr(),
+	(i->is_logical()
+	? i->cast<LogicalCachedExtent>()->get_laddr()
+	: L_ADDR_NULL),
 	i->last_committed_crc,
 	final_crc,
 	(segment_off_t)i->get_length(),
@@ -145,6 +148,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       delta_info_t{
 	extent_types_t::ROOT,
 	paddr_t{},
+	L_ADDR_NULL,
 	0,
 	0,
 	0,
@@ -243,6 +247,7 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
     return get_extent_by_type(
       delta.type,
       delta.paddr,
+      delta.laddr,
       delta.length).safe_then([this, record_base, delta](auto extent) {
 	logger().debug(
 	  "replay_delta: replaying {} on {}",
@@ -280,45 +285,54 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
 Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
+  laddr_t laddr,
   segment_off_t length)
 {
-  switch (type) {
-  case extent_types_t::ROOT:
-    assert(0 == "ROOT is never directly read");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  case extent_types_t::LADDR_INTERNAL:
-    return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::LADDR_LEAF:
-    return get_extent<lba_manager::btree::LBALeafNode>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::ONODE_BLOCK:
-    return get_extent<OnodeBlock>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::TEST_BLOCK:
-    return get_extent<TestBlock>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::TEST_BLOCK_PHYSICAL:
-    return get_extent<TestBlockPhysical>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
-  case extent_types_t::NONE: {
-    ceph_assert(0 == "NONE is an invalid extent type");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  }
-  default:
-    ceph_assert(0 == "impossible");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  }
+  return [=] {
+    switch (type) {
+    case extent_types_t::ROOT:
+      assert(0 == "ROOT is never directly read");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    case extent_types_t::LADDR_INTERNAL:
+      return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::LADDR_LEAF:
+      return get_extent<lba_manager::btree::LBALeafNode>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::ONODE_BLOCK:
+      return get_extent<OnodeBlock>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::TEST_BLOCK:
+      return get_extent<TestBlock>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::TEST_BLOCK_PHYSICAL:
+      return get_extent<TestBlockPhysical>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::NONE: {
+      ceph_assert(0 == "NONE is an invalid extent type");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    }
+    default:
+      ceph_assert(0 == "impossible");
+      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    }
+  }().safe_then([laddr](CachedExtentRef e) {
+    assert(e->is_logical() == (laddr != L_ADDR_NULL));
+    if (e->is_logical()) {
+      e->cast<LogicalCachedExtent>()->set_laddr(laddr);
+    }
+    return get_extent_ertr::make_ready_future<CachedExtentRef>(e);
+  });
 }
 
 }
