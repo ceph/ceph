@@ -3605,7 +3605,7 @@ MDSlaveUpdate* MDCache::get_uncommitted_slave(metareqid_t reqid, mds_rank_t mast
 }
 
 void MDCache::finish_rollback(metareqid_t reqid, MDRequestRef& mdr) {
-  auto p = resolve_need_rollback.find(mdr->reqid);
+  auto p = resolve_need_rollback.find(reqid);
   ceph_assert(p != resolve_need_rollback.end());
   if (mds->is_resolve()) {
     finish_uncommitted_slave(reqid, false);
