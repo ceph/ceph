@@ -162,24 +162,57 @@ with codecs.open(git_dir + "/.githubmap", encoding='utf-8') as f:
 BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
-def get_credits(pr, pr_req):
-    comments = requests.get("https://api.github.com/repos/{project}/{repo}/issues/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-    if comments.status_code != 200:
-        log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
-        sys.exit(1)
+def get(session, url, params=None, paging=True):
+    if params is None:
+        params = {}
+    params['per_page'] = 100
 
-    reviews = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/reviews".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-    if reviews.status_code != 200:
-        log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
+    log.debug(f"Fetching {url}")
+    response = session.get(url, auth=(USER, PASSWORD), params=params)
+    log.debug(f"Response = {response}; links = {response.headers.get('link', '')}")
+    if response.status_code != 200:
+        log.error(f"Failed to fetch {url}: {response}")
         sys.exit(1)
+    j = response.json()
+    yield j
+    if paging:
+        link = response.headers.get('link', None)
+        page = 2
+        while link is not None and 'next' in link:
+            log.debug(f"Fetching {url}")
+            new_params = dict(params)
+            new_params.update({'page': page})
+            response = session.get(url, auth=(USER, PASSWORD), params=new_params)
+            log.debug(f"Response = {response}; links = {response.headers.get('link', '')}")
+            if response.status_code != 200:
+                log.error(f"Failed to fetch {url}: {response}")
+                sys.exit(1)
+            yield response.json()
+            link = response.headers.get('link', None)
+            page += 1
 
-    review_comments = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-    if review_comments.status_code != 200:
-        log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
-        sys.exit(1)
+def get_credits(session, pr, pr_req):
+    comments = [pr_req]
+
+    log.debug(f"Getting comments for #{pr}")
+    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+    for c in get(session, endpoint):
+        comments.extend(c)
+
+    log.debug(f"Getting reviews for #{pr}")
+    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/reviews"
+    reviews = []
+    for c in get(session, endpoint):
+        comments.extend(c)
+        reviews.extend(c)
+
+    log.debug(f"Getting review comments for #{pr}")
+    endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}/comments"
+    for c in get(session, endpoint):
+        comments.extend(c)
 
     credits = set()
-    for comment in [pr_req.json()]+comments.json()+reviews.json()+review_comments.json():
+    for comment in comments:
         body = comment["body"]
         if body:
             url = comment["html_url"]
@@ -192,7 +225,7 @@ def get_credits(pr, pr_req):
                     credits.add(cap)
 
     new_new_contributors = {}
-    for review in reviews.json():
+    for review in reviews:
         if review["state"] == "APPROVED":
             user = review["user"]["login"]
             try:
@@ -222,17 +255,17 @@ def build_branch(args):
     if merge_branch_name is False:
         merge_branch_name = branch
 
+    session = requests.Session()
+
     if label:
-        #Check the label format
+        # Check the label format
         if re.search(r'\bwip-(.*?)-testing\b', label) is None:
             log.error("Unknown Label '{lblname}'. Label Format: wip-<name>-testing".format(lblname=label))
             sys.exit(1)
 
-        #Check if the Label exist in the repo
-        res = requests.get("https://api.github.com/repos/{project}/{repo}/labels/{lblname}".format(lblname=label, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-        if res.status_code != 200:
-            log.error("Label '{lblname}' not found in the repo".format(lblname=label))
-            sys.exit(1)
+        # Check if the Label exist in the repo
+        endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/labels/{label}"
+        get(session, endpoint, paging=False)
 
     G = git.Repo(args.git)
 
@@ -246,11 +279,10 @@ def build_branch(args):
             log.error("--pr-label must have a non-space value")
             sys.exit(1)
         payload = {'labels': args.pr_label, 'sort': 'created', 'direction': 'desc'}
-        labeled_prs = requests.get("https://api.github.com/repos/{project}/{repo}/issues".format(project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD), params=payload)
-        if labeled_prs.status_code != 200:
-            log.error("Failed to load labeled PRs: {}".format(labeled_prs))
-            sys.exit(1)
-        labeled_prs = labeled_prs.json()
+        endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues"
+        labeled_prs = []
+        for l in get(session, endpoint, params=payload):
+            labeled_prs.extend(l)
         if len(labeled_prs) == 0:
             log.error("Search for PRs matching label '{}' returned no results!".format(args.pr_label))
             sys.exit(1)
@@ -286,10 +318,8 @@ def build_branch(args):
             sys.exit(1)
         tip = fi[0].ref.commit
 
-        pr_req = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}".format(pr=pr), auth=(USER, PASSWORD))
-        if pr_req.status_code != 200:
-            log.error("PR '{pr}' not found: {c}".format(pr=pr,c=pr_req))
-            sys.exit(1)
+        endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}"
+        response = next(get(session, endpoint, paging=False))
 
         message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, merge_branch_name, remote_ref)
 
@@ -304,7 +334,7 @@ def build_branch(args):
 
         message = message + "\n"
         if args.credits:
-            (addendum, new_contributors) = get_credits(pr, pr_req)
+            (addendum, new_contributors) = get_credits(session, pr, response)
             message += addendum
         else:
             new_contributors = []
@@ -321,7 +351,7 @@ def build_branch(args):
             G.git.commit("--amend", "--no-edit")
 
         if label:
-            req = requests.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
+            req = session.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
             if req.status_code != 200:
                 log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
                 sys.exit(1)
