@@ -174,6 +174,13 @@ The output format is json and contains fields as follows.
 * path: absolute path of a subvolume
 * type: subvolume type indicating whether it's clone or subvolume
 * pool_namespace: RADOS namespace of the subvolume
+* features: features supported by the subvolume
+
+The subvolume "features" are based on the internal version of the subvolume and is a list containing
+a subset of the following features,
+
+* "snapshot-clone": supports cloning using a subvolumes snapshot as the source
+* "snapshot-autoprotect": supports automatically protecting snapshots, that are active clone sources, from deletion
 
 List subvolumes using::
 
@@ -204,7 +211,6 @@ The output format is json and contains fields as follows.
 * created_at: time of creation of snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
 * data_pool: data pool the snapshot belongs to
 * has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
-* protected: "yes" if snapshot is protected otherwise "no"
 * size: snapshot size in bytes
 
 Cloning Snapshots
@@ -214,10 +220,19 @@ Subvolumes can be created by cloning subvolume snapshots. Cloning is an asynchro
 data from a snapshot to a subvolume. Due to this bulk copy nature, cloning is currently inefficient for very huge
 data sets.
 
-Before starting a clone operation, the snapshot should be protected. Protecting a snapshot ensures that the snapshot
-cannot be deleted when a clone operation is in progress. Snapshots can be protected using::
+.. note:: Removing a snapshot (source subvolume) would fail if there are pending or in progress clone operations.
 
+Protecting snapshots prior to cloning was a pre-requisite in the Nautilus release, and the commands to protect/unprotect
+snapshots were introduced for this purpose. This pre-requisite, and hence the commands to protect/unprotect, is being
+deprecated in mainline CephFS, and may be removed from a future release.
+
+The commands being deprecated are:
   $ ceph fs subvolume snapshot protect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+  $ ceph fs subvolume snapshot unprotect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+.. note:: Using the above commands would not result in an error, but they serve no useful function.
+
+.. note:: Use subvolume info command to fetch subvolume metadata regarding supported "features" to help decide if protect/unprotect of snapshots is required, based on the "snapshot-autoprotect" feature availability.
 
 To initiate a clone operation use::
 
@@ -243,12 +258,11 @@ A clone can be in one of the following states:
 
 #. `pending`     : Clone operation has not started
 #. `in-progress` : Clone operation is in progress
-#. `complete`    : Clone operation has sucessfully finished
+#. `complete`    : Clone operation has successfully finished
 #. `failed`      : Clone operation has failed
 
 Sample output from an `in-progress` clone operation::
 
-  $ ceph fs subvolume snapshot protect cephfs subvol1 snap1
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
   $ ceph fs clone status cephfs clone1
   {
@@ -266,7 +280,7 @@ Sample output from an `in-progress` clone operation::
 
 .. note:: Cloned subvolumes are accessible only after the clone operation has successfully completed.
 
-For a successsful clone operation, `clone status` would look like so::
+For a successful clone operation, `clone status` would look like so::
 
   $ ceph fs clone status cephfs clone1
   {
@@ -282,14 +296,6 @@ To delete a partial clone use::
 
   $ ceph fs subvolume rm <vol_name> <clone_name> [--group_name <group_name>] --force
 
-When no clone operations are in progress or scheduled, the snaphot can be unprotected. To unprotect a snapshot use::
-
-  $ ceph fs subvolume snapshot unprotect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
-
-Note that unprotecting a snapshot would fail if there are pending or in progress clone operations. Also note that,
-only unprotected snapshots can be removed. This guarantees that a snapshot cannot be deleted when clones are pending
-(or in progress).
-
 .. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, inode timestamps (access and
           modification times) are synchronized upto seconds granularity.
 
@@ -299,7 +305,6 @@ An `in-progress` or a `pending` clone operation can be canceled. To cancel a clo
 
 On successful cancelation, the cloned subvolume is moved to `canceled` state::
 
-  $ ceph fs subvolume snapshot protect cephfs subvol1 snap1
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
   $ ceph fs clone cancel cephfs clone1
   $ ceph fs clone status cephfs clone1
