@@ -554,21 +554,10 @@ void DaemonServer::update_task_status(
 {
   dout(10) << "got task status from " << key << dendl;
 
-  bool service_map_dirty = false;
-  if (task_status.empty()) {
-    auto removed = pending_service_map.rm_daemon(key.type, key.name);
-    if (removed) {
-      service_map_dirty = true;
-    }
-  } else {
-    auto p = pending_service_map.get_daemon(key.type, key.name);
-    if (!map_compare(p.first->task_status, task_status)) {
-      service_map_dirty = true;
-      p.first->task_status = task_status;
-    }
-  }
-
-  if (service_map_dirty) {
+  [[maybe_unused]] auto [daemon, added] =
+    pending_service_map.get_daemon(key.type, key.name);
+  if (daemon->task_status != task_status) {
+    daemon->task_status = task_status;
     pending_service_map_dirty = pending_service_map.epoch;
   }
 }
