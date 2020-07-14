@@ -1558,6 +1558,10 @@ void RADOS::enable_application(std::string_view pool, std::string_view app_name,
   }
 }
 
+void RADOS::wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c) {
+  impl->objecter->wait_for_latest_osdmap(std::move(c));
+}
+
 void RADOS::mon_command(std::vector<std::string> command,
 			const cb::list& bl,
 			std::string* outs, cb::list* outbl,

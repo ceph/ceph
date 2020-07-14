@@ -941,6 +941,15 @@ public:
 					    std::move(init.completion_handler)));
     return init.result.get();
   }
+
+  template<typename CompletionToken>
+  auto wait_for_latest_osd_map(CompletionToken&& token) {
+    boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
+    wait_for_latest_osd_map(
+      SimpleOpComp::create(get_executor(), std::move(init.completion_handler)));
+    return init.result.get();
+  }
+
   uint64_t instance_id() const;
 
 private:
@@ -1073,6 +1082,7 @@ private:
   void enable_application(std::string_view pool, std::string_view app_name,
 			  bool force, std::unique_ptr<SimpleOpComp> c);
 
+  void wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c);
 
   // Proxy object to provide access to low-level RADOS messaging clients
   std::unique_ptr<detail::Client> impl;
