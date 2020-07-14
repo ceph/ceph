@@ -2299,12 +2299,13 @@ def command_pull():
 
 
 def _pull_image(image):
-    # type: () -> None
+    # type: (str) -> None
     logger.info('Pulling container image %s...' % image)
 
     ignorelist = [
         "error creating read-write layer with ID",
         "net/http: TLS handshake timeout",
+        "Digest did not match, expected",
     ]
 
     cmd = [container_path, 'pull', image]
