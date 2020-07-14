@@ -748,7 +748,8 @@ void SessionMap::replay_advance_version()
 
 void SessionMap::replay_open_sessions(version_t event_cmapv,
 			    map<client_t,entity_inst_t>& client_map,
-			    map<client_t,client_metadata_t>& client_metadata_map)
+			    map<client_t,client_metadata_t>& client_metadata_map, 
+			    bool client_not_open)
 {
   unsigned already_saved;
 
@@ -773,6 +774,9 @@ void SessionMap::replay_open_sessions(version_t event_cmapv,
       continue;
     }
 
+    if (client_not_open) {
+      s->set_client_not_open(true);
+    }
     set_state(s, Session::STATE_OPEN);
     replay_dirty_session(s);
   }

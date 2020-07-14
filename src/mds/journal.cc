@@ -1788,6 +1788,7 @@ void ESession::replay(MDSRank *mds)
       session = mds->sessionmap.get_or_add_session(client_inst);
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
       session->set_client_metadata(client_metadata);
+      session->set_client_not_open(false);
       dout(10) << " opened session " << session->info.inst << dendl;
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
@@ -3079,7 +3080,7 @@ void EImportStart::replay(MDSRank *mds)
     decode(cm, blp);
     if (!blp.end())
       decode(cmm, blp);
-    mds->sessionmap.replay_open_sessions(cmapv, cm, cmm);
+    mds->sessionmap.replay_open_sessions(cmapv, cm, cmm, true);
   }
   update_segment();
 }
