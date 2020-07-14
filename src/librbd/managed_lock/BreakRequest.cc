@@ -4,9 +4,11 @@
 #include "librbd/managed_lock/BreakRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/stringify.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
@@ -48,13 +50,13 @@ struct C_BlacklistClient : public Context {
 
 template <typename I>
 BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx,
-                              asio::ContextWQ *work_queue,
+                              AsioEngine& asio_engine,
                               const std::string& oid, const Locker &locker,
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
-    m_work_queue(work_queue), m_oid(oid), m_locker(locker),
+    m_asio_engine(asio_engine), m_oid(oid), m_locker(locker),
     m_exclusive(exclusive), m_blacklist_locker(blacklist_locker),
     m_blacklist_expire_seconds(blacklist_expire_seconds),
     m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
@@ -175,9 +177,9 @@ void BreakRequest<I>::send_blacklist() {
   using klass = BreakRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_blacklist>(
     this);
-  m_work_queue->queue(new C_BlacklistClient(m_ioctx, m_locker.address,
-                                            m_blacklist_expire_seconds, ctx),
-                      0);
+  m_asio_engine.get_work_queue()->queue(
+    new C_BlacklistClient(m_ioctx, m_locker.address,
+                          m_blacklist_expire_seconds, ctx), 0);
 }
 
 template <typename I>

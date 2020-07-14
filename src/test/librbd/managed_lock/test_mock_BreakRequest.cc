@@ -147,7 +147,7 @@ TEST_F(TestMockManagedLockBreakRequest, DeadLockOwner) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -176,7 +176,7 @@ TEST_F(TestMockManagedLockBreakRequest, ForceBreak) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, true, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -197,7 +197,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetWatchersError) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -218,7 +218,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetWatchersAlive) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EAGAIN, ctx.wait());
@@ -244,7 +244,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetLockerUpdated) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, false, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EAGAIN, ctx.wait());
@@ -270,7 +270,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetLockerBusy) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, false, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EAGAIN, ctx.wait());
@@ -296,7 +296,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetLockerMissing) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, false, 0, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -320,7 +320,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetLockerError) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, false, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -348,7 +348,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistDisabled) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, false, 0, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -376,7 +376,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistSelf) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(456), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -404,7 +404,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistError) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -433,7 +433,7 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockMissing) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -462,7 +462,7 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockError) {
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
   MockBreakRequest *req = MockBreakRequest::create(
-      mock_image_ctx.md_ctx, ictx->op_work_queue, mock_image_ctx.header_oid,
+      mock_image_ctx.md_ctx, *ictx->asio_engine, mock_image_ctx.header_oid,
       locker, true, true, 0, false, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());

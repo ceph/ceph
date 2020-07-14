@@ -23,10 +23,8 @@ namespace mirror {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class Threads {
-private:
-  librbd::AsioEngine* asio_engine = nullptr;
-
 public:
+  librbd::AsioEngine* asio_engine = nullptr;
   librbd::asio::ContextWQ* work_queue = nullptr;
 
   SafeTimer *timer = nullptr;

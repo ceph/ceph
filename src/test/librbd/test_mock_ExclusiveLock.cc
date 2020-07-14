@@ -40,7 +40,7 @@ struct Traits<MockExclusiveLockImageCtx> {
 
 template <>
 struct ManagedLock<MockExclusiveLockImageCtx> {
-  ManagedLock(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
+  ManagedLock(librados::IoCtx& ioctx, AsioEngine& asio_engine,
               const std::string& oid, librbd::MockImageWatcher *watcher,
               managed_lock::Mode  mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds)
