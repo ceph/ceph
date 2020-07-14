@@ -242,4 +242,4 @@ Guidance for use of cluster log
 -------------------------------
 
 If your patches emit messages to the Ceph cluster log, please consult
-this guidance: :doc:`/dev/logging`.
+this: :doc:`/dev/logging`.
