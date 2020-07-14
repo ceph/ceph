@@ -10,6 +10,8 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 
+#include "test/crimson/seastore/test_block.h"
+
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
@@ -116,10 +118,12 @@ struct btree_lba_manager_test :
   };
 
   auto create_transaction() {
-    return test_transaction_t{
+    auto t = test_transaction_t{
       lba_manager->create_transaction(),
       test_lba_mappings
     };
+    cache.alloc_new_extent<TestBlock>(*t.t, TestBlock::SIZE);
+    return t;
   }
 
   void submit_test_transaction(test_transaction_t t) {
