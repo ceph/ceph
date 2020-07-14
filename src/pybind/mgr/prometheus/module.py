@@ -793,8 +793,8 @@ class Module(MgrModule):
         pools_refreshed = False
         if pools:
             next_refresh = self.rbd_stats['pools_refresh_time'] + \
-                self.get_localized_module_option(
-                'rbd_stats_pools_refresh_interval', 300)
+                float(self.get_localized_module_option(
+                'rbd_stats_pools_refresh_interval', 300))
             if rbd_stats_pools != pools or time.time() >= next_refresh:
                 self.refresh_rbd_stats_pools(pools)
                 pools_refreshed = True
