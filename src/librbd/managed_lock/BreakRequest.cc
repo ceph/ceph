@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/asio/Utils.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -24,29 +25,6 @@ namespace managed_lock {
 
 using util::create_context_callback;
 using util::create_rados_callback;
-
-namespace {
-
-struct C_BlacklistClient : public Context {
-  librados::IoCtx &ioctx;
-  std::string locker_address;
-  uint32_t expire_seconds;
-  Context *on_finish;
-
-  C_BlacklistClient(librados::IoCtx &ioctx, const std::string &locker_address,
-                    uint32_t expire_seconds, Context *on_finish)
-    : ioctx(ioctx), locker_address(locker_address),
-      expire_seconds(expire_seconds), on_finish(on_finish) {
-  }
-
-  void finish(int r) override {
-    librados::Rados rados(ioctx);
-    r = rados.blacklist_add(locker_address, expire_seconds);
-    on_finish->complete(r);
-  }
-};
-
-} // anonymous namespace
 
 template <typename I>
 BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx,
@@ -173,13 +151,29 @@ void BreakRequest<I>::send_blacklist() {
     return;
   }
 
-  // TODO: need async version of RadosClient::blacklist_add
-  using klass = BreakRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_blacklist>(
-    this);
-  m_asio_engine.get_work_queue()->queue(
-    new C_BlacklistClient(m_ioctx, m_locker.address,
-                          m_blacklist_expire_seconds, ctx), 0);
+  entity_addr_t locker_addr;
+  if (!locker_addr.parse(m_locker.address.c_str(), 0)) {
+    lderr(m_cct) << "unable to parse locker address: " << m_locker.address
+                 << dendl;
+    finish(-EINVAL);
+    return;
+  }
+
+  std::stringstream cmd;
+  cmd << "{"
+      << "\"prefix\": \"osd blacklist\", "
+      << "\"blacklistop\": \"add\", "
+      << "\"addr\": \"" << locker_addr << "\"";
+  if (m_blacklist_expire_seconds != 0) {
+    cmd << ", \"expire\": " << m_blacklist_expire_seconds << ".0";
+  }
+  cmd << "}";
+
+  bufferlist in_bl;
+  m_asio_engine.get_rados_api().mon_command(
+    {cmd.str()}, in_bl, nullptr, nullptr,
+    librbd::asio::util::get_callback_adapter(
+      [this](int r) { handle_blacklist(r); }));
 }
 
 template <typename I>
@@ -192,6 +186,30 @@ void BreakRequest<I>::handle_blacklist(int r) {
     finish(r);
     return;
   }
+
+  wait_for_osd_map();
+}
+
+template <typename I>
+void BreakRequest<I>::wait_for_osd_map() {
+  ldout(m_cct, 10) << dendl;
+
+  m_asio_engine.get_rados_api().wait_for_latest_osd_map(
+    librbd::asio::util::get_callback_adapter(
+      [this](int r) { handle_wait_for_osd_map(r); }));
+}
+
+template <typename I>
+void BreakRequest<I>::handle_wait_for_osd_map(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to wait for updated OSD map: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
   send_break_lock();
 }
 
