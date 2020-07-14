@@ -19,6 +19,7 @@ class obj_watch_t;
 
 namespace librbd {
 
+class AsioEngine;
 class ImageCtx;
 template <typename> class Journal;
 namespace asio { struct ContextWQ; }
@@ -29,12 +30,12 @@ template <typename ImageCtxT = ImageCtx>
 class BreakRequest {
 public:
   static BreakRequest* create(librados::IoCtx& ioctx,
-                              asio::ContextWQ *work_queue,
+                              AsioEngine& asio_engine,
                               const std::string& oid, const Locker &locker,
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
-    return new BreakRequest(ioctx, work_queue, oid, locker, exclusive,
+    return new BreakRequest(ioctx, asio_engine, oid, locker, exclusive,
                             blacklist_locker, blacklist_expire_seconds,
                             force_break_lock, on_finish);
   }
@@ -67,7 +68,7 @@ private:
 
   librados::IoCtx &m_ioctx;
   CephContext *m_cct;
-  asio::ContextWQ *m_work_queue;
+  AsioEngine& m_asio_engine;
   std::string m_oid;
   Locker m_locker;
   bool m_exclusive;
@@ -83,7 +84,7 @@ private:
 
   Locker m_refreshed_locker;
 
-  BreakRequest(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
+  BreakRequest(librados::IoCtx& ioctx, AsioEngine& asio_engine,
                const std::string& oid, const Locker &locker,
                bool exclusive, bool blacklist_locker,
                uint32_t blacklist_expire_seconds, bool force_break_lock,

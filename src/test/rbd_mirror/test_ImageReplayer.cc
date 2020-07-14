@@ -176,7 +176,7 @@ public:
         cct, "rbd_mirror_concurrent_image_syncs"));
 
     m_instance_watcher = InstanceWatcher<>::create(
-        m_local_ioctx, m_threads->work_queue, nullptr,
+        m_local_ioctx, *m_threads->asio_engine, nullptr,
         m_image_sync_throttler.get());
     m_instance_watcher->handle_acquire_leader();
 
