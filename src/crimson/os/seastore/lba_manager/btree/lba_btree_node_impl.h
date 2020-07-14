@@ -63,36 +63,32 @@ struct LBAInternalNode
   }
 
   lookup_range_ret lookup_range(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t addr,
     extent_len_t len) final;
 
   insert_ret insert(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     lba_map_val_t val) final;
 
   mutate_mapping_ret mutate_mapping(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) final;
 
   find_hole_ret find_hole(
-    Cache &cache,
-    Transaction &t,
+    op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
-  make_split_children(Cache &cache, Transaction &t) final {
-    auto left = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
-    auto right = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
+  make_split_children(op_context_t c) final {
+    auto left = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto right = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
     return std::make_tuple(
       left,
       right,
@@ -100,24 +96,25 @@ struct LBAInternalNode
   }
 
   LBANodeRef make_full_merge(
-    Cache &cache, Transaction &t, LBANodeRef &right) final {
-    auto replacement = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
+    op_context_t c,
+    LBANodeRef &right) final {
+    auto replacement = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
     replacement->merge_from(*this, *right->cast<LBAInternalNode>());
     return replacement;
   }
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_balanced(
-    Cache &cache, Transaction &t,
+    op_context_t c,
     LBANodeRef &_right,
     bool prefer_left) final {
     ceph_assert(_right->get_type() == type);
     auto &right = *_right->cast<LBAInternalNode>();
-    auto replacement_left = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
-    auto replacement_right = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
+    auto replacement_left = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto replacement_right = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
 
     return std::make_tuple(
       replacement_left,
@@ -215,7 +212,8 @@ struct LBAInternalNode
     >;
   using split_ret = split_ertr::future<LBANodeRef>;
   split_ret split_entry(
-    Cache &c, Transaction &t, laddr_t addr,
+    op_context_t c,
+    laddr_t addr,
     internal_iterator_t,
     LBANodeRef entry);
 
@@ -224,7 +222,8 @@ struct LBAInternalNode
     >;
   using merge_ret = merge_ertr::future<LBANodeRef>;
   merge_ret merge_entry(
-    Cache &c, Transaction &t, laddr_t addr,
+    op_context_t c,
+    laddr_t addr,
     internal_iterator_t,
     LBANodeRef entry);
 
@@ -297,36 +296,32 @@ struct LBALeafNode
   }
 
   lookup_range_ret lookup_range(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t addr,
     extent_len_t len) final;
 
   insert_ret insert(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     lba_map_val_t val) final;
 
   mutate_mapping_ret mutate_mapping(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) final;
 
   find_hole_ret find_hole(
-    Cache &cache,
-    Transaction &t,
+    op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
-  make_split_children(Cache &cache, Transaction &t) final {
-    auto left = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
-    auto right = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
+  make_split_children(op_context_t c) final {
+    auto left = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto right = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
     return std::make_tuple(
       left,
       right,
@@ -334,24 +329,25 @@ struct LBALeafNode
   }
 
   LBANodeRef make_full_merge(
-    Cache &cache, Transaction &t, LBANodeRef &right) final {
-    auto replacement = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
+    op_context_t c,
+    LBANodeRef &right) final {
+    auto replacement = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
     replacement->merge_from(*this, *right->cast<LBALeafNode>());
     return replacement;
   }
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_balanced(
-    Cache &cache, Transaction &t,
+    op_context_t c,
     LBANodeRef &_right,
     bool prefer_left) final {
     ceph_assert(_right->get_type() == type);
     auto &right = *_right->cast<LBALeafNode>();
-    auto replacement_left = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
-    auto replacement_right = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
+    auto replacement_left = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto replacement_right = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
     return std::make_tuple(
       replacement_left,
       replacement_right,

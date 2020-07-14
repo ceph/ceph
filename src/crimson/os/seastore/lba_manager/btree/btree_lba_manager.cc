@@ -47,8 +47,7 @@ BtreeLBAManager::get_root(Transaction &t)
       paddr_t{croot->get_lba_root().lba_root_addr},
       unsigned(croot->get_lba_root().lba_depth));
     return get_lba_btree_extent(
-      cache,
-      t,
+      get_context(t),
       croot->get_lba_root().lba_depth,
       croot->get_lba_root().lba_root_addr,
       paddr_t());
@@ -64,7 +63,8 @@ BtreeLBAManager::get_mapping(
   return get_root(
     t).safe_then([this, &t, offset, length](auto extent) {
       return extent->lookup_range(
-	cache, t, offset, length);
+	get_context(t),
+	offset, length);
     }).safe_then([](auto &&e) {
       logger().debug("BtreeLBAManager::get_mapping: got mapping {}", e);
       return get_mapping_ret(
@@ -110,8 +110,7 @@ BtreeLBAManager::alloc_extent(
 	"BtreeLBAManager::alloc_extent: beginning search at {}",
 	*extent);
       return extent->find_hole(
-	cache,
-	t,
+	get_context(t),
 	hint,
 	L_ADDR_MAX,
 	len).safe_then([extent](auto ret) {
@@ -199,11 +198,15 @@ BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
 	  nullptr);
 	croot->get_lba_root().lba_root_addr = nroot->get_paddr();
 	croot->get_lba_root().lba_depth = root->depth + 1;
-	return nroot->split_entry(cache, t, laddr, nroot->begin(), root);
+	return nroot->split_entry(
+	  get_context(t),
+	  laddr, nroot->begin(), root);
       });
   }
   return split.safe_then([this, &t, laddr, val](LBANodeRef node) {
-    return node->insert(cache, t, laddr, val);
+    return node->insert(
+      get_context(t),
+      laddr, val);
   });
 }
 
@@ -240,8 +243,7 @@ BtreeLBAManager::update_mapping_ret BtreeLBAManager::update_mapping(
   return get_root(t
   ).safe_then([this, f=std::move(f), &t, addr](LBANodeRef root) mutable {
     return root->mutate_mapping(
-      cache,
-      t,
+      get_context(t),
       addr,
       std::move(f));
   });

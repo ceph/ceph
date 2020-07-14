@@ -92,6 +92,10 @@ private:
   SegmentManager &segment_manager;
   Cache &cache;
 
+  op_context_t get_context(Transaction &t) {
+    return op_context_t{cache, t};
+  }
+
   /**
    * get_root
    *
