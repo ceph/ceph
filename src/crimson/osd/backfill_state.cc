@@ -6,8 +6,6 @@
 
 #include "crimson/osd/backfill_state.h"
 #include "crimson/osd/backfill_facades.h"
-#include "crimson/osd/pg.h"
-#include "osd/PeeringState.h"
 
 namespace {
   seastar::logger& logger() {
