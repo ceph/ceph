@@ -6557,7 +6557,7 @@ next:
       do {
         entries.clear();
         ret = store->getRados()->bi_list(bs, object, marker, max_entries, &entries, &is_truncated);
-        if (ret < 0) {
+        if (ret < 0) {            
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
