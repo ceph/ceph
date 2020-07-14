@@ -28,9 +28,11 @@ class RGWSI_Zone;
 class RGWSI_Account;
 class RGWSI_MetaBackend_Handler;
 
+static constexpr uint32_t DEFAULT_QUOTA_LIMIT = 1000;
+
 struct AccountQuota {
-  uint32_t max_users {1000};
-  uint32_t max_roles {1000};
+  uint32_t max_users {DEFAULT_QUOTA_LIMIT};
+  uint32_t max_roles {DEFAULT_QUOTA_LIMIT};
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);
