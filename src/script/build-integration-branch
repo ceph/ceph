@@ -24,7 +24,7 @@ from __future__ import print_function
 import json
 import os
 import requests
-from subprocess import call
+from subprocess import call, check_output
 import sys
 import time
 try:
@@ -34,6 +34,11 @@ except:
 
 TIME_FORMAT = '%Y-%m-%d-%H%M'
 postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
+
+current_branch = check_output('git rev-parse --abbrev-ref HEAD', shell=True).strip().decode()
+if current_branch in 'mimic nautilus octopus pacific'.split():
+  postfix += '-' + current_branch
+  print(f"Adding current branch name '-{current_branch}' as a postfix")
 
 repo = "ceph/ceph"
 
