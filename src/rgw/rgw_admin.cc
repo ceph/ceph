@@ -7075,13 +7075,13 @@ next:
   if (opt_cmd == OPT::BUCKET_RECALC_STATS) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     if (!yes_i_really_mean_it) {
-      cerr << "This command will update bucket stats and object stats" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return 1;
+      cerr << "This command will update bucket stats and object stats." << std::endl;
+      cerr << "Do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
     }
 
     rgw_bucket bucket;
@@ -7121,8 +7121,8 @@ next:
       RGWRados::BucketShard bs(store->getRados());
       int ret = bs.init(bucket, i, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
       if (ret < 0) {
-	cerr << "bs.init() returned ret=" << ret << std::endl;
-	return ret;
+	cerr << "ERROR: BucketShard::init(): " << cpp_strerror(-ret) << std::endl;
+	return -ret;
       }
       bool is_truncated = true;
       marker.clear();
@@ -7130,7 +7130,7 @@ next:
 	entries.clear();
 	ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
 	if (ret < 0 && ret != -ENOENT) {
-	  derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+	  cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
@@ -7152,20 +7152,22 @@ next:
 	    auto bi_iter = entry.data.cbegin();
 	    decode(dir_entry, bi_iter);
 	    if (dir_entry.meta.accounted_size == 0 && dir_entry.meta.size != 0) {
-	      rgw_obj obj(bucket,dir_entry.key.name);
+	      rgw_obj obj(bucket, dir_entry.key.name);
 	      obj.key.set_instance(dir_entry.key.instance);
 	      cout << "Fixing entry accounted_size for " << dir_entry.key << std::endl;
 	      dir_entry.meta.accounted_size = dir_entry.meta.size;
 	      bufferlist bl;
 	      ::encode(dir_entry, bl);
 	      entry.data = bl;
-	      encode_json("entry", entry, formatter);
-	      formatter->flush(cout);
+	      if (verbose) {
+		encode_json("entry", entry, formatter);
+		formatter->flush(cout);
+	      }
 	      store->getRados()->bi_put(op, bs, entry);
 	      ret = bs.bucket_obj.operate(&op, null_yield);
-	      if (ret != 0) {
-		cerr << " Error in bi_put operate " << ret << std::endl;
-		return ret;
+	      if (ret < 0) {
+		cerr << "ERROR: bi_put operate " << cpp_strerror(-ret) << std::endl;
+		return -ret;
 	      }
 	    }
 	  }
@@ -7191,12 +7193,13 @@ next:
 	}
       }
 
-      cout << "updating stats " << std::endl;
+      cout << "updating stats" << std::endl;
       librados::ObjectWriteOperation op;
       cls_rgw_bucket_update_stats(op, true, stats);
       ret = bs.bucket_obj.operate(&op, null_yield);
-      if (ret != 0) {
-	return ret;
+      if (ret < 0) {
+	cerr << "ERROR: could not update bucket stats: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
       }
     }
   }
