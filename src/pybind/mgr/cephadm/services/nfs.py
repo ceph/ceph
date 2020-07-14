@@ -66,7 +66,7 @@ class NFSService(CephadmService):
 
         return cephadm_config, deps
 
-    def config(self, spec):
+    def config(self, spec: NFSServiceSpec) -> None:
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))

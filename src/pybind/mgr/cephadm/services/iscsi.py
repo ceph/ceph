@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class IscsiService(CephadmService):
     TYPE = 'iscsi'
 
-    def config(self, spec: IscsiServiceSpec):
+    def config(self, spec: IscsiServiceSpec) -> None:
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
         logger.info('Saving service %s spec with placement %s' % (
