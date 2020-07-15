@@ -117,6 +117,19 @@ public:
   virtual complete_transaction_ret complete_transaction(
     Transaction &t) = 0;
 
+  /**
+   * Should be called after replay on each cached extent.
+   * Implementation must initialize the LBAPin on any
+   * LogicalCachedExtent's and may also read in any dependent
+   * structures, etc.
+   */
+  using init_cached_extent_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using init_cached_extent_ret = init_cached_extent_ertr::future<>;
+  virtual init_cached_extent_ret init_cached_extent(
+    Transaction &t,
+    CachedExtentRef e) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;

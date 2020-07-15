@@ -26,6 +26,30 @@ std::ostream &LBAInternalNode::print_detail(std::ostream &out) const
 	     << ", meta=" << get_meta();
 }
 
+LBAInternalNode::lookup_ret LBAInternalNode::lookup(
+  op_context_t c,
+  laddr_t addr,
+  depth_t depth)
+{
+  auto meta = get_meta();
+  if (depth == get_meta().depth) {
+    return lookup_ret(
+      lookup_ertr::ready_future_marker{},
+      this);
+  }
+  assert(meta.begin <= addr);
+  assert(meta.end > addr);
+  auto [begin, end] = bound(addr, 0);
+  assert(begin == end + 1);
+  return get_lba_btree_extent(
+    c,
+    meta.depth,
+    begin->get_val(),
+    get_paddr()).safe_then([c, addr, depth](auto child) {
+      return child->lookup(c, addr, depth);
+    });
+}
+
 LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
   op_context_t c,
   laddr_t addr,
