@@ -222,6 +222,7 @@ class MonService(CephadmService):
         """
         Create a new monitor on the given host.
         """
+        assert self.TYPE == daemon_spec.daemon_type
         name, host, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
 
         # get mon. key
@@ -300,7 +301,9 @@ class MgrService(CephadmService):
         """
         Create a new manager instance on a host.
         """
+        assert self.TYPE == daemon_spec.daemon_type
         mgr_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -319,8 +322,10 @@ class MdsService(CephadmService):
     TYPE = 'mds'
 
     def config(self, spec: ServiceSpec) -> None:
-        # ensure mds_join_fs is set for these daemons
+        assert self.TYPE == spec.service_type
         assert spec.service_id
+
+        # ensure mds_join_fs is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
             'who': 'mds.' + spec.service_id,
@@ -329,6 +334,7 @@ class MdsService(CephadmService):
         })
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         mds_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
@@ -348,6 +354,8 @@ class RgwService(CephadmService):
     TYPE = 'rgw'
 
     def config(self, spec: RGWSpec) -> None:
+        assert self.TYPE == spec.service_type
+
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
@@ -403,7 +411,9 @@ class RgwService(CephadmService):
         self.mgr.spec_store.save(spec)
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
@@ -421,7 +431,9 @@ class RbdMirrorService(CephadmService):
     TYPE = 'rbd-mirror'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.rbd-mirror.' + daemon_id,
@@ -438,7 +450,9 @@ class CrashService(CephadmService):
     TYPE = 'crash'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.crash.' + host,

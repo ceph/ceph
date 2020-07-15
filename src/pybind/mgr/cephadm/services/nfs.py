@@ -21,6 +21,8 @@ class NFSService(CephadmService):
     TYPE = 'nfs'
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
@@ -67,15 +69,21 @@ class NFSService(CephadmService):
         return cephadm_config, deps
 
     def config(self, spec: NFSServiceSpec) -> None:
+        assert self.TYPE == spec.service_type
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
+
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
     def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
+
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = daemon_spec.spec
+
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
         return self.mgr._create_daemon(daemon_spec)
