@@ -66,6 +66,16 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     return cache.replay_delta(paddr, e);
   }).safe_then([this] {
     return journal.open_for_write();
+  }).safe_then([this] {
+    return seastar::do_with(
+      create_transaction(),
+      [this](auto &t) {
+	return cache.init_cached_extents(*t, [this](auto &t, auto &e) {
+	  return lba_manager.init_cached_extent(t, e);
+	}).safe_then([this, &t]() mutable {
+	  return submit_transaction(std::move(t));
+	});
+      });
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::all_same_way([] {

@@ -239,6 +239,63 @@ BtreeLBAManager::complete_transaction(
   return complete_transaction_ertr::now();
 }
 
+BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
+  Transaction &t,
+  CachedExtentRef e)
+{
+  logger().debug("{}: {}", __func__, *e);
+  return get_root(t).safe_then(
+    [this, &t, e=std::move(e)](LBANodeRef root) mutable {
+      if (is_lba_node(*e)) {
+	auto lban = e->cast<LBANode>();
+	logger().debug("init_cached_extent: lba node, getting root");
+	return root->lookup(
+	  op_context_t{cache, pin_set, t},
+	  lban->get_node_meta().begin,
+	  lban->get_node_meta().depth
+	).safe_then([this, &t, e=std::move(e)](LBANodeRef c) {
+	  if (c->get_paddr() == e->get_paddr()) {
+	    assert(&*c == &*e);
+	    logger().debug("init_cached_extent: {} initialized", *e);
+	  } else {
+	    // e is obsolete
+	    logger().debug("init_cached_extent: {} obsolete", *e);
+	    cache.retire_extent(t, e);
+	  }
+	  return init_cached_extent_ertr::now();
+	});
+      } else if (e->is_logical()) {
+	auto logn = e->cast<LogicalCachedExtent>();
+	return root->lookup_range(
+	  op_context_t{cache, pin_set, t},
+	  logn->get_laddr(),
+	  logn->get_length()).safe_then(
+	    [this, &t, logn=std::move(logn)](auto pins) {
+	      if (pins.size() == 1) {
+		auto pin = std::move(pins.front());
+		pins.pop_front();
+		if (pin->get_paddr() == logn->get_paddr()) {
+		  logn->set_pin(std::move(pin));
+		  logger().debug("init_cached_extent: {} initialized", *logn);
+		} else {
+		  // paddr doesn't match, remapped, obsolete
+		  logger().debug("init_cached_extent: {} obsolete", *logn);
+		  cache.retire_extent(t, logn);
+		}
+	      } else {
+		// set of extents changed, obsolete
+		logger().debug("init_cached_extent: {} obsolete", *logn);
+		cache.retire_extent(t, logn);
+	      }
+	      return init_cached_extent_ertr::now();
+	    });
+      } else {
+	logger().debug("init_cached_extent: {} skipped", *e);
+	return init_cached_extent_ertr::now();
+      }
+    });
+}
+
 BtreeLBAManager::BtreeLBAManager(
   SegmentManager &segment_manager,
   Cache &cache)
