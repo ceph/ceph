@@ -136,6 +136,25 @@ private:
   ceph::mutex ioc_reap_lock = ceph::make_mutex("BlockDevice::ioc_reap_lock");
   std::vector<IOContext*> ioc_reap_queue;
   std::atomic_int ioc_reap_count = {0};
+  enum class block_device_t {
+    unknown,
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+    aio,
+#if defined(HAVE_LIBZBC)
+    hm_smr,
+#endif
+#endif
+#if defined(HAVE_SPDK)
+    spdk,
+#endif
+#if defined(HAVE_BLUESTORE_PMEM)
+    pmem,
+#endif
+  };
+  static block_device_t detect_device_type(const std::string& path);
+  static BlockDevice *create_with_type(block_device_t device_type,
+    CephContext* cct, const std::string& path, aio_callback_t cb,
+    void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
 
 protected:
   uint64_t size = 0;

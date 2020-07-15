@@ -164,6 +164,20 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
   return 0;
 }
 
+bool PMEMDevice::support(const std::string &path)
+{
+  int is_pmem = 0;
+  size_t map_len = 0;
+  void *addr = pmem_map_file(path.c_str(), 0, PMEM_FILE_EXCL, O_RDONLY, &map_len, &is_pmem);
+  if (addr != NULL) {
+    if (is_pmem) {
+      return true;
+    }
+    pmem_unmap(addr, map_len);
+  }
+  return false;
+}
+
 int PMEMDevice::flush()
 {
   //Because all write is persist. So no need
