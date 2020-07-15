@@ -34,9 +34,6 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_LZ4=${LZ4_FOUND})
   if(LZ4_FOUND)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES LZ4::LZ4)
-    # When cross compiling, cmake may fail to locate lz4.
-    list(APPEND rocksdb_CMAKE_ARGS -DLZ4_INCLUDE_DIR=${LZ4_INCLUDE_DIR})
-    list(APPEND rocksdb_CMAKE_ARGS -DLZ4_LIBRARIES=${LZ4_LIBRARY})
   endif()
 
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_ZLIB=${ZLIB_FOUND})
