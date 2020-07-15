@@ -24,6 +24,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
+from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
@@ -1458,28 +1459,33 @@ you may want to run:
         return self._daemon_action(daemon_type, daemon_id, host, action)
 
     def _daemon_action(self, daemon_type, daemon_id, host, action):
+        daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
+            host=host,
+            daemon_id=daemon_id,
+            daemon_type=daemon_type,
+        )
+
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
-            return self._create_daemon(daemon_type, daemon_id, host)
+            return self._create_daemon(daemon_spec)
         elif action == 'reconfig':
-            return self._create_daemon(daemon_type, daemon_id, host,
-                                       reconfig=True)
+            return self._create_daemon(daemon_spec, reconfig=True)
 
         actions = {
             'start': ['reset-failed', 'start'],
             'stop': ['stop'],
             'restart': ['reset-failed', 'restart'],
         }
-        name = '%s.%s' % (daemon_type, daemon_id)
+        name = daemon_spec.name()
         for a in actions[action]:
             try:
                 out, err, code = self._run_cephadm(
-                    host, name, 'unit',
+                    daemon_spec.daemon_type, name, 'unit',
                     ['--name', name, a])
             except Exception:
                 self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
-        self.cache.invalidate_host_daemons(host)
-        return "{} {} from host '{}'".format(action, name, host)
+        self.cache.invalidate_host_daemons(daemon_spec.host)
+        return "{} {} from host '{}'".format(action, name, daemon_spec.host)
 
     @trivial_completion
     def daemon_action(self, action, daemon_type, daemon_id):
@@ -1646,7 +1652,7 @@ you may want to run:
 
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
-        return self.osd_service.create(drive_group)
+        return self.osd_service.create_from_spec(drive_group)
 
     @trivial_completion
     def preview_osdspecs(self,
@@ -1704,93 +1710,59 @@ you may want to run:
         }
 
     def _create_daemon(self,
-                       daemon_type: str,
-                       daemon_id: str,
-                       host: str,
-                       keyring: Optional[str] = None,
-                       extra_args: Optional[List[str]] = None,
-                       extra_config: Optional[Dict[str, Any]] = None,
+                       daemon_spec: CephadmDaemonSpec,
                        reconfig=False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
                        redeploy=False,
                        ) -> str:
 
-        if not extra_args:
-            extra_args = []
-        if not extra_config:
-            extra_config = {}
-        name = '%s.%s' % (daemon_type, daemon_id)
 
         start_time = datetime.datetime.utcnow()
-        deps = []  # type: List[str]
-        cephadm_config = {}  # type: Dict[str, Any]
-        if daemon_type == 'prometheus':
-            cephadm_config, deps = self.prometheus_service.generate_config()
-            extra_args.extend(['--config-json', '-'])
-        elif daemon_type == 'grafana':
-            cephadm_config, deps = self.grafana_service.generate_config()
-            extra_args.extend(['--config-json', '-'])
-        elif daemon_type == 'nfs':
-            cephadm_config, deps = \
-                    self.nfs_service._generate_nfs_config(daemon_type, daemon_id, host)
-            extra_args.extend(['--config-json', '-'])
-        elif daemon_type == 'alertmanager':
-            cephadm_config, deps = self.alertmanager_service.generate_config()
-            extra_args.extend(['--config-json', '-'])
-        elif daemon_type == 'node-exporter':
-            cephadm_config, deps = self.node_exporter_service.generate_config()
-            extra_args.extend(['--config-json', '-'])
-        else:
-            # Ceph.daemons (mon, mgr, mds, osd, etc)
-            cephadm_config = self._get_config_and_keyring(
-                    daemon_type, daemon_id, host,
-                    keyring=keyring,
-                    extra_ceph_config=extra_config.pop('config', ''))
-            if extra_config:
-                cephadm_config.update({'files': extra_config})
-            extra_args.extend(['--config-json', '-'])
+        cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(daemon_spec)
 
-            # osd deployments needs an --osd-uuid arg
-            if daemon_type == 'osd':
-                if not osd_uuid_map:
-                    osd_uuid_map = self.get_osd_uuid_map()
-                osd_uuid = osd_uuid_map.get(daemon_id)
-                if not osd_uuid:
-                    raise OrchestratorError('osd.%s not in osdmap' % daemon_id)
-                extra_args.extend(['--osd-fsid', osd_uuid])
+        daemon_spec.extra_args.extend(['--config-json', '-'])
+
+        # osd deployments needs an --osd-uuid arg
+        if daemon_spec.daemon_type == 'osd':
+            if not osd_uuid_map:
+                osd_uuid_map = self.get_osd_uuid_map()
+            osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
+            if not osd_uuid:
+                raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
+            daemon_spec.extra_args.extend(['--osd-fsid', osd_uuid])
 
         if reconfig:
-            extra_args.append('--reconfig')
+            daemon_spec.extra_args.append('--reconfig')
         if self.allow_ptrace:
-            extra_args.append('--allow-ptrace')
+            daemon_spec.extra_args.append('--allow-ptrace')
 
         self.log.info('%s daemon %s on %s' % (
             'Reconfiguring' if reconfig else 'Deploying',
-            name, host))
+            daemon_spec.name(), daemon_spec.host))
 
         out, err, code = self._run_cephadm(
-            host, name, 'deploy',
+            daemon_spec.host, daemon_spec.name(), 'deploy',
             [
-                '--name', name,
-            ] + extra_args,
+                '--name', daemon_spec.name(),
+            ] + daemon_spec.extra_args,
             stdin=json.dumps(cephadm_config))
-        if not code and host in self.cache.daemons:
+        if not code and daemon_spec.host in self.cache.daemons:
             # prime cached service state with what we (should have)
             # just created
             sd = orchestrator.DaemonDescription()
-            sd.daemon_type = daemon_type
-            sd.daemon_id = daemon_id
-            sd.hostname = host
+            sd.daemon_type = daemon_spec.daemon_type
+            sd.daemon_id = daemon_spec.daemon_id
+            sd.hostname = daemon_spec.host
             sd.status = 1
             sd.status_desc = 'starting'
-            self.cache.add_daemon(host, sd)
-            if daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
-                self.requires_post_actions.add(daemon_type)
-        self.cache.invalidate_host_daemons(host)
-        self.cache.update_daemon_config_deps(host, name, deps, start_time)
-        self.cache.save_host(host)
+            self.cache.add_daemon(daemon_spec.host, sd)
+            if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
+                self.requires_post_actions.add(daemon_spec.daemon_type)
+        self.cache.invalidate_host_daemons(daemon_spec.host)
+        self.cache.update_daemon_config_deps(daemon_spec.host, daemon_spec.name(), deps, start_time)
+        self.cache.save_host(daemon_spec.host)
         return "{} {} on host '{}'".format(
-            'Reconfigured' if reconfig else 'Deployed', name, host)
+            'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
 
     @forall_hosts
     def _remove_daemons(self, name, host) -> str:
@@ -1814,28 +1786,6 @@ you may want to run:
         self.cache.invalidate_host_daemons(host)
         return "Removed {} from host '{}'".format(name, host)
 
-    def _create_fn(self, service_type: str) -> Callable[..., str]:
-        try:
-            d: Dict[str, function] = {
-                'mon': self.mon_service.create,
-                'mgr': self.mgr_service.create,
-                'osd': self.osd_service.create,
-                'mds': self.mds_service.create,
-                'rgw': self.rgw_service.create,
-                'rbd-mirror': self.rbd_mirror_service.create,
-                'nfs': self.nfs_service.create,
-                'grafana': self.grafana_service.create,
-                'alertmanager': self.alertmanager_service.create,
-                'prometheus': self.prometheus_service.create,
-                'node-exporter': self.node_exporter_service.create,
-                'crash': self.crash_service.create,
-                'iscsi': self.iscsi_service.create,
-            }
-            return d[service_type]  # type: ignore
-        except KeyError:
-            self.log.exception(f'unknown service type {service_type}')
-            raise OrchestratorError(f'unknown service type {service_type}') from e
-
     def _config_fn(self, service_type) -> Optional[Callable[[ServiceSpec], None]]:
         return {
             'mds': self.mds_service.config,
@@ -1856,11 +1806,10 @@ you may want to run:
             return False
         self.log.debug('Applying service %s spec' % service_name)
 
-        create_func = self._create_fn(daemon_type)
         config_func = self._config_fn(daemon_type)
 
         if daemon_type == 'osd':
-            create_func(spec)
+            self.osd_service.create_from_spec(cast(DriveGroupSpec, spec))
             # TODO: return True would result in a busy loop
             return False
 
@@ -1918,14 +1867,11 @@ you may want to run:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
                                              forcename=name)
+            daemon_spec = self.cephadm_services[daemon_type].make_daemon_spec(host, daemon_id, network, spec)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
-            if daemon_type == 'mon':
-                create_func(daemon_id, host, network)  # type: ignore
-            elif daemon_type in ['nfs', 'iscsi']:
-                create_func(daemon_id, host, spec)  # type: ignore
-            else:
-                create_func(daemon_id, host)  # type: ignore
+
+            self.cephadm_services[daemon_type].create(daemon_spec)
 
             # add to daemon list so next name(s) will also be unique
             sd = orchestrator.DaemonDescription(
@@ -2018,8 +1964,12 @@ you may want to run:
                 self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
                 reconfig = True
             if reconfig:
-                self._create_daemon(dd.daemon_type, dd.daemon_id,
-                                    dd.hostname, reconfig=True)
+                self._create_daemon(
+                    CephadmDaemonSpec(
+                        host=dd.hostname,
+                        daemon_id=dd.daemon_id,
+                        daemon_type=dd.daemon_type),
+                    reconfig=True)
 
         # do daemon post actions
         for daemon_type, daemon_descs in daemons_post.items():
@@ -2052,19 +2002,15 @@ you may want to run:
         if config_func:
             config_func(spec)
 
-        args = []  # type: List[tuple]
+        args = []  # type: List[CephadmDaemonSpec]
         for host, network, name in hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
                                              forcename=name)
+            daemon_spec = self.cephadm_services[daemon_type].make_daemon_spec(host, daemon_id, network, spec)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
-            if daemon_type == 'mon':
-                args.append((daemon_id, host, network))  # type: ignore
-            elif daemon_type in ['nfs', 'iscsi']:
-                args.append((daemon_id, host, spec))  # type: ignore
-            else:
-                args.append((daemon_id, host))  # type: ignore
+            args.append(daemon_spec)
 
             # add to daemon list so next name(s) will also be unique
             sd = orchestrator.DaemonDescription(
