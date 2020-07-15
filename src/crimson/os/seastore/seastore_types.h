@@ -215,6 +215,7 @@ enum class extent_types_t : uint8_t {
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
+  TEST_BLOCK_PHYSICAL = 0xF1,
 
   // None
   NONE = 0xFF

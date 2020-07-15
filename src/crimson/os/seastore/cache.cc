@@ -295,6 +295,11 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
     ).safe_then([](auto extent) {
       return CachedExtentRef(extent.detach(), false /* add_ref */);
     });
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return get_extent<TestBlockPhysical>(offset, length
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return get_extent_ertr::make_ready_future<CachedExtentRef>();

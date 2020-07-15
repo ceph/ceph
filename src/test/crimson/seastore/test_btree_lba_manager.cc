@@ -122,7 +122,7 @@ struct btree_lba_manager_test :
       lba_manager->create_transaction(),
       test_lba_mappings
     };
-    cache.alloc_new_extent<TestBlock>(*t.t, TestBlock::SIZE);
+    cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
     return t;
   }
 
