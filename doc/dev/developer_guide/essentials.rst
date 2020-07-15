@@ -25,6 +25,7 @@ CephFS    Patrick Donnelly batrick
 Dashboard Lenz Grimmer     LenzGr
 MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
+Docs      Zac Dover        zdover23
 ========= ================ =============
 
 The Ceph-specific acronyms in the table are explained in
