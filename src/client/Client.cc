@@ -2732,9 +2732,8 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
   ldout(cct, 1) << __func__ << " epoch " << m->get_epoch() << dendl;
 
   std::unique_ptr<MDSMap> oldmap(new MDSMap);
-  oldmap.swap(mdsmap);
 
-  mdsmap->decode(m->get_encoded());
+  oldmap->decode(m->get_encoded());
 
   // Cancel any commands for missing or laggy GIDs
   std::list<ceph_tid_t> cancel_ops;
@@ -2742,7 +2741,7 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
   for (const auto &i : commands) {
     auto &op = i.second;
     const mds_gid_t op_mds_gid = op.mds_gid;
-    if (mdsmap->is_dne_gid(op_mds_gid) || mdsmap->is_laggy_gid(op_mds_gid)) {
+    if (oldmap->is_dne_gid(op_mds_gid) || oldmap->is_laggy_gid(op_mds_gid)) {
       ldout(cct, 1) << __func__ << ": cancelling command op " << i.first << dendl;
       cancel_ops.push_back(i.first);
       if (op.outs) {
@@ -2759,6 +2758,8 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 
   for (const auto &tid : cancel_ops)
     command_table.erase(tid);
+
+  oldmap.swap(mdsmap);
 
   // reset session
   for (auto p = mds_sessions.begin(); p != mds_sessions.end(); ) {
@@ -2786,7 +2787,7 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
       trim_cache_for_reconnect(session);
     } else if (oldstate == newstate)
       continue;  // no change
-    
+
     session->mds_state = newstate;
     if (newstate == MDSMap::STATE_RECONNECT) {
       session->con = messenger->connect_to_mds(session->addrs);
