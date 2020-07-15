@@ -585,7 +585,7 @@ class TestCephadm(object):
             _get_connection.side_effect = HostNotFound
             code, out, err = cephadm_module.check_host('test')
             assert out == ''
-            assert 'Failed to connect to test (test)' in err
+            assert "Host 'test' not found" in err
 
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test', status='Offline').to_json()
