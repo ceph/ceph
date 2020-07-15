@@ -26,7 +26,7 @@ DISKS = getConfig('DISKS', 2)
 Vagrant.configure("2") do |config|
   config.vm.synced_folder ".", "/vagrant", disabled: true
   config.vm.network "private_network", type: "dhcp"
-  config.vm.box = "centos/7"
+  config.vm.box = "centos/8"
 
   (0..MONS - 1).each do |i|
     config.vm.define "mon#{i}" do |mon|
@@ -58,9 +58,9 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "shell", inline: <<-SHELL
     sudo yum install -y yum-utils
-    sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+    sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
     sudo rpm --import 'https://download.ceph.com/keys/release.asc'
-    curl -L https://shaman.ceph.com/api/repos/ceph/master/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/latest/centos/8/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
     sudo yum install -y python36 podman ceph
   SHELL
 end
