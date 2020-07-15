@@ -545,6 +545,14 @@ std::string s3_expiration_header(
   const ceph::real_time& mtime,
   const std::map<std::string, buffer::list>& bucket_attrs);
 
+bool s3_multipart_abort_header(
+  DoutPrefixProvider* dpp,
+  const rgw_obj_key& obj_key,
+  const ceph::real_time& mtime,
+  const std::map<std::string, buffer::list>& bucket_attrs,
+  ceph::real_time& abort_date,
+  std::string& rule_id);
+
 } // namespace rgw::lc
 
 #endif

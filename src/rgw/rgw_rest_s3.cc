@@ -108,6 +108,14 @@ static inline std::string get_s3_expiration_header(
     s, s->object, s->tagset, mtime, s->bucket_attrs);
 }
 
+static inline bool get_s3_multipart_abort_header(
+  struct req_state* s, const ceph::real_time& mtime,
+  ceph::real_time& date, std::string& rule_id)
+{
+  return rgw::lc::s3_multipart_abort_header(
+          s, s->object, mtime, s->bucket_attrs, date, rule_id);
+}
+
 struct response_attr_param {
   const char *param;
   const char *http_attr;
@@ -3728,6 +3736,13 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   dump_errno(s);
   for (auto &it : crypt_http_responses)
      dump_header(s, it.first, it.second);
+  ceph::real_time abort_date;
+  string rule_id;
+  bool exist_multipart_abort = get_s3_multipart_abort_header(s, mtime, abort_date, rule_id);
+  if (exist_multipart_abort) {
+    dump_time_header(s, "x-amz-abort-date", abort_date);
+    dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
+  }
   end_header(s, this, "application/xml");
   if (op_ret == 0) {
     dump_start(s);

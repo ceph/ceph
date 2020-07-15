@@ -5984,6 +5984,7 @@ void RGWInitMultipart::execute()
     obj_op.meta.owner = s->owner.get_id();
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+    obj_op.meta.mtime = &mtime;
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = s->dest_placement;
