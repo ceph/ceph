@@ -45,6 +45,17 @@ public:
       return (errno = e, -1);
     }
 
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGHUP, &sa, nullptr) != 0) {
+      int e = errno;
+      oss << "[" << getpid() << "]: unable to ignore SIGHUP: " << cpp_strerror(e);
+      err = oss.str();
+      return (errno = e, -1);
+    }
+
     forked = true;
 
     childpid = fork();
