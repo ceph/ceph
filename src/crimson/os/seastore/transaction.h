@@ -52,6 +52,10 @@ public:
       // which is what we want.
       retired_set.insert(ref);
     }
+    if (ref->is_pending()) {
+      write_set.erase(*ref);
+      ref->state = CachedExtent::extent_state_t::INVALID;
+    }
   }
 
   void add_to_read_set(CachedExtentRef ref) {
