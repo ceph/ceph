@@ -47,7 +47,6 @@ class MgrModuleTest(MgrModuleTestCase):
         'see_also': JList(str)
     })
 
-
     def test_list_disabled_module(self):
         self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'])
         self.wait_until_rest_api_accessible()

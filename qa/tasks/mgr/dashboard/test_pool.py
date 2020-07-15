@@ -157,10 +157,10 @@ class PoolTest(DashboardTestCase):
     def test_delete_access_permissions(self):
         self._delete('/api/pool/ddd')
         self.assertStatus(403)
-        
+
     def test_pool_configuration(self):
         pool_name = 'device_health_metrics'
-        data= self._get('/api/pool/{}/configuration'.format(pool_name))
+        data = self._get('/api/pool/{}/configuration'.format(pool_name))
         self.assertStatus(200)
         self.assertSchema(data, JList(JObj({
              'name': str,
