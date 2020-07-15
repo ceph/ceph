@@ -115,8 +115,11 @@ public:
 	    t,
 	    pin->get_paddr(),
 	    pin->get_length()
-	  ).safe_then([&pin, &ret_ref](auto ref) mutable {
-	    ref->set_pin(std::move(pin));
+	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable {
+	    if (!ref->has_pin()) {
+	      ref->set_pin(std::move(pin));
+	      lba_manager.add_pin(ref->get_pin());
+	    }
 	    ret_ref.push_back(std::make_pair(ref->get_laddr(), ref));
 	    crimson::get_logger(ceph_subsys_filestore).debug(
 	      "read_extents: got extent {}",

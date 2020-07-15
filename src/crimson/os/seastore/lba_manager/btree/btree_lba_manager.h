@@ -87,6 +87,10 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
+  void add_pin(LBAPin &pin) final {
+    pin_set.add_pin(reinterpret_cast<BtreeLBAPin*>(&pin)->pin);
+  }
+
 private:
   SegmentManager &segment_manager;
   Cache &cache;
