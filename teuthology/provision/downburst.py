@@ -118,7 +118,9 @@ class Downburst(object):
             distro=self.os_type,
             distroversion=self.os_version
         ))
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE,
+        log.debug(args)
+        proc = subprocess.Popen(args, universal_newlines=True,
+                                stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
         out, err = proc.communicate()
         return (proc.returncode, out, err)
@@ -135,7 +137,9 @@ class Downburst(object):
         if self.logfile:
             args.extend(['-l', self.logfile])
         args.extend(['destroy', self.shortname])
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE,
+        log.debug(args)
+        proc = subprocess.Popen(args, universal_newlines=True,
+                                stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,)
         out, err = proc.communicate()
         log.info(out)
@@ -156,7 +160,7 @@ class Downburst(object):
         """
         Assemble a configuration to pass to downburst, and write it to a file.
         """
-        config_fd = tempfile.NamedTemporaryFile(delete=False)
+        config_fd = tempfile.NamedTemporaryFile(delete=False, mode='wt')
 
         os_type = self.os_type.lower()
         mac_address = self.status['mac_address']
@@ -208,7 +212,7 @@ class Downburst(object):
         # to install 'python' to get python2.7, which ansible needs
         if os_type in ('ubuntu', 'fedora'):
             user_info['packages'].append('python')
-        user_fd = tempfile.NamedTemporaryFile(delete=False)
+        user_fd = tempfile.NamedTemporaryFile(delete=False, mode='wt')
         user_str = "#cloud-config\n" + yaml.safe_dump(user_info)
         user_fd.write(user_str)
         self.user_path = user_fd.name
