@@ -16,6 +16,7 @@ class IscsiService(CephadmService):
     TYPE = 'iscsi'
 
     def config(self, spec: IscsiServiceSpec) -> None:
+        assert self.TYPE == spec.service_type
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
         logger.info('Saving service %s spec with placement %s' % (
@@ -23,10 +24,12 @@ class IscsiService(CephadmService):
         self.mgr.spec_store.save(spec)
 
     def create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
+
         spec = daemon_spec.spec
-        if spec is None:
-            raise OrchestratorError(f'Unable to deploy {daemon_spec.name()}: Service not found.')
         igw_id = daemon_spec.daemon_id
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': utils.name_to_auth_entity('iscsi', igw_id),
