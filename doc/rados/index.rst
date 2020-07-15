@@ -33,7 +33,7 @@ on ``ceph-deploy.``
 
 	</td><td><h3>Operations</h3>
 
-Once you have a deployed a Ceph Storage Cluster, you may begin operating 
+Once you have deployed a Ceph Storage Cluster, you may begin operating 
 your cluster.
 
 .. toctree::
