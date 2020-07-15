@@ -29,14 +29,10 @@
 
 #if defined(HAVE_BLUESTORE_PMEM)
 #include "pmem/PMEMDevice.h"
-#include "libpmem.h"
 #endif
 
 #if defined(HAVE_LIBZBC)
 #include "zoned/HMSMRDevice.h"
-extern "C" {
-#include <libzbc/zbc.h>
-}
 #endif
 
 #include "common/debug.h"
@@ -90,67 +86,62 @@ void IOContext::release_running_aios()
 #endif
 }
 
-BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
-				 aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+BlockDevice::block_device_t
+BlockDevice::detect_device_type(const std::string& path)
 {
-  string type = "kernel";
-  char buf[PATH_MAX + 1];
-  int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
-  if (r >= 0) {
-    buf[r] = '\0';
-    char *bname = ::basename(buf);
-    if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0)
-      type = "ust-nvme";
-  }
-
-#if defined(HAVE_BLUESTORE_PMEM)
-  if (type == "kernel") {
-    int is_pmem = 0;
-    size_t map_len = 0;
-    void *addr = pmem_map_file(path.c_str(), 0, PMEM_FILE_EXCL, O_RDONLY, &map_len, &is_pmem);
-    if (addr != NULL) {
-      if (is_pmem)
-	type = "pmem";
-      else
-	dout(1) << path.c_str() << " isn't pmem file" << dendl;
-      pmem_unmap(addr, map_len);
-    } else {
-      dout(1) << "pmem_map_file:" << path.c_str() << " failed." << pmem_errormsg() << dendl;
-    }
-  }
-#endif
-
-  dout(1) << __func__ << " path " << path << " type " << type << dendl;
-
-#if defined(HAVE_BLUESTORE_PMEM)
-  if (type == "pmem") {
-    return new PMEMDevice(cct, cb, cbpriv);
-  }
-#endif
-#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
-#if defined(HAVE_LIBZBC)
-  r = zbc_device_is_zoned(path.c_str(), false, nullptr);
-  if (r == 1) {
-    return new HMSMRDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
-  }
-  ceph_assertf(r >= 0, "zbc_device_is_zoned(%s) failed: %d", path.c_str(), r);
-#endif
-  if (type == "kernel") {
-    return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
-  }
-#endif
-#ifndef WITH_SEASTAR
 #if defined(HAVE_SPDK)
-  if (type == "ust-nvme") {
-    return new NVMEDevice(cct, cb, cbpriv);
+  if (NVMEDevice::support(path)) {
+    return block_device_t::spdk;
   }
 #endif
+#if defined(HAVE_BLUESTORE_PMEM)
+  if (PMEMDevice::support(path)) {
+    return block_device_t::pmem;
+  }
+#endif
+#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIZBC)
+  if (HMSMRDevice::support(path)) {
+    return block_device_t::hm_smr;
+  }
 #endif
 
-  derr << __func__ << " unknown backend " << type << dendl;
+  return block_device_t::aio;
+}
 
-  ceph_abort();
-  return NULL;
+BlockDevice* BlockDevice::create_with_type(block_device_t device_type,
+  CephContext* cct, const std::string& path, aio_callback_t cb,
+  void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+{
+
+  switch (device_type) {
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+  case block_device_t::aio:
+    return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
+#endif
+#if defined(HAVE_SPDK)
+  case block_device_t::spdk:
+    return new NVMEDevice(cct, cb, cbpriv);
+#endif
+#if defined(HAVE_BLUESTORE_PMEM)
+  case block_device_t::pmem:
+    return new PMEMDevice(cct, cb, cbpriv);
+#endif
+#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIZBC)
+  case block_device_t::hm_smr:
+    return new HMSMRDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
+#endif
+  default:
+    ceph_abort_msg("unsupported device");
+    return nullptr;
+  }
+}
+
+BlockDevice *BlockDevice::create(
+    CephContext* cct, const string& path, aio_callback_t cb,
+    void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+{
+  block_device_t device_type = detect_device_type(path);
+  return create_with_type(device_type, cct, path, cb, cbpriv, d_cb, d_cbpriv);
 }
 
 void BlockDevice::queue_reap_ioc(IOContext *ioc)

@@ -698,6 +698,20 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 {
 }
 
+bool NVMEDevice::support(const std::string& path)
+{
+  char buf[PATH_MAX + 1];
+  int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
+  if (r >= 0) {
+    buf[r] = '\0';
+    char *bname = ::basename(buf);
+    if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int NVMEDevice::open(const string& p)
 {
   dout(1) << __func__ << " path " << p << dendl;
