@@ -1,3 +1,3 @@
 #!/bin/bash
 
-echo "-e .[orchestra,test]" | pip-compile $@ - -qo- | sed '/^-e / d' > requirements.txt
+pip-compile $@ requirements.in -qo- | sed -e '/^-e / d' -e 's/-r requirements.in/teuthology/g' > requirements.txt
