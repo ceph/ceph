@@ -89,6 +89,42 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 };
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 
+struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
+  constexpr static segment_off_t SIZE = 4<<10;
+  using Ref = TCachedExtentRef<TestBlockPhysical>;
+
+  std::vector<test_block_delta_t> delta = {};
+
+  TestBlockPhysical(ceph::bufferptr &&ptr)
+    : CachedExtent(std::move(ptr)) {}
+  TestBlockPhysical(const TestBlock &other)
+    : CachedExtent(other) {}
+
+  CachedExtentRef duplicate_for_write() final {
+    return CachedExtentRef(new TestBlockPhysical(*this));
+  };
+
+  static constexpr extent_types_t TYPE = extent_types_t::TEST_BLOCK_PHYSICAL;
+  extent_types_t get_type() const final {
+    return TYPE;
+  }
+
+  void set_contents(char c, uint16_t offset, uint16_t len) {
+    ::memset(get_bptr().c_str() + offset, c, len);
+  }
+
+  void set_contents(char c) {
+    set_contents(c, 0, get_length());
+  }
+
+  ceph::bufferlist get_delta() final { return ceph::bufferlist(); }
+
+  int checksum() { return 0; }
+
+  void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final {}
+};
+using TestBlockPhysicalRef = TCachedExtentRef<TestBlockPhysical>;
+
 struct test_block_mutator_t {
   std::uniform_int_distribution<int8_t>
   contents_distribution = std::uniform_int_distribution<int8_t>(
