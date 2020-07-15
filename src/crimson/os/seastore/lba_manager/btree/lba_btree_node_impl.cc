@@ -203,8 +203,9 @@ LBAInternalNode::split_entry(
   c.cache.retire_extent(c.trans, entry);
 
   logger().debug(
-    "LBAInternalNode::split_entry *this {} left {} right {}",
+    "LBAInternalNode::split_entry *this {} entry {} into left {} right {}",
     *this,
+    *entry,
     *left,
     *right);
 
@@ -486,8 +487,9 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
       offset,
       LBA_BLOCK_SIZE).safe_then([offset, c](auto ret) {
 	logger().debug(
-	  "get_lba_btree_extent: read leaf at offset {}",
-	  offset);
+	  "get_lba_btree_extent: read leaf at offset {} {}",
+	  offset,
+	  *ret);
 	auto meta = ret->get_meta();
 	if (ret->get_size()) {
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
