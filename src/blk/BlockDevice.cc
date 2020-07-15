@@ -73,9 +73,7 @@ uint64_t IOContext::get_num_ios() const
   // that to the bytes value.
   uint64_t ios = 0;
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
-  for (auto& p : pending_aios) {
-    ios += p.iov.size();
-  }
+  ios += pending_aios.size();
 #endif
 #ifdef HAVE_SPDK
   ios += total_nseg;
