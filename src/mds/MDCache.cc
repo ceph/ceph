@@ -9649,7 +9649,9 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
 void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 {
-  mdr->mark_event("forwarding request");
+  CachedStackStringStream css;
+  *css << "forwarding request to mds." << who;
+  mdr->mark_event(css->strv());
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
