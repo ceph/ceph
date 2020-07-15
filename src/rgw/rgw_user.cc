@@ -2201,6 +2201,67 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   return 0;
 }
 
+int RGWUser::link_account(const DoutPrefixProvider *dpp,
+                          RGWUserAdminOpState& op_state,
+                          optional_yield y,
+			  std::string *err_msg)
+{
+  if (!op_state.has_account_id()) {
+    set_err_msg(err_msg, "invalid account id");
+    return -EINVAL;
+  }
+  int ret = init(dpp, op_state, y);
+  if (ret < 0) {
+    set_err_msg(err_msg, "unable to fetch user info");
+    return ret;
+  }
+
+  if (!is_populated()) {
+    set_err_msg(err_msg, "no user info saved");
+    return -EINVAL;
+  }
+
+  // TODO: add sal::User::link_account()
+  auto user_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user;
+  user_ctl->link_account(dpp, old_info,
+                         op_state.get_account_id(),
+                         RGWUserCtl::PutParams()
+                         .set_objv_tracker(&op_state.objv),
+                         y);
+  return 0;
+}
+
+
+int RGWUser::unlink_account(const DoutPrefixProvider *dpp,
+                            RGWUserAdminOpState& op_state,
+                            optional_yield y,
+                            std::string *err_msg)
+{
+  if (!op_state.has_account_id()) {
+    set_err_msg(err_msg, "invalid account id");
+    return -EINVAL;
+  }
+  int ret = init(dpp, op_state, y);
+  if (ret < 0) {
+    set_err_msg(err_msg, "unable to fetch user info");
+    return ret;
+  }
+
+  if (!is_populated()) {
+    set_err_msg(err_msg, "no user info saved");
+    return -EINVAL;
+  }
+
+  // TODO: add sal::User::unlink_account()
+  auto user_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user;
+  user_ctl->unlink_account(dpp, old_info,
+                           op_state.get_account_id(),
+                           RGWUserCtl::PutParams()
+                           .set_objv_tracker(&op_state.objv),
+                           y);
+  return 0;
+}
+
 int RGWUserAdminOp_User::list(const DoutPrefixProvider *dpp, rgw::sal::Store* store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
@@ -2353,6 +2414,48 @@ int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
     ret = -ERR_NO_SUCH_USER;
   return ret;
 }
+
+int RGWUserAdminOp_User::link_account(const DoutPrefixProvider *dpp,
+                                      rgw::sal::Store *store,
+                                      RGWUserAdminOpState& op_state,
+                                      RGWFormatterFlusher& flusher,
+                                      optional_yield y)
+{
+  RGWUserInfo info;
+  RGWUser user;
+  int ret = user.init(dpp, store, op_state, y);
+  if (ret < 0)
+    return ret;
+
+
+  ret = user.link_account(dpp, op_state, y);
+
+  if (ret == -ENOENT)
+    ret = -ERR_NO_SUCH_USER;
+  return ret;
+}
+
+int RGWUserAdminOp_User::unlink_account(const DoutPrefixProvider *dpp,
+                                        rgw::sal::Store *store,
+                                        RGWUserAdminOpState& op_state,
+                                        RGWFormatterFlusher& flusher,
+                                        optional_yield y)
+{
+  RGWUserInfo info;
+  RGWUser user;
+  int ret = user.init(dpp, store, op_state, y);
+  if (ret < 0)
+    return ret;
+
+
+  ret = user.unlink_account(dpp, op_state, y);
+
+  if (ret == -ENOENT)
+    ret = -ERR_NO_SUCH_USER;
+  return ret;
+}
+
+
 
 int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
 				   rgw::sal::Store* store,

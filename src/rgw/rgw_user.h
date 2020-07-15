@@ -121,6 +121,7 @@ struct RGWUserAdminOpState {
   RGWObjVersionTracker objv;
   uint32_t op_mask{0};
   std::map<int, std::string> temp_url_keys;
+  std::string account_id;
 
   // subuser attributes
   std::string subuser;
@@ -164,7 +165,8 @@ struct RGWUserAdminOpState {
   bool found_by_email{false};
   bool found_by_key{false};
   bool mfa_ids_specified{false};
- 
+  bool account_id_specified{false};
+
   // req parameters
   bool populated{false};
   bool initialized{false};
@@ -370,6 +372,11 @@ struct RGWUserAdminOpState {
     placement_tags_specified = true;
   }
 
+  void set_account_id(std::string_view _account_id) {
+    account_id = _account_id;
+    account_id_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -382,6 +389,7 @@ struct RGWUserAdminOpState {
   bool has_suspension_op() { return suspension_op; }
   bool has_subuser_perm() { return perm_specified; }
   bool has_op_mask() { return op_mask_specified; }
+  bool has_account_id() { return account_id_specified; }
   bool will_gen_access() { return gen_access; }
   bool will_gen_secret() { return gen_secret; }
   bool will_gen_subuser() { return gen_subuser; }
@@ -417,6 +425,7 @@ struct RGWUserAdminOpState {
   std::string get_caps() { return caps; }
   std::string get_user_email() { return user_email; }
   std::string get_display_name() { return display_name; }
+  std::string get_account_id () { return account_id; }
   rgw_user& get_new_uid() { return new_user_id; }
   bool get_overwrite_new_user() const { return overwrite_new_user; }
   std::map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
@@ -621,6 +630,14 @@ public:
   /* list the existing users */
   int list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
+  int link_account(const DoutPrefixProvider *dpp,
+                   RGWUserAdminOpState& op_state, optional_yield y,
+                   std::string *err_msg = nullptr);
+
+  int unlink_account(const DoutPrefixProvider *dpp,
+                     RGWUserAdminOpState& op_state, optional_yield y,
+                     std::string *err_msg = nullptr);
+
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
@@ -650,6 +667,19 @@ public:
 
   static int remove(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
+
+  static int link_account(const DoutPrefixProvider *dpp,
+                          rgw::sal::Store *store,
+                          RGWUserAdminOpState& op_state,
+                          RGWFormatterFlusher& flusher,
+                          optional_yield y);
+
+  static int unlink_account(const DoutPrefixProvider *dpp,
+                            rgw::sal::Store *store,
+                            RGWUserAdminOpState& op_state,
+                            RGWFormatterFlusher& flusher,
+                            optional_yield y);
+
 };
 
 class RGWUserAdminOp_Subuser

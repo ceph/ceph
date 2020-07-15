@@ -28,7 +28,7 @@ class RGWHandler_Account : public RGWHandler_Auth_S3 {
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   ~RGWHandler_Account() override = default;
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*, optional_yield y) override {
     return 0;
   }
 };
@@ -38,7 +38,7 @@ class RGWRESTMgr_Account : public RGWRESTMgr {
   RGWRESTMgr_Account() = default;
   ~RGWRESTMgr_Account() override = default;
 
-  RGWHandler_REST *get_handler(struct req_state*,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store, struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Account(auth_registry);

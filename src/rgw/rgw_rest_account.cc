@@ -1,6 +1,7 @@
 #include "rgw_rest_account.h"
 #include "rgw_rest.h"
 #include "rgw_account.h"
+#include "rgw_sal_rados.h"
 
 class RGWOp_Account_Create : public RGWRESTOp {
 public:
@@ -8,12 +9,12 @@ public:
     return caps.check_cap("accounts", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "create_account"; }
 };
 
-void RGWOp_Account_Create::execute()
+void RGWOp_Account_Create::execute(optional_yield y)
 {
   std::string account_id;
   std::string tenant;
@@ -26,11 +27,11 @@ void RGWOp_Account_Create::execute()
 
   RGWAccountInfo account_info(account_id, tenant);
   RGWObjVersionTracker objv_tracker;
-  http_ret = store->ctl()->account->store_info(account_info, &objv_tracker,
-                                               real_time(), true, nullptr, s->yield);
-  if (http_ret < 0) {
-    if (http_ret == -EEXIST) {
-      http_ret = -ERR_ACCOUNT_EXISTS;
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
+      this, account_info, &objv_tracker, real_time(), true, nullptr, s->yield);
+  if (op_ret < 0) {
+    if (op_ret == -EEXIST) {
+      op_ret = -ERR_ACCOUNT_EXISTS;
     }
     return;
   }
@@ -48,12 +49,12 @@ public:
     return caps.check_cap("account", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "get_account"; }
 };
 
-void RGWOp_Account_Get::execute()
+void RGWOp_Account_Get::execute(optional_yield y)
 {
   std::string account_id;
 
@@ -61,16 +62,12 @@ void RGWOp_Account_Get::execute()
 
   real_time mtime;
   RGWAccountInfo account_info;
-  map<std::string, bufferlist> attrs;
+  std::map<std::string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
 
-  http_ret = store->ctl()->account->read_info(account_id,
-                                              &account_info,
-                                              &objv_tracker,
-                                              &mtime,
-                                              &attrs,
-                                              s->yield);
-  if (http_ret < 0) {
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->read_info(
+      this, account_id, &account_info, &objv_tracker, &mtime, &attrs, s->yield);
+  if (op_ret < 0) {
     return;
   }
 
@@ -85,21 +82,20 @@ public:
     return caps.check_cap("account", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "delete_account"; }
 };
 
-void RGWOp_Account_Delete::execute()
+void RGWOp_Account_Delete::execute(optional_yield y)
 {
   std::string account_id;
 
   RESTArgs::get_string(s, "account", account_id, &account_id);
   RGWObjVersionTracker objv_tracker;
 
-  http_ret = store->ctl()->account->remove_info(account_id,
-                                                &objv_tracker,
-                                                s->yield);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->remove_info(
+      this, account_id, &objv_tracker, s->yield);
 }
 
 RGWOp *RGWHandler_Account::op_put()
