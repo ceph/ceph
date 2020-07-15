@@ -612,7 +612,8 @@ class RGWSpec(ServiceSpec):
         if service_id:
             a = service_id.split('.', 2)
             rgw_realm = a[0]
-            rgw_zone = a[1]
+            if len(a) > 1:
+                rgw_zone = a[1]
             if len(a) > 2:
                 subcluster = a[2]
         else:
@@ -649,6 +650,16 @@ class RGWSpec(ServiceSpec):
         else:
             ports.append(f"port={self.get_port()}")
         return f'beast {" ".join(ports)}'
+
+    def validate(self):
+        super(RGWSpec, self).validate()
+
+        if not self.rgw_realm:
+            raise ServiceSpecValidationError(
+                'Cannot add RGW: No realm specified')
+        if not self.rgw_zone:
+            raise ServiceSpecValidationError(
+                'Cannot add RGW: No zone specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
