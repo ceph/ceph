@@ -324,7 +324,7 @@ Context *SnapshotCreateRequest<I>::handle_create_image_state(int *result) {
 
   update_snap_context();
   if (*result < 0) {
-    lderr(cct) << this << " " << __func__ << ": failed to snapshot object map: "
+    lderr(cct) << this << " " << __func__ << ": failed to create image state: "
                << cpp_strerror(*result) << dendl;
     save_result(result);
   }
