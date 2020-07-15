@@ -13,9 +13,11 @@ class GrafanaService(CephadmService):
     DEFAULT_SERVICE_PORT = 3000
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         deps = []  # type: List[str]
 
         prom_services = []  # type: List[str]
@@ -76,9 +78,11 @@ class AlertmanagerService(CephadmService):
     DEFAULT_SERVICE_PORT = 9093
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         deps = [] # type: List[str]
 
         # dashboard(s)
@@ -143,9 +147,11 @@ class PrometheusService(CephadmService):
     DEFAULT_SERVICE_PORT = 9095
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         deps = []  # type: List[str]
 
         # scrape mgrs
@@ -230,7 +236,9 @@ class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         return self.mgr._create_daemon(daemon_spec)
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         return {}, []
