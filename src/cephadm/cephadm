@@ -2046,57 +2046,97 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         call_throws(['systemctl', 'start', unit_name])
 
 
+
+class Firewalld(object):
+    def __init__(self):
+        # type: () -> None
+        self.available = self.check()
+
+    def check(self):
+        # type: () -> bool
+        self.cmd = find_executable('firewall-cmd')
+        if not self.cmd:
+            logger.debug('firewalld does not appear to be present')
+            return False
+        (enabled, state, _) = check_unit('firewalld.service')
+        if not enabled:
+            logger.debug('firewalld.service is not enabled')
+            return False
+        if state != "running":
+            logger.debug('firewalld.service is not running')
+            return False
+
+        logger.info("firewalld ready")
+        return True
+
+    def enable_service_for(self, daemon_type):
+        # type: (str) -> None
+        if not self.available:
+            logger.debug('Not possible to enable service <%s>. firewalld.service is not available' % daemon_type)
+            return
+
+        if daemon_type == 'mon':
+            svc = 'ceph-mon'
+        elif daemon_type in ['mgr', 'mds', 'osd']:
+            svc = 'ceph'
+        elif daemon_type == NFSGanesha.daemon_type:
+            svc = 'nfs'
+        else:
+            return
+
+        out, err, ret = call([self.cmd, '--permanent', '--query-service', svc], verbose_on_failure=False)
+        if ret:
+            logger.info('Enabling firewalld service %s in current zone...' % svc)
+            out, err, ret = call([self.cmd, '--permanent', '--add-service', svc])
+            if ret:
+                raise RuntimeError(
+                    'unable to add service %s to current zone: %s' % (svc, err))
+        else:
+            logger.debug('firewalld service %s is enabled in current zone' % svc)
+
+    def open_ports(self, fw_ports):
+        # type: (List[int]) -> None
+        if not self.available:
+            logger.debug('Not possible to open ports <%s>. firewalld.service is not available' % fw_ports)
+            return
+
+        for port in fw_ports:
+            tcp_port = str(port) + '/tcp'
+            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
+            if ret:
+                logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
+                out, err, ret = call([self.cmd, '--permanent', '--add-port', tcp_port])
+                if ret:
+                    raise RuntimeError('unable to add port %s to current zone: %s' %
+                                    (tcp_port, err))
+            else:
+                logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
+
+    def apply_rules(self):
+        # type: () -> None
+        if not self.available:
+            return
+
+        call_throws([self.cmd, '--reload'])
+
+
 def update_firewalld(daemon_type):
     # type: (str) -> None
-    if args.skip_firewalld:
-        return
-    cmd = find_executable('firewall-cmd')
-    if not cmd:
-        logger.debug('firewalld does not appear to be present')
-        return
-    (enabled, state, _) = check_unit('firewalld.service')
-    if not enabled:
-        logger.debug('firewalld.service is not enabled')
-        return
+    firewall = Firewalld()
 
-    fw_services = []
+    firewall.enable_service_for(daemon_type)
+
     fw_ports = []
-    if daemon_type == 'mon':
-        fw_services.append('ceph-mon')
-    elif daemon_type in ['mgr', 'mds', 'osd']:
-        fw_services.append('ceph')
+
     if daemon_type == 'mgr':
         fw_ports.append(8080)  # dashboard
         fw_ports.append(8443)  # dashboard
         fw_ports.append(9283)  # mgr/prometheus exporter
     elif daemon_type in Monitoring.port_map.keys():
         fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
-    elif daemon_type == NFSGanesha.daemon_type:
-        fw_services.append('nfs')
 
-    for svc in fw_services:
-        out, err, ret = call([cmd, '--permanent', '--query-service', svc])
-        if ret:
-            logger.info('Enabling firewalld service %s in current zone...' % svc)
-            out, err, ret = call([cmd, '--permanent', '--add-service', svc])
-            if ret:
-                raise RuntimeError(
-                    'unable to add service %s to current zone: %s' % (svc, err))
-        else:
-            logger.debug('firewalld service %s is enabled in current zone' % svc)
-    for port in fw_ports:
-        tcp_port = str(port) + '/tcp'
-        out, err, ret = call([cmd, '--permanent', '--query-port', tcp_port])
-        if ret:
-            logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
-            out, err, ret = call([cmd, '--permanent', '--add-port', tcp_port])
-            if ret:
-                raise RuntimeError('unable to add port %s to current zone: %s' %
-                                   (tcp_port, err))
-        else:
-            logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
-    call_throws([cmd, '--reload'])
-
+    firewall.open_ports(fw_ports)
+    firewall.apply_rules()
 
 def install_base_units(fsid):
     # type: (str) -> None
