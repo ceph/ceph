@@ -59,6 +59,20 @@ struct LBANode : CachedExtent {
   virtual lba_node_meta_t get_node_meta() const = 0;
 
   /**
+   * lookup
+   *
+   * Returns the node at the specified depth responsible
+   * for laddr
+   */
+  using lookup_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using lookup_ret = lookup_ertr::future<LBANodeRef>;
+  virtual lookup_ret lookup(
+    op_context_t c,
+    laddr_t addr,
+    depth_t depth) = 0;
+
+  /**
    * lookup_range
    *
    * Returns mappings within range [addr, addr+len)

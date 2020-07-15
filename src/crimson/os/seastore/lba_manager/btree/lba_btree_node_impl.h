@@ -92,6 +92,8 @@ struct LBAInternalNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
+  lookup_ret lookup(op_context_t c, laddr_t addr, depth_t depth) final;
+
   lookup_range_ret lookup_range(
     op_context_t c,
     laddr_t addr,
@@ -337,6 +339,13 @@ struct LBALeafNode
   delta_buffer_t delta_buffer;
   delta_buffer_t *maybe_get_delta_buffer() {
     return is_mutation_pending() ? &delta_buffer : nullptr;
+  }
+
+  lookup_ret lookup(op_context_t c, laddr_t addr, depth_t depth) final
+  {
+    return lookup_ret(
+      lookup_ertr::ready_future_marker{},
+      this);
   }
 
   lookup_range_ret lookup_range(

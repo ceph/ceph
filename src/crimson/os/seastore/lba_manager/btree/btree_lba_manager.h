@@ -83,6 +83,10 @@ public:
   complete_transaction_ret complete_transaction(
     Transaction &t) final;
 
+  init_cached_extent_ret init_cached_extent(
+    Transaction &t,
+    CachedExtentRef e) final;
+
 private:
   SegmentManager &segment_manager;
   Cache &cache;

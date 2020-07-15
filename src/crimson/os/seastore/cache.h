@@ -298,6 +298,35 @@ public:
   replay_delta_ret replay_delta(paddr_t record_base, const delta_info_t &delta);
 
   /**
+   * init_cached_extents
+   *
+   * Calls passed lambda for each dirty cached block.  Intended for use
+   * after replay to allow lba_manager (or w/e) to read in any ancestor
+   * blocks.
+   */
+  using init_cached_extents_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using init_cached_extents_ret = replay_delta_ertr::future<>;
+  template <typename F>
+  init_cached_extents_ret init_cached_extents(
+    Transaction &t,
+    F &&f)
+  {
+    std::vector<CachedExtentRef> dirty;
+    for (auto &e : extents) {
+      dirty.push_back(CachedExtentRef(&e));
+    }
+    return seastar::do_with(
+      std::forward<F>(f),
+      std::move(dirty),
+      [&t](auto &f, auto &refs) mutable {
+	return crimson::do_for_each(
+	  refs,
+	  [&t, &f](auto &e) { return f(t, e); });
+      });
+  }
+
+  /**
    * print
    *
    * Dump summary of contents (TODO)
