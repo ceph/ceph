@@ -90,6 +90,9 @@ install(TARGETS osdmaptool DESTINATION bin)
 
 set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
 add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
+set_target_properties(ceph-diff-sorted PROPERTIES
+  SKIP_RPATH TRUE
+  INSTALL_RPATH "")
 install(TARGETS ceph-diff-sorted DESTINATION bin)
 
 if(WITH_TESTS)
