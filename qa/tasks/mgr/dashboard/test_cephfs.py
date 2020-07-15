@@ -154,7 +154,6 @@ class CephfsTest(DashboardTestCase):
             'max_files': int
         }))
 
-
     def test_cephfs_tabs(self):
         fs_id = self.get_fs_id()
         data = self._get("/ui-api/cephfs/{}/tabs".format(fs_id))
