@@ -17,15 +17,37 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <type=cephfs> <clusterid> [<placement>]
+    $ ceph nfs cluster create <type> <clusterid> [<placement>]
 
 This creates a common recovery pool for all Ganesha daemons, new user based on
-cluster_id and common ganesha config rados object.
+cluster_id, and a common ganesha config rados object. It can also bring up NFS
+Ganesha daemons using the enabled ceph-mgr orchestrator module (see
+:doc:`/mgr/orchestrator`), e.g. cephadm.
 
-Here type is export type and placement specifies the size of cluster and hosts.
-For more details on placement specification refer the `orchestrator doc
-<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_.
-Currently only CephFS export type is supported.
+<type> signifies the export type, which corresponds to the NFS Ganesha file
+system abstraction layer (FSAL). Permissible values are "cephfs" or "rgw", but
+currently only "cephfs" is supported.
+
+<clusterid> is an arbitrary string by which this NFS Ganesha cluster will be
+known.
+
+<placement> is an optional string signifying which hosts should have NFS Ganesha
+daemon containers running on them and, optionally, the total number of NFS
+Ganesha daemons the cluster (should you want to have more than one NFS Ganesha
+daemon running per node). For example, the following placement string means
+"deploy NFS Ganesha daemons on nodes host1 and host2 (one daemon per host):
+
+    "host1,host2"
+
+and this placement specification says to deploy two NFS Ganesha daemons each
+on nodes host1 and host2 (for a total of four NFS Ganesha daemons in the
+cluster):
+
+    "4 host1,host2"
+
+For more details on placement specification refer to the `orchestrator doc
+<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_
+but keep in mind that specifying the placement via a YAML file is not supported.
 
 Update NFS Ganesha Cluster
 ==========================
