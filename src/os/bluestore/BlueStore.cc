@@ -21,6 +21,7 @@
 
 #include "BlueStore.h"
 #include "os/kv.h"
+#include "kv/RocksDBStore.h"
 #include "include/compat.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
@@ -9488,7 +9489,6 @@ void BlueStore::_kv_sync_thread()
 	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
 	}
       }
-      bluefs_do_check_balance = false;
 
       // cleanup sync deferred keys
       for (auto b : deferred_stable) {
@@ -9501,9 +9501,15 @@ void BlueStore::_kv_sync_thread()
 	}
       }
 
-      // submit synct synchronously (block and wait for it to commit)
-      int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
-      ceph_assert(r == 0);
+      RocksDBStore::RocksDBTransactionImpl * _t =
+          static_cast<RocksDBStore::RocksDBTransactionImpl *>(synct.get());
+      if ( !(bluefs_do_check_balance &&  _t->bat.Count() == 0)) {
+        // submit synct synchronously (block and wait for it to commit)
+        int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
+        ceph_assert(r == 0);
+      }
+
+      bluefs_do_check_balance = false;
 
       {
 	std::unique_lock<std::mutex> m(kv_finalize_lock);
