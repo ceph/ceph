@@ -845,12 +845,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         'name=addr,type=CephString,req=false',
         'Check whether we can access and manage a remote host')
     def check_host(self, host, addr=None):
-        out, err, code = self._run_cephadm(host, 'client', 'check-host',
-                                           ['--expect-hostname', host],
-                                           addr=addr,
-                                           error_ok=True, no_fsid=True)
-        if code:
-            return 1, '', ('check-host failed:\n' + '\n'.join(err))
+        try:
+            out, err, code = self._run_cephadm(host, 'client', 'check-host',
+                                               ['--expect-hostname', host],
+                                               addr=addr,
+                                               error_ok=True, no_fsid=True)
+            if code:
+                return 1, '', ('check-host failed:\n' + '\n'.join(err))
+        except OrchestratorError as e:
+            self.log.exception(f"check-host failed for '{host}'")
+            return 1, '', ('check-host failed:\n' +
+                f"Host '{host}' not found. Use 'ceph orch host ls' to see all managed hosts.")
         # if we have an outstanding health alert for this host, give the
         # serve thread a kick
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
@@ -879,7 +884,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), err
 
-    def _get_connection(self, host):
+    def _get_connection(self, host: str):
         """
         Setup a connection for running commands on remote host.
         """
@@ -934,6 +939,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         try:
             try:
+                if not addr:
+                    raise OrchestratorError("host address is empty")
                 conn, connr = self._get_connection(addr)
             except OSError as e:
                 self._reset_con(host)
