@@ -130,6 +130,8 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
+  virtual void add_pin(LBAPin &pin) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
