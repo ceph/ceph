@@ -87,9 +87,14 @@ private:
   SegmentManager &segment_manager;
   Cache &cache;
 
+  btree_pin_set_t pin_set;
+
   op_context_t get_context(Transaction &t) {
-    return op_context_t{cache, t};
+    return op_context_t{cache, pin_set, t};
   }
+
+  static btree_range_pin_t &get_pin(CachedExtent &e);
+
 
   /**
    * get_root
