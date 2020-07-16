@@ -25,17 +25,17 @@ public:
   MOCK_METHOD1(shut_down, void(Context*));
 
   MOCK_METHOD8(execute_read,
-               bool(uint64_t, uint64_t, uint64_t, librados::snap_t,
-                    ceph::bufferlist*, Extents*, DispatchResult*, Context*));
+               bool(uint64_t, const Extents&, librados::snap_t,
+                    ceph::bufferlist*, Extents*, uint64_t*,
+                    DispatchResult*, Context*));
   bool read(
-      uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      librados::snap_t snap_id, int op_flags,
-      const ZTracer::Trace& parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, int* dispatch_flags,
-      DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) {
-    return execute_read(object_no, object_off, object_len, snap_id, read_data,
-                        extent_map, dispatch_result, on_dispatched);
+      uint64_t object_no, const Extents& extents, librados::snap_t snap_id,
+      int op_flags, const ZTracer::Trace& parent_trace,
+      ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
+      int* dispatch_flags, DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) {
+    return execute_read(object_no, extents, snap_id, read_data, extent_map,
+                        version, dispatch_result, on_dispatched);
   }
 
   MOCK_METHOD9(execute_discard,
