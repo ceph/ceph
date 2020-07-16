@@ -65,6 +65,73 @@ void ServiceMap::Daemon::generate_test_instances(std::list<Daemon*>& ls)
 
 // Service
 
+std::string ServiceMap::Service::get_summary() const
+{
+  if (summary.size()) {
+    return summary;
+  }
+  if (daemons.empty()) {
+    return "no daemons active";
+  }
+  std::ostringstream ss;
+  ss << daemons.size() << (daemons.size() > 1 ? " daemons" : " daemon")
+     << " active";
+
+  if (!daemons.empty()) {
+    ss << " (";
+    for (auto p = daemons.begin(); p != daemons.end(); ++p) {
+      if (p != daemons.begin()) {
+	ss << ", ";
+      }
+      ss << p->first;
+    }
+    ss << ")";
+  }
+
+  return ss.str();
+}
+
+std::string ServiceMap::Service::get_task_summary(const std::string_view task_prefix) const
+{
+  // contruct a map similar to:
+  //     {"service1 status" -> {"service1.0" -> "running"}}
+  //     {"service2 status" -> {"service2.0" -> "idle"},
+  //                           {"service2.1" -> "running"}}
+  std::map<std::string, std::map<std::string, std::string>> by_task;
+  for (const auto &p : daemons) {
+    std::stringstream d;
+    d << task_prefix << "." << p.first;
+    for (const auto &q : p.second.task_status) {
+      auto p1 = by_task.emplace(q.first, std::map<std::string, std::string>{}).first;
+      auto p2 = p1->second.emplace(d.str(), std::string()).first;
+      p2->second = q.second;
+    }
+  }
+
+  std::stringstream ss;
+  for (const auto &p : by_task) {
+    ss << "\n    " << p.first << ":";
+    for (auto q : p.second) {
+      ss << "\n        " << q.first << ": " << q.second;
+    }
+  }
+
+  return ss.str();
+}
+
+void ServiceMap::Service::count_metadata(const std::string& field,
+					std::map<std::string,int> *out) const
+{
+  for (auto& p : daemons) {
+    auto q = p.second.metadata.find(field);
+    if (q == p.second.metadata.end()) {
+      (*out)["unknown"]++;
+    } else {
+      (*out)[q->second]++;
+    }
+  }
+}
+
 void ServiceMap::Service::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
