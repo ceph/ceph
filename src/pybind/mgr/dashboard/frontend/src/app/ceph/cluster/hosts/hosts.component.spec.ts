@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -53,7 +53,7 @@ describe('HostsComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should render hosts list even with not permission mapped services', async(() => {
+  it('should render hosts list even with not permission mapped services', () => {
     const hostname = 'ceph.dev';
     const payload = [
       {
@@ -79,7 +79,7 @@ describe('HostsComponent', () => {
 
     hostListSpy.and.callFake(() => of(payload));
 
-    fixture.whenStable().then(() => {
+    return fixture.whenStable().then(() => {
       fixture.detectChanges();
 
       const spans = fixture.debugElement.nativeElement.querySelectorAll(
@@ -87,7 +87,7 @@ describe('HostsComponent', () => {
       );
       expect(spans[0].textContent).toBe(hostname);
     });
-  }));
+  });
 
   describe('getEditDisableDesc', () => {
     it('should return message (not managed by Orchestrator)', () => {
