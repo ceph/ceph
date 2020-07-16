@@ -1175,6 +1175,9 @@ ${CMAKE} .. \
     -DCMAKE_VERBOSE_MAKEFILE=ON \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
+%if 0%{?suse_version}
+    -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+%endif
     -DWITH_GRAFANA=ON
 
 %if %{with cmake_verbose_logging}
