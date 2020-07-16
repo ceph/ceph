@@ -108,6 +108,32 @@ BlockDevice::detect_device_type(const std::string& path)
   return block_device_t::aio;
 }
 
+BlockDevice::block_device_t
+BlockDevice::device_type_from_name(const std::string& blk_dev_name)
+{
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+  if (blk_dev_name == "aio") {
+    return block_device_t::aio;
+  }
+#endif
+#if defined(HAVE_SPDK)
+  if (blk_dev_name == "spdk") {
+    return block_device_t::spdk;
+  }
+#endif
+#if defined(HAVE_BLUESTORE_PMEM)
+  if (blk_dev_name == "pmem") {
+    return block_device_t::pmem;
+  }
+#endif
+#if (defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)) && defined(HAVE_LIZBC)
+  if (blk_dev_name == "hm_smr") {
+    return block_device_t::hm_smr;
+  }
+#endif
+  return block_device_t::unknown;
+}
+
 BlockDevice* BlockDevice::create_with_type(block_device_t device_type,
   CephContext* cct, const std::string& path, aio_callback_t cb,
   void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
@@ -140,7 +166,13 @@ BlockDevice *BlockDevice::create(
     CephContext* cct, const string& path, aio_callback_t cb,
     void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
 {
-  block_device_t device_type = detect_device_type(path);
+  const string blk_dev_name = cct->_conf.get_val<string>("bdev_type");
+  block_device_t device_type = block_device_t::unknown;
+  if (blk_dev_name.empty()) {
+    device_type = detect_device_type(path);
+  } else {
+    device_type = device_type_from_name(blk_dev_name);
+  }
   return create_with_type(device_type, cct, path, cb, cbpriv, d_cb, d_cbpriv);
 }
 
