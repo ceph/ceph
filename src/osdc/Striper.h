@@ -73,6 +73,9 @@
 
     static uint64_t get_num_objects(const file_layout_t& layout,
 				    uint64_t size);
+
+    static uint64_t get_file_offset(CephContext *cct,
+            const file_layout_t *layout, uint64_t objectno, uint64_t off);
     /*
      * helper to assemble a striped result
      */
