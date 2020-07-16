@@ -2077,7 +2077,7 @@ void PeeringState::calc_replicated_acting_stretch(
    * expect that this and other users should instead check against
    * CRUSH_ITEM_NONE.
    */
-  if (pool.info.peering_crush_mandatory_member != 0) {
+  if (pool.info.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
     auto aiter = ancestors.find(pool.info.peering_crush_mandatory_member);
     if (aiter != ancestors.end() &&
 	aiter->second.get_num_selected()) {

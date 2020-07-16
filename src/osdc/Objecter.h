@@ -1781,7 +1781,7 @@ public:
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
-    int32_t peering_crush_mandatory_member = 0;
+    int32_t peering_crush_mandatory_member = CRUSH_ITEM_NONE;
 
     bool used_replica = false;
     bool paused = false;

@@ -2036,7 +2036,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (peering_crush_bucket_barrier != 0 ||
       peering_crush_bucket_target != 0 ||
       peering_crush_bucket_count !=0 ||
-      peering_crush_mandatory_member) {
+      peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
     ceph_assert(v >= 30);
     new_compat = 30;
   }
@@ -2255,7 +2255,7 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
 	   << want;
     }
     return false;
-  } else if (peering_crush_mandatory_member &&
+  } else if (peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
 	     !ancestors.count(peering_crush_mandatory_member)) {
     if (out) {
       *out << __func__ << ": missing mandatory crush bucket member "
