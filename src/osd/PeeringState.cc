@@ -2442,22 +2442,9 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   // didn't break them with earlier choices!
   const pg_pool_t& pg_pool = pool.info;
   if (pg_pool.is_stretch_pool()) {
-    const uint32_t barrier_id = pg_pool.peering_crush_bucket_barrier;
-    const uint32_t barrier_count = pg_pool.peering_crush_bucket_count;
-    set<int> ancestors;
-    const shared_ptr<CrushWrapper>& crush = osdmap_ref->crush;
-    for (int osdid : want) {
-      int ancestor = crush->get_parent_of_type(osdid, barrier_id,
-					       pg_pool.crush_rule);
-      ancestors.insert(ancestor);
-    }
-    if (ancestors.size() < barrier_count) {
-      psdout(5) << "peeering blocked: not enough crush buckets with OSDs in acting" << dendl;
-      return false;
-    } else if (pg_pool.peering_crush_mandatory_member &&
-	       !ancestors.count(pg_pool.peering_crush_mandatory_member)) {
-      psdout(5) << "peering blocked: missing mandatory crush bucket member "
-		<< pg_pool.peering_crush_mandatory_member << dendl;
+    stringstream ss;
+    if (!pg_pool.stretch_set_can_peer(want, *get_osdmap(), &ss)) {
+      psdout(5) << "peering blocked by stretch_can_peer: " << ss.str() << dendl;
       return false;
     }
   }

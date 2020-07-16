@@ -14383,6 +14383,7 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
       newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
+      newp.last_force_op_resend = pending_inc.epoch;
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
@@ -14403,7 +14404,7 @@ void OSDMonitor::trigger_recovery_stretch_mode()
   for (auto pgi : osdmap.pools) {
     if (pgi.second.peering_crush_bucket_count) {
       pg_pool_t newp(pgi.second);
-      // bump up the min_size since we have extra replicas available...
+      newp.last_force_op_resend = pending_inc.epoch;
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
@@ -14473,6 +14474,7 @@ void OSDMonitor::trigger_healthy_stretch_mode()
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
       newp.peering_crush_mandatory_member = 0;
       newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      newp.last_force_op_resend = pending_inc.epoch;
       pending_inc.new_pools[pgi.first] = newp;
     }
   }
