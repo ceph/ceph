@@ -521,14 +521,7 @@ def write_file(remote, path, data):
     :param path: Path on the remote being written to.
     :param data: Data to be written.
     """
-    remote.run(
-        args=[
-            'cat',
-            run.Raw('>'),
-            path,
-        ],
-        stdin=data,
-    )
+    remote.write_file(path, data)
 
 
 def sudo_write_file(remote, path, data, perms=None, owner=None):
@@ -543,21 +536,7 @@ def sudo_write_file(remote, path, data, perms=None, owner=None):
 
     Both perms and owner are passed directly to chmod.
     """
-    permargs = []
-    if perms:
-        permargs = [run.Raw('&&'), 'sudo', 'chmod', perms, path]
-    owner_args = []
-    if owner:
-        owner_args = [run.Raw('&&'), 'sudo', 'chown', owner, path]
-    remote.run(
-        args=[
-            'sudo',
-            'sh',
-            '-c',
-            'cat > ' + path,
-        ] + owner_args + permargs,
-        stdin=data,
-    )
+    remote.sudo_write_file(path, data, mode=perms, owner=owner)
 
 
 def copy_file(from_remote, from_path, to_remote, to_path=None):
