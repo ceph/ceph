@@ -14,6 +14,7 @@ namespace crimson::os::seastore::lba_manager::btree {
 
 struct op_context_t {
   Cache &cache;
+  btree_pin_set_t &pins;
   Transaction &trans;
 };
 
@@ -49,10 +50,11 @@ struct LBANode : CachedExtent {
   using lookup_range_ertr = LBAManager::get_mapping_ertr;
   using lookup_range_ret = LBAManager::get_mapping_ret;
 
+  btree_range_pin_t pin;
 
-  LBANode(ceph::bufferptr &&ptr) : CachedExtent(std::move(ptr)) {}
+  LBANode(ceph::bufferptr &&ptr) : CachedExtent(std::move(ptr)), pin(this) {}
   LBANode(const LBANode &rhs)
-    : CachedExtent(rhs) {}
+    : CachedExtent(rhs), pin(rhs.pin, this) {}
 
   virtual lba_node_meta_t get_node_meta() const = 0;
 
