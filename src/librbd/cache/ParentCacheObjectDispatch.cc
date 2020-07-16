@@ -64,15 +64,22 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
 
 template <typename I>
 bool ParentCacheObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off,
-    uint64_t object_len, librados::snap_t snap_id, int op_flags,
-    const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-    io::Extents* extent_map, int* object_dispatch_flags,
-    io::DispatchResult* dispatch_result, Context** on_finish,
-    Context* on_dispatched) {
+    uint64_t object_no, const io::Extents &extents, librados::snap_t snap_id,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
+    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
+    Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
-                 << object_len << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
+
+  if (version != nullptr || extents.size() != 1) {
+    // we currently don't cache read versions
+    // and don't support reading more than one extent
+    return false;
+  }
+
+  auto [object_off, object_len] = extents.front();
+
   string oid = data_object_name(m_image_ctx, object_no);
 
   /* if RO daemon still don't startup, or RO daemon crash,
@@ -128,7 +135,7 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
         *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
         on_dispatched->complete(r);
       });
-    io::util::read_parent<I>(m_image_ctx, object_no, read_off, read_len,
+    io::util::read_parent<I>(m_image_ctx, object_no, {{read_off, read_len}},
                              snap_id, parent_trace, read_data, ctx);
     return;
   }

@@ -137,8 +137,8 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
     aio_comp, off, len, {{0, len}});
 
   auto req = io::ObjectDispatchSpec::create_read(
-    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, off, len, snapid,
-    op_flags, trace, &req_comp->bl, &req_comp->extent_map, req_comp);
+    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, {{off, len}}, snapid,
+    op_flags, trace, &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
   req->send();
 }
 
