@@ -7936,11 +7936,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->peering_crush_bucket_count = osdmap.stretch_bucket_count;
     pi->peering_crush_bucket_target = osdmap.stretch_bucket_count;
     pi->peering_crush_bucket_barrier = osdmap.stretch_mode_bucket;
-    pi->peering_crush_mandatory_member = 0;
+    pi->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
     if (osdmap.degraded_stretch_mode) {
       pi->peering_crush_bucket_count = osdmap.degraded_stretch_mode;
       pi->peering_crush_bucket_target = osdmap.degraded_stretch_mode;
-      // pi->peering_crush_bucket_mandatory_member = 0;
+      // pi->peering_crush_bucket_mandatory_member = CRUSH_ITEM_NONE;
       // TODO: drat, we don't record this ^ anywhere, though given that it
       // necessarily won't exist elsewhere it likely doesn't matter
       pi->min_size = pi->min_size / 2;
@@ -14315,7 +14315,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       pool->peering_crush_bucket_count = bucket_count;
       pool->peering_crush_bucket_target = bucket_count;
       pool->peering_crush_bucket_barrier = dividing_id;
-      pool->peering_crush_mandatory_member = 0;
+      pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
       pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
       pool->min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
     }
@@ -14472,7 +14472,7 @@ void OSDMonitor::trigger_healthy_stretch_mode()
     if (pgi.second.peering_crush_bucket_count) {
       pg_pool_t newp(pgi.second);
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
-      newp.peering_crush_mandatory_member = 0;
+      newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
       newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
       newp.last_force_op_resend = pending_inc.epoch;
       pending_inc.new_pools[pgi.first] = newp;
