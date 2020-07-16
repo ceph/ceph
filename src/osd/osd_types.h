@@ -1135,6 +1135,8 @@ struct pg_merge_meta_t {
 };
 WRITE_CLASS_ENCODER(pg_merge_meta_t)
 
+class OSDMap;
+
 /*
  * pg_pool
  */
@@ -1435,6 +1437,15 @@ public:
 
   bool is_stretch_pool() const {
     return peering_crush_bucket_count != 0;
+  }
+
+  bool stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
+			    std::ostream *out) const;
+  bool stretch_set_can_peer(const vector<int>& want, const OSDMap& osdmap,
+			    std::ostream *out) const {
+    set<int> swant;
+    for (auto i : want) swant.insert(i);
+    return stretch_set_can_peer(swant, osdmap, out);
   }
 
   uint64_t target_max_bytes;   ///< tiering: target max pool size
@@ -3048,7 +3059,6 @@ WRITE_CLASS_ENCODER(pg_notify_t)
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
 
 
-class OSDMap;
 /**
  * PastIntervals -- information needed to determine the PriorSet and
  * the might_have_unfound set
@@ -3179,6 +3189,14 @@ public:
     bool new_sort_bitwise,
     bool old_recovery_deletes,
     bool new_recovery_deletes,
+    uint32_t old_crush_count,
+    uint32_t new_crush_count,
+    uint32_t old_crush_target,
+    uint32_t new_crush_target,
+    uint32_t old_crush_barrier,
+    uint32_t new_crush_barrier,
+    int32_t old_crush_member,
+    int32_t new_crush_member,
     pg_t pgid
     );
 
