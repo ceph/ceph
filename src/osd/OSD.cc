@@ -3500,6 +3500,10 @@ int OSD::init()
 
   dout(2) << "superblock: I am osd." << superblock.whoami << dendl;
 
+  if (cct->_conf.get_val<bool>("osd_compact_on_start")) {
+    dout(2) << "compacting object store's omap" << dendl;
+    store->compact();
+  }
 
   // prime osd stats
   {
