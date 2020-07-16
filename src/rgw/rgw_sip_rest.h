@@ -25,8 +25,8 @@ class SIProvider_REST : public SIProviderCommon
 
   public:
     TypeProvider(SIProvider_REST *_sip) : sip(_sip) {}
-    SIProvider::TypeHandler *get_type_handler(const SIProvider::stage_id_t& sid) override {
-      return sip->get_type_handler(sid);
+    SIProvider::TypeHandler *get_type_handler() override {
+      return sip->get_type_handler();
     }
   } proxy_type_provider;
 

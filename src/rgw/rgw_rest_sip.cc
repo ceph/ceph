@@ -146,7 +146,7 @@ void RGWOp_SIP_Fetch::execute() {
 
   stage_id = opt_stage_id.value_or(sip->get_first_stage());
 
-  type_handler = sip->get_type_handler(stage_id);
+  type_handler = sip->get_type_handler();
   if (!type_handler) {
     ldout(s->cct, 0) << "ERROR: " << __func__ << "(): null type handler, likely a bug" << dendl;
     op_ret = -EIO;

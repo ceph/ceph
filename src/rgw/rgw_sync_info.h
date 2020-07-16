@@ -44,6 +44,7 @@ public:
 
   struct Info {
     std::string name;
+    std::string data_type;
     stage_id_t first_stage;
     stage_id_t last_stage;
     std::vector<StageInfo> stages;
@@ -60,6 +61,8 @@ public:
 
   struct EntryInfoBase {
     virtual ~EntryInfoBase() {}
+
+    virtual string get_data_type() const = 0;
 
     virtual void encode(bufferlist& bl) const = 0;
     virtual void decode(bufferlist::const_iterator& bl) = 0;
@@ -78,6 +81,8 @@ public:
   public:
     virtual ~TypeHandler() {}
 
+    virtual string get_data_type() const = 0;
+
     virtual int handle_entry(const SIProvider::stage_id_t& sid,
                              SIProvider::Entry& entry,
                              std::function<int(SIProvider::EntryInfoBase&)> f) = 0;
@@ -91,7 +96,7 @@ public:
   public:
     virtual ~TypeHandlerProvider() {}
 
-    virtual TypeHandler *get_type_handler(const stage_id_t& sid) = 0;
+    virtual TypeHandler *get_type_handler() = 0;
   };
 
   using TypeHandlerProviderRef = std::shared_ptr<TypeHandlerProvider>;
@@ -113,17 +118,22 @@ public:
   virtual const std::string& get_name() const = 0;
 
   virtual TypeHandlerProvider *get_type_provider() = 0;
-  virtual TypeHandler *get_type_handler(const stage_id_t& sid) {
+  virtual TypeHandler *get_type_handler() {
     auto tp = get_type_provider();
     if (!tp) {
       return nullptr;
     }
-    return tp->get_type_handler(sid);
+    return tp->get_type_handler();
   }
 
   virtual int trim(const stage_id_t& sid,
                    int shard_id,
                    const std::string& marker) = 0;
+
+  string get_data_type() {
+    auto th = get_type_handler();
+    return th->get_data_type();
+  }
 };
 
 class SIProviderCommon : public SIProvider
@@ -208,7 +218,7 @@ class SIProvider_Container : public SIProviderCommon
   public:
     TypeProvider(SIProvider_Container *_sip) : sip(_sip) {}
 
-    SIProvider::TypeHandler *get_type_handler(const stage_id_t& sid) override;
+    SIProvider::TypeHandler *get_type_handler() override;
   } type_provider;
 
 protected:
@@ -294,11 +304,16 @@ class SITypeHandlerProvider_Default : public SIProvider::TypeHandlerProvider {
       }
       return 0;
     }
+
+    string get_data_type() const {
+      T t;
+      return t.get_data_type();
+    }
   } type_handler;
 public:
   SITypeHandlerProvider_Default() {}
 
-  SIProvider::TypeHandler *get_type_handler(const SIProvider::stage_id_t& sid) override {
+  SIProvider::TypeHandler *get_type_handler() override {
     return &type_handler;
   }
 };

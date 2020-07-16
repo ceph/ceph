@@ -17,6 +17,10 @@ struct siprovider_meta_info : public SIProvider::EntryInfoBase {
   siprovider_meta_info(const string& _section, const string& _id) : section(_section),
                                                                     id(_id) {}
 
+  string get_data_type() const override {
+    return "meta";
+  }
+
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(section, bl);

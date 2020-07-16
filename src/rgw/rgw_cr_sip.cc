@@ -315,7 +315,7 @@ struct SIProviderRESTCRs {
           return set_cr_error(-EIO);
         }
 
-        auto type_handler = mgr->type_provider->get_type_handler(sid);
+        auto type_handler = mgr->type_provider->get_type_handler();
         if (!type_handler) {
           ldout(cct, 0) << "ERROR: " << __func__ << "(): get_type_provider for sid=" << sid << " is null, likely a bug" << dendl;
           return set_cr_error(-EIO);

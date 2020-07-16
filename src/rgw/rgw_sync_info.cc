@@ -52,6 +52,7 @@ void SIProvider::StageInfo::decode_json(JSONObj *obj)
 void SIProvider::Info::dump(Formatter *f) const
 {
   encode_json("name", name, f);
+  encode_json("data_type", data_type, f);
   encode_json("first_stage", first_stage, f);
   encode_json("last_stage", last_stage, f);
   encode_json("stages", stages, f);
@@ -60,6 +61,7 @@ void SIProvider::Info::dump(Formatter *f) const
 void SIProvider::Info::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("data_type", data_type, obj);
   JSONDecoder::decode_json("first_stage", first_stage, obj);
   JSONDecoder::decode_json("last_stage", last_stage, obj);
   JSONDecoder::decode_json("stages", stages, obj);
@@ -80,6 +82,7 @@ SIProvider::Info SIProviderCommon::get_info()
   }
 
   return { get_name(),
+           get_data_type(),
            get_first_stage(),
            get_last_stage(),
            stages };
@@ -309,17 +312,13 @@ int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std
   return provider->get_cur_state(psid, shard_id, marker);
 }
 
-SIProvider::TypeHandler *SIProvider_Container::TypeProvider::get_type_handler(const stage_id_t& sid)
+SIProvider::TypeHandler *SIProvider_Container::TypeProvider::get_type_handler()
 {
-  SIProviderRef provider;
-  stage_id_t psid;
-
-  if (!sip->decode_sid(sid,  &provider, &psid)) {
-    ldout(sip->cct, 20) << __func__ << "() can't decode sid: " << dendl;
+  if (sip->providers.empty()) {
     return nullptr;
   }
 
-  return provider->get_type_handler(psid);
+  return sip->providers[0]->get_type_handler();
 }
 
 int SIProvider_Container::trim(const stage_id_t& sid, int shard_id, const std::string& marker)

@@ -20,6 +20,10 @@ namespace rgw { namespace sal {
 struct siprovider_bucket_entry_info : public SIProvider::EntryInfoBase {
   rgw_bi_log_entry entry;
 
+  string get_data_type() const override {
+    return "bucket";
+  }
+
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(entry, bl);

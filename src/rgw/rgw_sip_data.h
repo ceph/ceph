@@ -19,6 +19,10 @@ struct siprovider_data_info : public SIProvider::EntryInfoBase {
   siprovider_data_info(const string& _id,
                        std::optional<ceph::real_time> _ts) : id(_id), timestamp(_ts) {}
 
+  string get_data_type() const override {
+    return "data";
+  }
+
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(id, bl);

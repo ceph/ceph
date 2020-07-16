@@ -10184,7 +10184,7 @@ next:
      return -r;
    }
 
-   auto type_handler = provider->get_type_handler(stage_id);
+   auto type_handler = provider->get_type_handler();
    if (!type_handler) {
      cerr << "ERROR: no type handler for stage_id=" << stage_id << std::endl;
      return EIO;
