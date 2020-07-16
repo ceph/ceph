@@ -92,3 +92,7 @@
     ceph fs required_client_features <fs name> add <feature>
     ceph fs required_client_features <fs name> rm <feature>
     ceph fs feature ls
+
+* OSD: A new configuration option ``osd_compact_on_start`` has been added which triggers
+  an OSD compaction on start. Setting this option to ``true`` and restarting an OSD
+  will result in an offline compaction of the OSD prior to booting.
