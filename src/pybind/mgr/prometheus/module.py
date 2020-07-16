@@ -9,12 +9,12 @@ import re
 import socket
 import threading
 import time
-from mgr_module import MgrModule, MgrStandbyModule, PG_STATES
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option
 from mgr_util import get_default_addr, profile_method
 from rbd import RBD
 from collections import namedtuple
 try:
-    from typing import DefaultDict, Optional, Dict, Any, Set
+    from typing import DefaultDict, Optional, Dict, Any, Set, cast
 except ImportError:
     pass
 
@@ -247,12 +247,31 @@ class Module(MgrModule):
     ]
 
     MODULE_OPTIONS = [
-        {'name': 'server_addr'},
-        {'name': 'server_port'},
-        {'name': 'scrape_interval'},
-        {'name': 'stale_cache_strategy'},
-        {'name': 'rbd_stats_pools'},
-        {'name': 'rbd_stats_pools_refresh_interval', 'type': 'int', 'default': 300},
+        Option(
+            'server_addr'
+        ),
+        Option(
+            'server_port',
+            type='int'
+        ),
+        Option(
+            'scrape_interval',
+            type='float',
+            default=15.0
+        ),
+        Option(
+            'stale_cache_strategy',
+            default='log'
+        ),
+        Option(
+            'rbd_stats_pools',
+            default=''
+        ),
+        Option(
+            name='rbd_stats_pools_refresh_interval',
+            type='int',
+            default=300
+        )
     ]
 
     STALE_CACHE_FAIL = 'fail'
@@ -264,8 +283,8 @@ class Module(MgrModule):
         self.shutdown_event = threading.Event()
         self.collect_lock = threading.Lock()
         self.collect_time = 0.0
-        self.scrape_interval = 15.0
-        self.stale_cache_strategy = self.STALE_CACHE_FAIL
+        self.scrape_interval: float = 15.0
+        self.stale_cache_strategy: str = self.STALE_CACHE_FAIL
         self.collect_cache = None
         self.rbd_stats = {
             'pools': {},
@@ -825,7 +844,7 @@ class Module(MgrModule):
         # list of pool[/namespace] entries. If no namespace is specifed the
         # stats are collected for every namespace in the pool. The wildcard
         # '*' can be used to indicate all pools or namespaces
-        pools_string = self.get_localized_module_option('rbd_stats_pools', '')
+        pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))
         pool_keys = []
         for x in re.split('[\s,]+', pools_string):
             if not x:
@@ -1249,9 +1268,9 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, msg)
 
         # Make the cache timeout for collecting configurable
-        self.scrape_interval = float(self.get_localized_module_option('scrape_interval', 15.0))
+        self.scrape_interval = cast(float, self.get_localized_module_option('scrape_interval'))
 
-        self.stale_cache_strategy = self.get_localized_module_option('stale_cache_strategy', 'log')
+        self.stale_cache_strategy = cast(str, self.get_localized_module_option('stale_cache_strategy'))
         if self.stale_cache_strategy not in [self.STALE_CACHE_FAIL,
                                              self.STALE_CACHE_RETURN]:
             self.stale_cache_strategy = self.STALE_CACHE_FAIL
@@ -1276,7 +1295,7 @@ class Module(MgrModule):
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
-            'server.socket_port': int(server_port),
+            'server.socket_port': server_port,
             'engine.autoreload.on': False
         })
         cherrypy.tree.mount(Root(), "/")
@@ -1313,7 +1332,7 @@ class StandbyModule(MgrStandbyModule):
                       (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,
-            'server.socket_port': int(server_port),
+            'server.socket_port': server_port,
             'engine.autoreload.on': False
         })
 

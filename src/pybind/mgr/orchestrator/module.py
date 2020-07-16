@@ -13,7 +13,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 
 from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
@@ -135,15 +135,14 @@ def preview_table_services(data):
 class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                       metaclass=CLICommandMeta):
     MODULE_OPTIONS = [
-        {
-            'name': 'orchestrator',
-            'type': 'str',
-            'default': None,
-            'desc': 'Orchestrator backend',
-            'enum_allowed': ['cephadm', 'rook',
-                             'test_orchestrator'],
-            'runtime': True,
-        },
+        Option(
+            'orchestrator',
+            type='str',
+            default=None,
+            desc='Orchestrator backend',
+            enum_allowed=['cephadm', 'rook', 'test_orchestrator'],
+            runtime=True,
+        )
     ]
     NATIVE_OPTIONS = []  # type: List[dict]
 
@@ -633,38 +632,38 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 usage:
   ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
   ceph orch apply osd --all-available-devices [--dry-run] [--unmanaged]
-  
+
 Restrictions:
-  
+
   Mutexes:
   * -i, --all-available-devices
   * -i, --unmanaged (this would overwrite the osdspec loaded from a file)
-  
+
   Parameters:
-  
+
   * --unmanaged
      Only works with --all-available-devices.
-  
+
 Description:
-  
+
   * -i
     An inbuf object like a file or a json/yaml blob containing a valid OSDSpec
-    
+
   * --all-available-devices
     The most simple OSDSpec there is. Takes all as 'available' marked devices
     and creates standalone OSDs on them.
-    
+
   * --unmanaged
     Set a the unmanaged flag for all--available-devices (default is False)
-    
+
 Examples:
 
    # ceph orch apply osd -i <file.yml|json>
-   
+
    Applies one or more OSDSpecs found in <file>
-   
+
    # ceph orch osd apply --all-available-devices --unmanaged=true
-   
+
    Creates and applies simple OSDSpec with the unmanaged flag set to <true>
 """
 
