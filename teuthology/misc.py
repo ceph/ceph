@@ -656,22 +656,8 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
 def append_lines_to_file(remote, path, lines, sudo=False):
     """
     Append lines to a file.
-    An intermediate file is used in the same manner as in
-    Remove_lines_from_list.
     """
-
-    temp_file_path = remote.mktemp()
-
-    data = get_file(remote, path, sudo).decode()
-
-    # add the additional data and write it back out, using a temp file
-    # in case of connectivity of loss, and then mv it to the
-    # actual desired location
-    data += lines
-    write_file(remote, temp_file_path, data)
-
-    # then do a 'mv' to the actual file location
-    move_file(remote, temp_file_path, path, sudo)
+    remote.write_file(path, lines, append=True, sudo=sudo)
 
 def prepend_lines_to_file(remote, path, lines, sudo=False):
     """
