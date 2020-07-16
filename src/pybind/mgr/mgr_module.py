@@ -1,10 +1,15 @@
 import ceph_module  # noqa
 
-try:
-    from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List
-except ImportError:
-    # just for type checking
-    pass
+from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List, \
+    Union, TYPE_CHECKING, NamedTuple
+if TYPE_CHECKING:
+    import sys
+    if sys.version_info >= (3, 8):
+        from typing import Literal
+    else:
+        from typing_extensions import Literal
+
+
 import logging
 import errno
 import json
@@ -354,27 +359,37 @@ def CLIWriteCommand(prefix, args="", desc=""):
 def _get_localized_key(prefix, key):
     return '{}/{}'.format(prefix, key)
 
+"""
+MODULE_OPTIONS types and Option Class
+"""
+if TYPE_CHECKING:
+    OptionTypeLabel = Literal[
+        'uint', 'int', 'str', 'float', 'bool', 'addr', 'addrvec', 'uuid', 'size', 'secs']
 
-class Option(dict):
+
+# common/options.h: value_t
+OptionValue = Optional[Union[bool, int, float, str]]
+
+
+class Option(Dict):
     """
     Helper class to declare options for MODULE_OPTIONS list.
-
-    Caveat: it uses argument names matching Python keywords (type, min, max),
-    so any further processing should happen in a separate method.
-
-    TODO: type validation.
+    TODO: Replace with typing.TypedDict when in python_version >= 3.8
     """
 
     def __init__(
-            self, name,
-            default=None,
-            type='str',
-            desc=None, longdesc=None,
-            min=None, max=None,
-            enum_allowed=None,
-            see_also=None,
-            tags=None,
-            runtime=False,
+            self,
+            name: str,
+            default: OptionValue=None,
+            type: 'OptionTypeLabel'='str',
+            desc: Optional[str]=None,
+            long_desc: Optional[str]=None,
+            min: OptionValue=None,
+            max: OptionValue=None,
+            enum_allowed: Optional[List[str]]=None,
+            tags: Optional[List[str]]=None,
+            see_also: Optional[List[str]]=None,
+            runtime: bool=False,
     ):
         super(Option, self).__init__(
             (k, v) for k, v in vars().items()
@@ -600,7 +615,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     from their active peer), and to configuration settings (read only).
     """
 
-    MODULE_OPTIONS = []  # type: List[Dict[str, Any]]
+    MODULE_OPTIONS: List[Option] = []
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     def __init__(self, module_name, capsule):
@@ -663,13 +678,11 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_mgr_id(self):
         return self._ceph_get_mgr_id()
 
-    def get_module_option(self, key, default=None):
+    def get_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
 
-        :param str key:
         :param default: the default value of the config if it is not found
-        :return: str
         """
         r = self._ceph_get_module_option(key)
         if r is None:
@@ -692,7 +705,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_active_uri(self):
         return self._ceph_get_active_uri()
 
-    def get_localized_module_option(self, key, default=None):
+    def get_localized_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
             return self.MODULE_OPTION_DEFAULTS.get(key, default)
@@ -702,7 +715,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     COMMANDS = []  # type: List[Any]
-    MODULE_OPTIONS = []  # type: List[dict]
+    MODULE_OPTIONS: List[Option] = []
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     # Priority definitions for perf counters
@@ -1248,28 +1261,23 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
-    def get_module_option(self, key, default=None):
+    def get_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
-
-        :param str key:
-        :param str default:
-        :return: str
         """
         self._validate_module_option(key)
         return self._get_module_option(key, default)
 
-    def get_module_option_ex(self, module, key, default=None):
+    def get_module_option_ex(self, module: str, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
         for the specified module.
 
-        :param str module: The name of the module, e.g. 'dashboard'
+        :param module: The name of the module, e.g. 'dashboard'
             or 'telemetry'.
-        :param str key: The configuration key, e.g. 'server_addr'.
-        :param str,None default: The default value to use when the
+        :param key: The configuration key, e.g. 'server_addr'.
+        :param default: The default value to use when the
             returned value is ``None``. Defaults to ``None``.
-        :return: str,int,bool,float,None
         """
         if module == self.module_name:
             self._validate_module_option(key)
@@ -1289,12 +1297,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def _set_localized(self, key, val, setter):
         return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
-    def get_localized_module_option(self, key, default=None):
+    def get_localized_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve localized configuration for this ceph-mgr instance
-        :param str key:
-        :param str default:
-        :return: str
         """
         self._validate_module_option(key)
         return self._get_module_option(key, default, self.get_mgr_id())

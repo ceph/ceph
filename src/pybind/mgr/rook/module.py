@@ -30,7 +30,7 @@ except ImportError:
     client = None
     config = None
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 import orchestrator
 
 from .rook_cluster import RookCluster
@@ -98,9 +98,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     Right now, we are calling the k8s API synchronously.
     """
 
-    MODULE_OPTIONS = [
+    MODULE_OPTIONS: List[Option] = [
         # TODO: configure k8s API addr instead of assuming local
-    ]  # type: List[Dict[str, Any]]
+    ]
 
     def process(self, completions):
         # type: (List[RookCompletion]) -> None

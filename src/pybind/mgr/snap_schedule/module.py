@@ -7,20 +7,20 @@ import errno
 import json
 import sqlite3
 from .fs.schedule_client import SnapSchedClient
-from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand
+from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option
 from mgr_util import CephfsConnectionException
 from threading import Event
 
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {
-            'name':    'allow_m_granularity',
-            'type':    'bool',
-            'default': False,
-            'desc':    'allow minute scheduled snapshots',
-            'runtime': True,
-        },
+        Option(
+            'allow_m_granularity',
+            type='bool',
+            default=False,
+            desc='allow minute scheduled snapshots',
+            runtime=True,
+        ),
     ]
 
     def __init__(self, *args, **kwargs):
