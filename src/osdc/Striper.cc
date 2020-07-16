@@ -296,6 +296,26 @@ uint64_t Striper::get_num_objects(const file_layout_t& layout,
   return num_periods * stripe_count - remainder_objs;
 }
 
+uint64_t Striper::get_file_offset(CephContext *cct,
+        const file_layout_t *layout, uint64_t objectno, uint64_t off) {
+  ldout(cct, 10) << "get_file_offset " << objectno << " " << off  << dendl;
+
+  __u32 object_size = layout->object_size;
+  __u32 su = layout->stripe_unit;
+  __u32 stripe_count = layout->stripe_count;
+  ceph_assert(object_size >= su);
+  uint64_t stripes_per_object = object_size / su;
+  ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
+
+  uint64_t off_in_block = off % su;
+
+  uint64_t stripepos = objectno % stripe_count;
+  uint64_t objectsetno = objectno / stripe_count;
+  uint64_t stripeno = off / su + objectsetno * stripes_per_object;
+  uint64_t blockno = stripeno * stripe_count + stripepos;
+  return blockno * su + off_in_block;
+}
+
 // StripedReadResult
 
 void Striper::StripedReadResult::add_partial_result(
