@@ -21,6 +21,7 @@
 #include <string_view>
 
 #include "common/config.h"
+#include "common/RefCountedObj.h"
 #include "include/counter.h"
 #include "include/elist.h"
 #include "include/types.h"
@@ -67,17 +68,55 @@ struct cinode_lock_info_t {
  */
 class InodeStoreBase {
 public:
-  typedef inode_t<mempool::mds_co::pool_allocator> mempool_inode;
-  typedef old_inode_t<mempool::mds_co::pool_allocator> mempool_old_inode;
-  typedef mempool::mds_co::compact_map<snapid_t, mempool_old_inode> mempool_old_inode_map;
-  typedef xattr_map<mempool::mds_co::pool_allocator> mempool_xattr_map; // FIXME bufferptr not in mempool
+  using mempool_inode = inode_t<mempool::mds_co::pool_allocator>;
+  using inode_ptr = std::shared_ptr<mempool_inode>;
+  using inode_const_ptr = std::shared_ptr<const mempool_inode>;
 
-  InodeStoreBase() {}
+  template <typename ...Args>
+  static inode_ptr allocate_inode(Args && ...args) {
+    static mempool::mds_co::pool_allocator<mempool_inode> allocator;
+    return std::allocate_shared<mempool_inode>(allocator, std::forward<Args>(args)...);
+  }
+  
+  using mempool_xattr_map = xattr_map<mempool::mds_co::pool_allocator>; // FIXME bufferptr not in mempool
+  using xattr_map_ptr = std::shared_ptr<mempool_xattr_map>;
+  using xattr_map_const_ptr = std::shared_ptr<const mempool_xattr_map>;
+
+  template <typename ...Args>
+  static xattr_map_ptr allocate_xattr_map(Args && ...args) {
+    static mempool::mds_co::pool_allocator<mempool_xattr_map> allocator;
+    return std::allocate_shared<mempool_xattr_map>(allocator, std::forward<Args>(args)...);
+  }
+
+  using mempool_old_inode = old_inode_t<mempool::mds_co::pool_allocator>;
+  using mempool_old_inode_map = mempool::mds_co::map<snapid_t, mempool_old_inode>;
+  using old_inode_map_ptr = std::shared_ptr<mempool_old_inode_map>;
+  using old_inode_map_const_ptr = std::shared_ptr<const mempool_old_inode_map>;
+
+  template <typename ...Args>
+  static old_inode_map_ptr allocate_old_inode_map(Args && ...args) {
+    static mempool::mds_co::pool_allocator<mempool_old_inode_map> allocator;
+    return std::allocate_shared<mempool_old_inode_map>(allocator, std::forward<Args>(args)...);
+  }
+
+  void reset_inode(inode_const_ptr&& ptr) {
+    inode = std::move(ptr);
+  }
+
+  void reset_xattrs(xattr_map_const_ptr&& ptr) {
+    xattrs = std::move(ptr);
+  }
+
+  void reset_old_inodes(old_inode_map_const_ptr&& ptr) {
+    old_inodes = std::move(ptr);
+  }
+
+  void encode_xattrs(bufferlist &bl) const;
+  void decode_xattrs(bufferlist::const_iterator &p);
+  void encode_old_inodes(bufferlist &bl, uint64_t features) const;
+  void decode_old_inodes(bufferlist::const_iterator &p);
 
   /* Helpers */
-  bool is_file() const    { return inode.is_file(); }
-  bool is_symlink() const { return inode.is_symlink(); }
-  bool is_dir() const     { return inode.is_dir(); }
   static object_t get_object_name(inodeno_t ino, frag_t fg, std::string_view suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
@@ -99,13 +138,20 @@ public:
   __u32 hash_dentry_name(std::string_view dn);
   frag_t pick_dirfrag(std::string_view dn);
 
-  mempool_inode inode;        // the inode itself
-  mempool::mds_co::string symlink;      // symlink dest, if symlink
-  mempool_xattr_map xattrs;
-  fragtree_t dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  mempool_old_inode_map old_inodes;   // key = last, value.first = first
-  snapid_t oldest_snap = CEPH_NOSNAP;
-  damage_flags_t damage_flags = 0;
+  mempool::mds_co::string	symlink;      // symlink dest, if symlink
+  fragtree_t			dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
+  snapid_t 			oldest_snap = CEPH_NOSNAP;
+  damage_flags_t 		damage_flags = 0;
+
+protected:
+  static inode_const_ptr	empty_inode;
+
+  // Following members are pointers to constant data, the constant data can
+  // be shared by CInode and log events. To update these members in CInode,
+  // read-copy-update should be used.
+  inode_const_ptr		inode = empty_inode;
+  xattr_map_const_ptr		xattrs;
+  old_inode_map_const_ptr	old_inodes;   // key = last, value.first = first
 };
 
 inline void decode_noshare(InodeStoreBase::mempool_xattr_map& xattrs,
@@ -116,6 +162,13 @@ inline void decode_noshare(InodeStoreBase::mempool_xattr_map& xattrs,
 
 class InodeStore : public InodeStoreBase {
 public:
+  mempool_inode* get_inode() {
+    if (inode == empty_inode)
+      reset_inode(allocate_inode());
+    return const_cast<mempool_inode*>(inode.get());
+  }
+  mempool_xattr_map* get_xattrs() { return const_cast<mempool_xattr_map*>(xattrs.get()); }
+
   void encode(ceph::buffer::list &bl, uint64_t features) const {
     InodeStoreBase::encode(bl, features, &snap_blob);
   }
@@ -131,7 +184,11 @@ public:
 
   static void generate_test_instances(std::list<InodeStore*>& ls);
 
-  // FIXME ceph::buffer::list not part of mempool
+  using InodeStoreBase::inode;
+  using InodeStoreBase::xattrs;
+  using InodeStoreBase::old_inodes;
+
+  // FIXME bufferlist not part of mempool
   ceph::buffer::list snap_blob;  // Encoded copy of SnapRealm, because we can't
 			 // rehydrate it without full MDCache
 };
@@ -243,32 +300,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     ScrubHeaderRef header;
   };
 
-  /**
-   * Projection methods, used to store inode changes until they have been journaled,
-   * at which point they are popped.
-   * Usage:
-   * project_inode as needed. If you're changing xattrs or sr_t, then pass true
-   * as needed then change the xattrs/snapnode member as needed. (Dirty
-   * exception: project_past_snaprealm_parent allows you to project the
-   * snapnode after doing project_inode (i.e. you don't need to pass
-   * snap=true).
-   *
-   * Then, journal. Once journaling is done, pop_and_dirty_projected_inode.
-   * This function will take care of the inode itself, the xattrs, and the snaprealm.
-   */
-
-  class projected_inode {
-  public:
-    static sr_t* const UNDEF_SRNODE;
-
-    projected_inode() = delete;
-    explicit projected_inode(const mempool_inode &in) : inode(in) {}
-
-    mempool_inode inode;
-    std::unique_ptr<mempool_xattr_map> xattrs;
-    sr_t *snapnode = UNDEF_SRNODE;
-  };
-
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps
@@ -368,7 +399,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     close_dirfrags();
     close_snaprealm();
     clear_file_locks();
-    ceph_assert(num_projected_xattrs == 0);
     ceph_assert(num_projected_srnodes == 0);
     ceph_assert(num_caps_wanted == 0);
     ceph_assert(num_subtree_roots == 0);
@@ -457,9 +487,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
-      inode.is_dir() ||  // links to me in other snaps
-      inode.nlink > 1 || // there are remote links, possibly snapped, that will need to find me
-      !old_inodes.empty(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
+      get_inode()->is_dir() ||  // links to me in other snaps
+      get_inode()->nlink > 1 || // there are remote links, possibly snapped, that will need to find me
+      is_any_old_inodes(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
   }
   snapid_t get_oldest_snap();
 
@@ -469,50 +499,84 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void mark_dirty_rstat();
   void clear_dirty_rstat();
 
-  CInode::projected_inode &project_inode(bool xattr = false, bool snap = false);
-  void pop_and_dirty_projected_inode(LogSegment *ls);
+  //bool hack_accessed = false;
+  //utime_t hack_load_stamp;
 
-  projected_inode *get_projected_node() {
-    if (projected_nodes.empty())
-      return NULL;
-    else
-      return &projected_nodes.back();
-  }
+  /**
+   * Projection methods, used to store inode changes until they have been journaled,
+   * at which point they are popped.
+   * Usage:
+   * project_inode as needed. If you're changing xattrs or sr_t, then pass true
+   * as needed then change the xattrs/snapnode member as needed. (Dirty
+   * exception: project_past_snaprealm_parent allows you to project the
+   * snapnode after doing project_inode (i.e. you don't need to pass
+   * snap=true).
+   *
+   * Then, journal. Once journaling is done, pop_and_dirty_projected_inode.
+   * This function will take care of the inode itself, the xattrs, and the snaprealm.
+   */
+
+  struct projected_inode {
+    static sr_t* const UNDEF_SRNODE;
+
+    inode_ptr const inode;
+    xattr_map_ptr const xattrs;
+    sr_t* const snapnode;
+
+    projected_inode() = delete;
+    explicit projected_inode(inode_ptr&& i, xattr_map_ptr&& x, sr_t *s) :
+      inode(std::move(i)), xattrs(std::move(x)), snapnode(s) {}
+  };
+  projected_inode project_inode(bool xattr = false, bool snap = false);
+
+  void pop_and_dirty_projected_inode(LogSegment *ls);
 
   version_t get_projected_version() const {
     if (projected_nodes.empty())
-      return inode.version;
+      return get_inode()->version;
     else
-      return projected_nodes.back().inode.version;
+      return projected_nodes.back().inode->version;
   }
   bool is_projected() const {
     return !projected_nodes.empty();
   }
 
-  const mempool_inode *get_projected_inode() const {
+  const inode_const_ptr& get_projected_inode() const {
     if (projected_nodes.empty())
-      return &inode;
+      return get_inode();
     else
-      return &projected_nodes.back().inode;
+      return projected_nodes.back().inode;
   }
-  mempool_inode *get_projected_inode() {
-    if (projected_nodes.empty())
-      return &inode;
-    else
-      return &projected_nodes.back().inode;
+  // inode should have already been projected in caller's context
+  mempool_inode* _get_projected_inode() {
+    ceph_assert(!projected_nodes.empty());
+    return const_cast<mempool_inode*>(projected_nodes.back().inode.get());
   }
-  mempool_inode *get_previous_projected_inode() {
+  const inode_const_ptr& get_previous_projected_inode() const {
     ceph_assert(!projected_nodes.empty());
     auto it = projected_nodes.rbegin();
     ++it;
     if (it != projected_nodes.rend())
-      return &it->inode;
+      return it->inode;
     else
-      return &inode;
+      return get_inode();
   }
 
-  mempool_xattr_map *get_projected_xattrs();
-  mempool_xattr_map *get_previous_projected_xattrs();
+  const xattr_map_const_ptr& get_projected_xattrs() {
+    if (projected_nodes.empty())
+      return xattrs;
+    else
+      return projected_nodes.back().xattrs;
+  }
+  const xattr_map_const_ptr& get_previous_projected_xattrs() {
+    ceph_assert(!projected_nodes.empty());
+    auto it = projected_nodes.rbegin();
+    ++it;
+    if (it != projected_nodes.rend())
+      return it->xattrs;
+    else
+      return xattrs;
+  }
 
   sr_t *prepare_new_srnode(snapid_t snapid);
   void project_snaprealm(sr_t *new_srnode);
@@ -533,9 +597,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void project_snaprealm_past_parent(SnapRealm *newparent);
   void early_pop_projected_snaprealm();
 
-  mempool_old_inode& cow_old_inode(snapid_t follows, bool cow_head);
+  const mempool_old_inode& cow_old_inode(snapid_t follows, bool cow_head);
   void split_old_inode(snapid_t snap);
-  mempool_old_inode *pick_old_inode(snapid_t last);
+  snapid_t pick_old_inode(snapid_t last) const;
   void pre_cow_old_inode();
   bool has_snap_data(snapid_t s);
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
@@ -598,15 +662,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   std::pair<bool,bool> split_need_snapflush(CInode *cowin, CInode *in);
 
   // -- accessors --
-  bool is_root() const { return inode.ino == MDS_INO_ROOT; }
-  bool is_stray() const { return MDS_INO_IS_STRAY(inode.ino); }
+
+  inodeno_t ino() const { return get_inode()->ino; }
+  vinodeno_t vino() const { return vinodeno_t(ino(), last); }
+  int d_type() const { return IFTODT(get_inode()->mode); }
+  bool is_root() const { return ino() == MDS_INO_ROOT; }
+  bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
   mds_rank_t get_stray_owner() const {
-    return (mds_rank_t)MDS_INO_STRAY_OWNER(inode.ino);
+    return (mds_rank_t)MDS_INO_STRAY_OWNER(ino());
   }
-  bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
-  bool is_base() const { return MDS_INO_IS_BASE(inode.ino); }
-  bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
+  bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(ino()); }
+  bool is_base() const { return MDS_INO_IS_BASE(ino()); }
+  bool is_system() const { return ino() < MDS_INO_SYSTEM_BASE; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
+  bool is_file() const    { return get_inode()->is_file(); }
+  bool is_symlink() const { return get_inode()->is_symlink(); }
+  bool is_dir() const     { return get_inode()->is_dir(); }
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
@@ -621,12 +692,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void clear_ambiguous_auth(MDSContext::vec& finished);
   void clear_ambiguous_auth();
 
-  inodeno_t ino() const { return inode.ino; }
-  vinodeno_t vino() const { return vinodeno_t(inode.ino, last); }
-  int d_type() const { return IFTODT(inode.mode); }
+  const inode_const_ptr& get_inode() const {
+    return inode;
+  }
 
-  mempool_inode& get_inode() { return inode; }
-  const mempool_inode& get_inode() const { return inode; }
+  // only used for updating newly allocated CInode
+  mempool_inode* _get_inode() {
+    if (inode == empty_inode)
+      reset_inode(allocate_inode());
+    return const_cast<mempool_inode*>(inode.get());
+  }
+
+  const xattr_map_const_ptr& get_xattrs() const { return xattrs; }
+
+  bool is_any_old_inodes() const { return old_inodes && !old_inodes->empty(); }
+  const old_inode_map_const_ptr& get_old_inodes() const { return old_inodes; }
+
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
@@ -656,11 +737,11 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void name_stray_dentry(std::string& dname);
   
   // -- dirtyness --
-  version_t get_version() const { return inode.version; }
+  version_t get_version() const { return get_inode()->version; }
 
   version_t pre_dirty();
   void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t projected_dirv, LogSegment *ls);
+  void mark_dirty(LogSegment *ls);
   void mark_clean();
 
   void store(MDSContext *fin);
@@ -837,7 +918,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(Session *s, Capability *cap, mempool_inode *file_i) const;
+  int get_caps_allowed_for_client(Session *s, Capability *cap,
+				  const mempool_inode *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
@@ -949,8 +1031,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   }
 
   bool has_ephemeral_policy() const {
-    return get_inode().export_ephemeral_random_pin > 0.0 ||
-           get_inode().export_ephemeral_distributed_pin;
+    return get_inode()->export_ephemeral_random_pin > 0.0 ||
+           get_inode()->export_ephemeral_distributed_pin;
   }
   bool is_ephemerally_pinned() const {
     return state_test(STATE_DISTEPHEMERALPIN) ||
@@ -1152,8 +1234,18 @@ private:
   bool _validate_disk_state(class ValidationContinuation *c,
                             int rval, int stage);
 
-  mempool::mds_co::list<projected_inode> projected_nodes;   // projected values (only defined while dirty)
-  size_t num_projected_xattrs = 0;
+  struct projected_const_node {
+    inode_const_ptr inode;
+    xattr_map_const_ptr xattrs;
+    sr_t *snapnode;
+
+    projected_const_node() = delete;
+    projected_const_node(projected_const_node&&) = default;
+    explicit projected_const_node(const inode_const_ptr& i, const xattr_map_const_ptr& x, sr_t *s) :
+      inode(i), xattrs(x), snapnode(s) {}
+  };
+
+  mempool::mds_co::list<projected_const_node> projected_nodes;   // projected values (only defined while dirty)
   size_t num_projected_srnodes = 0;
 
   // -- cache infrastructure --

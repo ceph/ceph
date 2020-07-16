@@ -997,15 +997,16 @@ int Session::check_access(CInode *in, unsigned mask,
   if (path.length())
     path = path.substr(1);    // drop leading /
 
-  if (in->inode.is_dir() &&
-      in->inode.has_layout() &&
-      in->inode.layout.pool_ns.length() &&
+  const auto& inode = in->get_inode();
+  if (in->is_dir() &&
+      inode->has_layout() &&
+      inode->layout.pool_ns.length() &&
       !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
     return -EIO;
   }
 
-  if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+  if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
 			    info.inst.addr)) {
