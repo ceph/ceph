@@ -1,10 +1,6 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep cd-login {
-  h1 {
-    margin: 0 0 30px;
-  }
-
   .form-group {
     background-color: bd.$color-password-toggle-bg;
     border-left: 4px solid bd.$color-solid-white;
