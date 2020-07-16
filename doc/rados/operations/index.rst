@@ -41,6 +41,8 @@ CRUSH algorithm.
 	upmap
 	crush-map
 	crush-map-edits
+	stretch-mode
+	change-mon-elections
 
 
 
@@ -60,7 +62,6 @@ with new hardware.
 
 	add-or-rm-osds
 	add-or-rm-mons
-	change-mon-elections
 	devices
 	bluestore-migration
 	Command Reference <control>
