@@ -1082,8 +1082,25 @@ public:
     std::atomic<int> flushing_count = {0};
     std::atomic<int> waiting_count = {0};
     /// protect flush_txns
-    ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
-    ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    struct flush_lock_cond {
+      MEMPOOL_CLASS_HELPERS();
+      ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
+      ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    };
+    flush_lock_cond* flush_lock_cond_ = NULL;
+
+    void init_flush_lock_cond(){
+      if(!flush_lock_cond_){
+        flush_lock_cond_ = new flush_lock_cond();
+      }
+    }
+    
+    void destroy_flush_lock_cond(){
+      if(flush_lock_cond_){
+        delete flush_lock_cond_;
+        flush_lock_cond_ = NULL;
+      }
+    }
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k)
@@ -1119,6 +1136,9 @@ public:
       extent_map(this) {
     }
 
+   ~Onode(){
+      destroy_flush_lock_cond();
+   }
     static Onode* decode(
       CollectionRef c,
       const ghobject_t& oid,

@@ -156,6 +156,7 @@ namespace mempool {
   f(bluestore_Buffer)		      \
   f(bluestore_Extent)		      \
   f(bluestore_Blob)		      \
+  f(bluestore_cache_onode_flush_lock_cond) \
   f(bluestore_SharedBlob)	      \
   f(bluestore_inline_bl)	      \
   f(bluestore_fsck)		      \

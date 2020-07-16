@@ -65,6 +65,9 @@ using bid_t = decltype(BlueStore::Blob::id);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
 			      bluestore_cache_onode);
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode::flush_lock_cond, bluestore_onode_flush_lock_cond,
+            bluestore_cache_onode_flush_lock_cond);
+
 // bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
 			      bluestore_Buffer);
@@ -3314,9 +3317,9 @@ void BlueStore::Onode::flush()
   if (flushing_count.load()) {
     ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
     waiting_count++;
-    std::unique_lock l(flush_lock);
+    std::unique_lock l(flush_lock_cond_->flush_lock);
     while (flushing_count.load()) {
-      flush_cond.wait(l);
+      flush_lock_cond_->flush_cond.wait(l);
     }
     waiting_count--;
   }
@@ -11581,8 +11584,8 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
       dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
 	       << dendl;
       if (--o->flushing_count == 0 && o->waiting_count.load()) {
-        std::lock_guard l(o->flush_lock);
-	o->flush_cond.notify_all();
+        std::lock_guard l(o->flush_lock_cond_->flush_lock);
+        o->flush_lock_cond_->flush_cond.notify_all();
       }
     }
   }
@@ -12776,6 +12779,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       goto endop;
     }
 
+    o->init_flush_lock_cond(); // init flush lock & flush condition
     switch (op->op) {
     case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
