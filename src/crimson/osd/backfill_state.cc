@@ -128,7 +128,7 @@ void BackfillState::Enqueuing::maybe_update_range()
                    pg().get_projected_last_update());
     logger().debug("{}: scanning pg log first", __func__);
     peering_state().get_pg_log().get_log().scan_log_after(primary_bi.version,
-      [&, this](const pg_log_entry_t& e) {
+      [&](const pg_log_entry_t& e) {
         logger().debug("maybe_update_range(lambda): updating from version {}",
                        e.version);
         if (e.soid >= primary_bi.begin && e.soid <  primary_bi.end) {
@@ -198,7 +198,7 @@ bool BackfillState::Enqueuing::should_rescan_replicas(
 {
   const auto& targets = peering_state().get_backfill_targets();
   return std::any_of(std::begin(targets), std::end(targets),
-    [&, this] (const auto& bt) {
+    [&] (const auto& bt) {
       return ReplicasScanning::replica_needs_scan(peer_backfill_info.at(bt),
                                                   backfill_info);
     });
@@ -218,7 +218,7 @@ void BackfillState::Enqueuing::trim_backfilled_object_from_intervals(
   std::map<pg_shard_t, BackfillInterval>& peer_backfill_info)
 {
   std::for_each(std::begin(result.pbi_targets), std::end(result.pbi_targets),
-    [this, &peer_backfill_info] (const auto& bt) {
+    [&peer_backfill_info] (const auto& bt) {
       peer_backfill_info.at(bt).pop_front();
     });
   last_backfill_started = std::move(result.new_last_backfill_started);
