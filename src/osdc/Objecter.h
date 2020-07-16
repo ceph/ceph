@@ -1778,6 +1778,10 @@ public:
     int min_size = -1; ///< the min size of the pool when were were last mapped
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
+    uint32_t peering_crush_bucket_count = 0;
+    uint32_t peering_crush_bucket_target = 0;
+    uint32_t peering_crush_bucket_barrier = 0;
+    int32_t peering_crush_mandatory_member = 0;
 
     bool used_replica = false;
     bool paused = false;
