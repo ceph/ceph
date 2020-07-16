@@ -1620,15 +1620,15 @@ void PG::schedule_event_after(
 
 void PG::request_local_background_io_reservation(
   unsigned priority,
-  PGPeeringEventRef on_grant,
-  PGPeeringEventRef on_preempt) {
+  PGPeeringEventURef on_grant,
+  PGPeeringEventURef on_preempt) {
   osd->local_reserver.request_reservation(
     pg_id,
     on_grant ? new QueuePeeringEvt(
-      this, on_grant) : nullptr,
+      this, std::move(on_grant)) : nullptr,
     priority,
     on_preempt ? new QueuePeeringEvt(
-      this, on_preempt) : nullptr);
+      this, std::move(on_preempt)) : nullptr);
 }
 
 void PG::update_local_background_io_priority(
@@ -1645,15 +1645,15 @@ void PG::cancel_local_background_io_reservation() {
 
 void PG::request_remote_recovery_reservation(
   unsigned priority,
-  PGPeeringEventRef on_grant,
-  PGPeeringEventRef on_preempt) {
+  PGPeeringEventURef on_grant,
+  PGPeeringEventURef on_preempt) {
   osd->remote_reserver.request_reservation(
     pg_id,
     on_grant ? new QueuePeeringEvt(
-      this, on_grant) : nullptr,
+      this, std::move(on_grant)) : nullptr,
     priority,
     on_preempt ? new QueuePeeringEvt(
-      this, on_preempt) : nullptr);
+      this, std::move(on_preempt)) : nullptr);
 }
 
 void PG::cancel_remote_recovery_reservation() {
@@ -3924,16 +3924,6 @@ int PG::pg_stat_adjust(osd_stat_t *ns)
     return 1;
   }
   return 0;
-}
-
-ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
-{
-  out << "BackfillInfo(" << bi.begin << "-" << bi.end
-      << " " << bi.objects.size() << " objects";
-  if (!bi.objects.empty())
-    out << " " << bi.objects;
-  out << ")";
-  return out;
 }
 
 void PG::dump_pgstate_history(Formatter *f)

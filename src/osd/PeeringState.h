@@ -245,7 +245,7 @@ struct PeeringCtxWrapper {
   }
 };
 
-  /* Encapsulates PG recovery process */
+/* Encapsulates PG recovery process */
 class PeeringState : public MissingLoc::MappingInfo {
 public:
   struct PeeringListener : public EpochSource {
@@ -310,8 +310,8 @@ public:
      */
     virtual void request_local_background_io_reservation(
       unsigned priority,
-      PGPeeringEventRef on_grant,
-      PGPeeringEventRef on_preempt) = 0;
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
     /// Modify pending local background reservation request priority
     virtual void update_local_background_io_priority(
       unsigned priority) = 0;
@@ -326,8 +326,8 @@ public:
      */
     virtual void request_remote_recovery_reservation(
       unsigned priority,
-      PGPeeringEventRef on_grant,
-      PGPeeringEventRef on_preempt) = 0;
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
     /// Cancel pending remote background reservation request
     virtual void cancel_remote_recovery_reservation() = 0;
 
