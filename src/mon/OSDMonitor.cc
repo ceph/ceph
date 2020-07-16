@@ -14236,13 +14236,7 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
       *errcode = -EINVAL;
       return;
     }
-    pg_pool_t *pp = nullptr;
-    if (pending_inc.new_pools.count(poolid))
-      pp = &pending_inc.new_pools[poolid];
-    if (!pp) {
-      pp = &pending_inc.new_pools[poolid];
-      *pp = *p;
-    }
+    pg_pool_t *pp = pending_inc.get_new_pool(poolid, p);
     // TODO: The part where we unconditionally copy the pools into pending_inc is bad
     // the attempt may fail and then we have these pool updates...but they won't do anything
     // if there is a failure, so if it's hard to change the interface, no need to bother
@@ -14379,12 +14373,11 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
   int remaining_site = osdmap.crush->get_item_id(remaining_site_name);
   for (auto pgi : osdmap.pools) {
     if (pgi.second.peering_crush_bucket_count) {
-      pg_pool_t newp(pgi.second);
+      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.peering_crush_bucket_count = new_site_count;
       newp.peering_crush_mandatory_member = remaining_site;
       newp.min_size = pgi.second.min_size / 2; // only support 2 zones now
       newp.last_force_op_resend = pending_inc.epoch;
-      pending_inc.new_pools[pgi.first] = newp;
     }
   }
   propose_pending();
@@ -14403,9 +14396,8 @@ void OSDMonitor::trigger_recovery_stretch_mode()
 
   for (auto pgi : osdmap.pools) {
     if (pgi.second.peering_crush_bucket_count) {
-      pg_pool_t newp(pgi.second);
+      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.last_force_op_resend = pending_inc.epoch;
-      pending_inc.new_pools[pgi.first] = newp;
     }
   }
   propose_pending();
@@ -14470,12 +14462,11 @@ void OSDMonitor::trigger_healthy_stretch_mode()
   pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
   for (auto pgi : osdmap.pools) {
     if (pgi.second.peering_crush_bucket_count) {
-      pg_pool_t newp(pgi.second);
+      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
       newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
       newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
       newp.min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
       newp.last_force_op_resend = pending_inc.epoch;
-      pending_inc.new_pools[pgi.first] = newp;
     }
   }
   propose_pending();
