@@ -152,6 +152,7 @@ private:
 #endif
   };
   static block_device_t detect_device_type(const std::string& path);
+  static block_device_t device_type_from_name(const std::string& blk_dev_name);
   static BlockDevice *create_with_type(block_device_t device_type,
     CephContext* cct, const std::string& path, aio_callback_t cb,
     void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
