@@ -1094,8 +1094,6 @@ start_ganesha() {
 
         MDCACHE {
            Dir_Chunk = 0;
-           NParts = 1;
-           Cache_Size = 1;
         }
 
         NFSv4 {
