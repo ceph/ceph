@@ -41,6 +41,7 @@ struct ServiceMap {
     static void generate_test_instances(std::list<Service*>& ls);
 
     std::string get_summary() const;
+    bool has_running_tasks() const;
     std::string get_task_summary(const std::string_view task_prefix) const;
     void count_metadata(const std::string& field,
 			std::map<std::string,int> *out) const;
