@@ -83,6 +83,26 @@ class SubvolumeV2(SubvolumeV1):
 
         return os.path.join(snap_base_path, uuid_str)
 
+    def _is_retained(self):
+        try:
+            self.metadata_mgr.refresh()
+            if self.state == SubvolumeStates.STATE_RETAINED:
+                return True
+            else:
+                raise VolumeException(-errno.EINVAL, "invalid state for subvolume '{0}' during create".format(self.subvolname))
+        except MetadataMgrException as me:
+            if me.errno != -errno.ENOENT:
+                raise VolumeException(me.errno, "internal error while processing subvolume '{0}'".format(self.subvolname))
+        return False
+
+    def _remove_on_failure(self, subvol_path, retained):
+        if retained:
+            log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
+            self._trash_dir(subvol_path)
+        else:
+            log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
+            self.remove()
+
     def _set_incarnation_metadata(self, subvolume_type, qpath, initial_state):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_TYPE, subvolume_type.value)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, qpath)
@@ -95,6 +115,7 @@ class SubvolumeV2(SubvolumeV1):
         except OpSmException as oe:
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
+        retained = self._is_retained()
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             self.fs.mkdirs(subvol_path, mode)
@@ -102,21 +123,14 @@ class SubvolumeV2(SubvolumeV1):
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
-            try:
-                self.metadata_mgr.refresh()
-                if self.state == SubvolumeStates.STATE_RETAINED:
-                    self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
-                    self.metadata_mgr.flush()
-                else:
-                    raise VolumeException(-errno.EINVAL, "invalid state for subvolume '{0}' during create".format(self.subvolname))
-            except MetadataMgrException as me:
-                if me.errno != -errno.ENOENT:
-                    raise
+            if retained:
+                self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
+                self.metadata_mgr.flush()
+            else:
                 self.init_config(SubvolumeV2.VERSION, subvolume_type, qpath, initial_state)
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
-                log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
-                self.remove()
+                self._remove_on_failure(subvol_path, retained)
             except VolumeException as ve:
                 log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
 
@@ -134,6 +148,7 @@ class SubvolumeV2(SubvolumeV1):
         except OpSmException as oe:
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
+        retained = self._is_retained()
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             stx = self.fs.statx(source_subvolume.snapshot_data_path(snapname),
@@ -153,22 +168,15 @@ class SubvolumeV2(SubvolumeV1):
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
-            try:
-                self.metadata_mgr.refresh()
-                if self.state == SubvolumeStates.STATE_RETAINED:
-                    self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
-                else:
-                    raise VolumeException(-errno.EINVAL, "invalid state for subvolume '{0}' during clone".format(self.subvolname))
-            except MetadataMgrException as me:
-                if me.errno != -errno.ENOENT:
-                    raise
+            if retained:
+                self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
+            else:
                 self.metadata_mgr.init(SubvolumeV2.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
-                log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
-                self.remove()
+                self._remove_on_failure(subvol_path, retained)
             except VolumeException as ve:
                 log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
 
