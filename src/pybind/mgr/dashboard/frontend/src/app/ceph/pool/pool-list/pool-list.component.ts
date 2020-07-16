@@ -240,7 +240,16 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   }
 
   transformPoolsData(pools: any) {
-    const requiredStats = ['bytes_used', 'max_avail', 'rd_bytes', 'wr_bytes', 'rd', 'wr'];
+    const requiredStats = [
+      'bytes_used',
+      'max_avail',
+      'avail_raw',
+      'percent_used',
+      'rd_bytes',
+      'wr_bytes',
+      'rd',
+      'wr'
+    ];
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
 
     _.forEach(pools, (pool: Pool) => {
@@ -250,8 +259,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
-      const avail = stats.bytes_used.latest + stats.max_avail.latest;
-      pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
+      pool['usage'] = stats.percent_used.latest;
 
       if (
         !pool.cdExecuting &&

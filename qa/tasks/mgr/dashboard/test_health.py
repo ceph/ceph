@@ -169,7 +169,8 @@ class HealthTest(DashboardTestCase):
                         'wr_bytes': int,
                         'compress_bytes_used': int,
                         'compress_under_bytes': int,
-                        'stored_raw': int
+                        'stored_raw': int,
+                        'avail_raw': int
                     }),
                     'name': str,
                     'id': int
