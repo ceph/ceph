@@ -111,8 +111,14 @@ Create CephFS Export
 
     $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
 
-It creates export rados objects containing the export block. Here binding is
-the pseudo root name and type is export type.
+This creates export rados objects containing the export block.
+
+<fsname> is the name of the FS volume used by the NFS Ganesha cluster that will
+serve this export.
+
+<clusterid> is the NFS Ganesha cluster ID.
+
+<binding> is the pseudo root path (must be an absolute path).
 
 Delete CephFS Export
 ====================
@@ -121,7 +127,11 @@ Delete CephFS Export
 
     $ ceph nfs export delete <clusterid> <binding>
 
-It deletes an export in cluster based on pseudo root name (binding).
+It deletes an export in an NFS Ganesha cluster.
+
+<clusterid> is the NFS Ganesha cluster ID.
+
+<binding> is the pseudo root path (must be an absolute path).
 
 List CephFS Export
 ==================
