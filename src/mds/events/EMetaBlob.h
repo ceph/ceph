@@ -69,29 +69,27 @@ public:
     std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
-    CInode::mempool_inode inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
+    CInode::inode_const_ptr inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
+    CInode::xattr_map_const_ptr xattrs;
     fragtree_t dirfragtree;
-    CInode::mempool_xattr_map xattrs;
     std::string symlink;
     snapid_t oldest_snap;
     bufferlist snapbl;
     __u8 state{0};
-    CInode::mempool_old_inode_map old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
+    CInode::old_inode_map_const_ptr old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
 
     fullbit(std::string_view d, snapid_t df, snapid_t dl, 
-	    version_t v, const CInode::mempool_inode& i, const fragtree_t &dft,
-	    const CInode::mempool_xattr_map &xa, std::string_view sym,
+	    version_t v, const CInode::inode_const_ptr& i, const fragtree_t &dft,
+	    const CInode::xattr_map_const_ptr& xa, std::string_view sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
-	    const CInode::mempool_old_inode_map *oi = NULL) :
+	    const CInode::old_inode_map_const_ptr& oi) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
-      oldest_snap(os), state(st)
+      oldest_snap(os), state(st), old_inodes(oi)
     {
-      if (i.is_symlink())
+      if (i->is_symlink())
 	symlink = sym;
-      if (i.is_dir())
+      if (i->is_dir())
 	dirfragtree = dft;
-      if (oi)
-	old_inodes = *oi;
       snapbl = sbl;
     }
     explicit fullbit(bufferlist::const_iterator &p) {
@@ -116,7 +114,7 @@ public:
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
-	  << " inode " << inode.ino
+	  << " inode " << inode->ino
 	  << " state=" << state << std::endl;
     }
     string state_string() const {
@@ -456,7 +454,7 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    const auto pi = in->get_projected_inode();
+    const auto& pi = in->get_projected_inode();
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
@@ -467,8 +465,8 @@ private:
 
     lump.nfull++;
     lump.add_dfull(dn->get_name(), dn->first, dn->last, dn->get_projected_version(),
-		   *pi, in->dirfragtree, *in->get_projected_xattrs(), in->symlink,
-		   in->oldest_snap, snapbl, state, &in->old_inodes);
+		   pi, in->dirfragtree, in->get_projected_xattrs(), in->symlink,
+		   in->oldest_snap, snapbl, state, in->get_old_inodes());
   }
 
   // convenience: primary or remote?  figure it out.
@@ -503,9 +501,9 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    const auto& pi = *(in->get_projected_inode());
+    const auto& pi = in->get_projected_inode();
+    const auto& px = in->get_projected_xattrs();
     const auto& pdft = in->dirfragtree;
-    const auto& px = *(in->get_projected_xattrs());
 
     bufferlist snapbl;
     const sr_t *sr = in->get_projected_srnode();
@@ -513,7 +511,7 @@ private:
       sr->encode(snapbl);
 
     for (auto p = roots.begin(); p != roots.end(); ++p) {
-      if (p->inode.ino == in->ino()) {
+      if (p->inode->ino == in->ino()) {
 	roots.erase(p);
 	break;
       }
@@ -522,7 +520,7 @@ private:
     string empty;
     roots.emplace_back(empty, in->first, in->last, 0, pi, pdft, px, in->symlink,
 		       in->oldest_snap, snapbl, (dirty ? fullbit::STATE_DIRTY : 0),
-		       &in->old_inodes);
+		       in->get_old_inodes());
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {

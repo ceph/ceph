@@ -3188,9 +3188,10 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
 CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-				  file_layout_t *layout)
+				  const file_layout_t *layout)
 {
   CInode *in = new CInode(mdcache);
+  auto _inode = in->_get_inode();
   
   // Server::prepare_force_open_sessions() can re-open session in closing
   // state. In that corner case, session's prealloc_inos are being freed.
@@ -3199,7 +3200,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
-  if (allow_prealloc_inos && (mdr->used_prealloc_ino = in->inode.ino = mdr->session->take_ino(useino))) {
+  if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(useino))) {
     mds->sessionmap.mark_projected(mdr->session);
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
 	     << " (" << mdr->session->info.prealloc_inos
@@ -3207,15 +3208,15 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 	     << dendl;
   } else {
     mdr->alloc_ino = 
-      in->inode.ino = mds->inotable->project_alloc_id(useino);
+      _inode->ino = mds->inotable->project_alloc_id(useino);
     dout(10) << "prepare_new_inode alloc " << mdr->alloc_ino << dendl;
   }
 
-  if (useino && useino != in->inode.ino) {
-    dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
+  if (useino && useino != _inode->ino) {
+    dout(0) << "WARNING: client specified " << useino << " and i allocated " << _inode->ino << dendl;
     mds->clog->error() << mdr->client_request->get_source()
        << " specified ino " << useino
-       << " but mds." << mds->get_nodeid() << " allocated " << in->inode.ino;
+       << " but mds." << mds->get_nodeid() << " allocated " << _inode->ino;
     //ceph_abort(); // just for now.
   }
     
@@ -3229,64 +3230,60 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     dout(10) << "prepare_new_inode prealloc " << mdr->prealloc_inos << dendl;
   }
 
-  in->inode.version = 1;
-  in->inode.xattr_version = 1;
-  in->inode.nlink = 1;   // FIXME
+  _inode->version = 1;
+  _inode->xattr_version = 1;
+  _inode->nlink = 1;   // FIXME
 
-  in->inode.mode = mode;
+  _inode->mode = mode;
 
   // FIPS zeroization audit 20191117: this memset is not security related.
-  memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
-  if (in->inode.is_dir()) {
-    in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
+  memset(&_inode->dir_layout, 0, sizeof(_inode->dir_layout));
+  if (_inode->is_dir()) {
+    _inode->dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
   } else if (layout) {
-    in->inode.layout = *layout;
+    _inode->layout = *layout;
   } else {
-    in->inode.layout = mdcache->default_file_layout;
+    _inode->layout = mdcache->default_file_layout;
   }
 
-  in->inode.truncate_size = -1ull;  // not truncated, yet!
-  in->inode.truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
+  _inode->truncate_size = -1ull;  // not truncated, yet!
+  _inode->truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
 
   CInode *diri = dir->get_inode();
 
-  dout(10) << oct << " dir mode 0" << diri->inode.mode << " new mode 0" << mode << dec << dendl;
+  dout(10) << oct << " dir mode 0" << diri->get_inode()->mode << " new mode 0" << mode << dec << dendl;
 
-  if (diri->inode.mode & S_ISGID) {
+  if (diri->get_inode()->mode & S_ISGID) {
     dout(10) << " dir is sticky" << dendl;
-    in->inode.gid = diri->inode.gid;
+    _inode->gid = diri->get_inode()->gid;
     if (S_ISDIR(mode)) {
       dout(10) << " new dir also sticky" << dendl;      
-      in->inode.mode |= S_ISGID;
+      _inode->mode |= S_ISGID;
     }
   } else 
-    in->inode.gid = mdr->client_request->get_caller_gid();
+    _inode->gid = mdr->client_request->get_caller_gid();
 
-  in->inode.uid = mdr->client_request->get_caller_uid();
+  _inode->uid = mdr->client_request->get_caller_uid();
 
-  in->inode.btime = in->inode.ctime = in->inode.mtime = in->inode.atime =
+  _inode->btime = _inode->ctime = _inode->mtime = _inode->atime =
     mdr->get_op_stamp();
 
-  in->inode.change_attr = 0;
+  _inode->change_attr = 0;
 
   const cref_t<MClientRequest> &req = mdr->client_request;
   if (req->get_data().length()) {
     auto p = req->get_data().cbegin();
 
     // xattrs on new inode?
-    CInode::mempool_xattr_map xattrs;
-    decode_noshare(xattrs, p);
-    for (const auto &p : xattrs) {
-      dout(10) << "prepare_new_inode setting xattr " << p.first << dendl;
-      auto em = in->xattrs.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple(p.second));
-      if (!em.second)
-        em.first->second = p.second;
-    }
+    auto _xattrs = CInode::allocate_xattr_map();
+    decode_noshare(*_xattrs, p);
+    dout(10) << "prepare_new_inode setting xattrs " << *_xattrs << dendl;
+    in->reset_xattrs(std::move(_xattrs));
   }
 
   if (!mds->mdsmap->get_inline_data_enabled() ||
       !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
-    in->inode.inline_data.version = CEPH_INLINE_NONE;
+    _inode->inline_data.version = CEPH_INLINE_NONE;
 
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;
@@ -4084,11 +4081,11 @@ void Server::handle_client_open(MDRequestRef& mdr)
       return;
   }
 
-  if (!cur->inode.is_file()) {
+  if (!cur->is_file()) {
     // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
     cmode = CEPH_FILE_MODE_PIN;
     // the inode is symlink and client wants to follow it, ignore the O_TRUNC flag.
-    if (cur->inode.is_symlink() && !(flags & CEPH_O_NOFOLLOW))
+    if (cur->is_symlink() && !(flags & CEPH_O_NOFOLLOW))
       flags &= ~CEPH_O_TRUNC;
   }
 
@@ -4103,20 +4100,20 @@ void Server::handle_client_open(MDRequestRef& mdr)
     respond_to_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
     }*/
-  if ((flags & CEPH_O_DIRECTORY) && !cur->inode.is_dir() && !cur->inode.is_symlink()) {
+  if ((flags & CEPH_O_DIRECTORY) && !cur->is_dir() && !cur->is_symlink()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     respond_to_request(mdr, -EINVAL);
     return;
   }
 
-  if ((flags & CEPH_O_TRUNC) && !cur->inode.is_file()) {
+  if ((flags & CEPH_O_TRUNC) && !cur->is_file()) {
     dout(7) << "specified O_TRUNC on !(file|symlink) " << *cur << dendl;
     // we should return -EISDIR for directory, return -EINVAL for other non-regular
-    respond_to_request(mdr, cur->inode.is_dir() ? -EISDIR : -EINVAL);
+    respond_to_request(mdr, cur->is_dir() ? -EISDIR : -EINVAL);
     return;
   }
 
-  if (cur->inode.inline_data.version != CEPH_INLINE_NONE &&
+  if (cur->get_inode()->inline_data.version != CEPH_INLINE_NONE &&
       !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     dout(7) << "old client cannot open inline data file " << *cur << dendl;
     respond_to_request(mdr, -EPERM);
@@ -4160,7 +4157,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
       return;
 
     // wait for pending truncate?
-    const auto pi = cur->get_projected_inode();
+    const auto& pi = cur->get_projected_inode();
     if (pi->is_truncating()) {
       dout(10) << " waiting for pending truncate from " << pi->truncate_from
 	       << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
@@ -4254,8 +4251,7 @@ public:
     dn->pop_projected_linkage();
 
     // dirty inode, dn, dir
-    newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
-    newi->mark_dirty(newi->inode.version+1, mdr->ls);
+    newi->mark_dirty(mdr->ls);
     newi->mark_dirty_parent(mdr->ls, true);
 
     mdr->apply();
@@ -4368,35 +4364,37 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     mds->locker->create_lock_cache(mdr, diri, &mdr->dir_layout);
 
   // create inode.
-  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
-				 req->head.args.open.mode | S_IFREG, &layout);
-  ceph_assert(in);
+  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
+				   req->head.args.open.mode | S_IFREG, &layout);
+  ceph_assert(newi);
 
   // it's a file.
-  dn->push_projected_linkage(in);
+  dn->push_projected_linkage(newi);
 
-  in->inode.version = dn->pre_dirty();
+  auto _inode = newi->_get_inode();
+  _inode->version = dn->pre_dirty();
   if (layout.pool_id != mdcache->default_file_layout.pool_id)
-    in->inode.add_old_pool(mdcache->default_file_layout.pool_id);
-  in->inode.update_backtrace();
-  in->inode.rstat.rfiles = 1;
+    _inode->add_old_pool(mdcache->default_file_layout.pool_id);
+  _inode->update_backtrace();
+  _inode->rstat.rfiles = 1;
+  _inode->accounted_rstat = _inode->rstat;
 
   SnapRealm *realm = diri->find_snaprealm();
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
   ceph_assert(follows >= realm->get_newest_seq());
 
   ceph_assert(dn->first == follows+1);
-  in->first = dn->first;
+  newi->first = dn->first;
 
   // do the open
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
-  in->authlock.set_state(LOCK_EXCL);
-  in->xattrlock.set_state(LOCK_EXCL);
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
+  newi->authlock.set_state(LOCK_EXCL);
+  newi->xattrlock.set_state(LOCK_EXCL);
 
   if (cap && (cmode & CEPH_FILE_MODE_WR)) {
-    in->inode.client_ranges[client].range.first = 0;
-    in->inode.client_ranges[client].range.last = in->inode.layout.stripe_unit;
-    in->inode.client_ranges[client].follows = follows;
+    _inode->client_ranges[client].range.first = 0;
+    _inode->client_ranges[client].range.last = _inode->layout.stripe_unit;
+    _inode->client_ranges[client].follows = follows;
     cap->mark_clientwriteable();
   }
   
@@ -4406,19 +4404,19 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
-  mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, in, true, true, true);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  le->metablob.add_primary_dentry(dn, newi, true, true, true);
 
   // make sure this inode gets into the journal
-  le->metablob.add_opened_ino(in->ino());
+  le->metablob.add_opened_ino(newi->ino());
 
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in);
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, newi);
 
   if (mdr->session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
     openc_response_t	ocresp;
 
     dout(10) << "adding created_ino and delegated_inos" << dendl;
-    ocresp.created_ino = in->inode.ino;
+    ocresp.created_ino = _inode->ino;
 
     if (delegate_inos_pct && !req->is_queued_for_replay()) {
       // Try to delegate some prealloc_inos to the client, if it's down to half the max
@@ -4431,10 +4429,10 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
-    encode(in->inode.ino, mdr->reply_extra_bl);
+    encode(newi->ino(), mdr->reply_extra_bl);
   }
 
-  journal_and_reply(mdr, in, dn, le, fin);
+  journal_and_reply(mdr, newi, dn, le, fin);
 
   // We hit_dir (via hit_inode) in our finish callback, but by then we might
   // have overshot the split size (multiple opencs in flight), so here is
@@ -4717,7 +4715,7 @@ public:
     MDSRank *mds = get_mds();
 
     // notify any clients
-    if (truncating_smaller && in->inode.is_truncating()) {
+    if (truncating_smaller && in->get_inode()->is_truncating()) {
       mds->locker->issue_truncate(in);
       mds->mdcache->truncate_inode(in, mdr->ls);
     }
@@ -4923,17 +4921,17 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
-  if ((mask & CEPH_SETATTR_UID) && (cur->inode.uid != req->head.args.setattr.uid))
+  if ((mask & CEPH_SETATTR_UID) && (cur->get_inode()->uid != req->head.args.setattr.uid))
     access_mask |= MAY_CHOWN;
 
-  if ((mask & CEPH_SETATTR_GID) && (cur->inode.gid != req->head.args.setattr.gid))
+  if ((mask & CEPH_SETATTR_GID) && (cur->get_inode()->gid != req->head.args.setattr.gid))
     access_mask |= MAY_CHGRP;
 
   if (!check_access(mdr, cur, access_mask))
     return;
 
   // trunc from bigger -> smaller?
-  auto pip = cur->get_projected_inode();
+  const auto& pip = cur->get_projected_inode();
 
   uint64_t old_size = std::max<uint64_t>(pip->size, req->head.args.setattr.old_size);
 
@@ -4964,55 +4962,55 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   EUpdate *le = new EUpdate(mdlog, "setattr");
   mdlog->start_entry(le);
 
-  auto &pi = cur->project_inode();
+  auto pi = cur->project_inode();
 
   if (mask & CEPH_SETATTR_UID)
-    pi.inode.uid = req->head.args.setattr.uid;
+    pi.inode->uid = req->head.args.setattr.uid;
   if (mask & CEPH_SETATTR_GID)
-    pi.inode.gid = req->head.args.setattr.gid;
+    pi.inode->gid = req->head.args.setattr.gid;
 
   if (mask & CEPH_SETATTR_MODE)
-    pi.inode.mode = (pi.inode.mode & ~07777) | (req->head.args.setattr.mode & 07777);
+    pi.inode->mode = (pi.inode->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   else if ((mask & (CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_KILL_SGUID)) &&
-	    S_ISREG(pi.inode.mode) &&
-            (pi.inode.mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
-    pi.inode.mode &= ~(S_ISUID|S_ISGID);
+	    S_ISREG(pi.inode->mode) &&
+            (pi.inode->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
+    pi.inode->mode &= ~(S_ISUID|S_ISGID);
   }
 
   if (mask & CEPH_SETATTR_MTIME)
-    pi.inode.mtime = req->head.args.setattr.mtime;
+    pi.inode->mtime = req->head.args.setattr.mtime;
   if (mask & CEPH_SETATTR_ATIME)
-    pi.inode.atime = req->head.args.setattr.atime;
+    pi.inode->atime = req->head.args.setattr.atime;
   if (mask & CEPH_SETATTR_BTIME)
-    pi.inode.btime = req->head.args.setattr.btime;
+    pi.inode->btime = req->head.args.setattr.btime;
   if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_BTIME))
-    pi.inode.time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
+    pi.inode->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
-      pi.inode.truncate(old_size, req->head.args.setattr.size);
+      pi.inode->truncate(old_size, req->head.args.setattr.size);
       le->metablob.add_truncate_start(cur->ino());
     } else {
-      pi.inode.size = req->head.args.setattr.size;
-      pi.inode.rstat.rbytes = pi.inode.size;
+      pi.inode->size = req->head.args.setattr.size;
+      pi.inode->rstat.rbytes = pi.inode->size;
     }
-    pi.inode.mtime = mdr->get_op_stamp();
+    pi.inode->mtime = mdr->get_op_stamp();
 
     // adjust client's max_size?
     CInode::mempool_inode::client_range_map new_ranges;
     bool max_increased = false;
-    mds->locker->calc_new_client_ranges(cur, pi.inode.size, true, &new_ranges, &max_increased);
-    if (pi.inode.client_ranges != new_ranges) {
-      dout(10) << " client_ranges " << pi.inode.client_ranges << " -> " << new_ranges << dendl;
-      pi.inode.client_ranges = new_ranges;
+    mds->locker->calc_new_client_ranges(cur, pi.inode->size, true, &new_ranges, &max_increased);
+    if (pi.inode->client_ranges != new_ranges) {
+      dout(10) << " client_ranges " << pi.inode->client_ranges << " -> " << new_ranges << dendl;
+      pi.inode->client_ranges = new_ranges;
       changed_ranges = true;
     }
   }
 
-  pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
+  pi.inode->version = cur->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
@@ -5045,24 +5043,24 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   mdlog->start_entry(le);
 
   // prepare
-  auto &pi = in->project_inode();
-  pi.inode.version = in->pre_dirty();
-  pi.inode.mtime = pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
+  auto pi = in->project_inode();
+  pi.inode->version = in->pre_dirty();
+  pi.inode->mtime = pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
 
-  uint64_t old_size = std::max<uint64_t>(pi.inode.size, mdr->client_request->head.args.open.old_size);
+  uint64_t old_size = std::max<uint64_t>(pi.inode->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
-    pi.inode.truncate(old_size, 0);
+    pi.inode->truncate(old_size, 0);
     le->metablob.add_truncate_start(in->ino());
   }
 
   bool changed_ranges = false;
   if (cap && (cmode & CEPH_FILE_MODE_WR)) {
-    pi.inode.client_ranges[client].range.first = 0;
-    pi.inode.client_ranges[client].range.last = pi.inode.get_layout_size_increment();
-    pi.inode.client_ranges[client].follows = realm->get_newest_seq();
+    pi.inode->client_ranges[client].range.first = 0;
+    pi.inode->client_ranges[client].range.last = pi.inode->get_layout_size_increment();
+    pi.inode->client_ranges[client].follows = realm->get_newest_seq();
     changed_ranges = true;
     cap->mark_clientwriteable();
   }
@@ -5161,15 +5159,15 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
     return;
 
   // project update
-  auto &pi = cur->project_inode();
-  pi.inode.layout = layout;
+  auto pi = cur->project_inode();
+  pi.inode->layout = layout;
   // add the old pool to the inode
-  pi.inode.add_old_pool(old_layout.pool_id);
-  pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
+  pi.inode->add_old_pool(old_layout.pool_id);
+  pi.inode->version = cur->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -5242,7 +5240,7 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
     return;
 
   // validate layout
-  const auto old_pi = cur->get_projected_inode();
+  const auto& old_pi = cur->get_projected_inode();
   file_layout_t layout;
   if (old_pi->has_layout())
     layout = old_pi->layout;
@@ -5289,9 +5287,9 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
   if (!check_access(mdr, cur, access))
     return;
 
-  auto &pi = cur->project_inode();
-  pi.inode.layout = layout;
-  pi.inode.version = cur->pre_dirty();
+  auto pi = cur->project_inode();
+  pi.inode->layout = layout;
+  pi.inode->version = cur->pre_dirty();
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -5533,10 +5531,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
       return;
 
-    auto &pi = cur->project_inode();
-    pi.inode.layout = layout;
+    auto pi = cur->project_inode();
+    pi.inode->layout = layout;
     mdr->no_early_reply = true;
-    pip = &pi.inode;
+    pip = pi.inode.get();
   } else if (name.compare(0, 16, "ceph.file.layout") == 0) {
     if (!cur->is_file()) {
       respond_to_request(mdr, -EINVAL);
@@ -5557,11 +5555,11 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!mds->locker->acquire_locks(mdr, lov))
       return;
 
-    auto &pi = cur->project_inode();
-    int64_t old_pool = pi.inode.layout.pool_id;
-    pi.inode.add_old_pool(old_pool);
-    pi.inode.layout = layout;
-    pip = &pi.inode;
+    auto pi = cur->project_inode();
+    int64_t old_pool = pi.inode->layout.pool_id;
+    pi.inode->add_old_pool(old_pool);
+    pi.inode->layout = layout;
+    pip = pi.inode.get();
   } else if (name.compare(0, 10, "ceph.quota") == 0) { 
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
@@ -5583,8 +5581,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, new_realm))
       return;
 
-    auto &pi = cur->project_inode(false, new_realm);
-    pi.inode.quota = quota;
+    auto pi = cur->project_inode(false, new_realm);
+    pi.inode->quota = quota;
 
     if (new_realm) {
       SnapRealm *realm = cur->find_snaprealm();
@@ -5594,7 +5592,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       newsnap.seq = seq;
     }
     mdr->no_early_reply = true;
-    pip = &pi.inode;
+    pip = pi.inode.get();
 
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
@@ -5617,9 +5615,9 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur))
       return;
 
-    auto &pi = cur->project_inode();
+    auto pi = cur->project_inode();
     cur->set_export_pin(rank);
-    pip = &pi.inode;
+    pip = pi.inode.get();
   } else if (name == "ceph.dir.pin.random"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
@@ -5646,9 +5644,9 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur))
       return;
 
-    auto &pi = cur->project_inode();
+    auto pi = cur->project_inode();
     cur->setxattr_ephemeral_rand(val);
-    pip = &pi.inode;
+    pip = pi.inode.get();
   } else if (name == "ceph.dir.pin.distributed"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
@@ -5667,9 +5665,9 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur))
       return;
 
-    auto &pi = cur->project_inode();
+    auto pi = cur->project_inode();
     cur->setxattr_ephemeral_dist(val);
-    pip = &pi.inode;
+    pip = pi.inode.get();
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
@@ -5725,9 +5723,9 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!mds->locker->acquire_locks(mdr, lov))
       return;
 
-    auto &pi = cur->project_inode();
-    pi.inode.clear_layout();
-    pi.inode.version = cur->pre_dirty();
+    auto pi = cur->project_inode();
+    pi.inode->clear_layout();
+    pi.inode->version = cur->pre_dirty();
 
     // log + wait
     mdr->ls = mdlog->get_current_segment();
@@ -5808,32 +5806,36 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   if (!check_access(mdr, cur, MAY_WRITE))
     return;
 
-  auto pxattrs = cur->get_projected_xattrs();
   size_t len = req->get_data().length();
   size_t inc = len + name.length();
 
-  // check xattrs kv pairs size
-  size_t cur_xattrs_size = 0;
-  for (const auto& p : *pxattrs) {
-    if ((flags & CEPH_XATTR_REPLACE) && (name.compare(p.first) == 0)) {
-      continue;
+  const auto& pxattrs = cur->get_projected_xattrs();
+  if (pxattrs) {
+    // check xattrs kv pairs size
+    size_t cur_xattrs_size = 0;
+    for (const auto& p : *pxattrs) {
+      if ((flags & CEPH_XATTR_REPLACE) && name.compare(p.first) == 0) {
+	continue;
+      }
+      cur_xattrs_size += p.first.length() + p.second.length();
     }
-    cur_xattrs_size += p.first.length() + p.second.length();
+
+    if (((cur_xattrs_size + inc) > g_conf()->mds_max_xattr_pairs_size)) {
+      dout(10) << "xattr kv pairs size too big. cur_xattrs_size "
+	<< cur_xattrs_size << ", inc " << inc << dendl;
+      respond_to_request(mdr, -ENOSPC);
+      return;
+    }
+
+    if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(mempool::mds_co::string(name))) {
+      dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
+      respond_to_request(mdr, -EEXIST);
+      return;
+    }
   }
 
-  if (((cur_xattrs_size + inc) > g_conf()->mds_max_xattr_pairs_size)) {
-    dout(10) << "xattr kv pairs size too big. cur_xattrs_size " 
-             << cur_xattrs_size << ", inc " << inc << dendl;
-    respond_to_request(mdr, -ENOSPC);
-    return;
-  }
-
-  if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(mempool::mds_co::string(name))) {
-    dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
-    respond_to_request(mdr, -EEXIST);
-    return;
-  }
-  if ((flags & CEPH_XATTR_REPLACE) && !pxattrs->count(mempool::mds_co::string(name))) {
+  if ((flags & CEPH_XATTR_REPLACE) &&
+      !(pxattrs && pxattrs->count(mempool::mds_co::string(name)))) {
     dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
     respond_to_request(mdr, -ENODATA);
     return;
@@ -5842,21 +5844,20 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;
 
   // project update
-  auto &pi = cur->project_inode(true);
-  pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
-  pi.inode.xattr_version++;
-  auto &px = *pi.xattrs;
+  auto pi = cur->project_inode(true);
+  pi.inode->version = cur->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
+  pi.inode->xattr_version++;
   if ((flags & CEPH_XATTR_REMOVE)) {
-    px.erase(mempool::mds_co::string(name));
+    pi.xattrs->erase(mempool::mds_co::string(name));
   } else {
     bufferptr b = buffer::create(len);
     if (len)
       req->get_data().begin().copy(len, b.c_str());
-    auto em = px.emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(name)), std::forward_as_tuple(b));
+    auto em = pi.xattrs->emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(name)), std::forward_as_tuple(b));
     if (!em.second)
       em.first->second = b;
   }
@@ -5901,8 +5902,8 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
-  auto pxattrs = cur->get_projected_xattrs();
-  if (pxattrs->count(mempool::mds_co::string(name)) == 0) {
+  const auto& pxattrs = cur->get_projected_xattrs();
+  if (pxattrs && pxattrs->count(mempool::mds_co::string(name)) == 0) {
     dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
     respond_to_request(mdr, -ENODATA);
     return;
@@ -5911,14 +5912,14 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   dout(10) << "removexattr '" << name << "' on " << *cur << dendl;
 
   // project update
-  auto &pi = cur->project_inode(true);
+  auto pi = cur->project_inode(true);
   auto &px = *pi.xattrs;
-  pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
-  pi.inode.xattr_version++;
+  pi.inode->version = cur->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
+  pi.inode->xattr_version++;
   px.erase(mempool::mds_co::string(name));
 
   // log + wait
@@ -5956,12 +5957,11 @@ public:
     // be a bit hacky with the inode version, here.. we decrement it
     // just to keep mark_dirty() happen. (we didn't bother projecting
     // a new version of hte inode since it's just been created)
-    newi->inode.version--; 
-    newi->mark_dirty(newi->inode.version + 1, mdr->ls);
+    newi->mark_dirty(mdr->ls);
     newi->mark_dirty_parent(mdr->ls, true);
 
     // mkdir?
-    if (newi->inode.is_dir()) { 
+    if (newi->is_dir()) {
       CDir *dir = newi->get_dirfrag(frag_t());
       ceph_assert(dir);
       dir->fnode.version--;
@@ -5974,9 +5974,9 @@ public:
     MDRequestRef null_ref;
     get_mds()->mdcache->send_dentry_link(dn, null_ref);
 
-    if (newi->inode.is_file()) {
+    if (newi->is_file()) {
       get_mds()->locker->share_inode_max_size(newi);
-    } else if (newi->inode.is_dir()) {
+    } else if (newi->is_dir()) {
       // We do this now so that the linkages on the new directory are stable.
       newi->maybe_ephemeral_dist();
       newi->maybe_ephemeral_rand(true);
@@ -6024,12 +6024,14 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi);
 
-  newi->inode.rdev = req->head.args.mknod.rdev;
-  newi->inode.version = dn->pre_dirty();
-  newi->inode.rstat.rfiles = 1;
+  auto _inode = newi->_get_inode();
+  _inode->version = dn->pre_dirty();
+  _inode->rdev = req->head.args.mknod.rdev;
+  _inode->rstat.rfiles = 1;
+  _inode->accounted_rstat = _inode->rstat;
   if (layout.pool_id != mdcache->default_file_layout.pool_id)
-    newi->inode.add_old_pool(mdcache->default_file_layout.pool_id);
-  newi->inode.update_backtrace();
+    _inode->add_old_pool(mdcache->default_file_layout.pool_id);
+  _inode->update_backtrace();
 
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
@@ -6037,7 +6039,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
   // if the client created a _regular_ file via MKNOD, it's highly likely they'll
   // want to write to it (e.g., if they are reexporting NFS)
-  if (S_ISREG(newi->inode.mode)) {
+  if (S_ISREG(_inode->mode)) {
     // issue a cap on the file
     int cmode = CEPH_FILE_MODE_RDWR;
     Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
@@ -6050,9 +6052,9 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
       newi->xattrlock.set_state(LOCK_EXCL);
 
       dout(15) << " setting a client_range too, since this is a regular file" << dendl;
-      newi->inode.client_ranges[client].range.first = 0;
-      newi->inode.client_ranges[client].range.last = newi->inode.layout.stripe_unit;
-      newi->inode.client_ranges[client].follows = follows;
+      _inode->client_ranges[client].range.first = 0;
+      _inode->client_ranges[client].range.last = _inode->layout.stripe_unit;
+      _inode->client_ranges[client].follows = follows;
       cap->mark_clientwriteable();
     }
   }
@@ -6060,7 +6062,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   ceph_assert(dn->first == follows + 1);
   newi->first = dn->first;
     
-  dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
+  dout(10) << "mknod mode " << _inode->mode << " rdev " << _inode->rdev << dendl;
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -6110,9 +6112,11 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   // it's a directory.
   dn->push_projected_linkage(newi);
 
-  newi->inode.version = dn->pre_dirty();
-  newi->inode.rstat.rsubdirs = 1;
-  newi->inode.update_backtrace();
+  auto _inode = newi->_get_inode();
+  _inode->version = dn->pre_dirty();
+  _inode->rstat.rsubdirs = 1;
+  _inode->accounted_rstat = _inode->rstat;
+  _inode->update_backtrace();
 
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
@@ -6189,11 +6193,13 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   dn->push_projected_linkage(newi);
 
   newi->symlink = req->get_path2();
-  newi->inode.size = newi->symlink.length();
-  newi->inode.rstat.rbytes = newi->inode.size;
-  newi->inode.rstat.rfiles = 1;
-  newi->inode.version = dn->pre_dirty();
-  newi->inode.update_backtrace();
+  auto _inode = newi->_get_inode();
+  _inode->version = dn->pre_dirty();
+  _inode->size = newi->symlink.length();
+  _inode->rstat.rbytes = _inode->size;
+  _inode->rstat.rfiles = 1;
+  _inode->accounted_rstat = _inode->rstat;
+  _inode->update_backtrace();
 
   newi->first = dn->first;
 
@@ -6346,13 +6352,13 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   version_t tipv = targeti->pre_dirty();
   
   // project inode update
-  auto &pi = targeti->project_inode();
-  pi.inode.nlink++;
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
-  pi.inode.version = tipv;
+  auto pi = targeti->project_inode();
+  pi.inode->nlink++;
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
+  pi.inode->version = tipv;
 
   bool adjust_realm = false;
   if (!targeti->is_projected_snaprealm_global()) {
@@ -6603,7 +6609,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
 				      EPeerUpdate::OP_PREPARE, EPeerUpdate::LINK);
   mdlog->start_entry(le);
 
-  auto &pi = dnl->get_inode()->project_inode();
+  auto pi = dnl->get_inode()->project_inode();
 
   // update journaled target inode
   bool inc;
@@ -6611,7 +6617,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
   bool realm_projected = false;
   if (mdr->peer_request->get_op() == MMDSPeerRequest::OP_LINKPREP) {
     inc = true;
-    pi.inode.nlink++;
+    pi.inode->nlink++;
     if (!targeti->is_projected_snaprealm_global()) {
       sr_t *newsnap = targeti->project_snaprealm();
       targeti->mark_snaprealm_global(newsnap);
@@ -6621,7 +6627,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
     }
   } else {
     inc = false;
-    pi.inode.nlink--;
+    pi.inode->nlink--;
     if (targeti->is_projected_snaprealm_global()) {
       ceph_assert(mdr->peer_request->desti_snapbl.length());
       auto p = mdr->peer_request->desti_snapbl.cbegin();
@@ -6629,7 +6635,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
       sr_t *newsnap = targeti->project_snaprealm();
       decode(*newsnap, p);
 
-      if (pi.inode.nlink == 0)
+      if (pi.inode->nlink == 0)
 	ceph_assert(!newsnap->is_parent_global());
 
       realm_projected = true;
@@ -6641,7 +6647,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
   link_rollback rollback;
   rollback.reqid = mdr->reqid;
   rollback.ino = targeti->ino();
-  rollback.old_ctime = targeti->inode.ctime;   // we hold versionlock xlock; no concorrent projections
+  rollback.old_ctime = targeti->get_inode()->ctime;   // we hold versionlock xlock; no concorrent projections
   const fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
@@ -6657,10 +6663,10 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
   encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
 
-  pi.inode.ctime = mdr->get_op_stamp();
-  pi.inode.version = targeti->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  pi.inode->version = targeti->pre_dirty();
 
-  dout(10) << " projected inode " << pi.inode.ino << " v " << pi.inode.version << dendl;
+  dout(10) << " projected inode " << pi.inode->ino << " v " << pi.inode->version << dendl;
 
   // commit case
   mdcache->predirty_journal_parents(mdr, &le->commit, dnl->get_inode(), 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY);
@@ -6789,8 +6795,8 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& 
   dout(10) << " target is " << *in << dendl;
   ceph_assert(!in->is_projected());  // live peer request hold versionlock xlock.
   
-  auto &pi = in->project_inode();
-  pi.inode.version = in->pre_dirty();
+  auto pi = in->project_inode();
+  pi.inode->version = in->pre_dirty();
   mut->add_projected_inode(in);
 
   // parent dir rctime
@@ -6798,20 +6804,20 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& 
   fnode_t *pf = parent->project_fnode();
   mut->add_projected_fnode(parent);
   pf->version = parent->pre_dirty();
-  if (pf->fragstat.mtime == pi.inode.ctime) {
+  if (pf->fragstat.mtime == pi.inode->ctime) {
     pf->fragstat.mtime = rollback.old_dir_mtime;
-    if (pf->rstat.rctime == pi.inode.ctime)
+    if (pf->rstat.rctime == pi.inode->ctime)
       pf->rstat.rctime = rollback.old_dir_rctime;
     mut->add_updated_lock(&parent->get_inode()->filelock);
     mut->add_updated_lock(&parent->get_inode()->nestlock);
   }
 
   // inode
-  pi.inode.ctime = rollback.old_ctime;
+  pi.inode->ctime = rollback.old_ctime;
   if (rollback.was_inc)
-    pi.inode.nlink--;
+    pi.inode->nlink--;
   else
-    pi.inode.nlink++;
+    pi.inode->nlink++;
 
   map<client_t,ref_t<MClientSnap>> splits;
   if (rollback.snapbl.length() && in->snaprealm) {
@@ -7096,19 +7102,19 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   // the unlinked dentry
   dn->pre_dirty();
 
-  auto &pi = in->project_inode();
+  auto pi = in->project_inode();
   {
     std::string t;
     dn->make_path_string(t, true);
-    pi.inode.stray_prior_path = std::move(t);
+    pi.inode->stray_prior_path = std::move(t);
   }
-  pi.inode.version = in->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.change_attr++;
-  pi.inode.nlink--;
-  if (pi.inode.nlink == 0)
+  pi.inode->version = in->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->change_attr++;
+  pi.inode->nlink--;
+  if (pi.inode->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
 
   if (mdr->more()->desti_srnode) {
@@ -7124,7 +7130,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
-    pi.inode.update_backtrace();
+    pi.inode->update_backtrace();
     le->metablob.add_primary_dentry(straydn, in, true, true);
   } else {
     mdr->add_projected_inode(in);
@@ -8282,18 +8288,18 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       ceph_assert(straydn);  // moving to straydn.
       // link--, and move.
       if (destdn->is_auth()) {
-	auto &pi= oldin->project_inode(); //project_snaprealm
-	pi.inode.version = straydn->pre_dirty(pi.inode.version);
-	pi.inode.update_backtrace();
-        tpi = &pi.inode;
+	auto pi= oldin->project_inode(); //project_snaprealm
+	pi.inode->version = straydn->pre_dirty(pi.inode->version);
+	pi.inode->update_backtrace();
+        tpi = pi.inode.get();
       }
       straydn->push_projected_linkage(oldin);
     } else if (destdnl->is_remote()) {
       // nlink-- targeti
       if (oldin->is_auth()) {
-	auto &pi = oldin->project_inode();
-	pi.inode.version = oldin->pre_dirty();
-        tpi = &pi.inode;
+	auto pi = oldin->project_inode();
+	pi.inode->version = oldin->pre_dirty();
+        tpi = pi.inode.get();
       }
     }
   }
@@ -8307,16 +8313,16 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       destdn->push_projected_linkage(srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       // srci
       if (srci->is_auth()) {
-	auto &pi = srci->project_inode();
-	pi.inode.version = srci->pre_dirty();
-        spi = &pi.inode;
+	auto pi = srci->project_inode();
+	pi.inode->version = srci->pre_dirty();
+        spi = pi.inode.get();
       }
     } else {
       dout(10) << " will merge remote onto primary link" << dendl;
       if (destdn->is_auth()) {
-	auto &pi = oldin->project_inode();
-	pi.inode.version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->inode.version);
-        spi = &pi.inode;
+	auto pi = oldin->project_inode();
+	pi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->get_version());
+        spi = pi.inode.get();
       }
     }
   } else { // primary
@@ -8338,11 +8344,11 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	  dout(10) << " noting renamed dir open frags " << metablob->renamed_dir_frags << dendl;
 	}
       }
-      auto &pi = srci->project_inode(); // project snaprealm if srcdnl->is_primary
+      auto pi = srci->project_inode(); // project snaprealm if srcdnl->is_primary
                                                  // & srcdnl->snaprealm
-      pi.inode.version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
-      pi.inode.update_backtrace();
-      spi = &pi.inode;
+      pi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
+      pi.inode->update_backtrace();
+      spi = pi.inode.get();
     }
     destdn->push_projected_linkage(srci);
   }
@@ -9065,7 +9071,7 @@ void Server::_logged_peer_rename(MDRequestRef& mdr,
       encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
       encode(exported_client_metadata_map, reply->inode_export);
       reply->inode_export.claim_append(inodebl);
-      reply->inode_export_v = srcdnl->get_inode()->inode.version;
+      reply->inode_export_v = srcdnl->get_inode()->get_version();
     }
 
     // remove mdr auth pin
@@ -9364,13 +9370,13 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
   if (in) {
     bool projected;
     if (in->get_projected_parent_dn()->authority().first == whoami) {
-      auto &pi = in->project_inode();
-      pip = &pi.inode;
+      auto pi = in->project_inode();
+      pip = pi.inode.get();
       mut->add_projected_inode(in);
       pip->version = in->pre_dirty();
       projected = true;
     } else {
-      pip = in->get_projected_inode();
+      // FIXME: pip = in->get_projected_inode();
       projected = false;
     }
     if (pip->ctime == rollback.ctime)
@@ -9433,13 +9439,13 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
     bool projected;
     CInode::mempool_inode *ti = nullptr;
     if (target->get_projected_parent_dn()->authority().first == whoami) {
-      auto &pi = target->project_inode();
-      ti = &pi.inode;
+      auto pi = target->project_inode();
+      ti = pi.inode.get();
       mut->add_projected_inode(target);
       ti->version = target->pre_dirty();
       projected = true;
     } else {
-      ti = target->get_projected_inode();
+      //FIXME: ti = target->get_projected_inode();
       projected = false;
     }
     if (ti->ctime == rollback.ctime)
@@ -9935,12 +9941,12 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   info.name = snapname;
   info.stamp = mdr->get_op_stamp();
 
-  auto &pi = diri->project_inode(false, true);
-  pi.inode.ctime = info.stamp;
-  if (info.stamp > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = info.stamp;
-  pi.inode.rstat.rsnaps++;
-  pi.inode.version = diri->pre_dirty();
+  auto pi = diri->project_inode(false, true);
+  pi.inode->ctime = info.stamp;
+  if (info.stamp > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = info.stamp;
+  pi.inode->rstat.rsnaps++;
+  pi.inode->version = diri->pre_dirty();
 
   // project the snaprealm
   auto &newsnap = *pi.snapnode;
@@ -10073,12 +10079,12 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   ceph_assert(mds->snapclient->get_cached_version() >= stid);
 
   // journal
-  auto &pi = diri->project_inode(false, true);
-  pi.inode.version = diri->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-    pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.rstat.rsnaps--;
+  auto pi = diri->project_inode(false, true);
+  pi.inode->version = diri->pre_dirty();
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->rstat.rsnaps--;
   
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
@@ -10217,11 +10223,11 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   ceph_assert(mds->snapclient->get_cached_version() >= stid);
 
   // journal
-  auto &pi = diri->project_inode(false, true);
-  pi.inode.ctime = mdr->get_op_stamp();
-  if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
-     pi.inode.rstat.rctime = mdr->get_op_stamp();
-  pi.inode.version = diri->pre_dirty();
+  auto pi = diri->project_inode(false, true);
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->version = diri->pre_dirty();
 
   // project the snaprealm
   auto &newsnap = *pi.snapnode;

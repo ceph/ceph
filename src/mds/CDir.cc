@@ -237,7 +237,7 @@ bool CDir::check_rstats(bool scrub)
     CDentry::linkage_t *dnl = i->second->get_linkage();
     if (dnl->is_primary()) {
       CInode *in = dnl->get_inode();
-      nest_info.add(in->inode.accounted_rstat);
+      nest_info.add(in->get_inode()->accounted_rstat);
       if (in->is_dir())
 	frag_info.nsubdirs++;
       else
@@ -277,7 +277,7 @@ bool CDir::check_rstats(bool scrub)
 	CDentry *dn = i->second;
 	if (dn->get_linkage()->is_primary()) {
 	  CInode *in = dn->get_linkage()->inode;
-	  dout(1) << *dn << " rstat " << in->inode.accounted_rstat << dendl;
+	  dout(1) << *dn << " rstat " << in->get_inode()->accounted_rstat << dendl;
 	} else {
 	  dout(1) << *dn << dendl;
 	}
@@ -860,7 +860,7 @@ void CDir::steal_dentry(CDentry *dn)
 
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
-      auto pi = in->get_projected_inode();
+      const auto& pi = in->get_projected_inode();
       if (in->is_dir()) {
 	fnode.fragstat.nsubdirs++;
 	if (in->item_pop_lru.is_on_list())
@@ -1182,7 +1182,7 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
 void CDir::resync_accounted_fragstat()
 {
   fnode_t *pf = get_projected_fnode();
-  auto pi = inode->get_projected_inode();
+  const auto& pi = inode->get_projected_inode();
 
   if (pf->accounted_fragstat.version != pi->dirstat.version) {
     pf->fragstat.version = pi->dirstat.version;
@@ -1197,7 +1197,7 @@ void CDir::resync_accounted_fragstat()
 void CDir::resync_accounted_rstat()
 {
   fnode_t *pf = get_projected_fnode();
-  auto pi = inode->get_projected_inode();
+  const auto& pi = inode->get_projected_inode();
   
   if (pf->accounted_rstat.version != pi->rstat.version) {
     pf->rstat.version = pi->rstat.version;
@@ -1217,8 +1217,8 @@ void CDir::assimilate_dirty_rstat_inodes()
     if (in->is_frozen())
       continue;
 
-    auto &pi = in->project_inode();
-    pi.inode.version = in->pre_dirty();
+    auto pi = in->project_inode();
+    pi.inode->version = in->pre_dirty();
 
     inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0, NULL);
   }
@@ -1799,8 +1799,8 @@ CDentry *CDir::_load_dentry(
 	  undef_inode = true;
 	} else if (committed_version == 0 &&
 		   dn->is_dirty() &&
-		   inode_data.inode.ino == in->ino() &&
-		   inode_data.inode.version == in->get_version()) {
+		   inode_data.inode->ino == in->ino() &&
+		   inode_data.inode->version == in->get_version()) {
 	  /* clean underwater item?
 	   * Underwater item is something that is dirty in our cache from
 	   * journal replay, but was previously flushed to disk before the
@@ -1823,23 +1823,23 @@ CDentry *CDir::_load_dentry(
 
     if (!dn || undef_inode) {
       // add inode
-      CInode *in = cache->get_inode(inode_data.inode.ino, last);
+      CInode *in = cache->get_inode(inode_data.inode->ino, last);
       if (!in || undef_inode) {
         if (undef_inode && in)
           in->first = first;
         else
           in = new CInode(cache, true, first, last);
         
-        in->inode = inode_data.inode;
+        in->reset_inode(std::move(inode_data.inode));
+        in->reset_xattrs(std::move(inode_data.xattrs));
         // symlink?
         if (in->is_symlink()) 
           in->symlink = inode_data.symlink;
         
         in->dirfragtree.swap(inode_data.dirfragtree);
-        in->xattrs.swap(inode_data.xattrs);
-        in->old_inodes.swap(inode_data.old_inodes);
-	if (!in->old_inodes.empty()) {
-	  snapid_t min_first = in->old_inodes.rbegin()->first + 1;
+        in->reset_old_inodes(std::move(inode_data.old_inodes));
+        if (in->is_any_old_inodes()) {
+	  snapid_t min_first = in->get_old_inodes()->rbegin()->first + 1;
 	  if (min_first > in->first)
 	    in->first = min_first;
 	}
@@ -1855,7 +1855,7 @@ CDentry *CDir::_load_dentry(
         }
         dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 
-        if (in->inode.is_dirty_rstat())
+        if (in->get_inode()->is_dirty_rstat())
           in->mark_dirty_rstat();
 
         in->maybe_ephemeral_rand(true, rand_threshold);
@@ -1867,15 +1867,15 @@ CDentry *CDir::_load_dentry(
 	dn = add_primary_dentry(dname, in, first, last);
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
-                << " mode " << in->inode.mode
-                << " mtime " << in->inode.mtime << dendl;
+                << " mode " << in->get_inode()->mode
+                << " mtime " << in->get_inode()->mtime << dendl;
         string dirpath, inopath;
         this->inode->make_path_string(dirpath);
         in->make_path_string(inopath);
-        cache->mds->clog->error() << "loaded dup inode " << inode_data.inode.ino
-          << " [" << first << "," << last << "] v" << inode_data.inode.version
+        cache->mds->clog->error() << "loaded dup inode " << inode_data.inode->ino
+          << " [" << first << "," << last << "] v" << inode_data.inode->version
           << " at " << dirpath << "/" << dname
-          << ", but inode " << in->vino() << " v" << in->inode.version
+          << ", but inode " << in->vino() << " v" << in->get_version()
 	  << " already exists at " << inopath;
         return dn;
       }

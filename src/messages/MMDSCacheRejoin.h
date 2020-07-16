@@ -188,14 +188,14 @@ public:
   }
   void add_inode_locks(CInode *in, __u32 nonce, ceph::buffer::list& bl) {
     using ceph::encode;
-    encode(in->inode.ino, inode_locks);
+    encode(in->ino(), inode_locks);
     encode(in->last, inode_locks);
     encode(nonce, inode_locks);
     encode(bl, inode_locks);
   }
   void add_inode_base(CInode *in, uint64_t features) {
     using ceph::encode;
-    encode(in->inode.ino, inode_base);
+    encode(in->ino(), inode_base);
     encode(in->last, inode_base);
     ceph::buffer::list bl;
     in->_encode_base(bl, features);
