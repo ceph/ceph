@@ -1026,32 +1026,6 @@ TEST_F(TestInternal, DiscardCopyup)
   }
 }
 
-TEST_F(TestInternal, ShrinkFlushesCache) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  std::string buffer(4096, '1');
-
-  // ensure write-path is initialized
-  bufferlist write_bl;
-  write_bl.append(buffer);
-  api::Io<>::write(*ictx, 0, buffer.size(), bufferlist{write_bl}, 0);
-
-  C_SaferCond cond_ctx;
-  auto c = librbd::io::AioCompletion::create(&cond_ctx);
-  c->get();
-  api::Io<>::aio_write(*ictx, c, 0, buffer.size(), bufferlist{write_bl}, 0,
-                       true);
-
-  librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, true, no_op));
-
-  ASSERT_TRUE(c->is_complete());
-  ASSERT_EQ(0, c->wait_for_complete());
-  ASSERT_EQ(0, cond_ctx.wait());
-  c->put();
-}
-
 TEST_F(TestInternal, ImageOptions) {
   rbd_image_options_t opts1 = NULL, opts2 = NULL;
   uint64_t uint64_val1 = 10, uint64_val2 = 0;
