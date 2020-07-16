@@ -5,14 +5,10 @@ CephFS Client Capabilities
 Use Ceph authentication capabilities to restrict your file system clients
 to the lowest possible level of authority needed.
 
-.. note::
-
-    Path restriction and layout modification restriction are new features
+.. note:: Path restriction and layout modification restriction are new features
     in the Jewel release of Ceph.
 
-.. note::
-
-   Using Erasure Coded(EC) pools with CephFS is supported only with the
+.. note:: Using Erasure Coded(EC) pools with CephFS is supported only with the
    BlueStore Backend. They cannot be used as metadata pools and overwrites must
    be enabled on the data pools.
 
@@ -20,10 +16,10 @@ to the lowest possible level of authority needed.
 Path restriction
 ================
 
-By default, clients are not restricted in what paths they are allowed to mount.
-Further, when clients mount a subdirectory, e.g., /home/user, the MDS does not
-by default verify that subsequent operations
-are ‘locked’ within that directory.
+By default, clients are not restricted in what paths they are allowed to
+mount. Further, when clients mount a subdirectory, e.g., ``/home/user``, the
+MDS does not by default verify that subsequent operations are ‘locked’ within
+that directory.
 
 To restrict clients to only mount and work within a certain directory, use
 path-based MDS authentication capabilities.
@@ -32,11 +28,12 @@ Syntax
 ------
 
 To grant rw access to the specified directory only, we mention the specified
-directory while creating key for a client using the following syntax. ::
+directory while creating key for a client using the following syntax::
 
- ceph fs authorize *file_system_name* client.*client_name* /*specified_directory* rw
+ ceph fs authorize <fs_name> client.<client_id> <path-in-cephfs> rw
 
-For example, to restrict client ``foo`` to writing only in the ``bar`` directory of file system ``cephfs_a``, use ::
+For example, to restrict client ``foo`` to writing only in the ``bar``
+directory of file system ``cephfs_a``, use ::
 
  ceph fs authorize cephfs_a client.foo / r /bar rw
 
@@ -58,19 +55,21 @@ be able to mount the file system when specifying a readable path in the
 mount command (see below).
 
 Supplying ``all`` or ``*`` as the file system name will grant access to every
-file system. Note that it is usually necessary to quote ``*`` to protect it from
-the shell.
+file system. Note that it is usually necessary to quote ``*`` to protect it
+from the shell.
 
-See `User Management - Add a User to a Keyring`_. for additional details on user management
+See `User Management - Add a User to a Keyring`_. for additional details on
+user management
 
-To restrict a client to the specified sub-directory only, we mention the specified
-directory while mounting using the following syntax. ::
+To restrict a client to the specified sub-directory only, we mention the
+specified directory while mounting using the following syntax::
 
- ./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
+ ceph-fuse -n client.<client_id> <mount-path> -r *directory_to_be_mounted*
 
-For example, to restrict client ``foo`` to ``mnt/bar`` directory, we will use. ::
+For example, to restrict client ``foo`` to ``mnt/bar`` directory, we will
+use::
 
- ./ceph-fuse -n client.foo mnt -r /bar
+ ceph-fuse -n client.foo mnt -r /bar
 
 Free space reporting
 --------------------
@@ -117,9 +116,10 @@ on the file system cephfs_a, but client.1 cannot::
 Snapshot restriction (the 's' flag)
 ===========================================
 
-To create or delete snapshots, clients require the 's' flag in addition to 'rw'.
-Note that when capability string also contains the 'p' flag, the 's' flag must
-appear after it (all flags except 'rw' must be specified in alphabetical order).
+To create or delete snapshots, clients require the 's' flag in addition to
+'rw'. Note that when capability string also contains the 'p' flag, the 's'
+flag must appear after it (all flags except 'rw' must be specified in
+alphabetical order).
 
 For example, in the following snippet client.0 can create or delete snapshots
 in the ``bar`` directory of file system ``cephfs_a``::
