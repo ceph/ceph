@@ -1055,7 +1055,7 @@ seastar::future<> OSD::send_incremental_map(crimson::net::Connection* conn,
     });
   } else {
     return load_map_bl(osdmap->get_epoch())
-    .then([this, conn, first](auto&& bl) mutable {
+    .then([this, conn](auto&& bl) mutable {
       auto m = make_message<MOSDMap>(monc->get_fsid(),
 	  osdmap->get_encoding_features());
       m->oldest_map = superblock.oldest_map;
