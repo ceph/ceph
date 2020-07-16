@@ -1114,8 +1114,8 @@ protected:
   bool journal_is_rotational = true;
 
   ZTracer::Endpoint trace_endpoint;
-  void create_logger();
-  void create_recoverystate_perf();
+  PerfCounters* create_logger();
+  PerfCounters* create_recoverystate_perf();
   void tick();
   void tick_without_osd_lock();
   void _dispatch(Message *m);
