@@ -44,7 +44,6 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
 	val.get_val(),
 	get_paddr()).safe_then(
 	  [c, &result, addr, len](auto extent) mutable {
-	    // TODO: add backrefs to ensure cache residence of parents
 	    return extent->lookup_range(
 	      c,
 	      addr,
@@ -318,12 +317,12 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
   auto ret = lba_pin_list_t();
   auto [i, end] = get_leaf_entries(addr, len);
   for (; i != end; ++i) {
-    auto val = (*i).get_val();
+    auto val = i->get_val();
+    auto begin = i->get_key();
     ret.emplace_back(
       std::make_unique<BtreeLBAPin>(
 	val.paddr,
-	(*i).get_key(),
-	val.len));
+	lba_node_meta_t{ begin, begin + val.len, 0}));
   }
   return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
     std::move(ret));
@@ -356,12 +355,12 @@ LBALeafNode::insert_ret LBALeafNode::insert(
     insert_pt.get_key(),
     insert_pt.get_val().len,
     insert_pt.get_val().paddr);
+  auto begin = insert_pt.get_key();
   return insert_ret(
     insert_ertr::ready_future_marker{},
     std::make_unique<BtreeLBAPin>(
       val.paddr,
-      laddr,
-      val.len));
+      lba_node_meta_t{ begin, begin + val.len, 0}));
 }
 
 LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
@@ -465,11 +464,15 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
     return c.cache.get_extent<LBAInternalNode>(
       c.trans,
       offset,
-      LBA_BLOCK_SIZE).safe_then([depth](auto ret) {
+      LBA_BLOCK_SIZE).safe_then([c](auto ret) {
 	auto meta = ret->get_meta();
 	if (ret->get_size()) {
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
 	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
+	}
+	if (!ret->is_pending() && !ret->pin.is_linked()) {
+	  ret->pin.set_range(meta);
+	  c.pins.add_pin(ret->pin);
 	}
 	return LBANodeRef(ret.detach(), /* add_ref = */ false);
       });
@@ -481,7 +484,7 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
     return c.cache.get_extent<LBALeafNode>(
       c.trans,
       offset,
-      LBA_BLOCK_SIZE).safe_then([offset, depth](auto ret) {
+      LBA_BLOCK_SIZE).safe_then([offset, c](auto ret) {
 	logger().debug(
 	  "get_lba_btree_extent: read leaf at offset {}",
 	  offset);
@@ -489,6 +492,10 @@ Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
 	if (ret->get_size()) {
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
 	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
+	}
+	if (!ret->is_pending() && !ret->pin.is_linked()) {
+	  ret->pin.set_range(meta);
+	  c.pins.add_pin(ret->pin);
 	}
 	return LBANodeRef(ret.detach(), /* add_ref = */ false);
       });

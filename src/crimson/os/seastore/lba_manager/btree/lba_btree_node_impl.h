@@ -119,10 +119,13 @@ struct LBAInternalNode
       c.trans, LBA_BLOCK_SIZE);
     auto right = c.cache.alloc_new_extent<LBAInternalNode>(
       c.trans, LBA_BLOCK_SIZE);
+    auto pivot = split_into(*left, *right);
+    left->pin.set_range(left->get_meta());
+    right->pin.set_range(right->get_meta());
     return std::make_tuple(
       left,
       right,
-      split_into(*left, *right));
+      pivot);
   }
 
   LBANodeRef make_full_merge(
@@ -131,6 +134,7 @@ struct LBAInternalNode
     auto replacement = c.cache.alloc_new_extent<LBAInternalNode>(
       c.trans, LBA_BLOCK_SIZE);
     replacement->merge_from(*this, *right->cast<LBAInternalNode>());
+    replacement->pin.set_range(replacement->get_meta());
     return replacement;
   }
 
@@ -146,15 +150,19 @@ struct LBAInternalNode
     auto replacement_right = c.cache.alloc_new_extent<LBAInternalNode>(
       c.trans, LBA_BLOCK_SIZE);
 
+    auto pivot = balance_into_new_nodes(
+      *this,
+      right,
+      prefer_left,
+      *replacement_left,
+      *replacement_right);
+
+    replacement_left->pin.set_range(replacement_left->get_meta());
+    replacement_right->pin.set_range(replacement_right->get_meta());
     return std::make_tuple(
       replacement_left,
       replacement_right,
-      balance_into_new_nodes(
-	*this,
-	right,
-	prefer_left,
-	*replacement_left,
-	*replacement_right));
+      pivot);
   }
 
   /**
@@ -358,10 +366,13 @@ struct LBALeafNode
       c.trans, LBA_BLOCK_SIZE);
     auto right = c.cache.alloc_new_extent<LBALeafNode>(
       c.trans, LBA_BLOCK_SIZE);
+    auto pivot = split_into(*left, *right);
+    left->pin.set_range(left->get_meta());
+    right->pin.set_range(right->get_meta());
     return std::make_tuple(
       left,
       right,
-      split_into(*left, *right));
+      pivot);
   }
 
   LBANodeRef make_full_merge(
@@ -370,6 +381,7 @@ struct LBALeafNode
     auto replacement = c.cache.alloc_new_extent<LBALeafNode>(
       c.trans, LBA_BLOCK_SIZE);
     replacement->merge_from(*this, *right->cast<LBALeafNode>());
+    replacement->pin.set_range(replacement->get_meta());
     return replacement;
   }
 
@@ -384,15 +396,20 @@ struct LBALeafNode
       c.trans, LBA_BLOCK_SIZE);
     auto replacement_right = c.cache.alloc_new_extent<LBALeafNode>(
       c.trans, LBA_BLOCK_SIZE);
+
+    auto pivot = balance_into_new_nodes(
+      *this,
+      right,
+      prefer_left,
+      *replacement_left,
+      *replacement_right);
+
+    replacement_left->pin.set_range(replacement_left->get_meta());
+    replacement_right->pin.set_range(replacement_right->get_meta());
     return std::make_tuple(
       replacement_left,
       replacement_right,
-      balance_into_new_nodes(
-	*this,
-	right,
-	prefer_left,
-	*replacement_left,
-	*replacement_right));
+      pivot);
   }
 
   // See LBAInternalNode, same concept
