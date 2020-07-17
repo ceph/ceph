@@ -1842,12 +1842,13 @@ you may want to run:
             return "Removed {} from host '{}'".format(name, host)
 
     def _config_fn(self, service_type) -> Optional[Callable[[ServiceSpec], None]]:
-        return {
+        fn = {
             'mds': self.mds_service.config,
             'rgw': self.rgw_service.config,
             'nfs': self.nfs_service.config,
             'iscsi': self.iscsi_service.config,
-        }.get(service_type)  # type: ignore
+        }.get(service_type)
+        return cast(Callable[[ServiceSpec], None], fn)
 
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
