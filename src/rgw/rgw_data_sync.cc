@@ -13,6 +13,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
+#include "rgw_cr_sip.h"
 #include "rgw_cr_rest.h"
 #include "rgw_cr_tools.h"
 #include "rgw_http_client.h"
@@ -21,6 +22,7 @@
 #include "rgw_bucket_sync_cache.h"
 #include "rgw_datalog.h"
 #include "rgw_metadata.h"
+#include "rgw_sip_data.h"
 #include "rgw_sync_counters.h"
 #include "rgw_sync_error_repo.h"
 #include "rgw_sync_module.h"
@@ -481,6 +483,8 @@ public:
 
   virtual ~RGWDataSyncInfoCRHandler() {}
 
+  virtual RGWCoroutine *init_cr() = 0;
+
   virtual RGWCoroutine *fetch_full_cr(const string& list_marker,
                                       read_metadata_list *result) = 0;
 
@@ -866,6 +870,11 @@ public:
     path = "/admin/metadata/bucket.instance";
   }
 
+  RGWCoroutine *init_cr() override {
+    /* nothing to init */
+    return nullptr;
+  }
+
   RGWCoroutine *fetch_full_cr(const string& marker,
                               read_metadata_list *result) override {
     string entrypoint = string("/admin/metadata/bucket.instance");
@@ -900,6 +909,112 @@ public:
                                            next_marker,
                                            result,
                                            truncated);
+  }
+};
+
+class RGWDataSyncInfoCRHandler_SIP : public RGWDataSyncInfoCRHandler {
+  friend class InitCR;
+
+  std::unique_ptr<SIProviderCRMgr_REST> sip_full;
+  std::vector<SIProvider::stage_id_t> full_stages;
+
+  std::unique_ptr<SIProviderCRMgr_REST> sip_inc;
+  std::vector<SIProvider::stage_id_t> inc_stages;
+
+  SIProvider::TypeHandlerProviderRef type_provider;
+
+  class InitCR : public RGWCoroutine {
+    RGWDataSyncInfoCRHandler_SIP *siph;
+
+  public:
+    InitCR(RGWDataSyncCtx *_sc,
+           RGWDataSyncInfoCRHandler_SIP *_siph) : RGWCoroutine(_sc->cct),
+                                                  siph(_siph) {}
+
+    int operate() {
+      reenter(this) {
+        yield call(siph->sip_full->get_stages_cr(&siph->full_stages));
+        if (retcode < 0) {
+          ldout(cct, 0) << "ERROR: failed to fetch list of stages for sip (data.full): retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
+        if (siph->full_stages.empty()) {
+          ldout(cct, 0) << "ERROR: sip (data.full) has no stages, likely a bug!" << dendl;
+          return set_cr_error(-EIO);
+        }
+        yield call(siph->sip_inc->get_stages_cr(&siph->inc_stages));
+        if (retcode < 0) {
+          ldout(cct, 0) << "ERROR: failed to fetch list of stages for sip (data.inc): retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
+        if (siph->inc_stages.empty()) {
+          ldout(cct, 0) << "ERROR: sip (data.inc) has no stages, likely a bug!" << dendl;
+          return set_cr_error(-EIO);
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+public:
+  RGWDataSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler(_sc) {
+    type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
+    sip_full.reset(new SIProviderCRMgr_REST(sync_env->cct,
+                                            sc->conn,
+                                            sync_env->http_manager,
+                                            "data.full",
+                                            type_provider.get(),
+                                            nullopt));
+    sip_inc.reset(new SIProviderCRMgr_REST(sync_env->cct,
+                                           sc->conn,
+                                           sync_env->http_manager,
+                                           "data.inc",
+                                           type_provider.get(),
+                                           nullopt));
+  }
+
+  RGWCoroutine *init_cr() override {
+    return new InitCR(sc, this);
+  }
+
+  RGWCoroutine *fetch_full_cr(const string& marker,
+                              read_metadata_list *result) override {
+    return nullptr;
+  }
+
+#warning remove this method from interface
+  RGWCoroutine *get_source_bucket_info_cr(const string& key,
+                                          bucket_instance_meta_info *result) override {
+#if 0
+    rgw_http_param_pair pairs[] = {{"key", key.c_str()},
+                                   {NULL, NULL}};
+
+    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, result);
+#endif
+    return nullptr;
+  }
+
+  RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
+#if 0
+    return new ReadDatalogStatusCR(sc, shard_id, marker, timestamp);
+#endif
+    return nullptr;
+  }
+
+  RGWCoroutine *fetch_inc_cr(int shard_id,
+                             const string& marker,
+                             list<rgw_data_change_log_entry> *result,
+                             string *next_marker,
+                             bool *truncated) override {
+#if 0
+    return new RGWReadRemoteDataLogShardCR(sc, shard_id,
+                                           marker,
+                                           next_marker,
+                                           result,
+                                           truncated);
+#endif
+    return nullptr;
   }
 };
 
