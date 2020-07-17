@@ -93,7 +93,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
     // no zero-length operations
     uint64_t length = random() % (std::max<uint64_t>(max_len - 1, 1)) + 1;
     std::string oid = "test" + stringify(random() % num_objs);
-    bool is_read = random() < percent_reads * RAND_MAX;
+    bool is_read = random() < percent_reads * float(RAND_MAX);
     std::shared_ptr<op_data> op(new op_data(oid, offset, length, is_read));
     ops.push_back(op);
     std::cout << "op " << i << " " << (is_read ? "read" : "write")
