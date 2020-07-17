@@ -7,7 +7,7 @@ import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { RbdConfigurationEntry } from '../../../shared/models/configuration';
@@ -32,7 +32,7 @@ describe('RbdConfigurationListComponent', () => {
       PipesModule
     ],
     declarations: [RbdConfigurationListComponent, TableComponent],
-    providers: [FormatterService, RbdConfigurationService, i18nProviders]
+    providers: [FormatterService, RbdConfigurationService]
   });
 
   beforeEach(() => {

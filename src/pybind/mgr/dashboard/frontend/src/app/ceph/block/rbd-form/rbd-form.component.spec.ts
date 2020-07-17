@@ -10,7 +10,7 @@ import { NEVER, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { SharedModule } from '../../../shared/shared.module';
@@ -41,7 +41,6 @@ describe('RbdFormComponent', () => {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ pool: 'foo', name: 'bar', snap: undefined })
       },
-      i18nProviders,
       RbdService
     ]
   });

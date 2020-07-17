@@ -2,7 +2,6 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
@@ -66,18 +65,17 @@ export class OsdFormComponent extends CdForm implements OnInit {
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private orchService: OrchestratorService,
     private router: Router,
     private modalService: ModalService
   ) {
     super();
-    this.resource = this.i18n('OSDs');
+    this.resource = $localize`OSDs`;
     this.action = this.actionLabels.CREATE;
     this.features = {
       encrypted: {
         key: 'encrypted',
-        desc: this.i18n('Encryption')
+        desc: $localize`Encryption`
       }
     };
     this.featureList = _.map(this.features, (o, key) => Object.assign(o, { key: key }));

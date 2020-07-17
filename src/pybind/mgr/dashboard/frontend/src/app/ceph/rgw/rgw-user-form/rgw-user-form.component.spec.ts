@@ -8,7 +8,7 @@ import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -33,8 +33,7 @@ describe('RgwUserFormComponent', () => {
       SharedModule,
       ToastrModule.forRoot(),
       NgbTooltipModule
-    ],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {
@@ -295,7 +294,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Created Object Gateway user ''`
+        `Created Object Gateway user 'null'`
       );
     });
 
@@ -306,7 +305,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Updated Object Gateway user ''`
+        `Updated Object Gateway user 'null'`
       );
     });
   });

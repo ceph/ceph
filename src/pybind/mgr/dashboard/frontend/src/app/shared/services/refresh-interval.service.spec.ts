@@ -8,7 +8,6 @@ describe('RefreshIntervalService', () => {
   let service: RefreshIntervalService;
 
   configureTestBed({
-    imports: [],
     providers: [RefreshIntervalService]
   });
 

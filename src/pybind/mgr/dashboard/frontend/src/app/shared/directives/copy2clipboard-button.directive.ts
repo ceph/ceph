@@ -1,6 +1,5 @@
 import { Directive, ElementRef, HostListener, Input, OnInit, Renderer2 } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { ToastrService } from 'ngx-toastr';
 
 @Directive({
@@ -13,15 +12,14 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   constructor(
     private elementRef: ElementRef,
     private renderer: Renderer2,
-    private toastr: ToastrService,
-    private i18n: I18n
+    private toastr: ToastrService
   ) {}
 
   ngOnInit() {
     const iElement = this.renderer.createElement('i');
     this.renderer.addClass(iElement, 'fa');
     this.renderer.addClass(iElement, 'fa-clipboard');
-    this.renderer.setAttribute(iElement, 'title', this.i18n('Copy to clipboard'));
+    this.renderer.setAttribute(iElement, 'title', $localize`Copy to clipboard`);
     this.renderer.appendChild(this.elementRef.nativeElement, iElement);
   }
 

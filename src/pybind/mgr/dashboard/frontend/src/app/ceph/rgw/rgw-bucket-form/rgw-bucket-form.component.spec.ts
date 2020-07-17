@@ -8,7 +8,7 @@ import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -36,8 +36,7 @@ describe('RgwBucketFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot()
-    ],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {
@@ -204,7 +203,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Created Object Gateway bucket ''`
+        `Created Object Gateway bucket 'null'`
       );
     });
 
@@ -215,7 +214,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Updated Object Gateway bucket ''.`
+        `Updated Object Gateway bucket 'null'.`
       );
     });
   });

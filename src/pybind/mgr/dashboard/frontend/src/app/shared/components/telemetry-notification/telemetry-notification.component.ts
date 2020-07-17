@@ -1,7 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { UserFormModel } from '../../../core/auth/user-form/user-form.model';
 import { MgrModuleService } from '../../api/mgr-module.service';
 import { UserService } from '../../api/user.service';
@@ -23,8 +21,7 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private userService: UserService,
     private notificationService: NotificationService,
-    private telemetryNotificationService: TelemetryNotificationService,
-    private i18n: I18n
+    private telemetryNotificationService: TelemetryNotificationService
   ) {}
 
   ngOnInit() {
@@ -59,10 +56,9 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
     localStorage.setItem('telemetry_notification_hidden', 'true');
     this.notificationService.show(
       NotificationType.success,
-      this.i18n('Telemetry activation reminder muted'),
-      this.i18n(
-        'You can activate the module on the Telemetry configuration page (<b>Dashboard Settings</b> -> <b>Telemetry configuration</b>) at any time.'
-      )
+      $localize`Telemetry activation reminder muted`,
+      $localize`You can activate the module on the Telemetry configuration \
+page (<b>Dashboard Settings</b> -> <b>Telemetry configuration</b>) at any time.`
     );
   }
 }

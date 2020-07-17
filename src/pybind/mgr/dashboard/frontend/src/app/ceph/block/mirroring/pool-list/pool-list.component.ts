@@ -1,7 +1,6 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Observable, Subscriber, Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -41,8 +40,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private rbdMirroringService: RbdMirroringService,
     private modalService: ModalService,
-    private taskWrapper: TaskWrapperService,
-    private i18n: I18n
+    private taskWrapper: TaskWrapperService
   ) {
     this.data = [];
     this.permission = this.authStorageService.getPermissions().rbdMirroring;
@@ -51,13 +49,13 @@ export class PoolListComponent implements OnInit, OnDestroy {
       permission: 'update',
       icon: Icons.edit,
       click: () => this.editModeModal(),
-      name: this.i18n('Edit Mode'),
+      name: $localize`Edit Mode`,
       canBePrimary: () => true
     };
     const addPeerAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      name: this.i18n('Add Peer'),
+      name: $localize`Add Peer`,
       click: () => this.editPeersModal('add'),
       disable: () => !this.selection.first() || this.selection.first().mirror_mode === 'disabled',
       visible: () => !this.getPeerUUID(),
@@ -66,14 +64,14 @@ export class PoolListComponent implements OnInit, OnDestroy {
     const editPeerAction: CdTableAction = {
       permission: 'update',
       icon: Icons.exchange,
-      name: this.i18n('Edit Peer'),
+      name: $localize`Edit Peer`,
       click: () => this.editPeersModal('edit'),
       visible: () => !!this.getPeerUUID()
     };
     const deletePeerAction: CdTableAction = {
       permission: 'delete',
       icon: Icons.destroy,
-      name: this.i18n('Delete Peer'),
+      name: $localize`Delete Peer`,
       click: () => this.deletePeersModal(),
       visible: () => !!this.getPeerUUID()
     };
@@ -82,14 +80,14 @@ export class PoolListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.columns = [
-      { prop: 'name', name: this.i18n('Name'), flexGrow: 2 },
-      { prop: 'mirror_mode', name: this.i18n('Mode'), flexGrow: 2 },
-      { prop: 'leader_id', name: this.i18n('Leader'), flexGrow: 2 },
-      { prop: 'image_local_count', name: this.i18n('# Local'), flexGrow: 2 },
-      { prop: 'image_remote_count', name: this.i18n('# Remote'), flexGrow: 2 },
+      { prop: 'name', name: $localize`Name`, flexGrow: 2 },
+      { prop: 'mirror_mode', name: $localize`Mode`, flexGrow: 2 },
+      { prop: 'leader_id', name: $localize`Leader`, flexGrow: 2 },
+      { prop: 'image_local_count', name: $localize`# Local`, flexGrow: 2 },
+      { prop: 'image_remote_count', name: $localize`# Remote`, flexGrow: 2 },
       {
         prop: 'health',
-        name: this.i18n('Health'),
+        name: $localize`Health`,
         cellTemplate: this.healthTmpl,
         flexGrow: 1
       }
@@ -131,7 +129,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     const peerUUID = this.getPeerUUID();
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.i18n('mirror peer'),
+      itemDescription: $localize`mirror peer`,
       itemNames: [`${poolName} (${peerUUID})`],
       submitActionObservable: () =>
         new Observable((observer: Subscriber<any>) => {

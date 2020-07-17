@@ -1,8 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
 
@@ -13,14 +11,13 @@ import { SummaryService } from '../../../shared/services/summary.service';
 })
 export class Nfs501Component implements OnInit, OnDestroy {
   docsUrl: string;
-  message = this.i18n('The NFS Ganesha service is not configured.');
+  message = $localize`The NFS Ganesha service is not configured.`;
   routeParamsSubscribe: any;
 
   constructor(
     private route: ActivatedRoute,
     private summaryService: SummaryService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
-    private i18n: I18n
+    private cephReleaseNamePipe: CephReleaseNamePipe
   ) {}
 
   ngOnInit() {

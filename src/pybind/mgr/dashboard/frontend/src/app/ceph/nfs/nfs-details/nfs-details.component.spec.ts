@@ -6,7 +6,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { NfsDetailsComponent } from './nfs-details.component';
 
@@ -18,8 +18,7 @@ describe('NfsDetailsComponent', () => {
 
   configureTestBed({
     declarations: [NfsDetailsComponent],
-    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule],
-    providers: i18nProviders
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule]
   });
 
   beforeEach(() => {

@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CdFormBuilder } from '../../forms/cd-form-builder';
@@ -31,8 +30,7 @@ export class FormModalComponent implements OnInit {
     public activeModal: NgbActiveModal,
     private formBuilder: CdFormBuilder,
     private formatter: FormatterService,
-    private dimlessBinaryPipe: DimlessBinaryPipe,
-    private i18n: I18n
+    private dimlessBinaryPipe: DimlessBinaryPipe
   ) {}
 
   ngOnInit() {
@@ -86,12 +84,12 @@ export class FormModalComponent implements OnInit {
     if (['binaryMin', 'binaryMax'].includes(error)) {
       // binaryMin and binaryMax return a function that take I18n to
       // provide a translated error message.
-      return errorContext(this.i18n);
+      return errorContext();
     }
     if (error === 'required') {
-      return this.i18n('This field is required.');
+      return $localize`This field is required.`;
     }
-    return this.i18n('An error occurred.');
+    return $localize`An error occurred.`;
   }
 
   onSubmitForm(values: any) {

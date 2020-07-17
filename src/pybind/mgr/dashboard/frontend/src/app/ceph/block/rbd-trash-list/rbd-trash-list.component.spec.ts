@@ -9,11 +9,7 @@ import * as moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -40,7 +36,7 @@ describe('RbdTrashListComponent', () => {
       NgbNavModule,
       ToastrModule.forRoot()
     ],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {

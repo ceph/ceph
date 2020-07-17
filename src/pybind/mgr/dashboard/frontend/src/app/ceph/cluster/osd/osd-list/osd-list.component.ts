@@ -3,7 +3,6 @@ import { FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
@@ -87,7 +86,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private modalService: ModalService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private router: Router,
     private depCheckerService: DepCheckerService,
@@ -105,7 +103,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         click: () => {
           this.depCheckerService.checkOrchestratorOrModal(
             this.actionLabels.CREATE,
-            this.i18n('OSD'),
+            $localize`OSD`,
             () => {
               this.router.navigate([this.urlBuilder.getCreate()]);
             }
@@ -144,21 +142,21 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.MARK_OUT,
         permission: 'update',
-        click: () => this.showConfirmationModal(this.i18n('out'), this.osdService.markOut),
+        click: () => this.showConfirmationModal($localize`out`, this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
         icon: Icons.left
       },
       {
         name: this.actionLabels.MARK_IN,
         permission: 'update',
-        click: () => this.showConfirmationModal(this.i18n('in'), this.osdService.markIn),
+        click: () => this.showConfirmationModal($localize`in`, this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
         icon: Icons.right
       },
       {
         name: this.actionLabels.MARK_DOWN,
         permission: 'update',
-        click: () => this.showConfirmationModal(this.i18n('down'), this.osdService.markDown),
+        click: () => this.showConfirmationModal($localize`down`, this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
         icon: Icons.down
       },
@@ -167,9 +165,9 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
-            this.i18n('Mark'),
-            this.i18n('OSD lost'),
-            this.i18n('marked lost'),
+            $localize`Mark`,
+            $localize`OSD lost`,
+            $localize`marked lost`,
             (ids: number[]) => {
               return this.osdService.safeToDestroy(JSON.stringify(ids));
             },
@@ -184,9 +182,9 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
-            this.i18n('Purge'),
-            this.i18n('OSD'),
-            this.i18n('purged'),
+            $localize`Purge`,
+            $localize`OSD`,
+            $localize`purged`,
             (ids: number[]) => {
               return this.osdService.safeToDestroy(JSON.stringify(ids));
             },
@@ -204,9 +202,9 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
-            this.i18n('destroy'),
-            this.i18n('OSD'),
-            this.i18n('destroyed'),
+            $localize`destroy`,
+            $localize`OSD`,
+            $localize`destroyed`,
             (ids: number[]) => {
               return this.osdService.safeToDestroy(JSON.stringify(ids));
             },
@@ -232,21 +230,21 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   ngOnInit() {
     this.clusterWideActions = [
       {
-        name: this.i18n('Flags'),
+        name: $localize`Flags`,
         icon: Icons.flag,
         click: () => this.configureFlagsAction(),
         permission: 'read',
         visible: () => this.permissions.osd.read
       },
       {
-        name: this.i18n('Recovery Priority'),
+        name: $localize`Recovery Priority`,
         icon: Icons.deepCheck,
         click: () => this.configureQosParamsAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read
       },
       {
-        name: this.i18n('PG scrub'),
+        name: $localize`PG scrub`,
         icon: Icons.analyse,
         click: () => this.configurePgScrubAction(),
         permission: 'read',
@@ -254,11 +252,11 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       }
     ];
     this.columns = [
-      { prop: 'host.name', name: this.i18n('Host') },
-      { prop: 'id', name: this.i18n('ID'), flexGrow: 1, cellTransformation: CellTemplate.bold },
+      { prop: 'host.name', name: $localize`Host` },
+      { prop: 'id', name: $localize`ID`, flexGrow: 1, cellTransformation: CellTemplate.bold },
       {
         prop: 'collectedStates',
-        name: this.i18n('Status'),
+        name: $localize`Status`,
         flexGrow: 1,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
@@ -273,7 +271,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       },
       {
         prop: 'tree.device_class',
-        name: this.i18n('Device class'),
+        name: $localize`Device class`,
         flexGrow: 1.2,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
@@ -285,34 +283,34 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       },
       {
         prop: 'stats.numpg',
-        name: this.i18n('PGs'),
+        name: $localize`PGs`,
         flexGrow: 1
       },
       {
         prop: 'stats.stat_bytes',
-        name: this.i18n('Size'),
+        name: $localize`Size`,
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
-      { prop: 'stats.usage', name: this.i18n('Usage'), cellTemplate: this.osdUsageTpl },
+      { prop: 'stats.usage', name: $localize`Usage`, cellTemplate: this.osdUsageTpl },
       {
         prop: 'stats_history.out_bytes',
-        name: this.i18n('Read bytes'),
+        name: $localize`Read bytes`,
         cellTransformation: CellTemplate.sparkline
       },
       {
         prop: 'stats_history.in_bytes',
-        name: this.i18n('Write bytes'),
+        name: $localize`Write bytes`,
         cellTransformation: CellTemplate.sparkline
       },
       {
         prop: 'stats.op_r',
-        name: this.i18n('Read ops'),
+        name: $localize`Read ops`,
         cellTransformation: CellTemplate.perSecond
       },
       {
         prop: 'stats.op_w',
-        name: this.i18n('Write ops'),
+        name: $localize`Write ops`,
         cellTransformation: CellTemplate.perSecond
       }
     ];
@@ -379,26 +377,22 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     const selectedOsd = _.filter(this.osds, ['id', this.selection.first().id]).pop();
 
     this.modalService.show(FormModalComponent, {
-      titleText: this.i18n('Edit OSD: {{id}}', {
-        id: selectedOsd.id
-      }),
+      titleText: $localize`Edit OSD: ${selectedOsd.id}`,
       fields: [
         {
           type: 'text',
           name: 'deviceClass',
           value: selectedOsd.tree.device_class,
-          label: this.i18n('Device class'),
+          label: $localize`Device class`,
           required: true
         }
       ],
-      submitButtonText: this.i18n('Edit OSD'),
+      submitButtonText: $localize`Edit OSD`,
       onSubmit: (values: any) => {
         this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
           this.notificationService.show(
             NotificationType.success,
-            this.i18n(`Updated OSD '{{id}}'`, {
-              id: selectedOsd.id
-            })
+            $localize`Updated OSD '${selectedOsd.id}'`
           );
           this.getOsdList();
         });
@@ -425,8 +419,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
     this.bsModalRef = this.modalService.show(ConfirmationModalComponent, {
-      titleText: this.i18n('Mark OSD {{markAction}}', { markAction: markAction }),
-      buttonText: this.i18n('Mark {{markAction}}', { markAction: markAction }),
+      titleText: $localize`Mark OSD ${markAction}`,
+      buttonText: $localize`Mark ${markAction}`,
       bodyTpl: this.markOsdConfirmationTpl,
       bodyContext: {
         markActionDescription: markAction
@@ -454,12 +448,12 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
     this.depCheckerService.checkOrchestratorOrModal(
       this.actionLabels.DELETE,
-      this.i18n('OSD'),
+      $localize`OSD`,
       () => {
         this.showCriticalConfirmationModal(
-          this.i18n('delete'),
-          this.i18n('OSD'),
-          this.i18n('deleted'),
+          $localize`delete`,
+          $localize`OSD`,
+          $localize`deleted`,
           (ids: number[]) => {
             return this.osdService.safeToDelete(JSON.stringify(ids));
           },

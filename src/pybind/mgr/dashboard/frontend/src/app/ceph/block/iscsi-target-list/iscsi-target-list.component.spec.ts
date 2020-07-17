@@ -11,7 +11,6 @@ import { BehaviorSubject, of } from 'rxjs';
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { IscsiService } from '../../../shared/api/iscsi.service';
@@ -46,7 +45,7 @@ describe('IscsiTargetListComponent', () => {
       NgbNavModule
     ],
     declarations: [IscsiTargetListComponent, IscsiTabsComponent, IscsiTargetDetailsComponent],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {

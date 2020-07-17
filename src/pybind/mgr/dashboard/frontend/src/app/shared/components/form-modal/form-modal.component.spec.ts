@@ -5,12 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  FormHelper,
-  i18nProviders
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, FixtureHelper, FormHelper } from '../../../../testing/unit-test-helper';
 import { CdValidators } from '../../forms/cd-validators';
 import { SharedModule } from '../../shared.module';
 import { FormModalComponent } from './form-modal.component';
@@ -58,7 +53,7 @@ describe('InputModalComponent', () => {
       ReactiveFormsModule,
       SharedModule
     ],
-    providers: [i18nProviders, NgbActiveModal]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
