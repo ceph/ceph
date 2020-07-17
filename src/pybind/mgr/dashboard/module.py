@@ -296,6 +296,7 @@ class Module(MgrModule, CherryPyConfig):
                                       data_suffix=True)
             __cov.start()
             cherrypy.engine.subscribe('after_request', __cov.save)
+            cherrypy.engine.subscribe('stop', __cov.stop)
 
         AuthManager.initialize()
         load_sso_db()
@@ -340,7 +341,6 @@ class Module(MgrModule, CherryPyConfig):
         self.shutdown_event.clear()
         NotificationQueue.stop()
         cherrypy.engine.stop()
-        cherrypy.engine.subscribe('stop', __cov.stop)
         logger.info('Engine stopped')
 
     def shutdown(self):
