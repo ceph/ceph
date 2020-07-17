@@ -1350,7 +1350,7 @@ TEST(BufferList, BenchAlloc) {
 }
 
 TEST(BufferList, append_bench_with_size_hint) {
-  std::array<char, 1048576> src = { 0, };
+  std::array<char, 1048576/ 4> src = { 0, };
 
   for (size_t step = 4; step <= 16384; step *= 4) {
     const utime_t start = ceph_clock_now();
@@ -1371,7 +1371,7 @@ TEST(BufferList, append_bench_with_size_hint) {
 }
 
 TEST(BufferList, append_bench) {
-  std::array<char, 1048576> src = { 0, };
+  std::array<char, 1048576/4> src = { 0, };
 
   for (size_t step = 4; step <= 16384; step *= 4) {
     const utime_t start = ceph_clock_now();
