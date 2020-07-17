@@ -21,6 +21,9 @@ class DashboardTestCase(MgrTestCase):
     # Display full error diffs
     maxDiff = None
 
+    # Increased x3 (20 -> 60)
+    TIMEOUT_HEALTH_CLEAR = 60
+
     MGRS_REQUIRED = 2
     MDSS_REQUIRED = 1
     REQUIRE_FILESYSTEM = True
@@ -186,7 +189,7 @@ class DashboardTestCase(MgrTestCase):
         super(DashboardTestCase, self).setUp()
         if not self._loggedin and self.AUTO_AUTHENTICATE:
             self.login('admin', 'admin')
-        self.wait_for_health_clear(20)
+        self.wait_for_health_clear(self.TIMEOUT_HEALTH_CLEAR)
 
     @classmethod
     def tearDownClass(cls):
