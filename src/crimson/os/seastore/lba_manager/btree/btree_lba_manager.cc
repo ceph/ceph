@@ -293,6 +293,42 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
     });
 }
 
+BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
+  Transaction &t,
+  laddr_t begin,
+  laddr_t end,
+  scan_mappings_func_t &&f)
+{
+  return seastar::do_with(
+    std::move(f),
+    [=, &t](auto &f) {
+      return get_root(t).safe_then(
+	[=, &t, &f](LBANodeRef lbaroot) mutable {
+	  return lbaroot->scan_mappings(
+	    get_context(t),
+	    begin,
+	    end,
+	    f);
+	});
+    });
+}
+
+BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
+    Transaction &t,
+    scan_mapped_space_func_t &&f)
+{
+  return seastar::do_with(
+    std::move(f),
+    [=, &t](auto &f) {
+      return get_root(t).safe_then(
+	[=, &t, &f](LBANodeRef lbaroot) mutable {
+	  return lbaroot->scan_mapped_space(
+	    get_context(t),
+	    f);
+	});
+    });
+}
+
 BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
