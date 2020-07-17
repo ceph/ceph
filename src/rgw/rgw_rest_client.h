@@ -211,13 +211,13 @@ public:
                 out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
   ~RGWRESTStreamS3PutObj() override;
 
-  void send_init(rgw_obj& obj);
+  void send_init(rgw::sal::RGWObject* obj);
   int send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
   int send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
                  RGWAccessControlPolicy& policy, bool send);
   int send_ready(RGWAccessKey& key, bool send);
 
-  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
+  int put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

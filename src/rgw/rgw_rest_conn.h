@@ -113,8 +113,8 @@ public:
 
 
   /* async requests */
-  int put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
-  int put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
+  int put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
+  int put_obj_async(const rgw_user& uid, rgw::sal::RGWObject* obj, uint64_t obj_size,
                     map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
 
@@ -143,9 +143,9 @@ public:
     uint64_t range_end{0};
   };
 
-  int get_obj(const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
+  int get_obj(const rgw::sal::RGWObject* obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
-  int get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
+  int get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw::sal::RGWObject* obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,

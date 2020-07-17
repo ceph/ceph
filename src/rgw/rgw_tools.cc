@@ -500,15 +500,17 @@ int RGWDataAccess::Object::put(bufferlist& data,
   rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   RGWObjectCtx obj_ctx(store);
-  rgw_obj obj(bucket_info.bucket, key);
+  std::unique_ptr<rgw::sal::RGWBucket> b;
+  store->get_bucket(NULL, bucket_info, &b);
+  std::unique_ptr<rgw::sal::RGWObject> obj = b->get_object(key);
 
   auto& owner = bucket->policy.get_owner();
 
   string req_id = store->svc()->zone_utils->unique_id(store->getRados()->get_new_req_id());
 
   using namespace rgw::putobj;
-  AtomicObjectProcessor processor(&aio, store, bucket_info, nullptr,
-                                  owner.get_id(), obj_ctx, obj, olh_epoch,
+  AtomicObjectProcessor processor(&aio, store, b.get(), nullptr,
+                                  owner.get_id(), obj_ctx, obj->get_obj(), olh_epoch,
                                   req_id, dpp, y);
 
   int ret = processor.prepare(y);
