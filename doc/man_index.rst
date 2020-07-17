@@ -40,3 +40,5 @@
    man/8/rbd-replay
    man/8/rbd
    man/8/rbdmap
+   man/8/rgw-orphan-list
+   man/8/ceph-diff-sorted

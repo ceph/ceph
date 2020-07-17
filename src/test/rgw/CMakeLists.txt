@@ -177,3 +177,5 @@ add_executable(unittest_rgw_url test_rgw_url.cc)
 add_ceph_unittest(unittest_rgw_url)
 
 target_link_libraries(unittest_rgw_url ${rgw_libs})
+add_ceph_test(test-ceph-diff-sorted.sh
+  ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)

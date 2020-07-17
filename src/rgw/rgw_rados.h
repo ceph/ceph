@@ -5,6 +5,7 @@
 #define CEPH_RGWRADOS_H
 
 #include <functional>
+#include <iomanip>
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
@@ -726,18 +727,18 @@ public:
     void seek(uint64_t ofs);
 
     void operator++();
-    bool operator==(const obj_iterator& rhs) {
+    bool operator==(const obj_iterator& rhs) const {
       return (ofs == rhs.ofs);
     }
-    bool operator!=(const obj_iterator& rhs) {
+    bool operator!=(const obj_iterator& rhs) const {
       return (ofs != rhs.ofs);
     }
-    const rgw_obj_select& get_location() {
+    const rgw_obj_select& get_location() const {
       return location;
     }
 
     /* start of current stripe */
-    uint64_t get_stripe_ofs() {
+    uint64_t get_stripe_ofs() const {
       if (manifest->explicit_objs) {
         return explicit_iter->first;
       }
@@ -755,7 +756,7 @@ public:
     }
 
     /* current stripe size */
-    uint64_t get_stripe_size() {
+    uint64_t get_stripe_size() const {
       if (manifest->explicit_objs) {
         return explicit_iter->second.size;
       }
@@ -763,7 +764,7 @@ public:
     }
 
     /* offset where data starts within current stripe */
-    uint64_t location_ofs() {
+    uint64_t location_ofs() const {
       if (manifest->explicit_objs) {
         return explicit_iter->second.loc_ofs;
       }
@@ -2539,7 +2540,7 @@ public:
   const string& get_key() const {
     return oid;
   }
-  bool from_meta(string& meta) {
+  bool from_meta(const string& meta) {
     int end_pos = meta.rfind('.'); // search for ".meta"
     if (end_pos < 0)
       return false;
@@ -2556,6 +2557,10 @@ public:
     prefix = "";
     meta = "";
     upload_id = "";
+  }
+  friend std::ostream& operator<<(std::ostream& out, const RGWMPObj& obj) {
+    return out << "RGWMPObj:{ prefix=" << std::quoted(obj.prefix) <<
+      ", meta=" << std::quoted(obj.meta) << " }";
   }
 }; // class RGWMPObj
 
