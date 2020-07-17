@@ -121,6 +121,16 @@ struct LBAInternalNode
     laddr_t max,
     extent_len_t len) final;
 
+  scan_mappings_ret scan_mappings(
+    op_context_t c,
+    laddr_t begin,
+    laddr_t end,
+    scan_mappings_func_t &f) final;
+
+  scan_mapped_space_ret scan_mapped_space(
+    op_context_t c,
+    scan_mapped_space_func_t &f) final;
+
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_split_children(op_context_t c) final {
     auto left = c.cache.alloc_new_extent<LBAInternalNode>(
@@ -365,6 +375,16 @@ struct LBALeafNode
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
+
+  scan_mappings_ret scan_mappings(
+    op_context_t c,
+    laddr_t begin,
+    laddr_t end,
+    scan_mappings_func_t &f) final;
+
+  scan_mapped_space_ret scan_mapped_space(
+    op_context_t c,
+    scan_mapped_space_func_t &f) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_split_children(op_context_t c) final {

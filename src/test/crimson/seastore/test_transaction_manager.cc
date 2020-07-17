@@ -264,6 +264,16 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
       auto ext = get_extent(t, i.first, i.second.desc.len);
       EXPECT_EQ(i.second, ext->get_desc());
     }
+    auto lt = create_lazy_transaction();
+    lba_manager->scan_mappings(
+      *lt.t,
+      0,
+      L_ADDR_MAX,
+      [iter=lt.mappings.begin(), &lt](auto l, auto p, auto len) mutable {
+	EXPECT_NE(iter, lt.mappings.end());
+	EXPECT_EQ(l, iter->first);
+	++iter;
+      }).unsafe_get0();
   }
 
   void submit_transaction(test_transaction_t t) {
