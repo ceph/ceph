@@ -11,11 +11,13 @@
 #include "common/TextTable.h"
 #include <iostream>
 #include <boost/program_options.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 namespace rbd {
 namespace action {
 namespace snap {
+
+using namespace boost::placeholders;
 
 static const std::string ALL_NAME("all");
 

@@ -20,7 +20,6 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ReadResult.h"
 
-#include <boost/bind.hpp>
 #include <boost/optional.hpp>
 
 #define dout_subsys ceph_subsys_rbd
