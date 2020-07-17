@@ -1038,7 +1038,7 @@ def main():
     if parsed_args.help:
         target = None
         if len(childargs) >= 2 and childargs[0] == 'tell':
-            target = childargs[1].split('.')
+            target = childargs[1].split('.', 1)
             if not validate_target(target):
                 print('target {0} doesn\'t exist; please pass correct target to tell command (e.g., mon.a, osd.1, mds.a, mgr)'.format(childargs[1]), file=sys.stderr)
                 return 1
@@ -1054,7 +1054,7 @@ def main():
 
     # implement "tell service.id help"
     if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
-        target = childargs[1].split('.')
+        target = childargs[1].split('.', 1)
         if validate_target(target):
             hdr('Tell %s commands' % target[0])
             return do_extended_help(parser, childargs, target, None)
