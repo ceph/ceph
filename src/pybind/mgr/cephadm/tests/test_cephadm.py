@@ -92,12 +92,13 @@ class TestCephadm(object):
 
             c = cephadm_module.list_daemons()
 
-            def remove_id(dd):
+            def remove_id_events(dd):
                 out = dd.to_json()
                 del out['daemon_id']
+                del out['events']
                 return out
 
-            assert [remove_id(dd) for dd in wait(cephadm_module, c)] == [
+            assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
                 {
                     'daemon_type': 'mds',
                     'hostname': 'test',
@@ -133,9 +134,12 @@ class TestCephadm(object):
                     'service_id': 'r.z',
                     'service_name': 'rgw.r.z',
                     'service_type': 'rgw',
-                    'status': {'running': 0, 'size': 1}
+                    'status': {'running': 0, 'size': 1},
                 }
             ]
+            for o in out:
+                if 'events' in o:
+                    del o['events']  # delete it, as it contains a timestamp
             assert out == expected
             assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
 
