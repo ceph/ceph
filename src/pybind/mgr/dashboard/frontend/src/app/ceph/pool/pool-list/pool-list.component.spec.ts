@@ -8,11 +8,7 @@ import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -57,7 +53,7 @@ describe('PoolListComponent', () => {
       NgbNavModule,
       HttpClientTestingModule
     ],
-    providers: [i18nProviders, PgCategoryService]
+    providers: [PgCategoryService]
   });
 
   beforeEach(() => {

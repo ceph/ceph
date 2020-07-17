@@ -1,7 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { UserService } from '../../../shared/api/user.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -46,7 +45,6 @@ export class UserListComponent implements OnInit {
     private modalService: ModalService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private cdDatePipe: CdDatePipe,
     public actionLabels: ActionLabelsI18n
@@ -77,36 +75,36 @@ export class UserListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Username'),
+        name: $localize`Username`,
         prop: 'username',
         flexGrow: 1
       },
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 1,
         pipe: this.emptyPipe
       },
       {
-        name: this.i18n('Email'),
+        name: $localize`Email`,
         prop: 'email',
         flexGrow: 1,
         pipe: this.emptyPipe
       },
       {
-        name: this.i18n('Roles'),
+        name: $localize`Roles`,
         prop: 'roles',
         flexGrow: 1,
         cellTemplate: this.userRolesTpl
       },
       {
-        name: this.i18n('Enabled'),
+        name: $localize`Enabled`,
         prop: 'enabled',
         flexGrow: 1,
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: this.i18n('Password expiration date'),
+        name: $localize`Password expiration date`,
         prop: 'pwdExpirationDate',
         flexGrow: 1,
         pipe: this.cdDatePipe
@@ -136,7 +134,7 @@ export class UserListComponent implements OnInit {
         this.modalRef.close();
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Deleted user '{{username}}'`, { username: username })
+          $localize`Deleted user '${username}'`
         );
       },
       () => {
@@ -151,8 +149,8 @@ export class UserListComponent implements OnInit {
     if (sessionUsername === username) {
       this.notificationService.show(
         NotificationType.error,
-        this.i18n(`Failed to delete user '{{username}}'`, { username: username }),
-        this.i18n(`You are currently logged in as '{{username}}'.`, { username: username })
+        $localize`Failed to delete user '${username}'`,
+        $localize`You are currently logged in as '${username}'.`
       );
       return;
     }

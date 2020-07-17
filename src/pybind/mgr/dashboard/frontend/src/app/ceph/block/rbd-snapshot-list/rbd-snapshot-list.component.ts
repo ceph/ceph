@@ -1,7 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as moment from 'moment';
 import { of } from 'rxjs';
 
@@ -80,7 +79,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private notificationService: NotificationService,
     private summaryService: SummaryService,
     private taskListService: TaskListService,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
@@ -89,39 +87,39 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         cellTransformation: CellTemplate.executing,
         flexGrow: 2
       },
       {
-        name: this.i18n('Size'),
+        name: $localize`Size`,
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Provisioned'),
+        name: $localize`Provisioned`,
         prop: 'disk_usage',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('State'),
+        name: $localize`State`,
         prop: 'is_protected',
         flexGrow: 1,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            true: { value: this.i18n('PROTECTED'), class: 'badge-success' },
-            false: { value: this.i18n('UNPROTECTED'), class: 'badge-info' }
+            true: { value: $localize`PROTECTED`, class: 'badge-success' },
+            false: { value: $localize`UNPROTECTED`, class: 'badge-info' }
           }
         }
       },
       {
-        name: this.i18n('Created'),
+        name: $localize`Created`,
         prop: 'timestamp',
         flexGrow: 1,
         pipe: this.cdDatePipe
@@ -132,7 +130,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   ngOnChanges() {
     const imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName);
 
-    const actions = new RbdSnapshotActionsModel(this.i18n, this.actionLabels, this.featuresName);
+    const actions = new RbdSnapshotActionsModel(this.actionLabels, this.featuresName);
     actions.create.click = () => this.openCreateSnapshotModal();
     actions.rename.click = () => this.openEditSnapshotModal();
     actions.protect.click = () => this.toggleProtection();
@@ -266,8 +264,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const snapshotName = this.selection.selected[0].name;
     const imageSpec = new ImageSpec(this.poolName, this.namespace, this.rbdName).toString();
     const initialState = {
-      titleText: this.i18n('RBD snapshot rollback'),
-      buttonText: this.i18n('Rollback'),
+      titleText: $localize`RBD snapshot rollback`,
+      buttonText: $localize`Rollback`,
       bodyTpl: this.rollbackTpl,
       bodyData: {
         snapName: `${imageSpec}@${snapshotName}`
@@ -283,7 +281,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   deleteSnapshotModal() {
     const snapshotName = this.selection.selected[0].name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.i18n('RBD snapshot'),
+      itemDescription: $localize`RBD snapshot`,
       itemNames: [snapshotName],
       submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)
     });

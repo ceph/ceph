@@ -6,11 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
@@ -31,8 +27,7 @@ describe('RgwBucketListComponent', () => {
       SharedModule,
       NgbNavModule,
       HttpClientTestingModule
-    ],
-    providers: i18nProviders
+    ]
   });
 
   beforeEach(() => {

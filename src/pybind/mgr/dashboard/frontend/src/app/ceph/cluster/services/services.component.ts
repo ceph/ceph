@@ -1,7 +1,5 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { CephServiceService } from '../../../shared/api/ceph-service.service';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -41,7 +39,6 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
   constructor(
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private orchService: OrchestratorService,
     private cephServiceService: CephServiceService
   ) {
@@ -52,17 +49,17 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   ngOnInit() {
     const columns = [
       {
-        name: this.i18n('Service'),
+        name: $localize`Service`,
         prop: 'service_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Container image name'),
+        name: $localize`Container image name`,
         prop: 'status.container_image_name',
         flexGrow: 3
       },
       {
-        name: this.i18n('Container image ID'),
+        name: $localize`Container image ID`,
         prop: 'status.container_image_id',
         flexGrow: 3,
         cellTransformation: CellTemplate.truncate,
@@ -71,19 +68,19 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         }
       },
       {
-        name: this.i18n('Running'),
+        name: $localize`Running`,
         prop: 'status.running',
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: this.i18n('Size'),
+        name: $localize`Size`,
         prop: 'status.size',
         flexGrow: 1
       },
       {
-        name: this.i18n('Last Refreshed'),
+        name: $localize`Last Refreshed`,
         prop: 'status.last_refresh',
         flexGrow: 1
       }

@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -48,7 +47,6 @@ export class CephfsClientsComponent implements OnInit {
     private modalService: ModalService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().cephfs;
@@ -63,12 +61,12 @@ export class CephfsClientsComponent implements OnInit {
 
   ngOnInit() {
     this.columns = [
-      { prop: 'id', name: this.i18n('id') },
-      { prop: 'type', name: this.i18n('type') },
-      { prop: 'state', name: this.i18n('state') },
-      { prop: 'version', name: this.i18n('version') },
-      { prop: 'hostname', name: this.i18n('Host') },
-      { prop: 'root', name: this.i18n('root') }
+      { prop: 'id', name: $localize`id` },
+      { prop: 'type', name: $localize`type` },
+      { prop: 'state', name: $localize`state` },
+      { prop: 'version', name: $localize`version` },
+      { prop: 'hostname', name: $localize`Host` },
+      { prop: 'root', name: $localize`root` }
     ];
   }
 
@@ -83,7 +81,7 @@ export class CephfsClientsComponent implements OnInit {
         this.modalRef.close();
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Evicted client '{{clientId}}'`, { clientId: clientId })
+          $localize`Evicted client '${clientId}'`
         );
       },
       () => {

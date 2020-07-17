@@ -10,7 +10,6 @@ import { BehaviorSubject, of } from 'rxjs';
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -54,7 +53,7 @@ describe('RbdListComponent', () => {
       RbdConfigurationListComponent,
       RbdTabsComponent
     ],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {

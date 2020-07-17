@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin } from 'rxjs';
 
@@ -52,13 +51,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
     private rgwSiteService: RgwSiteService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
     this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = this.i18n('bucket');
+    this.resource = $localize`bucket`;
     this.createForm();
   }
 
@@ -114,7 +112,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           const placementTargets = data['getPlacementTargets'];
           this.zonegroup = placementTargets['zonegroup'];
           _.forEach(placementTargets['placement_targets'], (placementTarget) => {
-            placementTarget['description'] = `${placementTarget['name']} (${this.i18n('pool')}: ${
+            placementTarget['description'] = `${placementTarget['name']} (${$localize`pool`}: ${
               placementTarget['data_pool']
             })`;
             this.placementTargets.push(placementTarget);
@@ -189,7 +187,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n(`Updated Object Gateway bucket '{{bid}}'.`, values)
+              $localize`Updated Object Gateway bucket '${values.bid}'.`
             );
             this.goToListView();
           },
@@ -215,7 +213,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n(`Created Object Gateway bucket '{{bid}}'`, values)
+              $localize`Created Object Gateway bucket '${values.bid}'`
             );
             this.goToListView();
           },

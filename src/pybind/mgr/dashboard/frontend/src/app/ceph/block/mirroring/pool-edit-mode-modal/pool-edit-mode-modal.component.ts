@@ -2,7 +2,6 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -31,14 +30,13 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
   peerExists = false;
 
   mirrorModes: Array<{ id: string; name: string }> = [
-    { id: 'disabled', name: this.i18n('Disabled') },
-    { id: 'pool', name: this.i18n('Pool') },
-    { id: 'image', name: this.i18n('Image') }
+    { id: 'disabled', name: $localize`Disabled` },
+    { id: 'pool', name: $localize`Pool` },
+    { id: 'image', name: $localize`Image` }
   ];
 
   constructor(
     public activeModal: NgbActiveModal,
-    private i18n: I18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {

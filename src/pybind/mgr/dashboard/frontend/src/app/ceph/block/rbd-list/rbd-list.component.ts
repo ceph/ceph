@@ -1,7 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -108,7 +107,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     private taskListService: TaskListService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -185,58 +183,58 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool_name',
         flexGrow: 2
       },
       {
-        name: this.i18n('Namespace'),
+        name: $localize`Namespace`,
         prop: 'namespace',
         flexGrow: 2
       },
       {
-        name: this.i18n('Size'),
+        name: $localize`Size`,
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Objects'),
+        name: $localize`Objects`,
         prop: 'num_objs',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessPipe
       },
       {
-        name: this.i18n('Object size'),
+        name: $localize`Object size`,
         prop: 'obj_size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Provisioned'),
+        name: $localize`Provisioned`,
         prop: 'disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Total provisioned'),
+        name: $localize`Total provisioned`,
         prop: 'total_disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Parent'),
+        name: $localize`Parent`,
         prop: 'parent',
         flexGrow: 2,
         cellTemplate: this.parentTpl
@@ -434,9 +432,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   getDeleteDisableDesc(): string {
     const first = this.selection.first();
     if (first && this.hasClonedSnapshots(first)) {
-      return this.i18n(
-        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
-      );
+      return $localize`This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.`;
     }
 
     return '';

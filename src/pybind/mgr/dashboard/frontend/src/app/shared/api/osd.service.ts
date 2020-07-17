@@ -1,7 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { map } from 'rxjs/operators';
 
@@ -19,7 +18,7 @@ export class OsdService {
     KNOWN_PRIORITIES: [
       {
         name: null,
-        text: this.i18n('-- Select the priority --'),
+        text: $localize`-- Select the priority --`,
         values: {
           osd_max_backfills: null,
           osd_recovery_max_active: null,
@@ -29,7 +28,7 @@ export class OsdService {
       },
       {
         name: 'low',
-        text: this.i18n('Low'),
+        text: $localize`Low`,
         values: {
           osd_max_backfills: 1,
           osd_recovery_max_active: 1,
@@ -39,7 +38,7 @@ export class OsdService {
       },
       {
         name: 'default',
-        text: this.i18n('Default'),
+        text: $localize`Default`,
         values: {
           osd_max_backfills: 1,
           osd_recovery_max_active: 3,
@@ -49,7 +48,7 @@ export class OsdService {
       },
       {
         name: 'high',
-        text: this.i18n('High'),
+        text: $localize`High`,
         values: {
           osd_max_backfills: 4,
           osd_recovery_max_active: 4,
@@ -60,7 +59,7 @@ export class OsdService {
     ]
   };
 
-  constructor(private http: HttpClient, private i18n: I18n, private deviceService: DeviceService) {}
+  constructor(private http: HttpClient, private deviceService: DeviceService) {}
 
   create(driveGroups: Object[]) {
     const request = {

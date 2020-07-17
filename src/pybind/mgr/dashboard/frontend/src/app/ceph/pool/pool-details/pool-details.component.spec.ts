@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders, TabHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, TabHelper } from '../../../../testing/unit-test-helper';
 import { Permissions } from '../../../shared/models/permissions';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
@@ -23,8 +23,7 @@ describe('PoolDetailsComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule
     ],
-    declarations: [PoolDetailsComponent, RbdConfigurationListComponent],
-    providers: [i18nProviders]
+    declarations: [PoolDetailsComponent, RbdConfigurationListComponent]
   });
 
   beforeEach(() => {

@@ -2,7 +2,6 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';
@@ -48,12 +47,11 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
     public activeModal: NgbActiveModal,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
     this.action = this.actionLabels.CREATE;
-    this.resource = this.i18n('EC Profile');
+    this.resource = $localize`EC Profile`;
     this.createForm();
     this.setJerasureDefaults();
   }

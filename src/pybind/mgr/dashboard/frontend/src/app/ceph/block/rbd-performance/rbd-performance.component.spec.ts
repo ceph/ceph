@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdPerformanceComponent } from './rbd-performance.component';
@@ -15,8 +15,7 @@ describe('RbdPerformanceComponent', () => {
 
   configureTestBed({
     imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, NgbNavModule],
-    declarations: [RbdPerformanceComponent, RbdTabsComponent],
-    providers: i18nProviders
+    declarations: [RbdPerformanceComponent, RbdTabsComponent]
   });
 
   beforeEach(() => {
