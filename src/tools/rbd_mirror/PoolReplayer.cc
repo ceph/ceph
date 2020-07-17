@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "PoolReplayer.h"
-#include <boost/bind.hpp>
 #include "common/Cond.h"
 #include "common/Formatter.h"
 #include "common/admin_socket.h"

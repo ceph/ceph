@@ -21,7 +21,9 @@
 #include "mgr/Gil.h"
 
 
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/python.hpp>
+#undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include "include/ceph_assert.h"  // boost clobbers this
 
 // For ::config_prefix

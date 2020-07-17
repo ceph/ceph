@@ -16,7 +16,6 @@
 #include "librbd/asio/ContextWQ.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
-#include <boost/bind.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror

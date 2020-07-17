@@ -4,7 +4,6 @@
 #ifndef CEPH_CACHE_SESSION_H
 #define CEPH_CACHE_SESSION_H
 
-#include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/error.hpp>
 

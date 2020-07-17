@@ -36,7 +36,6 @@
 #include "librbd/operation/ResizeRequest.h"
 
 #include "osdc/Striper.h"
-#include <boost/bind.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_rbd
