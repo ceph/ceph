@@ -116,7 +116,7 @@ void CacheController::handle_request(CacheSession* session,
         req_read_data->pool_namespace, req_read_data->pool_id,
         req_read_data->snap_id, req_read_data->oid, cache_path);
       ObjectCacheRequest* reply = nullptr;
-      if (ret != OBJ_CACHE_PROMOTED) {
+      if (ret != OBJ_CACHE_PROMOTED && ret != OBJ_CACHE_DNE) {
         reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);
       } else {
         reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY,
