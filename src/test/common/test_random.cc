@@ -197,7 +197,13 @@ TEST(util, test_random_class_interface)
   // Test deduction guides:
   {
     { ceph::util::random_number_generator rng(1234); }
+#pragma clang diagnostic push
+    // Turn this warning off, since we're checking that the deduction
+    // guide works. (And we don't know what the seed type will
+    // actually be.)
+#pragma clang diagnostic ignored "-Wliteral-conversion"
     { ceph::util::random_number_generator rng(1234.1234); }
+#pragma clang diagnostic pop
 
     {
     int x = 1234;
