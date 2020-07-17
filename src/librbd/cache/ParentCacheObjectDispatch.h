@@ -117,12 +117,13 @@ private:
 
   int read_object(std::string file_path, ceph::bufferlist* read_data,
                   uint64_t offset, uint64_t length, Context *on_finish);
-  void handle_read_cache(
-         ceph::immutable_obj_cache::ObjectCacheRequest* ack,
-         uint64_t read_off, uint64_t read_len,
-         ceph::bufferlist* read_data,
-         io::DispatchResult* dispatch_result,
-         Context* on_dispatched);
+  void handle_read_cache(ceph::immutable_obj_cache::ObjectCacheRequest* ack,
+                         uint64_t object_no, uint64_t read_off,
+                         uint64_t read_len, librados::snap_t snap_id,
+                         const ZTracer::Trace &parent_trace,
+                         ceph::bufferlist* read_data,
+                         io::DispatchResult* dispatch_result,
+                         Context* on_dispatched);
   int handle_register_client(bool reg);
   void create_cache_session(Context* on_finish, bool is_reconnect);
 
