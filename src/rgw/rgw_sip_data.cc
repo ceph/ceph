@@ -138,7 +138,16 @@ int SIProvider_DataInc::do_get_start_marker(int shard_id, std::string *marker) c
 
 int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker) const
 {
-#warning FIXME
+  RGWDataChangesLogInfo info;
+  int ret = data_log->get_info(shard_id, &info);
+  if (ret == -ENOENT) {
+    ret = 0;
+  }
+  if (ret < 0) {
+    lderr(cct) << "ERROR: data_log->get_info() returned ret=" << ret << dendl;
+    return ret;
+  }
+  *marker = rgw::to_base64(info.marker);
   return 0;
 }
 
