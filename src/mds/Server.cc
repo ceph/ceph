@@ -6690,9 +6690,6 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_
   // hit pop
   mds->balancer->hit_inode(targeti, META_POP_IWR);
 
-  // done.
-  mdr->reset_slave_request();
-
   if (adjust_realm) {
     int op = CEPH_SNAP_OP_SPLIT;
     mds->mdcache->send_snap_update(targeti, 0, op);
@@ -7382,7 +7379,6 @@ void Server::_logged_slave_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *strayd
       mdcache->do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
 
   // done.
-  mdr->reset_slave_request();
   mdr->straydn = 0;
 
   if (!mdr->aborted) {
@@ -9089,7 +9085,6 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
     mds->balancer->hit_inode(destdnl->get_inode(), META_POP_IWR);
 
   // done.
-  mdr->reset_slave_request();
   mdr->straydn = 0;
 
   if (reply) {
