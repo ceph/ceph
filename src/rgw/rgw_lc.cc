@@ -1262,8 +1262,10 @@ public:
       return -EINVAL;
     }
 
+    rgw::sal::RGWRadosBucket bucket(oc.store, oc.bucket_info);
+    rgw::sal::RGWRadosObject obj(oc.store, oc.obj.key, &bucket);
     int r = oc.store->getRados()->transition_obj(
-      oc.rctx, oc.bucket_info, oc.obj, target_placement, o.meta.mtime,
+      oc.rctx, &bucket, obj, target_placement, o.meta.mtime,
       o.versioned_epoch, oc.dpp, null_yield);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
