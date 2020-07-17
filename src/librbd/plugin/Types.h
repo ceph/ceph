@@ -7,7 +7,6 @@
 #include "include/common_fwd.h"
 #include "common/PluginRegistry.h"
 
-struct CephContext;
 struct Context;
 
 namespace librbd {
