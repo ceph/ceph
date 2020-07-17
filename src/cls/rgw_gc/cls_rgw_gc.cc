@@ -426,7 +426,7 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
       } //end - catch
       auto xattr_iter = xattr_urgent_data_map.find(op.info.tag);
       if (xattr_iter != xattr_urgent_data_map.end()) {
-        it->second = op.info.time;
+        xattr_iter->second = op.info.time;
         tag_found = true;
         //write the updated map back
         bufferlist bl_map;
