@@ -76,6 +76,9 @@ public:
 
   /* Name of Account */
   virtual string get_acct_name() const = 0;
+
+  /* Subuser of Account */
+  virtual string get_subuser() const = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -410,6 +413,10 @@ public:
     return token_claims.user_name;
   }
 
+  string get_subuser() const override {
+    return {};
+  }
+
   struct Factory {
     virtual ~Factory() {}
 
@@ -542,6 +549,7 @@ public:
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return info.acct_type; }
   string get_acct_name() const override { return info.acct_name; }
+  string get_subuser() const override { return {}; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -603,6 +611,7 @@ public:
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_RGW; }
   string get_acct_name() const override { return {}; }
+  string get_subuser() const override { return subuser; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -647,6 +656,7 @@ public:
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_ROLE; }
   string get_acct_name() const override { return {}; }
+  string get_subuser() const override { return {}; }
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
 
   struct Factory {
