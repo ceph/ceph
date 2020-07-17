@@ -32,10 +32,8 @@ class IntervalSetTest : public ::testing::Test {
 
 typedef ::testing::Types<
   interval_set<IntervalValueType>,
-  interval_set<IntervalValueType,
-	       btree::btree_map<IntervalValueType,IntervalValueType>>,
-  interval_set<IntervalValueType,
-	       boost::container::flat_map<IntervalValueType,IntervalValueType>>
+  interval_set<IntervalValueType, btree::btree_map>,
+  interval_set<IntervalValueType, boost::container::flat_map>
   > IntervalSetTypes;
 
 TYPED_TEST_SUITE(IntervalSetTest, IntervalSetTypes);

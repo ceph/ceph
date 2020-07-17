@@ -294,7 +294,7 @@ def device_info(monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
         if not devices:
-            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_first_lv", lambda filters: lv)
         else:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs",

@@ -215,6 +215,14 @@ class MDCache {
 
   void advance_stray();
 
+  bool get_export_ephemeral_distributed_config(void) const {
+    return export_ephemeral_distributed_config;
+  }
+
+  bool get_export_ephemeral_random_config(void) const {
+    return export_ephemeral_random_config;
+  }
+
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -226,6 +234,8 @@ class MDCache {
 
     stray_manager.eval_stray(dn);
   }
+
+  mds_rank_t hash_into_rank_bucket(inodeno_t ino);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   void clear_dirty_bits_for_stray(CInode* diri);
@@ -898,7 +908,7 @@ class MDCache {
   void discard_delayed_expire(CDir *dir);
 
   // -- mdsmap --
-  void handle_mdsmap(const MDSMap &mdsmap);
+  void handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap);
 
   int dump_cache() { return dump_cache({}, nullptr); }
   int dump_cache(std::string_view filename);
@@ -986,8 +996,12 @@ class MDCache {
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
   std::set<CInode *> export_pin_delayed_queue;
+  std::set<CInode *> rand_ephemeral_pins;
+  std::set<CInode *> dist_ephemeral_pins;
 
   OpenFileTable open_file_table;
+
+  double export_ephemeral_random_max = 0.0;
 
  protected:
   // track master requests whose slaves haven't acknowledged commit
@@ -1298,6 +1312,9 @@ class MDCache {
   double cache_health_threshold;
   bool forward_all_requests_to_auth;
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
+
+  bool export_ephemeral_distributed_config;
+  bool export_ephemeral_random_config;
 
   // File size recovery
   RecoveryQueue recovery_queue;

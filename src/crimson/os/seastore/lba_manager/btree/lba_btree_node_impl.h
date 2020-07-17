@@ -44,7 +44,7 @@ struct LBAInternalNode
       INTERNAL_NODE_CAPACITY,
       laddr_t, laddr_le_t,
       paddr_t, paddr_le_t> {
-  using internal_iterator_t = fixed_node_iter_t;
+  using internal_iterator_t = const_iterator;
   template <typename... T>
   LBAInternalNode(T&&... t) :
     LBANode(std::forward<T>(t)...),
@@ -53,8 +53,14 @@ struct LBAInternalNode
   static constexpr extent_types_t type = extent_types_t::LADDR_INTERNAL;
 
   CachedExtentRef duplicate_for_write() final {
+    assert(delta_buffer.empty());
     return CachedExtentRef(new LBAInternalNode(*this));
   };
+
+  delta_buffer_t delta_buffer;
+  delta_buffer_t *maybe_get_delta_buffer() {
+    return is_mutation_pending() ? &delta_buffer : nullptr;
+  }
 
   lookup_range_ret lookup_range(
     Cache &cache,
@@ -159,12 +165,24 @@ struct LBAInternalNode
   std::ostream &print_detail(std::ostream &out) const final;
 
   ceph::bufferlist get_delta() final {
-    // TODO
-    return ceph::bufferlist();
+    assert(!delta_buffer.empty());
+    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    delta_buffer.copy_out(bptr.c_str(), bptr.length());
+    ceph::bufferlist bl;
+    bl.push_back(bptr);
+    return bl;
   }
 
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
-    ceph_assert(0 == "TODO");
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &_bl) final {
+    assert(_bl.length());
+    ceph::bufferlist bl = _bl;
+    bl.rebuild();
+    delta_buffer_t buffer;
+    buffer.copy_in(bl.front().c_str(), bl.front().length());
+    buffer.replay(*this);
+    set_last_committed_crc(get_crc32c());
+    resolve_relative_addrs(base);
   }
 
   bool at_max_capacity() const final {
@@ -212,13 +230,6 @@ struct LBAInternalNode
 
   /// returns iterator for subtree containing laddr
   internal_iterator_t get_containing_child(laddr_t laddr);
-
-  // delta operations (TODO)
-  void journal_remove(
-    laddr_t to_remove);
-  void journal_insert(
-    laddr_t to_insert,
-    paddr_t val);
 };
 
 /**
@@ -267,7 +278,7 @@ struct LBALeafNode
       LEAF_NODE_CAPACITY,
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t> {
-  using internal_iterator_t = fixed_node_iter_t;
+  using internal_iterator_t = const_iterator;
   template <typename... T>
   LBALeafNode(T&&... t) :
     LBANode(std::forward<T>(t)...),
@@ -276,8 +287,14 @@ struct LBALeafNode
   static constexpr extent_types_t type = extent_types_t::LADDR_LEAF;
 
   CachedExtentRef duplicate_for_write() final {
+    assert(delta_buffer.empty());
     return CachedExtentRef(new LBALeafNode(*this));
   };
+
+  delta_buffer_t delta_buffer;
+  delta_buffer_t *maybe_get_delta_buffer() {
+    return is_mutation_pending() ? &delta_buffer : nullptr;
+  }
 
   lookup_range_ret lookup_range(
     Cache &cache,
@@ -362,12 +379,24 @@ struct LBALeafNode
   }
 
   ceph::bufferlist get_delta() final {
-    // TODO
-    return ceph::bufferlist();
+    assert(!delta_buffer.empty());
+    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    delta_buffer.copy_out(bptr.c_str(), bptr.length());
+    ceph::bufferlist bl;
+    bl.push_back(bptr);
+    return bl;
   }
 
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
-    ceph_assert(0 == "TODO");
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &_bl) final {
+    assert(_bl.length());
+    ceph::bufferlist bl = _bl;
+    bl.rebuild();
+    delta_buffer_t buffer;
+    buffer.copy_in(bl.front().c_str(), bl.front().length());
+    buffer.replay(*this);
+    set_last_committed_crc(get_crc32c());
+    resolve_relative_addrs(base);
   }
 
   extent_types_t get_type() const final {
@@ -400,27 +429,9 @@ struct LBALeafNode
     }
     return std::make_pair(retl, retr);
   }
-  internal_iterator_t upper_bound(laddr_t l) {
-    auto ret = begin();
-    for (; ret != end(); ++ret) {
-      if (ret->get_key() > l)
-	break;
-    }
-    return ret;
-  }
 
   std::pair<internal_iterator_t, internal_iterator_t>
   get_leaf_entries(laddr_t addr, extent_len_t len);
-
-  // delta operations (TODO)
-  void journal_mutated(
-    laddr_t laddr,
-    lba_map_val_t val);
-  void journal_insertion(
-    laddr_t laddr,
-    lba_map_val_t val);
-  void journal_removal(
-    laddr_t laddr);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 

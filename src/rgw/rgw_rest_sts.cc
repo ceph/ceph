@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <array>
+#include <string_view>
 #include <sstream>
 #include <memory>
 
@@ -35,7 +36,7 @@
 
 #include "rgw_sts.h"
 #include "rgw_rest_oidc_provider.h"
-#include <boost/utility/string_ref.hpp>
+
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -128,7 +129,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
   WebTokenEngine::token_t t;
   try {
     const auto& decoded = jwt::decode(token);
-  
+
     auto& payload = decoded.get_payload();
     ldpp_dout(dpp, 20) << " payload = " << payload << dendl;
     if (decoded.has_issuer()) {
@@ -580,7 +581,7 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
                               url_decode(t.substr(pos+1, t.size() -1)));
         }
       }
-    } 
+    }
   }
   auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
   s->info.args.append("PayloadHash", payload_hash);

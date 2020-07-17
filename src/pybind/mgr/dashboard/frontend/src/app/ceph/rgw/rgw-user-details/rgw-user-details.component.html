@@ -1,8 +1,9 @@
 <ng-container *ngIf="selection">
   <ul ngbNav
       #nav="ngbNav"
-      class="nav-tabs">
-    <li ngbNavItem>
+      class="nav-tabs"
+      cdStatefulTab="rgw-user-details">
+    <li ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -130,7 +131,7 @@
         </div>
       </ng-template>
     </li>
-    <li ngbNavItem
+    <li ngbNavItem="keys"
         *ngIf="keys.length">
       <a ngbNavLink
          i18n>Keys</a>

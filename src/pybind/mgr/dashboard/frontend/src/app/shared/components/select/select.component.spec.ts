@@ -3,7 +3,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SelectOption } from './select-option.model';
 import { SelectComponent } from './select.component';
 
@@ -19,8 +19,7 @@ describe('SelectComponent', () => {
 
   configureTestBed({
     declarations: [SelectComponent],
-    imports: [NgbPopoverModule, NgbTooltipModule, ReactiveFormsModule],
-    providers: i18nProviders
+    imports: [NgbPopoverModule, NgbTooltipModule, ReactiveFormsModule]
   });
 
   beforeEach(() => {

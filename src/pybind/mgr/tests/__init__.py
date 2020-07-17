@@ -36,10 +36,24 @@ if 'UNITTEST' in os.environ:
             }
 
         def _ceph_get_module_option(self, module, key, localized_prefix: None):
-            return self._ceph_get_store(f'{module}/{key}')
+            val =  self._ceph_get_store(f'{module}/{key}')
+            mo = [o for o in self.MODULE_OPTIONS if o['name'] == key]
+            if len(mo) == 1 and val is not None:
+                cls = {
+                    'str': str,
+                    'secs': int,
+                    'bool': lambda s: bool(s) and s != 'false' and s != 'False',
+                    'int': int,
+                }[mo[0].get('type', 'str')]
+                return cls(val)
+            return val
 
         def _ceph_set_module_option(self, module, key, val):
             return self._ceph_set_store(f'{module}/{key}', val)
+
+        def _ceph_get(self, *args):
+            return mock.MagicMock()
+
 
         def __init__(self, *args):
             self._store = {}
@@ -52,10 +66,10 @@ if 'UNITTEST' in os.environ:
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
-            self._ceph_get = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
             self._ceph_get_context = mock.MagicMock()
             self._ceph_register_client = mock.MagicMock()
+            self._ceph_set_health_checks = mock.MagicMock()
             self._configure_logging = lambda *_: None
             self._unconfigure_logging = mock.MagicMock()
             self._ceph_log = mock.MagicMock()

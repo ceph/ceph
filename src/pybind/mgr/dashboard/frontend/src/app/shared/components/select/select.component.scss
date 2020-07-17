@@ -1,19 +1,22 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .select-menu-item {
-  display: block;
+  border-bottom: 1px solid bd.$color-transparent;
   cursor: pointer;
-  border-bottom: 1px solid $color-transparent;
-  font-size: 12px;
+  display: block;
+  font-size: 1rem;
+
   &:hover {
-    background-color: $color-whitesmoke-gray;
+    background-color: bd.$color-whitesmoke-gray;
   }
 }
+
 .select-menu-item-icon {
   float: left;
   padding: 0.5em;
   width: 3em;
 }
+
 .select-menu-item-content {
   padding: 0.5em;
 }

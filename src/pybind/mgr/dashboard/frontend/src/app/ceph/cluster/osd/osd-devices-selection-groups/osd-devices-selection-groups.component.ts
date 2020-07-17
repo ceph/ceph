@@ -1,11 +1,10 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService, ModalOptions } from 'ngx-bootstrap/modal';
 
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
@@ -42,12 +41,12 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
 
   addButtonTooltip: String;
   tooltips = {
-    noAvailDevices: this.i18n('No available devices'),
-    addPrimaryFirst: this.i18n('Please add primary devices first'),
-    addByFilters: this.i18n('Add devices by using filters')
+    noAvailDevices: $localize`No available devices`,
+    addPrimaryFirst: $localize`Please add primary devices first`,
+    addByFilters: $localize`Add devices by using filters`
   };
 
-  constructor(private bsModalService: BsModalService, private i18n: I18n) {}
+  constructor(private modalService: ModalService) {}
 
   ngOnInit() {
     this.updateAddButtonTooltip();
@@ -62,17 +61,16 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
     if (this.type === 'data') {
       filterColumns = ['hostname', ...filterColumns];
     }
-    const options: ModalOptions = {
-      class: 'modal-xl',
-      initialState: {
-        hostname: this.hostname,
-        deviceType: this.name,
-        devices: this.availDevices,
-        filterColumns: filterColumns
-      }
+    const initialState = {
+      hostname: this.hostname,
+      deviceType: this.name,
+      devices: this.availDevices,
+      filterColumns: filterColumns
     };
-    const modalRef = this.bsModalService.show(OsdDevicesSelectionModalComponent, options);
-    modalRef.content.submitAction.subscribe((result: CdTableColumnFiltersChange) => {
+    const modalRef = this.modalService.show(OsdDevicesSelectionModalComponent, initialState, {
+      size: 'xl'
+    });
+    modalRef.componentInstance.submitAction.subscribe((result: CdTableColumnFiltersChange) => {
       this.devices = result.data;
       this.capacity = _.sumBy(this.devices, 'sys_api.size');
       this.appliedFilters = result.filters;

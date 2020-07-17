@@ -8,7 +8,7 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../api/prometheus.service';
 import { RbdService } from '../../api/rbd.service';
 import { SettingsService } from '../../api/settings.service';
@@ -39,14 +39,7 @@ describe('NotificationsSidebarComponent', () => {
       ClickOutsideModule
     ],
     declarations: [NotificationsSidebarComponent],
-    providers: [
-      i18nProviders,
-      PrometheusService,
-      SettingsService,
-      SummaryService,
-      NotificationService,
-      RbdService
-    ]
+    providers: [PrometheusService, SettingsService, SummaryService, NotificationService, RbdService]
   });
 
   beforeEach(() => {

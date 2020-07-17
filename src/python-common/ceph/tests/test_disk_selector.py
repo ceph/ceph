@@ -325,7 +325,10 @@ class TestDriveGroup(object):
             if empty:
                 raw_sample = {
                     'service_type': 'osd',
-                    'placement': {'host_pattern': 'data*'}
+                    'placement': {'host_pattern': 'data*'},
+                    'data_devices': {
+                        'all': True
+                    },
                 }
 
             dgo = DriveGroupSpec.from_json(raw_sample)
@@ -384,7 +387,7 @@ class TestDriveGroup(object):
 
     def test_data_devices_prop_empty(self, test_fix):
         test_fix = test_fix(empty=True)
-        assert test_fix.data_devices is None
+        assert test_fix.db_devices is None
 
     def test_db_devices_prop(self, test_fix):
         test_fix = test_fix()

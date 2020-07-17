@@ -1394,7 +1394,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     {
       std::shared_lock locker{ictx->image_lock};
       r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
-			         exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
+			         exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED,
 			         cookie, tag, "", utime_t(), 0);
       if (r < 0) {
         return r;

@@ -115,12 +115,13 @@
             <cd-helper i18n>If the start time lies in the past the creation time will be used</cd-helper>
           </label>
           <div class="cd-col-form-input">
-            <input [bsConfig]="bsConfig"
-                   bsDatepicker
-                   class="form-control"
+            <input class="form-control"
                    formControlName="startsAt"
-                   id="starts-at"
-                   name="starts-at">
+                   [ngbPopover]="popStart"
+                   triggers="manual"
+                   #ps="ngbPopover"
+                   (click)="ps.open()"
+                   (keypress)="ps.close()">
             <span *ngIf="form.showError('startsAt', formDir, 'required')"
                   class="invalid-feedback"
                   i18n>This field is required!</span>
@@ -150,12 +151,13 @@
                  for="ends-at"
                  i18n>End time</label>
           <div class="cd-col-form-input">
-            <input [bsConfig]="bsConfig"
-                   bsDatepicker
-                   class="form-control"
+            <input class="form-control"
                    formControlName="endsAt"
-                   id="ends-at"
-                   name="ends-at">
+                   [ngbPopover]="popEnd"
+                   triggers="manual"
+                   #pe="ngbPopover"
+                   (click)="pe.open()"
+                   (keypress)="pe.close()">
             <span *ngIf="form.showError('endsAt', formDir, 'required')"
                   class="invalid-feedback"
                   i18n>This field is required!</span>
@@ -214,3 +216,14 @@
     </div>
   </form>
 </div>
+
+<ng-template #popStart>
+  <cd-date-time-picker [control]="form.get('startsAt')"
+                       [hasSeconds]="false"></cd-date-time-picker>
+</ng-template>
+
+
+<ng-template #popEnd>
+  <cd-date-time-picker [control]="form.get('endsAt')"
+                       [hasSeconds]="false"></cd-date-time-picker>
+</ng-template>

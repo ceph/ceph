@@ -1,8 +1,6 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -44,128 +42,127 @@ export class GrafanaComponent implements OnInit, OnChanges {
     private summaryService: SummaryService,
     private sanitizer: DomSanitizer,
     private settingsService: SettingsService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
-    private i18n: I18n
+    private cephReleaseNamePipe: CephReleaseNamePipe
   ) {
     this.grafanaTimes = [
       {
-        name: this.i18n('Last 5 minutes'),
+        name: $localize`Last 5 minutes`,
         value: 'from=now-5m&to=now'
       },
       {
-        name: this.i18n('Last 15 minutes'),
+        name: $localize`Last 15 minutes`,
         value: 'from=now-15m&to=now'
       },
       {
-        name: this.i18n('Last 30 minutes'),
+        name: $localize`Last 30 minutes`,
         value: 'from=now-30m&to=now'
       },
       {
-        name: this.i18n('Last 1 hour (Default)'),
+        name: $localize`Last 1 hour (Default)`,
         value: 'from=now-1h&to=now'
       },
       {
-        name: this.i18n('Last 3 hours'),
+        name: $localize`Last 3 hours`,
         value: 'from=now-3h&to=now'
       },
       {
-        name: this.i18n('Last 6 hours'),
+        name: $localize`Last 6 hours`,
         value: 'from=now-6h&to=now'
       },
       {
-        name: this.i18n('Last 12 hours'),
+        name: $localize`Last 12 hours`,
         value: 'from=now-12h&to=now'
       },
       {
-        name: this.i18n('Last 24 hours'),
+        name: $localize`Last 24 hours`,
         value: 'from=now-24h&to=now'
       },
       {
-        name: this.i18n('Yesterday'),
+        name: $localize`Yesterday`,
         value: 'from=now-1d%2Fd&to=now-1d%2Fd'
       },
       {
-        name: this.i18n('Today'),
+        name: $localize`Today`,
         value: 'from=now%2Fd&to=now%2Fd'
       },
       {
-        name: this.i18n('Today so far'),
+        name: $localize`Today so far`,
         value: 'from=now%2Fd&to=now'
       },
       {
-        name: this.i18n('Day before yesterday'),
+        name: $localize`Day before yesterday`,
         value: 'from=now-2d%2Fd&to=now-2d%2Fd'
       },
       {
-        name: this.i18n('Last 2 days'),
+        name: $localize`Last 2 days`,
         value: 'from=now-2d&to=now'
       },
       {
-        name: this.i18n('This day last week'),
+        name: $localize`This day last week`,
         value: 'from=now-7d%2Fd&to=now-7d%2Fd'
       },
       {
-        name: this.i18n('Previous week'),
+        name: $localize`Previous week`,
         value: 'from=now-1w%2Fw&to=now-1w%2Fw'
       },
       {
-        name: this.i18n('This week'),
+        name: $localize`This week`,
         value: 'from=now%2Fw&to=now%2Fw'
       },
       {
-        name: this.i18n('This week so far'),
+        name: $localize`This week so far`,
         value: 'from=now%2Fw&to=now'
       },
       {
-        name: this.i18n('Last 7 days'),
+        name: $localize`Last 7 days`,
         value: 'from=now-7d&to=now'
       },
       {
-        name: this.i18n('Previous month'),
+        name: $localize`Previous month`,
         value: 'from=now-1M%2FM&to=now-1M%2FM'
       },
       {
-        name: this.i18n('This month'),
+        name: $localize`This month`,
         value: 'from=now%2FM&to=now%2FM'
       },
       {
-        name: this.i18n('This month so far'),
+        name: $localize`This month so far`,
         value: 'from=now%2FM&to=now'
       },
       {
-        name: this.i18n('Last 30 days'),
+        name: $localize`Last 30 days`,
         value: 'from=now-30d&to=now'
       },
       {
-        name: this.i18n('Last 90 days'),
+        name: $localize`Last 90 days`,
         value: 'from=now-90d&to=now'
       },
       {
-        name: this.i18n('Last 6 months'),
+        name: $localize`Last 6 months`,
         value: 'from=now-6M&to=now'
       },
       {
-        name: this.i18n('Last 1 year'),
+        name: $localize`Last 1 year`,
         value: 'from=now-1y&to=now'
       },
       {
-        name: this.i18n('Previous year'),
+        name: $localize`Previous year`,
         value: 'from=now-1y%2Fy&to=now-1y%2Fy'
       },
       {
-        name: this.i18n('This year'),
+        name: $localize`This year`,
         value: 'from=now%2Fy&to=now%2Fy'
       },
       {
-        name: this.i18n('This year so far'),
+        name: $localize`This year so far`,
         value: 'from=now%2Fy&to=now'
       },
       {
-        name: this.i18n('Last 2 years'),
+        name: $localize`Last 2 years`,
         value: 'from=now-2y&to=now'
       },
       {
-        name: this.i18n('Last 5 years'),
+        name: $localize`Last 5 years`,
         value: 'from=now-5y&to=now'
       }
     ];

@@ -40,9 +40,12 @@ class MLog;
 class Messenger;
 class AioCompletionImpl;
 
+namespace neorados { namespace detail { class RadosClient; }}
+
 class librados::RadosClient : public Dispatcher,
 			      public md_config_obs_t
 {
+  friend neorados::detail::RadosClient;
 public:
   using Dispatcher::cct;
 private:

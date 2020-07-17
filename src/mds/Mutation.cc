@@ -418,12 +418,31 @@ bool MDRequestImpl::is_queued_for_replay() const
   return client_request ? client_request->is_queued_for_replay() : false;
 }
 
-bool MDRequestImpl::is_batch_op()
+bool MDRequestImpl::can_batch()
 {
-  return (client_request->get_op() == CEPH_MDS_OP_LOOKUP &&
-      client_request->get_filepath().depth() == 1) ||
-    (client_request->get_op() == CEPH_MDS_OP_GETATTR &&
-     client_request->get_filepath().depth() == 0);
+  if (num_auth_pins || num_remote_auth_pins || lock_cache || !locks.empty())
+    return false;
+
+  auto op = client_request->get_op();
+  auto& path = client_request->get_filepath();
+  if (op == CEPH_MDS_OP_GETATTR) {
+    if (path.depth() == 0)
+      return true;
+  } else if (op == CEPH_MDS_OP_LOOKUP) {
+    if (path.depth() == 1 && !path.is_last_snap())
+      return true;
+  }
+
+  return false;
+}
+
+std::unique_ptr<BatchOp> MDRequestImpl::release_batch_op()
+{
+  int mask = client_request->head.args.getattr.mask;
+  auto it = batch_op_map->find(mask);
+  std::unique_ptr<BatchOp> bop = std::move(it->second);
+  batch_op_map->erase(it);
+  return bop;
 }
 
 int MDRequestImpl::compare_paths()

@@ -1,8 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -31,14 +30,13 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
   peerExists = false;
 
   mirrorModes: Array<{ id: string; name: string }> = [
-    { id: 'disabled', name: this.i18n('Disabled') },
-    { id: 'pool', name: this.i18n('Pool') },
-    { id: 'image', name: this.i18n('Image') }
+    { id: 'disabled', name: $localize`Disabled` },
+    { id: 'pool', name: $localize`Pool` },
+    { id: 'image', name: $localize`Image` }
   ];
 
   constructor(
-    public modalRef: BsModalRef,
-    private i18n: I18n,
+    public activeModal: NgbActiveModal,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -97,7 +95,7 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
       error: () => this.editModeForm.setErrors({ cdSubmitButton: true }),
       complete: () => {
         this.rbdMirroringService.refresh();
-        this.modalRef.hide();
+        this.activeModal.close();
       }
     });
   }

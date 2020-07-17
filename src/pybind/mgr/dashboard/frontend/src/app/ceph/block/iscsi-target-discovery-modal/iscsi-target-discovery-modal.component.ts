@@ -1,8 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
@@ -27,10 +26,9 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private iscsiService: IscsiService,
-    private notificationService: NotificationService,
-    private i18n: I18n
+    private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().iscsi;
   }
@@ -111,9 +109,9 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Updated discovery authentication')
+          $localize`Updated discovery authentication`
         );
-        this.bsModalRef.hide();
+        this.activeModal.close();
       },
       () => {
         this.discoveryForm.setErrors({ cdSubmitButton: true });

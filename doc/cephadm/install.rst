@@ -105,6 +105,11 @@ or run ``cephadm bootstrap -h`` to see all available options:
   cluster by putting them in a standard ini-style configuration file
   and using the ``--config *<config-file>*`` option.
 
+* You can choose the ssh user cephadm will use to connect to hosts by
+  using the ``--ssh-user *<user>*`` option. The ssh key will be added
+  to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
+  passwordless sudo access. 
+
 
 Enable Ceph CLI
 ===============
@@ -256,6 +261,49 @@ hosts to the cluster. No further steps are necessary.
     # ceph orch apply mon --unmanaged
     # ceph orch daemon add mon newhost1:10.1.2.123
     # ceph orch daemon add mon newhost2:10.1.2.0/24
+
+  .. note::
+     The **apply** command can be confusing. For this reason, we recommend using
+     YAML specifications. 
+
+     Each 'ceph orch apply mon' command supersedes the one before it. 
+     This means that you must use the proper comma-separated list-based 
+     syntax when you want to apply monitors to more than one host. 
+     If you do not use the proper syntax, you will clobber your work 
+     as you go.
+
+     For example::
+        
+          # ceph orch apply mon host1
+          # ceph orch apply mon host2
+          # ceph orch apply mon host3
+
+     This results in only one host having a monitor applied to it: host 3.
+
+     (The first command creates a monitor on host1. Then the second command
+     clobbers the monitor on host1 and creates a monitor on host2. Then the
+     third command clobbers the monitor on host2 and creates a monitor on 
+     host3. In this scenario, at this point, there is a monitor ONLY on
+     host3.)
+
+     To make certain that a monitor is applied to each of these three hosts,
+     run a command like this::
+       
+          # ceph orch apply mon "host1,host2,host3"
+
+     Instead of using the "ceph orch apply mon" commands, run a command like
+     this::
+
+          # ceph orch apply -i file.yaml
+
+     Here is a sample **file.yaml** file::
+
+          service_type: mon
+          placement:
+            hosts:
+             - host1
+             - host2
+             - host3
 
 
 Deploy OSDs

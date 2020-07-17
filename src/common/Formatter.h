@@ -118,6 +118,7 @@ namespace ceph {
     virtual void *get_external_feature_handler(const std::string& feature) {
       return nullptr;
     }
+    virtual void write_bin_data(const char* buff, int buf_len);
   };
 
   class copyable_sstream : public std::stringstream {
@@ -226,6 +227,7 @@ namespace ceph {
     void dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
     int get_len() const override;
     void write_raw_data(const char *data) override;
+    void write_bin_data(const char* buff, int len) override;
 
     /* with attrs */
     void open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override;

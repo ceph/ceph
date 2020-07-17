@@ -91,7 +91,7 @@ MATCHER_P(IsLockType, exclusive, "") {
   bl.share(arg);
   auto iter = bl.cbegin();
   decode(op, iter);
-  return op.type == (exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED);
+  return op.type == (exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED);
 }
 
 } // anonymous namespace

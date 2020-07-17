@@ -57,7 +57,7 @@ cd build-doc
 if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
 fi
-$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
+$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \

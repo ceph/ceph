@@ -53,7 +53,7 @@ class TestClusterAffinity(CephFSTestCase):
             except AssertionError as e:
                 log.debug("%s", e)
                 return False
-        status = self.wait_until_true(takeover, 30)
+        self.wait_until_true(takeover, 30)
 
     def test_join_fs_runtime(self):
         """
@@ -126,7 +126,6 @@ class TestClusterAffinity(CephFSTestCase):
         That a standby with mds_join_fs set to another fs is still used if necessary.
         """
         status, target = self._verify_init()
-        active = self.fs.get_active_names(status=status)[0]
         standbys = [info['name'] for info in status.get_standbys()]
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')

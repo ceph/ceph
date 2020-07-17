@@ -5,7 +5,7 @@
 
 #define TIME_BUF_SIZE 128
 
-#include <boost/utility/string_ref.hpp>
+#include <string_view>
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
 #include "common/ceph_json.h"
@@ -28,9 +28,9 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
                                         const uint64_t max_len,
                                         const bool allow_chunked=true);
 
-static inline boost::string_ref rgw_sanitized_hdrval(ceph::buffer::list& raw)
+static inline std::string_view rgw_sanitized_hdrval(ceph::buffer::list& raw)
 {
-  /* std::string and thus boost::string_ref ARE OBLIGED to carry multiple
+  /* std::string and thus std::string_view ARE OBLIGED to carry multiple
    * 0x00 and count them to the length of a string. We need to take that
    * into consideration and sanitize the size of a ceph::buffer::list used
    * to store metadata values (x-amz-meta-*, X-Container-Meta-*, etags).
@@ -45,7 +45,7 @@ static inline boost::string_ref rgw_sanitized_hdrval(ceph::buffer::list& raw)
     len--;
   }
 
-  return boost::string_ref(data, len);
+  return std::string_view(data, len);
 }
 
 template <class T>
@@ -729,22 +729,22 @@ extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, const rgw_user& id, string& name,
 		       const char *section = NULL);
 extern void dump_header(struct req_state* s,
-                        const boost::string_ref& name,
-                        const boost::string_ref& val);
+                        const std::string_view& name,
+                        const std::string_view& val);
 extern void dump_header(struct req_state* s,
-                        const boost::string_ref& name,
+                        const std::string_view& name,
                         ceph::buffer::list& bl);
 extern void dump_header(struct req_state* s,
-                        const boost::string_ref& name,
+                        const std::string_view& name,
                         long long val);
 extern void dump_header(struct req_state* s,
-                        const boost::string_ref& name,
+                        const std::string_view& name,
                         const utime_t& val);
 
 template <class... Args>
 static inline void dump_header_prefixed(struct req_state* s,
-                                        const boost::string_ref& name_prefix,
-                                        const boost::string_ref& name,
+                                        const std::string_view& name_prefix,
+                                        const std::string_view& name,
                                         Args&&... args) {
   char full_name_buf[name_prefix.size() + name.size() + 1];
   const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
@@ -752,15 +752,15 @@ static inline void dump_header_prefixed(struct req_state* s,
                             name_prefix.data(),
                             static_cast<int>(name.length()),
                             name.data());
-  boost::string_ref full_name(full_name_buf, len);
+  std::string_view full_name(full_name_buf, len);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
 
 template <class... Args>
 static inline void dump_header_infixed(struct req_state* s,
-                                       const boost::string_ref& prefix,
-                                       const boost::string_ref& infix,
-                                       const boost::string_ref& sufix,
+                                       const std::string_view& prefix,
+                                       const std::string_view& infix,
+                                       const std::string_view& sufix,
                                        Args&&... args) {
   char full_name_buf[prefix.size() + infix.size() + sufix.size() + 1];
   const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s%.*s",
@@ -770,24 +770,24 @@ static inline void dump_header_infixed(struct req_state* s,
                             infix.data(),
                             static_cast<int>(sufix.length()),
                             sufix.data());
-  boost::string_ref full_name(full_name_buf, len);
+  std::string_view full_name(full_name_buf, len);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
 
 template <class... Args>
 static inline void dump_header_quoted(struct req_state* s,
-                                      const boost::string_ref& name,
-                                      const boost::string_ref& val) {
+                                      const std::string_view& name,
+                                      const std::string_view& val) {
   /* We need two extra bytes for quotes. */
   char qvalbuf[val.size() + 2 + 1];
   const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
                             static_cast<int>(val.length()), val.data());
-  return dump_header(s, name, boost::string_ref(qvalbuf, len));
+  return dump_header(s, name, std::string_view(qvalbuf, len));
 }
 
 template <class ValueT>
 static inline void dump_header_if_nonempty(struct req_state* s,
-                                           const boost::string_ref& name,
+                                           const std::string_view& name,
                                            const ValueT& value) {
   if (name.length() > 0 && value.length() > 0) {
     return dump_header(s, name, value);
@@ -813,7 +813,7 @@ static inline std::string compute_domain_uri(const struct req_state *s) {
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
-                      const boost::string_ref& etag,
+                      const std::string_view& etag,
                       bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);

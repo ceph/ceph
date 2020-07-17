@@ -5,6 +5,7 @@
 #include <fmt/ostream.h>
 
 #include "crimson/common/type_helpers.h"
+#include "crimson/osd/backfill_facades.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/pg.h"
@@ -20,15 +21,19 @@
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
 
-void PGRecovery::start_background_recovery(
-  crimson::osd::scheduler::scheduler_class_t klass)
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
+
+void PGRecovery::start_pglogbased_recovery()
 {
-  using BackgroundRecovery = crimson::osd::BackgroundRecovery;
-  (void) pg->get_shard_services().start_operation<BackgroundRecovery>(
+  using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
+  (void) pg->get_shard_services().start_operation<PglogBasedRecovery>(
     static_cast<crimson::osd::PG*>(pg),
     pg->get_shard_services(),
-    pg->get_osdmap_epoch(),
-    klass);
+    pg->get_osdmap_epoch());
 }
 
 crimson::osd::blocking_future<bool>
@@ -36,20 +41,21 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
 {
   assert(pg->is_primary());
   assert(pg->is_peered());
+  assert(pg->is_recovering());
+  // in ceph-osd the do_recovery() path handles both the pg log-based
+  // recovery and the backfill, albeit they are separated at the layer
+  // of PeeringState. In crimson-osd backfill has been cut from it, so
+  // and do_recovery() is actually solely for pg log-based recovery.
+  // At the time of writing it's considered to move it to FSM and fix
+  // the naming as well.
+  assert(!pg->is_backfilling());
   assert(!pg->get_peering_state().is_deleting());
-
-  if (!pg->is_recovering() && !pg->is_backfilling()) {
-    return crimson::osd::make_ready_blocking_future<bool>(false);
-  }
 
   std::vector<crimson::osd::blocking_future<>> started;
   started.reserve(max_to_start);
   max_to_start -= start_primary_recovery_ops(max_to_start, &started);
   if (max_to_start > 0) {
     max_to_start -= start_replica_recovery_ops(max_to_start, &started);
-  }
-  if (max_to_start > 0) {
-    max_to_start -= start_backfill_ops(max_to_start, &started);
   }
   return crimson::osd::join_blocking_futures(std::move(started)).then(
     [this] {
@@ -58,14 +64,29 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
       crimson::get_logger(ceph_subsys_osd).debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
 		     pg->get_pgid());
       using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
-      (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
-	static_cast<crimson::osd::PG*>(pg),
-	pg->get_shard_services(),
-	pg->get_pg_whoami(),
-	pg->get_pgid(),
-	pg->get_osdmap_epoch(),
-	pg->get_osdmap_epoch(),
-	PeeringState::AllReplicasRecovered{});
+      if (!pg->get_peering_state().needs_backfill()) {
+        logger().debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
+                      pg->get_pgid());
+        (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
+          static_cast<crimson::osd::PG*>(pg),
+          pg->get_shard_services(),
+          pg->get_pg_whoami(),
+          pg->get_pgid(),
+          pg->get_osdmap_epoch(),
+          pg->get_osdmap_epoch(),
+          PeeringState::AllReplicasRecovered{});
+      } else {
+        logger().debug("start_recovery_ops: RequestBackfill for pg: {}",
+                      pg->get_pgid());
+        (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
+          static_cast<crimson::osd::PG*>(pg),
+          pg->get_shard_services(),
+          pg->get_pg_whoami(),
+          pg->get_pgid(),
+          pg->get_osdmap_epoch(),
+          pg->get_osdmap_epoch(),
+          PeeringState::RequestBackfill{});
+      }
     }
     return seastar::make_ready_future<bool>(!done);
   });
@@ -255,15 +276,6 @@ size_t PGRecovery::start_replica_recovery_ops(
   return started;
 }
 
-size_t PGRecovery::start_backfill_ops(
-  size_t max_to_start,
-  std::vector<crimson::osd::blocking_future<>> *out)
-{
-  if (pg->get_peering_state().get_backfill_targets().empty())
-    return 0;
-  ceph_abort("not implemented!");
-}
-
 std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
@@ -332,7 +344,7 @@ void PGRecovery::on_local_recover(
       obc->obs.oi = recovery_info.oi;
       // obc is loaded the excl lock
       obc->put_lock_type(RWState::RWEXCL);
-      assert(obc->get_recovery_read().get0());
+      ceph_assert_always(obc->get_recovery_read().get0());
     }
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();
@@ -387,4 +399,158 @@ void PGRecovery::_committed_pushed_object(epoch_t epoch,
 	"{} pg has changed, not touching last_complete_ondisk",
 	__func__);
   }
+}
+
+template <class EventT>
+void PGRecovery::start_backfill_recovery(const EventT& evt)
+{
+  using BackfillRecovery = crimson::osd::BackfillRecovery;
+  std::ignore = pg->get_shard_services().start_operation<BackfillRecovery>(
+    static_cast<crimson::osd::PG*>(pg),
+    pg->get_shard_services(),
+    pg->get_osdmap_epoch(),
+    evt);
+}
+
+void PGRecovery::request_replica_scan(
+  const pg_shard_t& target,
+  const hobject_t& begin,
+  const hobject_t& end)
+{
+  logger().debug("{}: target.osd={}", __func__, target.osd);
+  auto msg = make_message<MOSDPGScan>(
+    MOSDPGScan::OP_SCAN_GET_DIGEST,
+    pg->get_pg_whoami(),
+    pg->get_osdmap_epoch(),
+    pg->get_last_peering_reset(),
+    spg_t(pg->get_pgid().pgid, target.shard),
+    begin,
+    end);
+  std::ignore = pg->get_shard_services().send_to_osd(
+    target.osd,
+    std::move(msg),
+    pg->get_osdmap_epoch());
+}
+
+void PGRecovery::request_primary_scan(
+  const hobject_t& begin)
+{
+  logger().debug("{}", __func__);
+  using crimson::common::local_conf;
+  std::ignore = pg->get_recovery_backend()->scan_for_backfill(
+    begin,
+    local_conf()->osd_backfill_scan_min,
+    local_conf()->osd_backfill_scan_max
+  ).then([this] (BackfillInterval bi) {
+    logger().debug("request_primary_scan:{}", __func__);
+    using BackfillState = crimson::osd::BackfillState;
+    start_backfill_recovery(BackfillState::PrimaryScanned{ std::move(bi) });
+  });
+}
+
+void PGRecovery::enqueue_push(
+  const pg_shard_t& target,
+  const hobject_t& obj,
+  const eversion_t& v)
+{
+  logger().debug("{}: target={} obj={} v={}",
+                 __func__, target, obj, v);
+  std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
+  handle_exception([] (auto) {
+    ceph_abort_msg("got exception on backfill's push");
+    return seastar::make_ready_future<>();
+  }).then([this, obj] {
+    logger().debug("enqueue_push:{}", __func__);
+    using BackfillState = crimson::osd::BackfillState;
+    start_backfill_recovery(BackfillState::ObjectPushed(std::move(obj)));
+  });
+}
+
+void PGRecovery::enqueue_drop(
+  const pg_shard_t& target,
+  const hobject_t& obj,
+  const eversion_t& v)
+{
+  ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::update_peers_last_backfill(
+  const hobject_t& new_last_backfill)
+{
+  logger().debug("{}: new_last_backfill={}",
+                 __func__, new_last_backfill);
+  // If new_last_backfill == MAX, then we will send OP_BACKFILL_FINISH to
+  // all the backfill targets.  Otherwise, we will move last_backfill up on
+  // those targets need it and send OP_BACKFILL_PROGRESS to them.
+  for (const auto& bt : pg->get_peering_state().get_backfill_targets()) {
+    if (const pg_info_t& pinfo = pg->get_peering_state().get_peer_info(bt);
+        new_last_backfill > pinfo.last_backfill) {
+      pg->get_peering_state().update_peer_last_backfill(bt, new_last_backfill);
+      auto m = make_message<MOSDPGBackfill>(
+        pinfo.last_backfill.is_max() ? MOSDPGBackfill::OP_BACKFILL_FINISH
+                                     : MOSDPGBackfill::OP_BACKFILL_PROGRESS,
+        pg->get_osdmap_epoch(),
+        pg->get_last_peering_reset(),
+        spg_t(pg->get_pgid().pgid, bt.shard));
+      // Use default priority here, must match sub_op priority
+      // TODO: if pinfo.last_backfill.is_max(), then
+      //       start_recovery_op(hobject_t::get_max());
+      m->last_backfill = pinfo.last_backfill;
+      m->stats = pinfo.stats;
+      std::ignore = pg->get_shard_services().send_to_osd(
+        bt.osd, std::move(m), pg->get_osdmap_epoch());
+      logger().info("{}: peer {} num_objects now {} / {}",
+                    __func__,
+                    bt,
+                    pinfo.stats.stats.sum.num_objects,
+                    pg->get_info().stats.stats.sum.num_objects);
+    }
+  }
+}
+
+bool PGRecovery::budget_available() const
+{
+  // TODO: the limits!
+  return true;
+}
+
+void PGRecovery::backfilled()
+{
+  using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
+  std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
+    static_cast<crimson::osd::PG*>(pg),
+    pg->get_shard_services(),
+    pg->get_pg_whoami(),
+    pg->get_pgid(),
+    pg->get_osdmap_epoch(),
+    pg->get_osdmap_epoch(),
+    PeeringState::Backfilled{});
+}
+
+void PGRecovery::dispatch_backfill_event(
+  boost::intrusive_ptr<const boost::statechart::event_base> evt)
+{
+  logger().debug("{}", __func__);
+  backfill_state->process_event(evt);
+}
+
+void PGRecovery::on_backfill_reserved()
+{
+  logger().debug("{}", __func__);
+  // PIMP and depedency injection for the sake unittestability.
+  // I'm not afraid about the performance here.
+  using BackfillState = crimson::osd::BackfillState;
+  backfill_state = std::make_unique<BackfillState>(
+    *this,
+    std::make_unique<BackfillState::PeeringFacade>(pg->get_peering_state()),
+    std::make_unique<BackfillState::PGFacade>(
+      *static_cast<crimson::osd::PG*>(pg)));
+  // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
+  // will be set after on_backfill_reserved() returns.
+  // Backfill needs to take this into consideration when scheduling
+  // events -- they must be mutually exclusive with PeeringEvent
+  // instances. Otherwise the execution might begin without having
+  // the state updated.
+  ceph_assert(!pg->get_peering_state().is_backfilling());
+  start_backfill_recovery(BackfillState::Triggered{});
 }

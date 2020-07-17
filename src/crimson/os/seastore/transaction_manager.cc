@@ -39,6 +39,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
       lba_manager.create_transaction(),
       [this](auto &transaction) {
 	logger().debug("TransactionManager::mkfs: about to cache.mkfs");
+	cache.init();
 	return cache.mkfs(*transaction
 	).safe_then([this, &transaction] {
 	  return lba_manager.mkfs(*transaction);
@@ -60,6 +61,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 
 TransactionManager::mount_ertr::future<> TransactionManager::mount()
 {
+  cache.init();
   return journal.replay([this](auto paddr, const auto &e) {
     return cache.replay_delta(paddr, e);
   }).safe_then([this] {

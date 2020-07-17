@@ -39,6 +39,8 @@ endif(WITH_BLUESTORE)
 
 if(HAVE_LIBZBC)
   list(APPEND libos_srcs
+    bluestore/zoned_types.cc
+    bluestore/ZonedFreelistManager.cc
     bluestore/ZonedAllocator.cc)
 endif()
 

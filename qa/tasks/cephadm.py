@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 
 def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
-    testdir = teuthology.get_testdir(ctx)
+    teuthology.get_testdir(ctx)
     return remote.run(
         args=[
             'sudo',
@@ -769,12 +769,9 @@ def ceph_rgw(ctx, config):
 @contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
-    testdir = teuthology.get_testdir(ctx)
 
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
-    testdir = teuthology.get_testdir(ctx)
-    coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
     for remote, roles_for_host in clients.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
                                                      cluster_name):
@@ -1122,8 +1119,6 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('cephadm', {}))
     log.info('Config: ' + str(config))
 
-    testdir = teuthology.get_testdir(ctx)
-
     # set up cluster context
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
@@ -1149,20 +1144,25 @@ def task(ctx, config):
     container_registry_mirror = mirrors.get('docker.io',
                                             container_registry_mirror)
 
-    if not container_image_name:
-        raise Exception("Configuration error occurred. "
-                        "The 'image' value is undefined for 'cephadm' task. "
-                        "Please provide corresponding options in the task's "
-                        "config, task 'overrides', or teuthology 'defaults' "
-                        "section.")
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
     ref = None
     if not ctx.ceph[cluster_name].image:
+        if not container_image_name:
+            raise Exception("Configuration error occurred. "
+                            "The 'image' value is undefined for 'cephadm' task. "
+                            "Please provide corresponding options in the task's "
+                            "config, task 'overrides', or teuthology 'defaults' "
+                            "section.")
         sha1 = config.get('sha1')
+        flavor = config.get('flavor', 'default')
+
         if sha1:
-            ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
+            if flavor == "crimson":
+                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
+            else:
+                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
             ref = sha1
         else:
             # hmm, fall back to branch?

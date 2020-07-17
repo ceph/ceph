@@ -25,11 +25,65 @@ The *prometheus* module is enabled with::
 Configuration
 -------------
 
-By default the module will accept HTTP requests on port ``9283`` on all
-IPv4 and IPv6 addresses on the host.  The port and listen address are both
+.. note::
+
+    The Prometheus manager module needs to be restarted for configuration changes to be applied.
+
+By default the module will accept HTTP requests on port ``9283`` on all IPv4
+and IPv6 addresses on the host.  The port and listen address are both
 configurable with ``ceph config-key set``, with keys
-``mgr/prometheus/server_addr`` and ``mgr/prometheus/server_port``.
-This port is registered with Prometheus's `registry <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
+``mgr/prometheus/server_addr`` and ``mgr/prometheus/server_port``.  This port
+is registered with Prometheus's `registry
+<https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
+
+::
+
+    ceph config set mgr mgr/prometheus/server_addr 0.0.0.0
+    ceph config set mgr mgr/prometheus/server_port 9283
+
+.. warning::
+
+    The ``scrape_interval`` of this module should always be set to match
+    Prometheus' scrape interval to work properly and not cause any issues.
+    
+The Prometheus manager module is, by default, configured with a scrape interval
+of 15 seconds.  The scrape interval in the module is used for caching purposes
+and to determine when a cache is stale.
+
+It is not recommended to use a scrape interval below 10 seconds.  It is
+recommended to use 15 seconds as scrape interval, though, in some cases it
+might be useful to increase the scrape interval.
+
+To set a different scrape interval in the Prometheus module, set
+``scrape_interval`` to the desired value::
+
+    ceph config set mgr mgr/prometheus/scrape_interval 20
+
+On large clusters (>1000 OSDs), the time to fetch the metrics may become
+significant.  Without the cache, the Prometheus manager module could,
+especially in conjunction with multiple Prometheus instances, overload the
+manager and lead to unresponsive or crashing Ceph manager instances.  Hence,
+the cache is enabled by default and cannot be disabled.  This means that there
+is a possibility that the cache becomes stale.  The cache is considered stale
+when the time to fetch the metrics from Ceph exceeds the configured
+``scrape_interval``.
+
+If that is the case, **a warning will be logged** and the module will either
+
+* respond with a 503 HTTP status code (service unavailable) or,
+* it will return the content of the cache, even though it might be stale.
+
+This behavior can be configured. By default, it will return a 503 HTTP status
+code (service unavailable). You can set other options using the ``ceph config
+set`` commands.
+
+To tell the module to respond with possibly stale data, set it to ``return``::
+
+    ceph config set mgr mgr/prometheus/stale_cache_strategy return
+
+To tell the module to respond with "service unavailable", set it to ``fail``::
+
+    ceph config set mgr mgr/prometheus/stale_cache_strategy fail
 
 .. _prometheus-rbd-io-statistics:
 
@@ -62,7 +116,7 @@ Statistic names and labels
 ==========================
 
 The names of the stats are exactly as Ceph names them, with
-illegal characters ``.``, ``-`` and ``::`` translated to ``_``, 
+illegal characters ``.``, ``-`` and ``::`` translated to ``_``,
 and ``ceph_`` prefixed to all names.
 
 
@@ -75,7 +129,7 @@ rocksdb stats.
 
 
 The *cluster* statistics (i.e. those global to the Ceph cluster)
-have labels appropriate to what they report on.  For example, 
+have labels appropriate to what they report on.  For example,
 metrics relating to pools have a ``pool_id`` label.
 
 
@@ -109,7 +163,7 @@ Correlating drive statistics with node_exporter
 The prometheus output from Ceph is designed to be used in conjunction
 with the generic host monitoring from the Prometheus node_exporter.
 
-To enable correlation of Ceph OSD statistics with node_exporter's 
+To enable correlation of Ceph OSD statistics with node_exporter's
 drive statistics, special series are output like this:
 
 ::

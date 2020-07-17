@@ -16,7 +16,6 @@
 #include "include/util.h"
 
 #include "messages/MCommand.h"
-#include "messages/MOSDAlive.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
@@ -83,8 +82,8 @@ OSD::OSD(int id, uint32_t nonce,
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"),
       local_conf().get_config_values())},
-    shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
-    heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
+    shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
+    heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
@@ -406,27 +405,6 @@ seastar::future<> OSD::_add_me_to_crush()
   });
 }
 
-seastar::future<> OSD::_send_alive()
-{
-  auto want = osdmap->get_epoch();
-  logger().info(
-    "{} want {} up_thru_wanted {}",
-    __func__,
-    want,
-    up_thru_wanted);
-  if (!osdmap->exists(whoami)) {
-    logger().warn("{} DNE", __func__);
-    return seastar::now();
-  } else if (want <= up_thru_wanted) {
-    logger().debug("{} {} <= {}", __func__, want, up_thru_wanted);
-    return seastar::now();
-  } else {
-    up_thru_wanted = want;
-    auto m = make_message<MOSDAlive>(osdmap->get_epoch(), want);
-    return monc->send_message(std::move(m));
-  }
-}
-
 seastar::future<> OSD::handle_command(crimson::net::Connection* conn,
 				      Ref<MCommand> m)
 {
@@ -451,7 +429,8 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<ConfigShowHook>()),
       asok->register_command(make_asok_hook<ConfigGetHook>()),
-      asok->register_command(make_asok_hook<ConfigSetHook>()));
+      asok->register_command(make_asok_hook<ConfigSetHook>()),
+      asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)));
   });
 }
 
@@ -639,6 +618,10 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
     case MSG_OSD_PG_RECOVERY_DELETE:
       [[fallthrough]];
     case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+      [[fallthrough]];
+    case MSG_OSD_PG_SCAN:
+      [[fallthrough]];
+    case MSG_OSD_PG_BACKFILL:
       return handle_recovery_subreq(conn, boost::static_pointer_cast<MOSDFastDispatchOp>(m));
     case MSG_OSD_PG_LEASE:
       [[fallthrough]];
@@ -684,7 +667,15 @@ void OSD::handle_authentication(const EntityName& name,
   // todo
 }
 
-MessageRef OSD::get_stats()
+void OSD::update_stats()
+{
+  osd_stat_seq++;
+  osd_stat.up_from = get_up_epoch();
+  osd_stat.hb_peers = heartbeat->get_peers();
+  osd_stat.seq = (static_cast<uint64_t>(get_up_epoch()) << 32) | osd_stat_seq;
+}
+
+MessageRef OSD::get_stats() const
 {
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
@@ -699,6 +690,13 @@ MessageRef OSD::get_stats()
     }
   }
   return m;
+}
+
+uint64_t OSD::send_pg_stats()
+{
+  // mgr client sends the report message in background
+  mgrc->report();
+  return osd_stat_seq;
 }
 
 OSD::cached_map_t OSD::get_map() const
@@ -1057,7 +1055,7 @@ seastar::future<> OSD::send_incremental_map(crimson::net::Connection* conn,
     });
   } else {
     return load_map_bl(osdmap->get_epoch())
-    .then([this, conn, first](auto&& bl) mutable {
+    .then([this, conn](auto&& bl) mutable {
       auto m = make_message<MOSDMap>(monc->get_fsid(),
 	  osdmap->get_encoding_features());
       m->oldest_map = superblock.oldest_map;
@@ -1249,21 +1247,24 @@ seastar::future<> OSD::prepare_to_stop()
 {
   if (osdmap && osdmap->is_up(whoami)) {
     state.set_prestop();
-    return monc->send_message(
+    const auto timeout =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+	std::chrono::duration<double>(
+	  local_conf().get_val<double>("osd_mon_shutdown_timeout")));
+
+    return seastar::with_timeout(
+      seastar::timer<>::clock::now() + timeout,
+      monc->send_message(
 	  make_message<MOSDMarkMeDown>(
 	    monc->get_fsid(),
 	    whoami,
 	    osdmap->get_addrs(whoami),
 	    osdmap->get_epoch(),
 	    true)).then([this] {
-      const auto timeout =
-	std::chrono::duration_cast<std::chrono::milliseconds>(
-	  std::chrono::duration<double>(
-	    local_conf().get_val<double>("osd_mon_shutdown_timeout")));
-      return seastar::with_timeout(
-      seastar::timer<>::clock::now() + timeout,
-      stop_acked.get_future());
-    }).handle_exception_type([this](seastar::timed_out_error&) {
+	return stop_acked.get_future();
+      })
+    ).handle_exception_type(
+      [](seastar::timed_out_error&) {
       return seastar::now();
     });
   }

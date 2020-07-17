@@ -9,7 +9,7 @@ from mgr_util import CephfsClient
 from .fs_util import listdir
 
 from .operations.volume import create_volume, \
-    delete_volume, list_volumes, open_volume
+    delete_volume, list_volumes, open_volume, get_pool_names
 from .operations.group import open_group, create_group, remove_group
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
@@ -98,9 +98,24 @@ class VolumeClient(CephfsClient):
                 "that is what you want, re-issue the command followed by " \
                 "--yes-i-really-mean-it.".format(volname)
 
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config get',
+            'key': 'mon_allow_pool_delete',
+            'who': 'mon',
+            'format': 'json',
+        })
+        mon_allow_pool_delete = json.loads(out)
+        if not mon_allow_pool_delete:
+            return -errno.EPERM, "", "pool deletion is disabled; you must first " \
+                "set the mon_allow_pool_delete config option to true before volumes " \
+                "can be deleted"
+
+        metadata_pool, data_pools = get_pool_names(self.mgr, volname)
+        if not metadata_pool:
+            return -errno.ENOENT, "", "volume {0} doesn't exist".format(volname)
         self.purge_queue.cancel_jobs(volname)
         self.connection_pool.del_fs_handle(volname, wait=True)
-        return delete_volume(self.mgr, volname)
+        return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
         if self.stopping.is_set():
@@ -199,6 +214,24 @@ class VolumeClient(CephfsClient):
                             [{'bytes_used': usedbytes},{'bytes_quota': nsize},
                              {'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}],
                             indent=4, sort_keys=True), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_pin(self, **kwargs):
+        ret         = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        pin_type    = kwargs['pin_type']
+        pin_setting = kwargs['pin_setting']
+        groupname   = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                        subvolume.pin(pin_type, pin_setting)
+                        ret = 0, json.dumps({}), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -326,33 +359,31 @@ class VolumeClient(CephfsClient):
         return ret
 
     def protect_subvolume_snapshot(self, **kwargs):
-        ret        = 0, "", ""
+        ret        = 0, "", "Deprecation warning: 'snapshot protect' call is deprecated and will be removed in a future release"
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
-        snapname   = kwargs['snap_name']
         groupname  = kwargs['group_name']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
-                        subvolume.protect_snapshot(snapname)
+                        log.warning("snapshot protect call is deprecated and will be removed in a future release")
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
 
     def unprotect_subvolume_snapshot(self, **kwargs):
-        ret        = 0, "", ""
+        ret        = 0, "", "Deprecation warning: 'snapshot unprotect' call is deprecated and will be removed in a future release"
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
-        snapname   = kwargs['snap_name']
         groupname  = kwargs['group_name']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
-                        subvolume.unprotect_snapshot(snapname)
+                        log.warning("snapshot unprotect call is deprecated and will be removed in a future release")
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -379,8 +410,6 @@ class VolumeClient(CephfsClient):
 
         if not snapname.encode('utf-8') in subvolume.list_snapshots():
             raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
-        if not subvolume.is_snapshot_protected(snapname):
-            raise VolumeException(-errno.EINVAL, "snapshot '{0}' is not protected".format(snapname))
 
         # TODO: when the target group is same as source, reuse group object.
         with open_group(fs_handle, self.volspec, target_groupname) as target_group:
@@ -500,6 +529,22 @@ class VolumeClient(CephfsClient):
         except VolumeException as ve:
             if not ve.errno == -errno.ENOENT:
                 ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def pin_subvolume_group(self, **kwargs):
+        ret           = 0, "", ""
+        volname       = kwargs['vol_name']
+        groupname     = kwargs['group_name']
+        pin_type      = kwargs['pin_type']
+        pin_setting   = kwargs['pin_setting']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    group.pin(pin_type, pin_setting)
+                    ret = 0, json.dumps({}), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
         return ret
 
     ### group snapshot

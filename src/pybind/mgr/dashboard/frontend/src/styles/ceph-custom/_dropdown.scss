@@ -1,0 +1,36 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+/* Dropdown */
+.dropdown-menu {
+  min-width: 50px;
+  z-index: 999999;
+
+  button.dropdown-item:focus {
+    outline: none;
+  }
+}
+
+.dropdown-menu > li > a {
+  color: bd.$color-dropdown-menu;
+  cursor: pointer;
+}
+
+.dropdown-menu > li > a > i.fa {
+  /** Add space between icon and text */
+  margin-right: 5px;
+}
+
+.dropdown-menu > .active > a {
+  background-color: bd.$color-dropdown-active-bg;
+  color: bd.$color-dropdown-active-text;
+
+  &,
+  &:hover,
+  &:focus {
+    background-color: darken(bd.$color-dropdown-active-bg, 10);
+  }
+}
+
+.dataTables_wrapper .dropdown-menu > li.dropdown-divider {
+  cursor: auto;
+}

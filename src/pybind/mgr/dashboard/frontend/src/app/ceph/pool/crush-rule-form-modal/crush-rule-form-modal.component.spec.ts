@@ -2,8 +2,8 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -11,7 +11,6 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   Mocks
 } from '../../../../testing/unit-test-helper';
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
@@ -79,7 +78,7 @@ describe('CrushRuleFormComponent', () => {
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
-    providers: [CrushRuleService, BsModalRef, i18nProviders]
+    providers: [CrushRuleService, NgbActiveModal]
   });
 
   beforeEach(() => {

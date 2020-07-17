@@ -2,16 +2,23 @@ import os
 import uuid
 import errno
 import logging
+from enum import Enum, unique
 from hashlib import md5
 
 import cephfs
 
+from ..pin_util import pin
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 
 log = logging.getLogger(__name__)
+
+@unique
+class SubvolumeFeatures(Enum):
+    FEATURE_SNAPSHOT_CLONE       = "snapshot-clone"
+    FEATURE_SNAPSHOT_AUTOPROTECT = "snapshot-autoprotect"
 
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
@@ -92,6 +99,10 @@ class SubvolumeBase(object):
     @legacy_mode.setter
     def legacy_mode(self, mode):
         self.legacy = mode
+
+    @property
+    def features(self):
+        raise NotImplementedError
 
     def load_config(self):
         if self.legacy_mode:
@@ -195,6 +206,9 @@ class SubvolumeBase(object):
                 raise VolumeException(-e.args[0], "Cannot set new size for the subvolume. '{0}'".format(e.args[1]))
         return newsize, subvolstat.st_size
 
+    def pin(self, pin_type, pin_setting):
+        return pin(self.fs, self.base_path, pin_type, pin_setting)
+
     def init_config(self, version, subvolume_type, subvolume_path, subvolume_state):
         self.metadata_mgr.init(version, subvolume_type, subvolume_path, subvolume_state)
         self.metadata_mgr.flush()
@@ -257,4 +271,4 @@ class SubvolumeBase(object):
             'mode': int(st["mode"]), 'data_pool': data_pool, 'created_at': str(st["btime"]),
             'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
             'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
-            'pool_namespace': pool_namespace}
+            'pool_namespace': pool_namespace, 'features': self.features}

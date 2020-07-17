@@ -52,6 +52,10 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
+#ifdef WITH_BLKIN
+#include "common/zipkin_trace.h"
+#endif
+
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
@@ -245,7 +249,7 @@ public:
       if (data.length()) {
 	ceph::buffer::list t;
 	t.substr_of(data, 0, newlen);
-	data.claim(t);
+	data = std::move(t);
       }
       length = newlen;
     }
@@ -281,7 +285,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_cache_other::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_meta::map<uint32_t, std::unique_ptr<Buffer>>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -470,7 +474,7 @@ public:
 
     // we use a bare pointer because we don't want to affect the ref
     // count
-    mempool::bluestore_cache_other::unordered_map<uint64_t,SharedBlob*> sb_map;
+    mempool::bluestore_cache_meta::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard l(lock);
@@ -685,7 +689,7 @@ public:
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_cache_other::map<int,BlobRef> blob_map_t;
+  typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
@@ -793,7 +797,7 @@ public:
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
-    mempool::bluestore_cache_other::vector<Shard> shards;    ///< shards
+    mempool::bluestore_cache_meta::vector<Shard> shards;    ///< shards
 
     ceph::buffer::list inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
@@ -1051,26 +1055,26 @@ public:
   };
 
   struct OnodeSpace;
-  struct OnodeCacheShard;
   /// an in-memory object
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
-    // Not persisted and updated on cache insertion/removal
-    OnodeCacheShard *s;
-    bool pinned = false; // Only to be used by the onode cache shard
 
     std::atomic_int nref;  ///< reference count
     Collection *c;
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
-    mempool::bluestore_cache_other::string key;
+    mempool::bluestore_cache_meta::string key;
 
-    boost::intrusive::list_member_hook<> lru_item, pin_item;
+    boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
-
+    bool cached;              ///< Onode is logically in the cache
+                              /// (it can be pinned and hence physically out
+                              /// of it at the moment though)
+    bool pinned;              ///< Onode is pinned
+                              /// (or should be pinned when cached)
     ExtentMap extent_map;
 
     // track txc's that have not been committed to kv store (and whose
@@ -1082,33 +1086,36 @@ public:
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
 
     Onode(Collection *c, const ghobject_t& o,
-	  const mempool::bluestore_cache_other::string& k)
-      : s(nullptr),
-        nref(0),
+	  const mempool::bluestore_cache_meta::string& k)
+      : nref(0),
 	c(c),
 	oid(o),
 	key(k),
 	exists(false),
+        cached(false),
+        pinned(false),
 	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
       const std::string& k)
-      : s(nullptr),
-      nref(0),
+      : nref(0),
       c(c),
       oid(o),
       key(k),
       exists(false),
+      cached(false),
+      pinned(false),
       extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
       const char* k)
-      : s(nullptr),
-      nref(0),
+      : nref(0),
       c(c),
       oid(o),
       key(k),
       exists(false),
+      cached(false),
+      pinned(false),
       extent_map(this) {
     }
 
@@ -1121,19 +1128,18 @@ public:
     void dump(ceph::Formatter* f) const;
 
     void flush();
-    void get() {
-      if (++nref == 2 && s != nullptr) {
-        s->pin(*this);
-      }
+    void get();
+    void put();
+
+    inline bool put_cache() {
+      ceph_assert(!cached);
+      cached = true;
+      return !pinned;
     }
-    void put() {
-      int n = --nref;
-      if (n == 1 && s != nullptr) {
-        s->unpin(*this);
-      }
-      if (n == 0) {
-	delete this;
-      }
+    inline bool pop_cache() {
+      ceph_assert(cached);
+      cached = false;
+      return !pinned;
     }
 
     const std::string& get_omap_prefix();
@@ -1200,26 +1206,32 @@ public:
     std::atomic<uint64_t> num_pinned = {0};
 
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
+
+    virtual void _pin(Onode* o) = 0;
+    virtual void _unpin(Onode* o) = 0;
+
   public:
     OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
     static OnodeCacheShard *create(CephContext* cct, std::string type,
                                    PerfCounters *logger);
-    virtual void _add(OnodeRef& o, int level) = 0;
-    virtual void _rm(OnodeRef& o) = 0;
-    virtual void _touch(OnodeRef& o) = 0;
-    virtual void _pin(Onode& o) = 0;
-    virtual void _unpin(Onode& o) = 0;
+    virtual void _add(Onode* o, int level) = 0;
+    virtual void _rm(Onode* o) = 0;
 
-    void pin(Onode& o) {
+    void pin(Onode* o, std::function<bool ()> validator) {
       std::lock_guard l(lock);
-      _pin(o);
+      if (validator()) {
+        _pin(o);
+      }
     }
 
-    void unpin(Onode& o) {
+    void unpin(Onode* o, std::function<bool()> validator) {
       std::lock_guard l(lock);
-      _unpin(o);
+      if (validator()) {
+        _unpin(o);
+      }
     }
 
+    virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
     bool empty() {
       return _get_num() == 0;
@@ -1276,24 +1288,23 @@ public:
 
   private:
     /// forward lookups
-    mempool::bluestore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend struct Collection; // for split_cache()
 
+    friend struct LruOnodeCacheShard;
+    void _remove(const ghobject_t& oid);
   public:
     OnodeSpace(OnodeCacheShard *c) : cache(c) {}
     ~OnodeSpace() {
       clear();
     }
 
-    OnodeRef add(const ghobject_t& oid, OnodeRef o);
+    OnodeRef add(const ghobject_t& oid, OnodeRef& o);
     OnodeRef lookup(const ghobject_t& o);
-    void remove(const ghobject_t& oid) {
-      onode_map.erase(oid);
-    }
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
-		const mempool::bluestore_cache_other::string& new_okey);
+		const mempool::bluestore_cache_meta::string& new_okey);
     void clear();
     bool empty();
 
@@ -1327,6 +1338,9 @@ public:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
+    OnodeCacheShard* get_onode_cache() const {
+      return onode_map.cache;
+    }
     OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
 
     // the terminology is confusing here, sorry!
@@ -1508,8 +1522,6 @@ public:
       STATE_DONE,
     } state_t;
 
-    state_t state = STATE_PREPARE;
-
     const char *get_state_name() {
       switch (state) {
       case STATE_PREPARE: return "prepare";
@@ -1544,6 +1556,18 @@ public:
       return "???";
     }
 #endif
+
+    inline void set_state(state_t s) {
+       state = s;
+#ifdef WITH_BLKIN
+       if (trace) {
+         trace.event(get_state_name());
+       } 
+#endif
+    }
+    inline state_t get_state() {
+      return state;
+    }
 
     CollectionRef ch;
     OpSequencerRef osr;  // this should be ch->osr
@@ -1581,6 +1605,10 @@ public:
     bool tracing = false;
 #endif
 
+#ifdef WITH_BLKIN
+    ZTracer::Trace trace;
+#endif
+
     explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
 			  std::list<Context*> *on_commits)
       : ch(c),
@@ -1593,6 +1621,11 @@ public:
       }
     }
     ~TransContext() {
+#ifdef WITH_BLKIN
+      if (trace) {
+        trace.event("txc destruct");
+      }
+#endif
       delete deferred_txn;
     }
 
@@ -1619,6 +1652,8 @@ public:
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
     }
+  private:
+    state_t state = STATE_PREPARE;
   };
 
   class BlueStoreThrottle {
@@ -1822,7 +1857,7 @@ public:
       // caller must hold qlock & q.empty() must not empty
       ceph_assert(!q.empty());
       TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+      if (txc->get_state() >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
       }
       return false;
@@ -1858,7 +1893,7 @@ public:
 	} else {
 	  auto it = q.rbegin();
 	  it++;
-	  if (it->state >= TransContext::STATE_KV_SUBMITTED) {
+	  if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
 	    --kv_submitted_waiters;
 	    return;
           }
@@ -1874,7 +1909,7 @@ public:
 	return true;
       }
       TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_DONE) {
+      if (txc->get_state() >= TransContext::STATE_KV_DONE) {
 	return true;
       }
       txc->oncommits.push_back(c);
@@ -2176,8 +2211,14 @@ private:
       MetaCache(BlueStore *s) : MempoolCache(s) {};
 
       virtual uint64_t _get_used_bytes() const {
-        return mempool::bluestore_cache_other::allocated_bytes() +
-            mempool::bluestore_cache_onode::allocated_bytes();
+        return mempool::bluestore_Buffer::allocated_bytes() +
+          mempool::bluestore_Blob::allocated_bytes() +
+          mempool::bluestore_Extent::allocated_bytes() +
+          mempool::bluestore_cache_meta::allocated_bytes() +
+          mempool::bluestore_cache_other::allocated_bytes() +
+	   mempool::bluestore_cache_onode::allocated_bytes() +
+          mempool::bluestore_SharedBlob::allocated_bytes() +
+          mempool::bluestore_inline_bl::allocated_bytes();
       }
 
       virtual std::string get_cache_name() const {
@@ -2236,6 +2277,10 @@ private:
     void _update_cache_settings();
     void _resize_shards(bool interval_stats);
   } mempool_thread;
+
+#ifdef WITH_BLKIN
+  ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
+#endif
 
   // --------------------------------------------------------
   // private methods
@@ -2310,6 +2355,20 @@ private:
   int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
 
+  // Functions related to zoned storage.
+
+  // For now, to avoid interface changes we piggyback zone_size (in MiB) and the
+  // first sequential zone number onto min_alloc_size and pass it to functions
+  // Allocator::create and FreelistManager::create.
+  uint64_t _piggyback_zoned_device_parameters_onto(uint64_t min_alloc_size) {
+    uint64_t zone_size = bdev->get_zone_size();
+    uint64_t zone_size_mb = zone_size / (1024 * 1024);
+    uint64_t first_seq_zone = bdev->get_conventional_region_size() / zone_size;
+    min_alloc_size |= (zone_size_mb << 32);
+    min_alloc_size |= (first_seq_zone << 48);
+    return min_alloc_size;
+  }
+
 public:
   utime_t get_deferred_last_submitted() {
     std::lock_guard l(deferred_lock);
@@ -2351,7 +2410,8 @@ private:
   friend void _dump_transaction(CephContext *cct, Transaction *t);
 
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
-			    std::list<Context*> *on_commits);
+			    std::list<Context*> *on_commits,
+			    TrackedOpRef osd_op=TrackedOpRef());
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
@@ -2588,7 +2648,7 @@ public:
 
   void get_db_statistics(ceph::Formatter *f) override;
   void generate_db_histogram(ceph::Formatter *f) override;
-  void _flush_cache();
+  void _shutdown_cache();
   int flush_cache(std::ostream *os = NULL) override;
   void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");

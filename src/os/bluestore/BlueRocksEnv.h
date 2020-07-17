@@ -16,6 +16,8 @@
 class BlueFS;
 
 class BlueRocksEnv : public rocksdb::EnvWrapper {
+  using base_t = EnvWrapper;
+
   void split(const std::string &fn, std::string *dir, std::string *file) {
     size_t slash = fn.rfind('/');
     *file = fn.substr(slash + 1);
@@ -155,6 +157,9 @@ public:
   // Get full directory name for this db.
   rocksdb::Status GetAbsolutePath(const std::string& db_path,
       std::string* output_path) override;
+
+  // Start new thread taking care about Seastar's allocator init.
+  void StartThread(void(*function)(void* arg), void* arg) override;
 
   explicit BlueRocksEnv(BlueFS *f);
 private:

@@ -8,11 +8,12 @@
 #ifndef CEPH_RGW_CRYPT_H
 #define CEPH_RGW_CRYPT_H
 
+#include <string_view>
+
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_rest.h>
 #include <rgw/rgw_rest_s3.h>
 #include "rgw_putobj.h"
-#include <boost/utility/string_view.hpp>
 
 /**
  * \brief Interface for block encryption methods

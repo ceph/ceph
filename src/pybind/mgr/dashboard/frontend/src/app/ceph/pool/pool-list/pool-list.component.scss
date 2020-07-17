@@ -1,17 +1,17 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep .pg-clean {
-  color: $color-bright-green;
+  color: bd.$color-bright-green;
 }
 
 ::ng-deep .pg-working {
-  color: $color-primary;
+  color: bd.$color-primary;
 }
 
 ::ng-deep .pg-warning {
-  color: $color-bright-yellow;
+  color: bd.$color-bright-yellow;
 }
 
 ::ng-deep .pg-unknown {
-  color: $color-solid-red;
+  color: bd.$color-solid-red;
 }

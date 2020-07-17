@@ -193,9 +193,9 @@ static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
   ::memcpy(dst, src, copy_size);
   encode(ss, bl);
 #else
-  ceph_sockaddr_storage ss{};
+  ceph_sockaddr_storage ss;
   ::memset(&ss, '\0', sizeof(ss));
-  ::memcpy(&wireaddr, &ss, std::min(sizeof(ss), sizeof(a)));
+  ::memcpy(&ss, &a, std::min(sizeof(ss), sizeof(a)));
   encode(ss, bl);
 #endif
 }

@@ -8,6 +8,7 @@
 #define IS_ERR_VALUE(x) ((x) >= (unsigned long)-MAX_ERRNO)
 
 #include <errno.h>
+#include <stdint.h>
 
 /* this generates a warning in c++; caller can do the cast manually
 static inline void *ERR_PTR(long error)
@@ -18,12 +19,12 @@ static inline void *ERR_PTR(long error)
 
 static inline long PTR_ERR(const void *ptr)
 {
-  return (long) ptr;
+  return (uintptr_t) ptr;
 }
 
 static inline long IS_ERR(const void *ptr)
 {
-  return IS_ERR_VALUE((unsigned long)ptr);
+  return IS_ERR_VALUE((uintptr_t)ptr);
 }
 
 #endif

@@ -1,7 +1,6 @@
 import errno
 import json
 import itertools
-import six
 import socket
 import time
 from threading import Event
@@ -99,7 +98,7 @@ class Module(MgrModule):
                 }
 
     def get_daemon_stats(self):
-        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
+        for daemon, counters in self.get_all_perf_counters().items():
             svc_type, svc_id = daemon.split('.', 1)
             metadata = self.get_metadata(svc_type, svc_id)
             if not metadata:

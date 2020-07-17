@@ -247,7 +247,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
-    this.table.element.addEventListener('mouseenter', (e) => e.stopPropagation(), true);
+    this.table.element.addEventListener('mouseenter', (e) => e.stopPropagation());
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
@@ -282,6 +282,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.filterHiddenColumns();
     this.initColumnFilters();
     this.updateColumnFilterOptions();
+    // Notify all subscribers to reset their current selection.
+    this.updateSelection.emit(new CdTableSelection());
     // Load the data table content every N ms or at least once.
     // Force showing the loading indicator if there are subscribers to the fetchData
     // event. This is necessary because it has been set to False in useData() when

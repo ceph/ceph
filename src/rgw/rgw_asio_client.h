@@ -42,8 +42,8 @@ class ClientIO : public io::RestfulClient,
   void flush() override;
   size_t send_status(int status, const char *status_name) override;
   size_t send_100_continue() override;
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override;
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override;
   size_t send_content_length(uint64_t len) override;
   size_t complete_header() override;
 

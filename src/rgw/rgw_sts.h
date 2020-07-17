@@ -129,11 +129,12 @@ struct SessionToken {
   bool is_admin;
   uint32_t acct_type;
   string role_session;
+  std::vector<string> token_claims;
 
   SessionToken() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(access_key_id, bl);
     encode(secret_access_key, bl);
     encode(expiration, bl);
@@ -145,11 +146,12 @@ struct SessionToken {
     encode(is_admin, bl);
     encode(acct_type, bl);
     encode(role_session, bl);
+    encode(token_claims, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(access_key_id, bl);
     decode(secret_access_key, bl);
     decode(expiration, bl);
@@ -162,6 +164,9 @@ struct SessionToken {
     decode(acct_type, bl);
     if (struct_v >= 2) {
       decode(role_session, bl);
+    }
+    if (struct_v >= 3) {
+      decode(token_claims, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -181,6 +186,7 @@ public:
                           const boost::optional<string>& policy,
                           const boost::optional<string>& roleId,
                           const boost::optional<string>& role_session,
+                          const boost::optional<std::vector<string> > token_claims,
                           boost::optional<rgw_user> user,
                           rgw::auth::Identity* identity);
   const string& getAccessKeyId() const { return accessKeyId; }

@@ -3,21 +3,19 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
+import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
 import { SilenceListComponent } from './silence-list.component';
 
 describe('SilenceListComponent', () => {
@@ -29,13 +27,12 @@ describe('SilenceListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      ModalModule.forRoot(),
       ToastrModule.forRoot(),
       RouterTestingModule,
-      HttpClientTestingModule
+      HttpClientTestingModule,
+      NgbNavModule
     ],
-    declarations: [SilenceListComponent],
-    providers: [i18nProviders]
+    declarations: [SilenceListComponent, PrometheusTabsComponent]
   });
 
   beforeEach(() => {
@@ -97,8 +94,8 @@ describe('SilenceListComponent', () => {
 
     const expireSilence = () => {
       component.expireSilence();
-      const deletion: CriticalConfirmationModalComponent = component.modalRef.content;
-      deletion.modalRef = new BsModalRef();
+      const deletion: CriticalConfirmationModalComponent = component.modalRef.componentInstance;
+      // deletion.modalRef = new BsModalRef();
       deletion.ngOnInit();
       deletion.callSubmitAction();
     };
@@ -113,9 +110,9 @@ describe('SilenceListComponent', () => {
       const mockObservable = () => of([]);
       spyOn(component, 'refresh').and.callFake(mockObservable);
       spyOn(prometheusService, 'expireSilence').and.callFake(mockObservable);
-      spyOn(TestBed.inject(BsModalService), 'show').and.callFake((deletionClass, config) => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, config) => {
         return {
-          content: Object.assign(new deletionClass(), config.initialState)
+          componentInstance: Object.assign(new deletionClass(), config)
         };
       });
     });

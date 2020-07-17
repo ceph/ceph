@@ -1887,6 +1887,146 @@ TEST_F(PITest, past_intervals_ec_lost) {
     /* pg_down    */ false);
 }
 
+void ci_ref_test(
+  object_manifest_t l,
+  object_manifest_t to_remove,
+  object_manifest_t g,
+  object_ref_delta_t expected_delta)
+{
+  {
+    object_ref_delta_t delta;
+    to_remove.calc_refs_to_drop_on_removal(
+      &l,
+      &g,
+      delta);
+    ASSERT_EQ(
+      expected_delta,
+      delta);
+  }
+
+  // calc_refs_to_drop specifically handles nullptr identically to empty
+  // chunk_map
+  if (l.chunk_map.empty() || g.chunk_map.empty()) {
+    object_ref_delta_t delta;
+    to_remove.calc_refs_to_drop_on_removal(
+      l.chunk_map.empty() ? nullptr : &l,
+      g.chunk_map.empty() ? nullptr : &g,
+      delta);
+    ASSERT_EQ(
+      expected_delta,
+      delta);
+  }
+}
+
+hobject_t mk_hobject(string name)
+{
+  return hobject_t(
+    std::move(name),
+    string(),
+    CEPH_NOSNAP,
+    0x42,
+    1,
+    string());
+}
+
+object_manifest_t mk_manifest(
+  std::map<uint64_t, std::tuple<uint64_t, uint64_t, string>> m)
+{
+  object_manifest_t ret;
+  ret.type = object_manifest_t::TYPE_CHUNKED;
+  for (auto &[offset, tgt] : m) {
+    auto &[tgt_off, length, name] = tgt;
+    auto &ci = ret.chunk_map[offset];
+    ci.offset = tgt_off;
+    ci.length = length;
+    ci.oid = mk_hobject(name);
+  }
+  return ret;
+}
+
+object_ref_delta_t mk_delta(std::map<string, int> _m) {
+  std::map<hobject_t, int> m;
+  for (auto &[name, delta] : _m) {
+    m.insert(
+      std::make_pair(
+	mk_hobject(name),
+	delta));
+  }
+  return object_ref_delta_t(std::move(m));
+}
+
+TEST(chunk_info_test, calc_refs_to_drop) {
+  ci_ref_test(
+    mk_manifest({}),
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({}),
+    mk_delta({{"foo", -1}}));
+
+}
+
+
+TEST(chunk_info_test, calc_refs_to_drop_match) {
+  ci_ref_test(
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_delta({}));
+
+}
+
+TEST(chunk_info_test, calc_refs_to_drop_head_match) {
+  ci_ref_test(
+    mk_manifest({}),
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_delta({}));
+
+}
+
+TEST(chunk_info_test, calc_refs_to_drop_tail_match) {
+  ci_ref_test(
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({}),
+    mk_delta({}));
+
+}
+
+TEST(chunk_info_test, calc_refs_to_drop_second_reference) {
+  ci_ref_test(
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "foo"}}, {4<<10, {0, 1<<10, "foo"}}}),
+    mk_manifest({}),
+    mk_delta({{"foo", -1}}));
+
+}
+
+TEST(chunk_info_test, calc_refs_offsets_dont_match) {
+  ci_ref_test(
+    mk_manifest({{0, {0, 1024, "foo"}}}),
+    mk_manifest({{512, {0, 1024, "foo"}}, {(4<<10) + 512, {0, 1<<10, "foo"}}}),
+    mk_manifest({}),
+    mk_delta({{"foo", -2}}));
+
+}
+
+TEST(chunk_info_test, calc_refs_g_l_match) {
+  ci_ref_test(
+    mk_manifest({{4096, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "foo"}}, {4096, {0, 1024, "bar"}}}),
+    mk_manifest({{4096, {0, 1024, "foo"}}}),
+    mk_delta({{"foo", -2}, {"bar", -1}}));
+
+}
+
+TEST(chunk_info_test, calc_refs_g_l_match_no_this) {
+  ci_ref_test(
+    mk_manifest({{4096, {0, 1024, "foo"}}}),
+    mk_manifest({{0, {0, 1024, "bar"}}}),
+    mk_manifest({{4096, {0, 1024, "foo"}}}),
+    mk_delta({{"foo", -1}, {"bar", -1}}));
+
+}
 
 /*
  * Local Variables:

@@ -936,6 +936,8 @@ static inline bool has_all_tags(const lc_op& rule_action,
   for (const auto& tag : object_tags.get_tags()) {
     const auto& rule_tags = rule_action.obj_tags->get_tags();
     const auto& iter = rule_tags.find(tag.first);
+    if(iter == rule_tags.end())
+        continue;
     if(iter->second == tag.second)
     {
       tag_count++;
@@ -2253,5 +2255,71 @@ std::string s3_expiration_header(
   return hdr;
 
 } /* rgwlc_s3_expiration_header */
+
+bool s3_multipart_abort_header(
+  DoutPrefixProvider* dpp,
+  const rgw_obj_key& obj_key,
+  const ceph::real_time& mtime,
+  const std::map<std::string, buffer::list>& bucket_attrs,
+  ceph::real_time& abort_date,
+  std::string& rule_id)
+{
+  CephContext* cct = dpp->get_cct();
+  RGWLifecycleConfiguration config(cct);
+
+  const auto& aiter = bucket_attrs.find(RGW_ATTR_LC);
+  if (aiter == bucket_attrs.end())
+    return false;
+
+  bufferlist::const_iterator iter{&aiter->second};
+  try {
+    config.decode(iter);
+  } catch (const buffer::error& e) {
+    ldpp_dout(dpp, 0) << __func__
+                      <<  "() decode life cycle config failed"
+                      << dendl;
+    return false;
+  } /* catch */
+
+  std::optional<ceph::real_time> abort_date_tmp;
+  std::optional<std::string_view> rule_id_tmp;
+  const auto& rule_map = config.get_rule_map();
+  for (const auto& ri : rule_map) {
+    const auto& rule = ri.second;
+    const auto& id = rule.get_id();
+    const auto& filter = rule.get_filter();
+    const auto& prefix = filter.has_prefix()?filter.get_prefix():rule.get_prefix();
+    const auto& mp_expiration = rule.get_mp_expiration();
+    if (!rule.is_enabled()) {
+      continue;
+    }
+    if(!prefix.empty() && !boost::starts_with(obj_key.name, prefix)) {
+      continue;
+    }
+
+    std::optional<ceph::real_time> rule_abort_date;
+    if (mp_expiration.has_days()) {
+      rule_abort_date = std::optional<ceph::real_time>(
+              mtime + make_timespan(mp_expiration.get_days()*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+    }
+
+    // update earliest abort date
+    if (rule_abort_date) {
+      if ((! abort_date_tmp) ||
+          (*abort_date_tmp > *rule_abort_date)) {
+        abort_date_tmp =
+                std::optional<ceph::real_time>(rule_abort_date);
+        rule_id_tmp = std::optional<std::string_view>(id);
+      }
+    }
+  }
+  if (abort_date_tmp && rule_id_tmp) {
+    abort_date = *abort_date_tmp;
+    rule_id = *rule_id_tmp;
+    return true;
+  } else {
+    return false;
+  }
+}
 
 } /* namespace rgw::lc */

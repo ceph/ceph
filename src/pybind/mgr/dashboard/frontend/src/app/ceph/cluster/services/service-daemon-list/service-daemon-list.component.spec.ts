@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import * as _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { CephServiceService } from '../../../../shared/api/ceph-service.service';
 import { HostService } from '../../../../shared/api/host.service';
@@ -77,9 +77,7 @@ describe('ServiceDaemonListComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, CephModule, CoreModule, SharedModule],
-    declarations: [],
-    providers: [i18nProviders]
+    imports: [HttpClientTestingModule, CephModule, CoreModule, SharedModule]
   });
 
   beforeEach(() => {

@@ -618,7 +618,7 @@ public:
       explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
       NotifyAck(uint64_t notify_id, uint64_t cookie, ceph::buffer::list& rbl)
 	: watch_cookie(cookie), notify_id(notify_id) {
-	reply_bl.claim(rbl);
+	reply_bl = std::move(rbl);
       }
     };
     std::list<NotifyAck> notify_acks;
@@ -1476,6 +1476,10 @@ protected:
   friend struct C_ProxyWrite_Commit;
 
   // -- chunkop --
+  enum class refcount_t {
+    INCREMENT_REF,
+    DECREMENT_REF,
+  };
   void do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing_oid, 
 			   ObjectContextRef obc, bool write_ordered);
   void do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
@@ -1494,9 +1498,11 @@ protected:
 			     uint64_t last_offset);
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
-  void cancel_manifest_ops(bool requeue, std::vector<ceph_tid_t> *tids);
-  void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
-                         SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset);
+  void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
+  void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
+			 RefCountCallback* cb);
+  void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
+  void dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
@@ -1889,7 +1895,6 @@ public:
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
-  void wait_for_all_missing(OpRequestRef op);
 
   bool check_laggy(OpRequestRef& op);
   bool check_laggy_requeue(OpRequestRef& op);

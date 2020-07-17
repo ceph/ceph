@@ -25,11 +25,12 @@ cephadm/cephadm script into memory.)
    MON=1 MGR=1 OSD=0 MDS=0 ../src/vstart.sh -d -n -x --cephadm
 
 - ``~/.ssh/id_dsa[.pub]`` is used as the cluster key.  It is assumed that
-  this key is authorized to ssh to root@`hostname`.
-- No service spec is defined for mon or mgr, which means that cephadm
-  does not try to manage them.
+  this key is authorized to ssh with no passphrase to root@`hostname`.
+- cephadm does not try to manage any daemons started by vstart.sh (any
+  nonzero number in the environment variables).  No service spec is defined
+  for mon or mgr.
 - You'll see health warnings from cephadm about stray daemons--that's because
-  the vstart-launched mon and mgr aren't controlled by cephadm.
+  the vstart-launched daemons aren't controlled by cephadm.
 - The default image is ``quay.io/ceph-ci/ceph:master``, but you can change
   this by passing ``-o container_image=...`` or ``ceph config set global container_image ...``.
 
@@ -61,18 +62,18 @@ To start a test cluster::
 The last line of this will be a line you can cut+paste to update the
 container image.  For instance::
 
-  sudo ../src/script/cpach -t quay.io/ceph-ci/ceph:8f509f4e
+  sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e
 
 By default, cpatch will patch everything it can think of from the local
 build dir into the container image.  If you are working on a specific
 part of the system, though, can you get away with smaller changes so that
 cpatch runs faster.  For instance::
 
-  sudo ../src/script/cpach -t quay.io/ceph-ci/ceph:8f509f4e --py
+  sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e --py
 
 will update the mgr modules (minus the dashboard).  Or::
 
-  sudo ../src/script/cpach -t quay.io/ceph-ci/ceph:8f509f4e --core
+  sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e --core
 
 will do most binaries and libraries.  Pass ``-h`` to cpatch for all options.
 
@@ -89,14 +90,15 @@ When you're done, you can tear down the cluster with::
 Note regarding network calls from CLI handlers
 ==============================================
 
-Executing any cephadm CLI commands like ``ceph orch ls`` will block
-the mon command handler thread within the MGR, thus preventing any
-concurrent CLI calls. Note that pressing ``^C`` will not resolve this
-situation, as *only* the client will be aborted, but not exceution
-itself. This means, cephadm will be completely unresonsive, until the
-execution of the CLI handler is fully completed. Note that even
-``ceph orch ps`` will not respond, while another handler is executed.
+Executing any cephadm CLI commands like ``ceph orch ls`` will block the
+mon command handler thread within the MGR, thus preventing any concurrent
+CLI calls. Note that pressing ``^C`` will not resolve this situation,
+as *only* the client will be aborted, but not execution of the command
+within the orchestrator manager module itself. This means, cephadm will
+be completely unresponsive until the execution of the CLI handler is
+fully completed. Note that even ``ceph orch ps`` will not respond while
+another handler is executing.
 
-This means, we should only do very few calls to remote hosts synchronously. 
-As a guideline, cephadm should do at most ``O(1)`` network calls in CLI handlers. 
+This means we should do very few synchronous calls to remote hosts.
+As a guideline, cephadm should do at most ``O(1)`` network calls in CLI handlers.
 Everything else should be done asynchronously in other threads, like ``serve()``.

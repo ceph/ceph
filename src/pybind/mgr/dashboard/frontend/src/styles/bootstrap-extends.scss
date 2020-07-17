@@ -79,10 +79,12 @@ cd-about {
   dl {
     @extend .row;
   }
+
   dt {
     @extend .col-4;
     @extend .font-weight-bold;
   }
+
   dd {
     @extend .col-8;
   }
