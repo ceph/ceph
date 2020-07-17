@@ -168,7 +168,8 @@ void FastCDC::calc_chunks(
       _scan(&p, &pp, &pe, pos,
 	    std::min(len,
 		     cstart + (1 << max_bits)),
-	    fp, large_mask, table)) ;
+	    fp, large_mask, table))
+      ;
 
     chunks->push_back(std::pair<uint64_t,uint64_t>(cstart, pos - cstart));
   }
