@@ -164,6 +164,14 @@ class TestVolumes(CephFSTestCase):
         subvol_md = self._fs_cmd(*args)
         return subvol_md
 
+    def _get_subvolume_snapshot_info(self, vol_name, subvol_name, snapname, group_name=None):
+        args = ["subvolume", "snapshot", "info", vol_name, subvol_name, snapname]
+        if group_name:
+            args.append(group_name)
+        args = tuple(args)
+        snap_md = self._fs_cmd(*args)
+        return snap_md
+
     def _delete_test_volume(self):
         self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
@@ -1174,6 +1182,49 @@ class TestVolumes(CephFSTestCase):
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_info(self):
+
+        """
+        tests the 'fs subvolume snapshot info' command
+        """
+
+        snap_metadata = ["created_at", "data_pool", "has_pending_clones", "protected", "size"]
+
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        self.assertNotEqual(len(snap_info), 0)
+        for md in snap_metadata:
+            if md not in snap_info:
+                raise RuntimeError("%s not present in the metadata of subvolume snapshot" % md)
+        self.assertEqual(snap_info["protected"], "yes")
+        self.assertEqual(snap_info["has_pending_clones"], "no")
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
 
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
