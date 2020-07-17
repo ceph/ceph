@@ -1675,7 +1675,7 @@ void CDir::_omap_fetch_more(
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   C_IO_Dir_OMAP_FetchedMore *fin = new C_IO_Dir_OMAP_FetchedMore(this, c);
-  fin->hdrbl.claim(hdrbl);
+  fin->hdrbl = std::move(hdrbl);
   fin->omap.swap(omap);
   ObjectOperation rd;
   rd.omap_get_vals(fin->omap.rbegin()->first,
@@ -1857,6 +1857,7 @@ CDentry *CDir::_load_dentry(
         if (in->inode.is_dirty_rstat())
           in->mark_dirty_rstat();
 
+        in->maybe_ephemeral_rand(true);
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
@@ -2045,20 +2046,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 }
 
-void CDir::_go_bad()
-{
-  if (get_version() == 0)
-    set_version(1);
-  state_set(STATE_BADFRAG);
-  // mark complete, !fetching
-  mark_complete();
-  state_clear(STATE_FETCHING);
-  auth_unpin(this);
-
-  // kick waiters
-  finish_waiting(WAIT_COMPLETE, -EIO);
-}
-
 void CDir::go_bad_dentry(snapid_t last, std::string_view dname)
 {
   dout(10) << __func__ << " " << dname << dendl;
@@ -2083,10 +2070,17 @@ void CDir::go_bad(bool complete)
     ceph_abort();  // unreachable, damaged() respawns us
   }
 
-  if (complete)
-    _go_bad();
-  else
-    auth_unpin(this);
+  if (complete) {
+    if (get_version() == 0)
+      set_version(1);
+    
+    state_set(STATE_BADFRAG);
+    mark_complete();
+  }
+
+  state_clear(STATE_FETCHING);
+  auth_unpin(this);
+  finish_waiting(WAIT_COMPLETE, -EIO);
 }
 
 // -----------------------
@@ -2230,10 +2224,11 @@ void CDir::_omap_commit(int op_prio)
   };
 
   if (state_test(CDir::STATE_FRAGMENTING)) {
+    assert(committed_version == 0);
     for (auto p = items.begin(); p != items.end(); ) {
       CDentry *dn = p->second;
       ++p;
-      if (!dn->is_dirty() && dn->get_linkage()->is_null())
+      if (dn->get_linkage()->is_null())
 	continue;
       write_one(dn);
     }

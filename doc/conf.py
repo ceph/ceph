@@ -99,7 +99,7 @@ edit_on_github_branch = 'master'
 
 # handles edit-on-github and old version warning display
 def setup(app):
-    app.add_javascript('js/ceph.js')
+    app.add_js_file('js/ceph.js')
     if ditaa is None:
         # add "ditaa" as an alias of "diagram"
         from plantweb.directive import DiagramDirective

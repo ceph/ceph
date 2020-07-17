@@ -89,7 +89,7 @@ class TestAdminCommands(CephFSTestCase):
 
         n = "test_add_data_pool_ec"
         self._setup_ec_pools(n, metadata=False)
-        p = self.fs.add_data_pool(n+"-data", create=False)
+        self.fs.add_data_pool(n+"-data", create=False)
 
     def test_new_default_ec(self):
         """
@@ -163,6 +163,40 @@ class TestAdminCommands(CephFSTestCase):
         for i in range(2):
             self._check_pool_application_metadata_key_value(
                 pool_names[i], 'cephfs', keys[i], fs_name)
+
+    def test_required_client_features(self):
+        """
+        That `ceph fs required_client_features` command functions.
+        """
+
+        def is_required(index):
+            out = self.fs.mon_manager.raw_cluster_cmd('fs', 'get', self.fs.name, '--format=json-pretty')
+            features = json.loads(out)['mdsmap']['required_client_features']
+            if "feature_{0}".format(index) in features:
+                return True;
+            return False;
+
+        features = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'feature', 'ls', '--format=json-pretty'))
+        self.assertGreater(len(features), 0);
+
+        for f in features:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', str(f['index']))
+
+        for f in features:
+            index = f['index']
+            feature = f['name']
+            if feature == 'reserved':
+                feature = str(index)
+
+            if index % 3 == 0:
+                continue;
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'add', feature)
+            self.assertTrue(is_required(index))
+
+            if index % 2 == 0:
+                continue;
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', feature)
+            self.assertFalse(is_required(index))
 
 
 class TestConfigCommands(CephFSTestCase):

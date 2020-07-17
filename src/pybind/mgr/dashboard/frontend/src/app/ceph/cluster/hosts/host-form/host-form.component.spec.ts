@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { LoadingPanelComponent } from '../../../../shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '../../../../shared/shared.module';
 import { HostFormComponent } from './host-form.component';
@@ -23,7 +23,6 @@ describe('HostFormComponent', () => {
         ReactiveFormsModule,
         ToastrModule.forRoot()
       ],
-      providers: [i18nProviders],
       declarations: [HostFormComponent]
     },
     [LoadingPanelComponent]

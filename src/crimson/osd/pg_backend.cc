@@ -515,10 +515,21 @@ maybe_get_omap_vals(
 }
 
 seastar::future<ceph::bufferlist> PGBackend::omap_get_header(
-  crimson::os::CollectionRef& c,
-  const ghobject_t& oid)
+  const crimson::os::CollectionRef& c,
+  const ghobject_t& oid) const
 {
   return store->omap_get_header(c, oid);
+}
+
+seastar::future<> PGBackend::omap_get_header(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  return omap_get_header(coll, ghobject_t{os.oi.soid}).then(
+    [&osd_op] (ceph::bufferlist&& header) {
+      osd_op.outdata = std::move(header);
+      return seastar::now();
+    });
 }
 
 seastar::future<> PGBackend::omap_get_keys(
@@ -604,13 +615,14 @@ seastar::future<> PGBackend::omap_get_vals(
         const auto& [key, value] = *iter;
         if (key.substr(0, filter_prefix.size()) != filter_prefix) {
           break;
-        } else if (num++ >= max_return ||
+        } else if (num >= max_return ||
             result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
           truncated = true;
           break;
         }
         encode(key, result);
         encode(value, result);
+        ++num;
       }
       encode(num, osd_op.outdata);
       osd_op.outdata.claim_append(result);
@@ -676,6 +688,41 @@ seastar::future<> PGBackend::omap_set_vals(
   os.oi.set_flag(object_info_t::FLAG_OMAP);
   os.oi.clear_omap_digest();
   osd_op_params.clean_regions.mark_omap_dirty();
+  return seastar::now();
+}
+
+seastar::future<> PGBackend::omap_set_header(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  maybe_create_new_object(os, txn);
+  txn.omap_setheader(coll->get_cid(), ghobject_t{os.oi.soid}, osd_op.indata);
+  //TODO:
+  //ctx->clean_regions.mark_omap_dirty();
+  //ctx->delta_stats.num_wr++;
+  os.oi.set_flag(object_info_t::FLAG_OMAP);
+  os.oi.clear_omap_digest();
+  return seastar::now();
+}
+
+seastar::future<> PGBackend::omap_remove_range(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  std::string key_begin, key_end;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode(key_begin, p);
+    decode(key_end, p);
+  } catch (buffer::error& e) {
+    throw crimson::osd::invalid_argument{};
+  }
+  txn.omap_rmkeyrange(coll->get_cid(), ghobject_t{os.oi.soid}, key_begin, key_end);
+  //TODO:
+  //ctx->delta_stats.num_wr++;
+  os.oi.clear_omap_digest();
   return seastar::now();
 }
 

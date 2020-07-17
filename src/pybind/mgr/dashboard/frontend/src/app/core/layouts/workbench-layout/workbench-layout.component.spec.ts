@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -19,7 +19,7 @@ describe('WorkbenchLayoutComponent', () => {
     imports: [RouterTestingModule, ToastrModule.forRoot(), PipesModule, HttpClientTestingModule],
     declarations: [WorkbenchLayoutComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [AuthStorageService, i18nProviders, RbdService]
+    providers: [AuthStorageService, RbdService]
   });
 
   beforeEach(() => {

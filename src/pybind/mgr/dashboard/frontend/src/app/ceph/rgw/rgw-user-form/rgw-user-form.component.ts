@@ -2,9 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -16,6 +14,7 @@ import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
@@ -53,16 +52,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private rgwUserService: RgwUserService,
-    private bsModalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
-    this.resource = this.i18n('user');
-    this.subuserLabel = this.i18n('subuser');
-    this.s3keyLabel = this.i18n('S3 Key');
-    this.capabilityLabel = this.i18n('capability');
+    this.resource = $localize`user`;
+    this.subuserLabel = $localize`subuser`;
+    this.s3keyLabel = $localize`S3 Key`;
+    this.capabilityLabel = $localize`capability`;
     this.createForm();
   }
 
@@ -250,12 +248,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         const args = this._getUpdateArgs();
         this.submitObservables.push(this.rgwUserService.update(uid, args));
       }
-      notificationTitle = this.i18n(`Updated Object Gateway user '{{uid}}'`, { uid: uid });
+      notificationTitle = $localize`Updated Object Gateway user '${uid}'`;
     } else {
       // Add
       const args = this._getCreateArgs();
       this.submitObservables.push(this.rgwUserService.create(args));
-      notificationTitle = this.i18n(`Created Object Gateway user '{{uid}}'`, { uid: uid });
+      notificationTitle = $localize`Created Object Gateway user '${uid}'`;
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
@@ -468,19 +466,19 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   showSubuserModal(index?: number) {
     const uid = this.userForm.getValue('uid');
-    const modalRef = this.bsModalService.show(RgwUserSubuserModalComponent);
+    const modalRef = this.modalService.show(RgwUserSubuserModalComponent);
     if (_.isNumber(index)) {
       // Edit
       const subuser = this.subusers[index];
-      modalRef.content.setEditing();
-      modalRef.content.setValues(uid, subuser.id, subuser.permissions);
+      modalRef.componentInstance.setEditing();
+      modalRef.componentInstance.setValues(uid, subuser.id, subuser.permissions);
     } else {
       // Add
-      modalRef.content.setEditing(false);
-      modalRef.content.setValues(uid);
-      modalRef.content.setSubusers(this.subusers);
+      modalRef.componentInstance.setEditing(false);
+      modalRef.componentInstance.setValues(uid);
+      modalRef.componentInstance.setSubusers(this.subusers);
     }
-    modalRef.content.submitAction.subscribe((subuser: RgwUserSubuser) => {
+    modalRef.componentInstance.submitAction.subscribe((subuser: RgwUserSubuser) => {
       this.setSubuser(subuser, index);
     });
   }
@@ -490,18 +488,18 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @param {number | undefined} index The S3 key to show.
    */
   showS3KeyModal(index?: number) {
-    const modalRef = this.bsModalService.show(RgwUserS3KeyModalComponent);
+    const modalRef = this.modalService.show(RgwUserS3KeyModalComponent);
     if (_.isNumber(index)) {
       // View
       const key = this.s3Keys[index];
-      modalRef.content.setViewing();
-      modalRef.content.setValues(key.user, key.access_key, key.secret_key);
+      modalRef.componentInstance.setViewing();
+      modalRef.componentInstance.setValues(key.user, key.access_key, key.secret_key);
     } else {
       // Add
       const candidates = this._getS3KeyUserCandidates();
-      modalRef.content.setViewing(false);
-      modalRef.content.setUserCandidates(candidates);
-      modalRef.content.submitAction.subscribe((key: RgwUserS3Key) => {
+      modalRef.componentInstance.setViewing(false);
+      modalRef.componentInstance.setUserCandidates(candidates);
+      modalRef.componentInstance.submitAction.subscribe((key: RgwUserS3Key) => {
         this.setS3Key(key);
       });
     }
@@ -512,9 +510,9 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @param {number} index The Swift key to show.
    */
   showSwiftKeyModal(index: number) {
-    const modalRef = this.bsModalService.show(RgwUserSwiftKeyModalComponent);
+    const modalRef = this.modalService.show(RgwUserSwiftKeyModalComponent);
     const key = this.swiftKeys[index];
-    modalRef.content.setValues(key.user, key.secret_key);
+    modalRef.componentInstance.setValues(key.user, key.secret_key);
   }
 
   /**
@@ -522,18 +520,18 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @param {number | undefined} index The S3 key to show.
    */
   showCapabilityModal(index?: number) {
-    const modalRef = this.bsModalService.show(RgwUserCapabilityModalComponent);
+    const modalRef = this.modalService.show(RgwUserCapabilityModalComponent);
     if (_.isNumber(index)) {
       // Edit
       const cap = this.capabilities[index];
-      modalRef.content.setEditing();
-      modalRef.content.setValues(cap.type, cap.perm);
+      modalRef.componentInstance.setEditing();
+      modalRef.componentInstance.setValues(cap.type, cap.perm);
     } else {
       // Add
-      modalRef.content.setEditing(false);
-      modalRef.content.setCapabilities(this.capabilities);
+      modalRef.componentInstance.setEditing(false);
+      modalRef.componentInstance.setCapabilities(this.capabilities);
     }
-    modalRef.content.submitAction.subscribe((cap: RgwUserCapability) => {
+    modalRef.componentInstance.submitAction.subscribe((cap: RgwUserCapability) => {
       this.setCapability(cap, index);
     });
   }

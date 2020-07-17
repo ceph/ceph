@@ -30,6 +30,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
   ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
+  ${PROJECT_SOURCE_DIR}/src/common/buffer_seastar.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
@@ -99,6 +100,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/inode_backtrace.cc
   ${PROJECT_SOURCE_DIR}/src/mds/mdstypes.cc
+  ${PROJECT_SOURCE_DIR}/src/mds/cephfs_features.cc
   ${PROJECT_SOURCE_DIR}/src/mds/FSMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/FSMapUser.cc
   ${PROJECT_SOURCE_DIR}/src/mds/MDSMap.cc
@@ -172,8 +174,7 @@ add_library(crimson STATIC
   ${crimson_auth_srcs}
   ${crimson_mgr_srcs}
   ${crimson_mon_srcs}
-  ${crimson_net_srcs}
-  ${CMAKE_SOURCE_DIR}/src/common/buffer_seastar.cc)
+  ${crimson_net_srcs})
 target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")
 target_link_libraries(crimson

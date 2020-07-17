@@ -2,8 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { HostService } from '../../../../shared/api/host.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
 import { CdForm } from '../../../../shared/forms/cd-form';
@@ -25,13 +23,12 @@ export class HostFormComponent extends CdForm implements OnInit {
 
   constructor(
     private router: Router,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n,
     private hostService: HostService,
     private taskWrapper: TaskWrapperService
   ) {
     super();
-    this.resource = this.i18n('host');
+    this.resource = $localize`host`;
     this.action = this.actionLabels.CREATE;
     this.createForm();
   }

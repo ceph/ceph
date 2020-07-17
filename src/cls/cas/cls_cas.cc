@@ -107,15 +107,7 @@ static int chunk_create_or_get_ref(cls_method_context_t hctx,
     CLS_LOG(10, "inc ref oid=%s\n",
 	    op.source.oid.name.c_str());
 
-    if (!objr.get(op.source)) {
-      // we could perhaps return -EEXIST here, but instead we will
-      // behave in an idempotent fashion, since we know that it is possible
-      // for references to be leaked.  If A has a ref, tries to drop it and
-      // fails (leaks), and then later tries to take it again, we should
-      // simply succeed if we know we already have it.  This will serve to
-      // silently correct the mistake.
-      return 0;
-    }
+    objr.get(op.source);
 
     ret = chunk_set_refcount(hctx, objr);
     if (ret < 0) {
@@ -148,15 +140,7 @@ static int chunk_get_ref(cls_method_context_t hctx,
   // existing chunk; inc ref
   CLS_LOG(10, "oid=%s\n", op.source.oid.name.c_str());
   
-  if (!objr.get(op.source)) {
-    // we could perhaps return -EEXIST here, but instead we will
-    // behave in an idempotent fashion, since we know that it is possible
-    // for references to be leaked.  If A has a ref, tries to drop it and
-    // fails (leaks), and then later tries to take it again, we should
-    // simply succeed if we know we already have it.  This will serve to
-    // silently correct the mistake.
-    return 0;
-  }
+  objr.get(op.source);
 
   ret = chunk_set_refcount(hctx, objr);
   if (ret < 0) {

@@ -72,7 +72,6 @@ TEST_P(WatchStress, Stress1) {
   ASSERT_EQ("", create_one_pool_pp(pool_name, ncluster));
   IoCtx nioctx;
   ncluster.ioctx_create(pool_name.c_str(), nioctx);
-  WatchNotifyTestCtx ctx;
 
   WatcherUnwatcher *thr = new WatcherUnwatcher(pool_name);
   thr->create("watcher_unwatch");

@@ -1,9 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -27,11 +26,10 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   priorityAttrs = {};
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private authStorageService: AuthStorageService,
     private configService: ConfigurationService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     private osdService: OsdService
   ) {
     this.permissions = this.authStorageService.getPermissions();
@@ -42,28 +40,28 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     });
     this.priorityAttrs = {
       osd_max_backfills: {
-        text: this.i18n('Max Backfills'),
+        text: $localize`Max Backfills`,
         desc: '',
         patternHelpText: '',
         maxValue: undefined,
         minValue: undefined
       },
       osd_recovery_max_active: {
-        text: this.i18n('Recovery Max Active'),
+        text: $localize`Recovery Max Active`,
         desc: '',
         patternHelpText: '',
         maxValue: undefined,
         minValue: undefined
       },
       osd_recovery_max_single_start: {
-        text: this.i18n('Recovery Max Single Start'),
+        text: $localize`Recovery Max Single Start`,
         desc: '',
         patternHelpText: '',
         maxValue: undefined,
         minValue: undefined
       },
       osd_recovery_sleep: {
-        text: this.i18n('Recovery Sleep'),
+        text: $localize`Recovery Sleep`,
         desc: '',
         patternHelpText: '',
         maxValue: undefined,
@@ -104,7 +102,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     if (Object.entries(configOptionValues).length === 4) {
       this.osdRecvSpeedForm.controls.customizePriority.setValue(true);
       return callbackFn(
-        Object({ name: 'custom', text: this.i18n('Custom'), values: configOptionValues })
+        Object({ name: 'custom', text: $localize`Custom`, values: configOptionValues })
       );
     }
 
@@ -189,7 +187,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     if (this.osdRecvSpeedForm.getValue('customizePriority')) {
       const customPriority = {
         name: 'custom',
-        text: this.i18n('Custom'),
+        text: $localize`Custom`,
         values: values
       };
       this.setPriority(customPriority);
@@ -224,14 +222,14 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Updated OSD recovery speed priority '{{value}}'`, {
-            value: this.osdRecvSpeedForm.getValue('priority')
-          })
+          $localize`Updated OSD recovery speed priority '${this.osdRecvSpeedForm.getValue(
+            'priority'
+          )}'`
         );
-        this.bsModalRef.hide();
+        this.activeModal.close();
       },
       () => {
-        this.bsModalRef.hide();
+        this.activeModal.close();
       }
     );
   }

@@ -40,9 +40,7 @@ struct thick_provision_writer {
   librbd::Image *image;
   ceph::mutex lock = ceph::make_mutex("thick_provision_writer::lock");
   ceph::condition_variable cond;
-  bufferlist bl;
   uint64_t chunk_size;
-  const int block_size;
   uint64_t concurr;
   struct {
     uint64_t in_flight;
@@ -51,29 +49,28 @@ struct thick_provision_writer {
 
   // Constructor
   explicit thick_provision_writer(librbd::Image *i, librbd::ImageOptions &o)
-    : image(i),
-      block_size(512) // 512 Bytes
+    : image(i)
   {
     // If error cases occur, the code is aborted, because
     // constructor cannot return error value.
     ceph_assert(g_ceph_context != nullptr);
-    bl.append_zero(block_size);
 
     librbd::image_info_t info;
     int r = image->stat(info, sizeof(info));
     ceph_assert(r >= 0);
-    uint64_t order;
-    if (info.order == 0) {
+
+    uint64_t order = info.order;
+    if (order == 0) {
       order = g_conf().get_val<uint64_t>("rbd_default_order");
-    } else {
-      order = info.order;
-    }
-    chunk_size = (1ull << order);
-    if (image->get_stripe_unit() < chunk_size) {
-      chunk_size = image->get_stripe_unit();
     }
 
-    concurr = g_conf().get_val<uint64_t>("rbd_concurrent_management_ops");
+    auto stripe_count = std::max<uint64_t>(1U, image->get_stripe_count());
+    chunk_size = (1ull << order) * stripe_count;
+
+    concurr = std::max<uint64_t>(
+      1U, g_conf().get_val<uint64_t>("rbd_concurrent_management_ops") /
+            stripe_count);
+
     io_status.in_flight = 0;
     io_status.io_error = 0;
   }
@@ -92,7 +89,9 @@ struct thick_provision_writer {
     librbd::RBD::AioCompletion *c;
     c = new librbd::RBD::AioCompletion(this, thick_provision_writer_completion);
     int r;
-    r = image->aio_writesame(write_offset, chunk_size, bl, c, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+    r = image->aio_write_zeroes(write_offset, chunk_size, c,
+                                RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
+                                LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
     if (r < 0) {
       std::lock_guard l{lock};
       io_status.io_error = r;

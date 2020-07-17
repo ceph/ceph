@@ -1,2 +1,4 @@
+# Don't verify os + flavor + sha1
+verify_ceph_hash: false
 tasks:
 - cephadm:

@@ -99,7 +99,7 @@ public:
   void claim_op_out_data(std::vector<OSDOp>& o) {
     ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
-      ops[i].outdata.claim(o[i].outdata);
+      ops[i].outdata = std::move(o[i].outdata);
     }
   }
   void claim_ops(std::vector<OSDOp>& o) {

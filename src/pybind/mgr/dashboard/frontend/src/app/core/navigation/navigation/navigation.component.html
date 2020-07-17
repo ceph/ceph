@@ -1,4 +1,5 @@
 <cd-pwd-expiration-notification></cd-pwd-expiration-notification>
+<cd-telemetry-notification></cd-telemetry-notification>
 <cd-notifications-sidebar></cd-notifications-sidebar>
 
 <div class="cd-navbar-top">
@@ -25,8 +26,7 @@
       </span>
     </button>
 
-    <div class="collapse navbar-collapse"
-         [collapse]="isCollapsed">
+    <div class="collapse navbar-collapse">
       <ul class="nav navbar-nav cd-navbar-utility my-2 my-md-0">
         <ng-container *ngTemplateOutlet="cd_utilities"> </ng-container>
       </ul>
@@ -70,7 +70,7 @@
   </li>
 </ng-template>
 
-<ng-template #cd_menu >
+<ng-template #cd_menu>
   <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
     <!-- Dashboard -->
     <li routerLinkActive="active"
@@ -96,8 +96,7 @@
         <ng-container i18n>Cluster</ng-container>
       </a>
       <ul class="list-unstyled"
-          [collapse]="displayedSubMenu !== 'cluster'"
-          [isAnimated]="true">
+          [ngbCollapse]="displayedSubMenu !== 'cluster'">
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_hosts"
             *ngIf="permissions.hosts.read">
@@ -187,8 +186,7 @@
       </a>
 
       <ul class="list-unstyled"
-          [collapse]="displayedSubMenu !== 'block'"
-          [isAnimated]="true">
+          [ngbCollapse]="displayedSubMenu !== 'block'">
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_block_images"
             *ngIf="permissions.rbdImage.read && enabledFeature.rbd">
@@ -246,8 +244,7 @@
         <ng-container i18n>Object Gateway</ng-container>
       </a>
       <ul class="list-unstyled"
-          [collapse]="displayedSubMenu !== 'rgw'"
-          [isAnimated]="true">
+          [ngbCollapse]="displayedSubMenu !== 'rgw'">
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_rgw_daemons">
           <a i18n

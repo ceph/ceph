@@ -83,10 +83,6 @@ LBAInternalNode::insert_ret LBAInternalNode::insert(
 	  insert_ertr::make_ready_future<LBANodeRef>(std::move(extent));
       }).safe_then([&cache, &t, laddr, val=std::move(val)](
 		     LBANodeRef extent) mutable {
-	if (extent->depth == 0) {
-	  auto mut_extent = cache.duplicate_for_write(t, extent);
-	  extent = mut_extent->cast<LBANode>();
-	}
 	return extent->insert(cache, t, laddr, val);
       });
 }
@@ -105,26 +101,18 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
     get_paddr()
   ).safe_then([this, &cache, &t, laddr](LBANodeRef extent) {
     if (extent->at_min_capacity()) {
-      auto mut_this = cache.duplicate_for_write(
-	t, this)->cast<LBAInternalNode>();
-      return mut_this->merge_entry(
+      return merge_entry(
 	cache,
 	t,
 	laddr,
-	mut_this->get_containing_child(laddr),
+	get_containing_child(laddr),
 	extent);
     } else {
       return merge_ertr::make_ready_future<LBANodeRef>(
 	std::move(extent));
     }
   }).safe_then([&cache, &t, laddr, f=std::move(f)](LBANodeRef extent) mutable {
-    if (extent->depth == 0) {
-      auto mut_extent = cache.duplicate_for_write(
-	t, extent)->cast<LBANode>();
-      return mut_extent->mutate_mapping(cache, t, laddr, std::move(f));
-    } else {
-      return extent->mutate_mapping(cache, t, laddr, std::move(f));
-    }
+    return extent->mutate_mapping(cache, t, laddr, std::move(f));
   });
 }
 
@@ -203,19 +191,24 @@ LBAInternalNode::split_entry(
   Cache &c, Transaction &t, laddr_t addr,
   internal_iterator_t iter, LBANodeRef entry)
 {
+  if (!is_pending()) {
+    auto mut = c.duplicate_for_write(t, this)->cast<LBAInternalNode>();
+    auto mut_iter = mut->iter_idx(iter->get_offset());
+    return mut->split_entry(c, t, addr, mut_iter, entry);
+  }
+
   ceph_assert(!at_max_capacity());
   auto [left, right, pivot] = entry->make_split_children(c, t);
 
-  journal_remove(iter->get_key());
-  journal_insert(iter->get_key(), left->get_paddr());
-  journal_insert(pivot, right->get_paddr());
-
-  copy_from_local(iter + 1, iter, end());
-  iter->set_val(maybe_generate_relative(left->get_paddr()));
-  iter++;
-  iter->set_key(pivot);
-  iter->set_val(maybe_generate_relative(right->get_paddr()));
-  set_size(get_size() + 1);
+  journal_update(
+    iter,
+    maybe_generate_relative(left->get_paddr()),
+    maybe_get_delta_buffer());
+  journal_insert(
+    iter + 1,
+    pivot,
+    maybe_generate_relative(right->get_paddr()),
+    maybe_get_delta_buffer());
 
   c.retire_extent(t, entry);
 
@@ -230,24 +223,17 @@ LBAInternalNode::split_entry(
   );
 }
 
-void LBAInternalNode::journal_remove(
-  laddr_t to_remove)
-{
-  // TODO
-}
-
-void LBAInternalNode::journal_insert(
-  laddr_t to_insert,
-  paddr_t val)
-{
-  // TODO
-}
-
 LBAInternalNode::merge_ret
 LBAInternalNode::merge_entry(
   Cache &c, Transaction &t, laddr_t addr,
   internal_iterator_t iter, LBANodeRef entry)
 {
+  if (!is_pending()) {
+    auto mut = c.duplicate_for_write(t, this)->cast<LBAInternalNode>();
+    auto mut_iter = mut->iter_idx(iter->get_offset());
+    return mut->merge_entry(c, t, addr, mut_iter, entry);
+  }
+
   logger().debug(
     "LBAInternalNode: merge_entry: {}, {}",
     *this,
@@ -272,13 +258,11 @@ LBAInternalNode::merge_entry(
 	t,
 	r);
 
-      journal_remove(riter->get_key());
-      journal_remove(liter->get_key());
-      journal_insert(liter->get_key(), replacement->get_paddr());
-
-      liter->set_val(maybe_generate_relative(replacement->get_paddr()));
-      copy_from_local(riter, riter + 1, end());
-      set_size(get_size() - 1);
+      journal_update(
+	liter,
+	maybe_generate_relative(replacement->get_paddr()),
+	maybe_get_delta_buffer());
+      journal_remove(riter, maybe_get_delta_buffer());
 
       c.retire_extent(t, l);
       c.retire_extent(t, r);
@@ -295,16 +279,15 @@ LBAInternalNode::merge_entry(
 	  r,
 	  !donor_is_left);
 
-      journal_remove(liter->get_key());
-      journal_remove(riter->get_key());
-      journal_insert(liter->get_key(), replacement_l->get_paddr());
-      journal_insert(pivot, replacement_r->get_paddr());
-
-      liter->set_val(
-	maybe_generate_relative(replacement_l->get_paddr()));
-      riter->set_key(pivot);
-      riter->set_val(
-	maybe_generate_relative(replacement_r->get_paddr()));
+      journal_update(
+	liter,
+	maybe_generate_relative(replacement_l->get_paddr()),
+	maybe_get_delta_buffer());
+      journal_replace(
+	riter,
+	pivot,
+	maybe_generate_relative(replacement_r->get_paddr()),
+	maybe_get_delta_buffer());
 
       c.retire_extent(t, l);
       c.retire_extent(t, r);
@@ -360,30 +343,35 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
 
 LBALeafNode::insert_ret LBALeafNode::insert(
   Cache &cache,
-  Transaction &transaction,
+  Transaction &t,
   laddr_t laddr,
   lba_map_val_t val)
 {
   ceph_assert(!at_max_capacity());
-  auto insert_pt = upper_bound(laddr);
-  if (insert_pt != end()) {
-    copy_from_local(insert_pt + 1, insert_pt, end());
+
+  if (!is_pending()) {
+    return cache.duplicate_for_write(t, this)->cast<LBALeafNode>()->insert(
+      cache,
+      t,
+      laddr,
+      val);
   }
-  set_size(get_size() + 1);
-  insert_pt.set_key(laddr);
+
   val.paddr = maybe_generate_relative(val.paddr);
   logger().debug(
     "LBALeafNode::insert: inserting {}~{} -> {}",
     laddr,
     val.len,
     val.paddr);
-  insert_pt.set_val(val);
+
+  auto insert_pt = lower_bound(laddr);
+  journal_insert(insert_pt, laddr, val, maybe_get_delta_buffer());
+
   logger().debug(
     "LBALeafNode::insert: inserted {}~{} -> {}",
     insert_pt.get_key(),
     insert_pt.get_val().len,
     insert_pt.get_val().paddr);
-  journal_insertion(laddr, val);
   return insert_ret(
     insert_ertr::ready_future_marker{},
     std::make_unique<BtreeLBAPin>(
@@ -398,6 +386,15 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
   laddr_t laddr,
   mutate_func_t &&f)
 {
+  if (!is_pending()) {
+    return cache.duplicate_for_write(transaction, this)->cast<LBALeafNode>(
+    )->mutate_mapping(
+      cache,
+      transaction,
+      laddr,
+      std::move(f));
+  }
+
   ceph_assert(!at_min_capacity());
   auto mutation_pt = find(laddr);
   if (mutation_pt == end()) {
@@ -409,39 +406,16 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
 
   auto mutated = f(mutation_pt.get_val());
   if (mutated) {
-    mutation_pt.set_val(*mutated);
-    journal_mutated(laddr, *mutated);
+    journal_update(mutation_pt, *mutated, maybe_get_delta_buffer());
     return mutate_mapping_ret(
       mutate_mapping_ertr::ready_future_marker{},
       mutated);
   } else {
-    journal_removal(laddr);
-    copy_from_local(mutation_pt, mutation_pt + 1, end());
-    set_size(get_size() - 1);
+    journal_remove(mutation_pt, maybe_get_delta_buffer());
     return mutate_mapping_ret(
       mutate_mapping_ertr::ready_future_marker{},
       mutated);
   }
-}
-
-void LBALeafNode::journal_mutated(
-  laddr_t laddr,
-  lba_map_val_t val)
-{
-  // TODO
-}
-
-void LBALeafNode::journal_insertion(
-  laddr_t laddr,
-  lba_map_val_t val)
-{
-  // TODO
-}
-
-void LBALeafNode::journal_removal(
-  laddr_t laddr)
-{
-  // TODO
 }
 
 LBALeafNode::find_hole_ret LBALeafNode::find_hole(

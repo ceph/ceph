@@ -64,7 +64,8 @@ Synopsis
 |                           [--dashboard-crt DASHBOARD_CRT]
 |                           [--ssh-config SSH_CONFIG]
 |                           [--ssh-private-key SSH_PRIVATE_KEY]
-|                           [--ssh-public-key SSH_PUBLIC_KEY] [--skip-mon-network]
+|                           [--ssh-public-key SSH_PUBLIC_KEY] 
+|                           [--ssh-user SSH_USER] [--skip-mon-network]
 |                           [--skip-dashboard] [--dashboard-password-noupdate]
 |                           [--no-minimize-config] [--skip-ping-check]
 |                           [--skip-pull] [--skip-firewalld] [--allow-overwrite]
@@ -206,6 +207,7 @@ Arguments:
 * [--ssh-config SSH_CONFIG] SSH config
 * [--ssh-private-key SSH_PRIVATE_KEY] SSH private key
 * [--ssh-public-key SSH_PUBLIC_KEY] SSH public key
+* [--ssh-user SSH_USER]           set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users'
 * [--skip-mon-network]            set mon public_network based on bootstrap mon ip
 * [--skip-dashboard]              do not enable the Ceph Dashboard
 * [--dashboard-password-noupdate] stop forced dashboard password change

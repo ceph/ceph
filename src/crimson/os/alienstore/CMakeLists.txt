@@ -24,6 +24,7 @@ list(APPEND crimson_alien_srcs
   ${PROJECT_SOURCE_DIR}/src/common/TrackedOp.cc
   ${PROJECT_SOURCE_DIR}/src/common/WorkQueue.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
@@ -42,16 +43,17 @@ list(APPEND crimson_alien_srcs
 
 add_library(crimson-alienstore STATIC ${crimson_alien_srcs}
   $<TARGET_OBJECTS:compressor_objs>
-  $<TARGET_OBJECTS:crush_objs>
   $<TARGET_OBJECTS:common_prioritycache_obj>)
 
 target_compile_definitions(crimson-alienstore PRIVATE -DWITH_SEASTAR -DWITH_ALIEN)
 target_include_directories(crimson-alienstore PRIVATE
   $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(crimson-alienstore fmt::fmt)
-target_link_libraries(crimson-alienstore kv)
-target_link_libraries(crimson-alienstore heap_profiler)
-target_link_libraries(crimson-alienstore ${BLKID_LIBRARIES})
-target_link_libraries(crimson-alienstore ${UDEV_LIBRARIES})
-target_link_libraries(crimson-alienstore crimson)
-target_link_libraries(crimson-alienstore blk)
+target_link_libraries(crimson-alienstore
+  fmt::fmt
+  kv
+  heap_profiler
+  ${BLKID_LIBRARIES}
+  ${UDEV_LIBRARIES}
+  crimson-os
+  crimson
+  blk)

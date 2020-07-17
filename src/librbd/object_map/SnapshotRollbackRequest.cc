@@ -104,7 +104,7 @@ void SnapshotRollbackRequest::send_write_map() {
   m_state = STATE_WRITE_MAP;
 
   librados::ObjectWriteOperation op;
-  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   op.write_full(m_read_bl);
 
   librados::AioCompletion *rados_completion = create_callback_completion();

@@ -2,8 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
-import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
-import { CollapseModule } from 'ngx-bootstrap/collapse';
+import { NgbCollapseModule, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { AppRoutingModule } from '../../app-routing.module';
@@ -21,7 +20,7 @@ import { NotificationsComponent } from './notifications/notifications.component'
   imports: [
     CommonModule,
     AuthModule,
-    CollapseModule.forRoot(),
+    NgbCollapseModule,
     NgbDropdownModule,
     AppRoutingModule,
     SharedModule,

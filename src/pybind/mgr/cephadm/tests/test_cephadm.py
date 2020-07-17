@@ -1,6 +1,7 @@
 import datetime
 import json
 from contextlib import contextmanager
+from unittest.mock import ANY
 
 import pytest
 
@@ -22,8 +23,7 @@ from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, mon_command, match_glob, with_host
-from cephadm.module import CephadmOrchestrator
-
+from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
 
 """
 TODOs:
@@ -92,12 +92,13 @@ class TestCephadm(object):
 
             c = cephadm_module.list_daemons()
 
-            def remove_id(dd):
+            def remove_id_events(dd):
                 out = dd.to_json()
                 del out['daemon_id']
+                del out['events']
                 return out
 
-            assert [remove_id(dd) for dd in wait(cephadm_module, c)] == [
+            assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
                 {
                     'daemon_type': 'mds',
                     'hostname': 'test',
@@ -111,7 +112,7 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
             c = cephadm_module.describe_service()
-            out = [o.to_json() for o in wait(cephadm_module, c)]
+            out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
             expected = [
                 {
                     'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
@@ -126,14 +127,19 @@ class TestCephadm(object):
                         'count': 1,
                         'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
                     },
-                    'rgw_realm': 'r',
-                    'rgw_zone': 'z',
+                    'spec': {
+                        'rgw_realm': 'r',
+                        'rgw_zone': 'z',
+                    },
                     'service_id': 'r.z',
                     'service_name': 'rgw.r.z',
                     'service_type': 'rgw',
-                    'status': {'running': 0, 'size': 1}
+                    'status': {'running': 0, 'size': 1},
                 }
             ]
+            for o in out:
+                if 'events' in o:
+                    del o['events']  # delete it, as it contains a timestamp
             assert out == expected
             assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
 
@@ -158,7 +164,9 @@ class TestCephadm(object):
             )
         ])
     ))
-    def test_daemon_action(self, cephadm_module):
+    #@mock.patch("mgr_module.MgrModule._ceph_get")
+    @mock.patch("ceph_module.BaseMgrModule._ceph_get")
+    def test_daemon_action(self, _ceph_get, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
@@ -169,6 +177,11 @@ class TestCephadm(object):
             for what in ('start', 'stop', 'restart'):
                 c = cephadm_module.daemon_action(what, 'rgw', 'myrgw.foobar')
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
+
+            now = datetime.datetime.utcnow().strftime(CEPH_DATEFMT)
+            _ceph_get.return_value = {'modified': now}
+
+            cephadm_module._check_daemons()
 
             assert_rm_daemon(cephadm_module, 'rgw.myrgw.foobar', 'test')
 
@@ -278,7 +291,7 @@ class TestCephadm(object):
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'prepare', '--bluestore', '--data', '/dev/sdb', '--no-systemd'],
-                env_vars=[], error_ok=True, stdin='{"config": "", "keyring": ""}')
+                env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with('test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
 
 
@@ -330,7 +343,7 @@ class TestCephadm(object):
             dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
-            out = cephadm_module.osd_service.driveselection_to_ceph_volume(dg, ds, [], preview)
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
             assert out in exp_command
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
@@ -536,6 +549,36 @@ class TestCephadm(object):
 
             assert_rm_service(cephadm_module, spec.service_name())
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
+    def test_daemon_ok_to_stop(self, ok_to_stop, cephadm_module: CephadmOrchestrator):
+        spec = ServiceSpec(
+            'mds',
+            service_id='fsname',
+            placement=PlacementSpec(hosts=['host1', 'host2'])
+        )
+        with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
+            c = cephadm_module.apply_mds(spec)
+            out = wait(cephadm_module, c)
+            match_glob(out, "Scheduled mds.fsname update...")
+            cephadm_module._apply_all_services()
+
+            [daemon] = cephadm_module.cache.daemons['host1'].keys()
+
+            spec.placement.set_hosts(['host2'])
+
+            ok_to_stop.side_effect = False
+
+            c = cephadm_module.apply_mds(spec)
+            out = wait(cephadm_module, c)
+            match_glob(out, "Scheduled mds.fsname update...")
+            cephadm_module._apply_all_services()
+
+            ok_to_stop.assert_called_with([daemon[4:]])
+
+            assert_rm_daemon(cephadm_module, spec.service_name(), 'host1')  # verifies ok-to-stop
+            assert_rm_daemon(cephadm_module, spec.service_name(), 'host2')
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
@@ -546,7 +589,7 @@ class TestCephadm(object):
             _get_connection.side_effect = HostNotFound
             code, out, err = cephadm_module.check_host('test')
             assert out == ''
-            assert 'Failed to connect to test (test)' in err
+            assert "Host 'test' not found" in err
 
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test', status='Offline').to_json()
@@ -597,3 +640,25 @@ class TestCephadm(object):
                     # code will blow up here triggering the BOOM!
                     code, out, err = cephadm_module.check_host('test')
                     assert err is None
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    @mock.patch("remoto.process.check")
+    def test_etc_ceph(self, _check, _get_connection, cephadm_module: CephadmOrchestrator):
+        _get_connection.return_value = mock.Mock(), mock.Mock()
+        _check.return_value = '{}', '', 0
+
+        with with_host(cephadm_module, 'test'):
+            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.set_module_option('manage_etc_ceph_ceph_conf', True)
+            cephadm_module.config_notify()
+            assert cephadm_module.manage_etc_ceph_ceph_conf == True
+
+            cephadm_module._refresh_hosts_and_daemons()
+            _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
+
+            assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+
+            cephadm_module.notify('mon_map', mock.MagicMock())
+            assert cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')

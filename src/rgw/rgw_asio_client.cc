@@ -47,7 +47,7 @@ int ClientIO::init_env(CephContext *cct)
       continue;
     }
 
-    static const boost::string_ref HTTP_{"HTTP_"};
+    static const std::string_view HTTP_{"HTTP_"};
 
     char buf[name.size() + HTTP_.size() + 1];
     auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
@@ -161,8 +161,8 @@ size_t ClientIO::complete_header()
   return sent;
 }
 
-size_t ClientIO::send_header(const boost::string_ref& name,
-                             const boost::string_ref& value)
+size_t ClientIO::send_header(const std::string_view& name,
+                             const std::string_view& value)
 {
   static constexpr char HEADER_SEP[] = ": ";
   static constexpr char HEADER_END[] = "\r\n";

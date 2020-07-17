@@ -11,34 +11,33 @@ import orchestrator
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmService
-
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 
 logger = logging.getLogger(__name__)
 
 
 class OSDService(CephadmService):
-    def create(self, drive_group: DriveGroupSpec) -> str:
+    TYPE = 'osd'
+
+    def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
         logger.debug(f"Processing DriveGroup {drive_group}")
         ret = []
-        drive_group.osd_id_claims = self.find_destroyed_osds()
-        logger.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
+        osd_id_claims = self.find_destroyed_osds()
+        logger.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims}")
         for host, drive_selection in self.prepare_drivegroup(drive_group):
             logger.info('Applying %s on host %s...' % (drive_group.service_id, host))
-            cmd = self.driveselection_to_ceph_volume(drive_group, drive_selection,
-                                                     drive_group.osd_id_claims.get(host, []))
+            cmd = self.driveselection_to_ceph_volume(drive_selection,
+                                                     osd_id_claims.get(host, []))
             if not cmd:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
                 continue
-            # env_vars = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
-            # disable this until https://github.com/ceph/ceph/pull/34835 is merged
-            env_vars: List[str] = []
+            env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = self.create_single_host(
-                host, cmd, replace_osd_ids=drive_group.osd_id_claims.get(host, []), env_vars=env_vars
+                host, cmd, replace_osd_ids=osd_id_claims.get(host, []), env_vars=env_vars
             )
             ret.append(ret_msg)
         return ", ".join(ret)
-        
+
     def create_single_host(self, host: str, cmd: str, replace_osd_ids=None, env_vars: Optional[List[str]] = None) -> str:
         out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
@@ -85,8 +84,13 @@ class OSDService(CephadmService):
                     continue
 
                 created.append(osd_id)
+                daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
+                    daemon_id=osd_id,
+                    host=host,
+                    daemon_type='osd',
+                )
                 self.mgr._create_daemon(
-                    'osd', osd_id, host,
+                    daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
         if created:
@@ -120,12 +124,12 @@ class OSDService(CephadmService):
             host_ds_map.append((host, drive_selection))
         return host_ds_map
 
-    def driveselection_to_ceph_volume(self, drive_group: DriveGroupSpec,
+    def driveselection_to_ceph_volume(self,
                                       drive_selection: DriveSelection,
                                       osd_id_claims: Optional[List[str]] = None,
                                       preview: bool = False) -> Optional[str]:
-        logger.debug(f"Translating DriveGroup <{drive_group}> to ceph-volume command")
-        cmd: Optional[str] = translate.to_ceph_volume(drive_group, drive_selection,
+        logger.debug(f"Translating DriveGroup <{drive_selection.spec}> to ceph-volume command")
+        cmd: Optional[str] = translate.to_ceph_volume(drive_selection,
                                                       osd_id_claims, preview=preview).run()
         logger.debug(f"Resulting ceph-volume cmd: {cmd}")
         return cmd
@@ -161,7 +165,7 @@ class OSDService(CephadmService):
         for osdspec in osdspecs:
 
             # populate osd_id_claims
-            osdspec.osd_id_claims = self.find_destroyed_osds()
+            osd_id_claims = self.find_destroyed_osds()
 
             # prepare driveselection
             for host, ds in self.prepare_drivegroup(osdspec):
@@ -169,9 +173,8 @@ class OSDService(CephadmService):
                     continue
 
                 # driveselection for host
-                cmd = self.driveselection_to_ceph_volume(osdspec,
-                                                         ds,
-                                                         osdspec.osd_id_claims.get(host, []),
+                cmd = self.driveselection_to_ceph_volume(ds,
+                                                         osd_id_claims.get(host, []),
                                                          preview=True)
                 if not cmd:
                     logger.debug("No data_devices, skipping DriveGroup: {}".format(

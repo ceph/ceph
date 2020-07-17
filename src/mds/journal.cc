@@ -420,7 +420,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  DECODE_START(8, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -432,40 +432,17 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
   if (inode.is_dir()) {
     decode(dirfragtree, bl);
     decode(snapbl, bl);
-    if ((struct_v == 2) || (struct_v == 3)) {
-      bool dir_layout_exists;
-      decode(dir_layout_exists, bl);
-      if (dir_layout_exists) {
-	__u8 dir_struct_v;
-	decode(dir_struct_v, bl); // default_file_layout version
-	decode(inode.layout, bl); // and actual layout, that we care about
-      }
-    }
   }
-  if (struct_v >= 6) {
-    decode(state, bl);
-  } else {
-    bool dirty;
-    decode(dirty, bl);
-    state = dirty ? EMetaBlob::fullbit::STATE_DIRTY : 0;
-  }
-
-  if (struct_v >= 3) {
-    bool old_inodes_present;
-    decode(old_inodes_present, bl);
-    if (old_inodes_present) {
-      decode(old_inodes, bl);
-    }
+  decode(state, bl);
+  bool old_inodes_present;
+  decode(old_inodes_present, bl);
+  if (old_inodes_present) {
+    decode(old_inodes, bl);
   }
   if (!inode.is_dir()) {
-    if (struct_v >= 7)
-      decode(snapbl, bl);
+    decode(snapbl, bl);
   }
-  if (struct_v >= 8)
-    decode(oldest_snap, bl);
-  else
-    oldest_snap = CEPH_NOSNAP;
-
+  decode(oldest_snap, bl);
   DECODE_FINISH(bl);
 }
 
@@ -526,8 +503,14 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 {
   in->inode = inode;
   in->xattrs = xattrs;
-  in->maybe_export_pin();
   if (in->inode.is_dir()) {
+    if (is_export_ephemeral_random()) {
+      dout(15) << "random ephemeral pin on " << *in << dendl;
+      in->set_ephemeral_rand(true);
+      in->maybe_ephemeral_rand(true);
+    }
+    in->maybe_ephemeral_dist();
+    in->maybe_export_pin();
     if (!(in->dirfragtree == dirfragtree)) {
       dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
 	       << dirfragtree << " on " << *in << dendl;
@@ -1135,6 +1118,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   set<CInode*> linked;
 
   // walk through my dirs (in order!)
+  int count = 0;
   for (const auto& lp : lump_order) {
     dout(10) << "EMetaBlob.replay dir " << lp << dendl;
     dirlump &lump = lump_map[lp];
@@ -1286,6 +1270,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       else
 	in->state_clear(CInode::STATE_AUTH);
       ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
+
+      if (!(++count % 1000))
+        mds->heartbeat_reset();
     }
 
     // remote dentries
@@ -1317,6 +1304,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       }
       if (lump.is_importing())
 	dn->state_set(CDentry::STATE_AUTH);
+
+      if (!(++count % 1000))
+        mds->heartbeat_reset();
     }
 
     // null dentries
@@ -1352,6 +1342,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
       // Make null dentries the first things we trim
       dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
+
+      if (!(++count % 1000))
+        mds->heartbeat_reset();
     }
   }
 
@@ -1382,6 +1375,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    slaveup->olddirs.insert(dir->inode);
 	  else
 	    dir->state_set(CDir::STATE_AUTH);
+
+          if (!(++count % 1000))
+            mds->heartbeat_reset();
 	}
       }
 
@@ -1411,6 +1407,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dout(10) << " creating new rename import bound " << *dir << dendl;
 	dir->state_clear(CDir::STATE_AUTH);
 	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
+
+        if (!(++count % 1000))
+          mds->heartbeat_reset();
       }
     }
 
@@ -1421,6 +1420,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	continue;
       ceph_assert(p->first->is_dir());
       mds->mdcache->adjust_subtree_after_rename(p->first, p->second, false);
+
+      if (!(++count % 1000))
+        mds->heartbeat_reset();
     }
   }
 
@@ -1436,6 +1438,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  in->snaprealm->adjust_parent();
       } else
 	mds->mdcache->remove_inode_recursive(in);
+
+      if (!(++count % 1000))
+        mds->heartbeat_reset();
     }
   }
 
@@ -1446,6 +1451,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     MDSTableClient *client = mds->get_table_client(p.first);
     if (client)
       client->got_journaled_agree(p.second, logseg);
+
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
 
   // opened ino?
@@ -1532,6 +1540,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     CInode *in = mds->mdcache->get_inode(ino);
     ceph_assert(in);
     mds->mdcache->add_recovered_truncate(in, logseg);
+
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
     LogSegment *ls = mds->mdlog->get_segment(p.second);
@@ -1540,6 +1551,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       ceph_assert(in);
       mds->mdcache->remove_recovered_truncate(in, ls);
     }
+
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
 
   // destroyed inodes
@@ -1559,6 +1573,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       } else {
 	dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
       }
+
+      if (!(++count % 1000))
+        mds->heartbeat_reset();
     }
     mds->mdcache->open_file_table.note_destroyed_inos(logseg->seq, destroyed_inodes);
   }
@@ -1578,6 +1595,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  session->trim_completed_requests(p.second);
       }
     }
+
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
 
   // client flushes
@@ -1591,6 +1611,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  session->trim_completed_flushes(p.second);
       }
     }
+
+    if (!(++count % 1000))
+      mds->heartbeat_reset();
   }
 
   // update segment

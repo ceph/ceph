@@ -17,6 +17,13 @@ awscli_dir=${HOME}/awscli_temp
 export PATH=${PATH}:${awscli_dir}
 
 rgw_host=$(hostname --fqdn)
+if echo "$rgw_host" | grep -q '\.' ; then
+    :
+else
+    host_domain=".front.sepia.ceph.com"
+    echo "WARNING: rgw hostname -- $rgw_host -- does not appear to be fully qualified; PUNTING and appending $host_domain"
+    rgw_host="${rgw_host}${host_domain}"
+fi
 rgw_port=80
 
 echo "Fully Qualified Domain Name: $rgw_host"

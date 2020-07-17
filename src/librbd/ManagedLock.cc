@@ -286,8 +286,8 @@ int ManagedLock<I>::assert_header_locked() {
   {
     std::lock_guard locker{m_lock};
     rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME,
-                                    (m_mode == EXCLUSIVE ? LOCK_EXCLUSIVE :
-                                                           LOCK_SHARED),
+                                    (m_mode == EXCLUSIVE ? ClsLockType::EXCLUSIVE :
+                                                           ClsLockType::SHARED),
                                     m_cookie,
                                     managed_lock::util::get_watcher_lock_tag());
   }

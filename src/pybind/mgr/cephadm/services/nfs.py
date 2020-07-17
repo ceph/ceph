@@ -1,7 +1,7 @@
 import logging
 
 import rados
-from typing import Dict, Optional, Tuple, Any, List, cast
+from typing import Dict, Optional, Tuple, Any, List, Set, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
 
@@ -12,13 +12,19 @@ from orchestrator import DaemonDescription
 import cephadm
 from .. import utils
 
-from .cephadmservice import CephadmService
+from .cephadmservice import CephadmService, CephadmDaemonSpec
+
 logger = logging.getLogger(__name__)
 
 
 class NFSService(CephadmService):
-    def _generate_nfs_config(self, daemon_type, daemon_id, host):
-        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
+    TYPE = 'nfs'
+
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_type = daemon_spec.daemon_type
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+
         deps = []  # type: List[str]
 
         # find the matching NFSServiceSpec
@@ -66,22 +72,28 @@ class NFSService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_id, host, spec):
+    def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]):
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+        spec = daemon_spec.spec
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
-        return self.mgr._create_daemon('nfs', daemon_id, host)
+        return self.mgr._create_daemon(daemon_spec)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         
         def get_set_cmd_dicts(out: str) -> List[dict]:
-            locations: List[str] = []
+            locations: Set[str] = set()
             for dd in daemon_descrs:
                 spec = cast(NFSServiceSpec,
                             self.mgr.spec_store.specs.get(dd.service_name(), None))
                 if not spec or not spec.service_id:
                     logger.warning('No ServiceSpec or service_id found for %s', dd)
                     continue
-                locations.append('{}:{}/{}'.format(spec.service_id, spec.pool, spec.namespace))
+                location = '{}:{}'.format(spec.service_id, spec.pool)
+                if spec.namespace:
+                    location = '{}/{}'.format(location, spec.namespace)
+                locations.add(location)
             new_value = ','.join(locations)
             if new_value and new_value != out:
                 return [{'prefix': 'dashboard set-ganesha-clusters-rados-pool-namespace',

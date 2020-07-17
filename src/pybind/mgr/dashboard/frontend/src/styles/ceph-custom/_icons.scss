@@ -1,0 +1,16 @@
+/* Icons */
+.ceph-icon {
+  background: url('assets/Ceph_Logo_Stacked_RGB_White_120411_fa_256x256.png');
+}
+
+.prometheus-icon {
+  background: url('assets/prometheus_logo.svg');
+}
+
+.custom-icon {
+  background-clip: padding-box;
+  background-repeat: no-repeat;
+  background-size: contain;
+  margin-right: 8px;
+  padding: 10px;
+}

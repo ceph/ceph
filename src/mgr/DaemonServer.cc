@@ -548,12 +548,16 @@ bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
   return true;
 }
 
-void DaemonServer::update_task_status(DaemonKey key, const ref_t<MMgrReport>& m) {
+void DaemonServer::update_task_status(
+  DaemonKey key,
+  const std::map<std::string,std::string>& task_status)
+{
   dout(10) << "got task status from " << key << dendl;
 
-  auto p = pending_service_map.get_daemon(key.type, key.name);
-  if (!map_compare(p.first->task_status, *m->task_status)) {
-    p.first->task_status = *m->task_status;
+  [[maybe_unused]] auto [daemon, added] =
+    pending_service_map.get_daemon(key.type, key.name);
+  if (daemon->task_status != task_status) {
+    daemon->task_status = task_status;
     pending_service_map_dirty = pending_service_map.epoch;
   }
 }
@@ -652,7 +656,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
       }
       // update task status
       if (m->task_status) {
-        update_task_status(key, m);
+        update_task_status(key, *m->task_status);
         daemon->last_service_beacon = now;
       }
       if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
@@ -1855,6 +1859,12 @@ bool DaemonServer::_handle_command(
     int r = 0;
     string name;
     if (cmd_getval(cmdctx->cmdmap, "key", name)) {
+      // handle special options
+      if (name == "fsid") {
+       cmdctx->odata.append(stringify(monc->get_fsid()) + "\n");
+       cmdctx->reply(r, ss);
+       return true;
+      }
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
 	  !p->second.empty()) {

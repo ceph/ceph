@@ -1,17 +1,17 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 :host {
-  position: fixed;
-  top: $navbar-height + 10px;
   bottom: 10px;
-  right: -350px;
-
-  width: 350px;
   max-width: 90vw;
-
-  z-index: 9;
+  position: fixed;
+  right: -350px;
+  top: bd.$navbar-height + 10px;
 
   transition: all 0.6s;
+
+  width: 350px;
+
+  z-index: 9;
 }
 
 :host.active {
@@ -27,14 +27,14 @@ ngx-simplebar {
 }
 
 .separator {
+  background-color: bd.$color-popover-seperator-bg;
+  color: bd.$color-popover-seperator-text;
+  font-size: 1rem;
   padding: 5px 12px;
-  color: $color-popover-seperator-text;
-  background-color: $color-popover-seperator-bg;
-  font-size: 12px;
 }
 
 .btn-link .fa-trash-o {
-  color: $color-black;
+  color: bd.$color-black;
 }
 
 table {

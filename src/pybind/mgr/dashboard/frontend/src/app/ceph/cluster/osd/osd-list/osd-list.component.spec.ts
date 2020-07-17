@@ -7,15 +7,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -27,6 +22,7 @@ import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { CephModule } from '../../../ceph.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
@@ -103,12 +99,10 @@ describe('OsdListComponent', () => {
       CoreModule,
       RouterTestingModule
     ],
-    declarations: [],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
-      BsModalService,
-      i18nProviders
+      ModalService
     ]
   });
 
@@ -116,7 +110,7 @@ describe('OsdListComponent', () => {
     fixture = TestBed.createComponent(OsdListComponent);
     component = fixture.componentInstance;
     osdService = TestBed.inject(OsdService);
-    modalServiceShowSpy = spyOn(TestBed.inject(BsModalService), 'show').and.stub();
+    modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.stub();
   });
 
   it('should create', () => {
@@ -430,7 +424,7 @@ describe('OsdListComponent', () => {
     ): void => {
       const osdServiceSpy = spyOn(osdService, osdServiceMethodName).and.callFake(() => EMPTY);
       openActionModal(actionName);
-      const initialState = modalServiceShowSpy.calls.first().args[1].initialState;
+      const initialState = modalServiceShowSpy.calls.first().args[1];
       const submit = initialState.onSubmit || initialState.submitAction;
       submit.call(component);
 

@@ -153,6 +153,10 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
 
+  export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
+  export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
+  export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
   bottom_lru.lru_set_midpoint(0);
@@ -213,10 +217,36 @@ MDCache::~MDCache()
 
 void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
+  dout(20) << "config changes: " << changed << dendl;
   if (changed.count("mds_cache_memory_limit"))
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
+  if (changed.count("mds_export_ephemeral_distributed")) {
+    export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
+    dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
+    mds->balancer->handle_export_pins();
+  }
+  if (changed.count("mds_export_ephemeral_random")) {
+    export_ephemeral_random_config = g_conf().get_val<bool>("mds_export_ephemeral_random");
+    dout(10) << "Migrating any ephemeral random pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    mds->balancer->handle_export_pins();
+  }
+  if (changed.count("mds_export_ephemeral_random_max")) {
+    export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+  }
   if (changed.count("mds_health_cache_threshold"))
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
@@ -301,6 +331,8 @@ void MDCache::add_inode(CInode *in)
   if (cache_toofull()) {
     exceeded_size_limit = true;
   }
+
+  in->maybe_ephemeral_dist(false);
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -328,6 +360,9 @@ void MDCache::remove_inode(CInode *o)
 
   if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
     export_pin_delayed_queue.erase(o);
+
+  o->set_ephemeral_dist(false);
+  o->set_ephemeral_rand(false);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -856,6 +891,27 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 }
 
 
+// ====================================================================
+// consistent hash ring
+
+/*
+ * hashing implementation based on Lamping and Veach's Jump Consistent Hash: https://arxiv.org/pdf/1406.2294.pdf
+*/
+mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino)
+{
+  const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
+  uint64_t hash = rjhash64(ino);
+  int64_t b = -1, j = 0;
+  while (j < max_mds) {
+    b = j;
+    hash = hash*2862933555777941757ULL + 1;
+    j = (b + 1) * (double(1LL << 31) / double((hash >> 33) + 1));
+  }
+  // verify bounds before returning
+  auto result = mds_rank_t(b);
+  ceph_assert(result >= 0 && result < max_mds);
+  return result;
+}
 
 
 // ====================================================================
@@ -929,6 +985,11 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
 	p = p->inode->get_parent_dir();
       }
     }
+  }
+
+  if (dir->is_auth()) {
+    /* do this now that we are auth for the CDir */
+    dir->inode->maybe_pin();
   }
 
   show_subtrees();
@@ -1283,14 +1344,16 @@ CDir *MDCache::get_projected_subtree_root(CDir *dir)
 void MDCache::remove_subtree(CDir *dir)
 {
   dout(10) << "remove_subtree " << *dir << dendl;
-  ceph_assert(subtrees.count(dir));
-  ceph_assert(subtrees[dir].empty());
-  subtrees.erase(dir);
+  auto it = subtrees.find(dir);
+  ceph_assert(it != subtrees.end());
+  subtrees.erase(it);
   dir->put(CDir::PIN_SUBTREE);
   if (dir->get_parent_dir()) {
     CDir *p = get_subtree_root(dir->get_parent_dir());
-    ceph_assert(subtrees[p].count(dir));
-    subtrees[p].erase(dir);
+    auto it = subtrees.find(p);
+    ceph_assert(it != subtrees.end());
+    auto count = it->second.erase(dir);
+    ceph_assert(count == 1);
   }
 }
 
@@ -2531,11 +2594,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
-  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *dir = p->first;
-
+  for (auto& [dir, bounds] : subtrees) {
     // journal subtree as "ours" if we are
     //   me, -2
     //   me, me
@@ -2551,19 +2610,21 @@ ESubtreeMap *MDCache::create_subtree_map()
       dout(15) << " ambig subtree " << *dir << dendl;
       le->ambiguous_subtrees.insert(dir->dirfrag());
     } else {
-      dout(15) << " subtree " << *dir << dendl;
+      dout(15) << " auth subtree " << *dir << dendl;
     }
 
     dirs_to_add[dir->dirfrag()] = dir;
     le->subtrees[dir->dirfrag()].clear();
 
-
     // bounds
-    for (set<CDir*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      CDir *bound = *q;
-      dout(15) << " subtree bound " << *bound << dendl;
+    size_t nbounds = bounds.size();
+    if (nbounds > 3) {
+      dout(15) << "  subtree has " << nbounds << " bounds" << dendl;
+    }
+    for (auto& bound : bounds) {
+      if (nbounds <= 3) {
+        dout(15) << "  subtree bound " << *bound << dendl;
+      }
       dirs_to_add[bound->dirfrag()] = bound;
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
     }
@@ -2572,18 +2633,18 @@ ESubtreeMap *MDCache::create_subtree_map()
   // apply projected renames
   for (const auto& [diri, renames] : projected_subtree_renames) {
     for (const auto& [olddir, newdir] : renames) {
-      dout(10) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
+      dout(15) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
 
       auto&& dfls = diri->get_dirfrags();
       for (const auto& dir : dfls) {
-	dout(10) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
+	dout(15) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
 	CDir *oldparent = get_projected_subtree_root(olddir);
-	dout(10) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
+	dout(15) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
 	CDir *newparent = get_projected_subtree_root(newdir);
-	dout(10) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
+	dout(15) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
 
 	if (oldparent == newparent) {
-	  dout(10) << "parent unchanged for " << dir->dirfrag() << " at "
+	  dout(15) << "parent unchanged for " << dir->dirfrag() << " at "
 		   << oldparent->dirfrag() << dendl;
 	  continue;
 	}
@@ -2614,10 +2675,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 	  }
 	  
 	  // see if any old bounds move to the new parent.
-	  for (set<CDir*>::iterator p = subtrees[oldparent].begin();
-	       p != subtrees[oldparent].end();
-	       ++p) {
-	    CDir *bound = *p;
+	  for (auto& bound : subtrees.at(oldparent)) {
 	    if (dir->contains(bound->get_parent_dir()))
 	      _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				      le->subtrees);
@@ -2631,21 +2689,22 @@ ESubtreeMap *MDCache::create_subtree_map()
   // subtrees than needed due to migrations that are just getting
   // started or just completing.  but on replay, the "live" map will
   // be simple and we can do a straight comparison.
-  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = le->subtrees.begin(); p != le->subtrees.end(); ++p) {
-    if (le->ambiguous_subtrees.count(p->first))
+  for (auto& [frag, bfrags] : le->subtrees) {
+    if (le->ambiguous_subtrees.count(frag))
       continue;
     unsigned i = 0;
-    while (i < p->second.size()) {
-      dirfrag_t b = p->second[i];
+    while (i < bfrags.size()) {
+      dirfrag_t b = bfrags[i];
       if (le->subtrees.count(b) &&
 	  le->ambiguous_subtrees.count(b) == 0) {
-	vector<dirfrag_t>& bb = le->subtrees[b];
-	dout(10) << "simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
-	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
-	  p->second.push_back(*r);
+	auto& bb = le->subtrees.at(b);
+	dout(10) << "simplify: " << frag << " swallowing " << b << " with bounds " << bb << dendl;
+	for (auto& r : bb) {
+	  bfrags.push_back(r);
+        }
 	dirs_to_add.erase(b);
 	le->subtrees.erase(b);
-	p->second.erase(p->second.begin() + i);
+	bfrags.erase(bfrags.begin() + i);
       } else {
 	++i;
       }
@@ -6756,32 +6815,38 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
     ++p;
     CInode *diri = dir->get_inode();
     if (dir->is_auth()) {
-      if (!diri->is_auth() && !diri->is_base() &&
-	  dir->get_num_head_items() == 0) {
-	if (dir->state_test(CDir::STATE_EXPORTING) ||
-	    !(mds->is_active() || mds->is_stopping()) ||
-	    dir->is_freezing() || dir->is_frozen())
-	  continue;
+      if (diri->is_auth() && !diri->is_base()) {
+        /* this situation should correspond to an export pin */
+        if (dir->get_num_head_items() == 0 && dir->get_num_ref() == 1) {
+          /* pinned empty subtree, try to drop */
+          if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
+            dout(20) << "trimming empty pinned subtree " << *dir << dendl;
+            dir->state_clear(CDir::STATE_AUXSUBTREE);
+            remove_subtree(dir);
+            diri->close_dirfrag(dir->dirfrag().frag);
+          }
+        }
+      } else if (!diri->is_auth() && !diri->is_base() && dir->get_num_head_items() == 0) {
+        if (dir->state_test(CDir::STATE_EXPORTING) ||
+           !(mds->is_active() || mds->is_stopping()) ||
+           dir->is_freezing() || dir->is_frozen())
+          continue;
 
-	migrator->export_empty_import(dir);
+        migrator->export_empty_import(dir);
         ++trimmed;
       }
-    } else {
-      if (!diri->is_auth()) {
-	if (dir->get_num_ref() > 1)  // only subtree pin
-	  continue;
-	auto&& ls = diri->get_subtree_dirfrags();
-	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
-	  continue;
+    } else if (!diri->is_auth() && dir->get_num_ref() <= 1) {
+      // only subtree pin
+      auto&& ls = diri->get_subtree_dirfrags();
+      if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
+        continue;
 
-	// don't trim subtree root if its auth MDS is recovering.
-	// This simplify the cache rejoin code.
-	if (dir->is_subtree_root() &&
-	    rejoin_ack_gather.count(dir->get_dir_auth().first))
-	  continue;
-	trim_dirfrag(dir, 0, expiremap);
-        ++trimmed;
-      }
+      // don't trim subtree root if its auth MDS is recovering.
+      // This simplify the cache rejoin code.
+      if (dir->is_subtree_root() && rejoin_ack_gather.count(dir->get_dir_auth().first))
+        continue;
+      trim_dirfrag(dir, 0, expiremap);
+      ++trimmed;
     }
   }
 
@@ -7803,30 +7868,44 @@ bool MDCache::shutdown_pass()
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
+
+  {
+    dout(10) << "Migrating any ephemerally pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
+    mds->balancer->handle_export_pins();
+  }
+
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
-  if (!subtrees.empty() &&
-      mds->get_nodeid() != 0) {
-    dout(7) << "looking for subtrees to export to mds0" << dendl;
+  if (!subtrees.empty() && mds->get_nodeid() != 0) {
+    dout(7) << "looking for subtrees to export" << dendl;
     std::vector<CDir*> ls;
-    for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
-         it != subtrees.end();
-         ++it) {
-      CDir *dir = it->first;
-      if (dir->get_inode()->is_mdsdir())
+    for (auto& [dir, bounds] : subtrees) {
+      dout(10) << "  examining " << *dir << " bounds " << bounds << dendl;
+      if (dir->get_inode()->is_mdsdir() || !dir->is_auth())
 	continue;
-      if (dir->is_auth()) {
-	num_auth_subtree++;
-	if (dir->is_frozen() ||
-	    dir->is_freezing() ||
-	    dir->is_ambiguous_dir_auth() ||
-	    dir->state_test(CDir::STATE_EXPORTING))
-	  continue;
-	ls.push_back(dir);
+      num_auth_subtree++;
+      if (dir->is_frozen() ||
+          dir->is_freezing() ||
+          dir->is_ambiguous_dir_auth() ||
+          dir->state_test(CDir::STATE_EXPORTING) ||
+          dir->get_inode()->is_ephemerally_pinned()) {
+        continue;
       }
+      ls.push_back(dir);
     }
 
     migrator->clear_export_queue();
+
     for (const auto& dir : ls) {
       mds_rank_t dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
@@ -9574,37 +9653,8 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
-    if (mdr->is_batch_head) {
-      int mask = mdr->client_request->head.args.getattr.mask;
-
-      switch (mdr->client_request->get_op()) {
-	case CEPH_MDS_OP_GETATTR:
-	  {
-	    CInode* in = mdr->in[0];
-	    if (in) {
-	      auto it = in->batch_ops.find(mask);
-	      if (it != in->batch_ops.end()) {
-                it->second->forward(who);
-                in->batch_ops.erase(it);
-	      }
-	    }
-	    break;
-	  }
-	case CEPH_MDS_OP_LOOKUP:
-	  {
-	    if (mdr->dn[0].size()) {
-	      CDentry* dn = mdr->dn[0].back();
-	      auto it = dn->batch_ops.find(mask);
-	      if (it != dn->batch_ops.end()) {
-		it->second->forward(who);
-		dn->batch_ops.erase(it);
-	      }
-	    }
-	    break;
-	  }
-	default:
-	  ceph_abort();
-      }
+    if (mdr->is_batch_head()) {
+      mdr->release_batch_op()->forward(who);
     } else {
       mds->forward_message_mds(mdr->release_client_request(), who);
     }
@@ -9674,7 +9724,7 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
     } else if (mdr->more()->srcdn_auth_mds == *p &&
 	       mdr->more()->inode_import.length() > 0) {
       // information about rename imported caps
-      r->inode_export.claim(mdr->more()->inode_import);
+      r->inode_export = std::move(mdr->more()->inode_import);
     }
 
     mds->send_message_mds(r, *p);
@@ -10725,7 +10775,7 @@ void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 			      uint64_t features)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ceph_assert(in->is_auth());
   encode(in->inode.ino, bl);  // bleh, minor assymetry here
   encode(in->last, bl);
@@ -10735,6 +10785,10 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 
   in->_encode_base(bl, features);
   in->_encode_locks_state_for_replica(bl, mds->get_state() < MDSMap::STATE_ACTIVE);
+
+  __u32 state = in->state;
+  encode(state, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -10831,7 +10885,7 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
 
 void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   inodeno_t ino;
   snapid_t last;
   __u32 nonce;
@@ -10865,6 +10919,17 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << __func__ << " different linkage in dentry " << *dn << dendl;
   }
+
+  if (struct_v >= 2) {
+    __u32 s;
+    decode(s, p);
+    s &= CInode::MASK_STATE_REPLICATED;
+    if (s & CInode::STATE_RANDEPHEMERALPIN) {
+      dout(10) << "replica inode is random ephemeral pinned" << dendl;
+      in->set_ephemeral_rand(true);
+    }
+  }
+
   DECODE_FINISH(p); 
 }
 
@@ -13303,12 +13368,15 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   return true;
 }
 
-void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
+void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   // process export_pin_delayed_queue whenever a new MDSMap received
   auto &q = export_pin_delayed_queue;
   for (auto it = q.begin(); it != q.end(); ) {
     auto *in = *it;
     mds_rank_t export_pin = in->get_export_pin(false);
+    if (in->is_ephemerally_pinned()) {
+      dout(10) << "ephemeral export pin to " << export_pin << " for " << *in << dendl;
+    }
     dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
       << " max_mds=" << mdsmap.get_max_mds() << dendl;
     if (export_pin >= mdsmap.get_max_mds()) {
@@ -13318,7 +13386,20 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
 
     in->state_clear(CInode::STATE_DELAYEDEXPORTPIN);
     it = q.erase(it);
-    in->maybe_export_pin();
+    in->queue_export_pin(export_pin);
+  }
+
+  if (mdsmap.get_max_mds() != oldmap.get_max_mds()) {
+    dout(10) << "Checking ephemerally pinned directories for redistribute due to max_mds change." << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
   }
 }
-

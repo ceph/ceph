@@ -65,7 +65,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
 	    }
 	    bool got = recovery_waiter.obc->get_recovery_read().get0();
-	    assert(pulled ? got : 1);
+	    ceph_assert_always(pulled ? got : 1);
 	    if (!got) {
 	      return recovery_waiter.obc->get_recovery_read(true)
 	      .then([](bool) { return seastar::now(); });
@@ -80,10 +80,12 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      recovery_waiter.obc = obc;
 	      // obc is loaded with excl lock
 	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-	      assert(recovery_waiter.obc->get_recovery_read().get0());
+	      ceph_assert_always(recovery_waiter.obc->get_recovery_read().get0());
 	      return seastar::make_ready_future<>();
 	    })
 	  );
+	} else {
+	  logger().debug("recover_object: already has obc!");
 	}
 	return seastar::now();
       }().then([this, soid, need, &pops, &shards] {
@@ -645,11 +647,12 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 			    [this, &pop, &pi, first, t, response]
 			    (auto& data_zeros, auto& data,
 			     auto& usable_intervals) {
-      data = pop.data;
-      ceph::bufferlist usable_data;
-      trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, data,
-	  &usable_intervals, &usable_data);
-      data.claim(usable_data);
+      {
+        ceph::bufferlist usable_data;
+        trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, pop.data,
+	    &usable_intervals, &usable_data);
+        data = std::move(usable_data);
+      }
       pi.recovery_progress = pop.after_progress;
       logger().debug("new recovery_info {}, new progress {}",
 	  pi.recovery_info, pi.recovery_progress);
@@ -1081,9 +1084,8 @@ seastar::future<> ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDisp
     return handle_recovery_delete_reply(
 	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
-    return seastar::make_exception_future<>(
-	std::invalid_argument(fmt::format("invalid request type: {}",
-					  m->get_header().type)));
+    // delegate to parent class for handling backend-agnostic recovery ops.
+    return RecoveryBackend::handle_recovery_op(std::move(m));
   }
 }
 

@@ -1,7 +1,7 @@
-@import 'defaults.scss';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .badge-remove {
-  color: $color-solid-white;
+  color: bd.$color-solid-white;
 }
 
 i.fa-pencil {

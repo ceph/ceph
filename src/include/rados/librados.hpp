@@ -19,6 +19,8 @@ namespace libradosstriper
   class RadosStriper;
 }
 
+namespace neorados { class RADOS; }
+
 namespace librados {
 
 using ceph::bufferlist;
@@ -518,7 +520,6 @@ inline namespace v14_2_0 {
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
-    void tier_flush();
 
 
     friend class IoCtx;
@@ -733,6 +734,12 @@ inline namespace v14_2_0 {
      * triggering a promote on the OSD (that is then evicted).
      */
     void cache_evict();
+
+    /**
+     * flush a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_flush();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -1503,9 +1510,11 @@ inline namespace v14_2_0 {
 						callback_t cb_safe)
       __attribute__ ((deprecated));
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
-    
+
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
+    friend class neorados::RADOS;
+
     // We don't allow assignment or copying
     Rados(const Rados& rhs);
     const Rados& operator=(const Rados& rhs);

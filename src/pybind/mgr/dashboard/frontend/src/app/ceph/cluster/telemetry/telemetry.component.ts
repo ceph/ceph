@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { ValidatorFn, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
@@ -14,6 +13,7 @@ import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { TelemetryNotificationService } from '../../../shared/services/telemetry-notification.service';
 import { TextToDownloadService } from '../../../shared/services/text-to-download.service';
 
 @Component({
@@ -49,8 +49,8 @@ export class TelemetryComponent extends CdForm implements OnInit {
     private notificationService: NotificationService,
     private router: Router,
     private telemetryService: TelemetryService,
-    private i18n: I18n,
-    private textToDownloadService: TextToDownloadService
+    private textToDownloadService: TextToDownloadService,
+    private telemetryNotificationService: TelemetryNotificationService
   ) {
     super();
   }
@@ -149,11 +149,9 @@ export class TelemetryComponent extends CdForm implements OnInit {
     this.mgrModuleService.updateConfig('telemetry', config).subscribe(
       () => {
         this.disableModule(
-          this.i18n(
-            `Your settings have been applied successfully. \
-Due to privacy/legal reasons the Telemetry module is now disabled until you \
-complete the next step and accept the license.`
-          ),
+          $localize`Your settings have been applied successfully. \
+ Due to privacy/legal reasons the Telemetry module is now disabled until you \
+ complete the next step and accept the license.`,
           () => {
             this.getReport();
           }
@@ -172,6 +170,7 @@ complete the next step and accept the license.`
 
   disableModule(message: string = null, followUpFunc: Function = null) {
     this.telemetryService.enable(false).subscribe(() => {
+      this.telemetryNotificationService.setVisibility(true);
       if (message) {
         this.notificationService.show(NotificationType.success, message);
       }
@@ -197,9 +196,10 @@ complete the next step and accept the license.`
 
   onSubmit() {
     this.telemetryService.enable().subscribe(() => {
+      this.telemetryNotificationService.setVisibility(false);
       this.notificationService.show(
         NotificationType.success,
-        this.i18n('The Telemetry module has been configured and activated successfully.')
+        $localize`The Telemetry module has been configured and activated successfully.`
       );
       this.router.navigate(['']);
     });

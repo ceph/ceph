@@ -790,7 +790,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   ceph_assert(dest != mds->get_nodeid());
    
   CDir* parent = dir->inode->get_projected_parent_dir();
-  if (!mds->is_stopping() && !dir->inode->is_exportable(dest)) {
+  if (!mds->is_stopping() && !dir->inode->is_exportable(dest) && dir->get_num_head_items() > 0) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": dir is export pinned" << dendl;
     return;
   } else if (!(mds->is_active() || mds->is_stopping())) {
@@ -1303,7 +1303,7 @@ void Migrator::encode_export_prep_trace(bufferlist &final_bl, CDir *bound,
     cache->encode_replica_inode(cur->inode, es.peer, bl, mds->mdsmap->get_up_features());
     dout(7) << "  added " << *cur->inode << dendl;
     bl.claim_append(tracebl);
-    tracebl.claim(bl);
+    tracebl = std::move(bl);
 
     cur = cur->get_parent_dir();
     // don't repeat dirfrags
@@ -1317,7 +1317,7 @@ void Migrator::encode_export_prep_trace(bufferlist &final_bl, CDir *bound,
     cache->encode_replica_dir(cur, es.peer, bl);
     dout(7) << "  added " << *cur << dendl;
     bl.claim_append(tracebl);
-    tracebl.claim(bl);
+    tracebl = std::move(bl);
     start = 'f';  // start with dirfrag
   }
   dirfrag_t df = cur->dirfrag();
@@ -3176,7 +3176,6 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   }
 }
 
-
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 				   mds_rank_t oldauth, LogSegment *ls,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
@@ -3441,6 +3440,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
     dir->verify_fragstat();
 #endif
 
+  dir->inode->maybe_ephemeral_dist();
   dir->inode->maybe_export_pin();
 
   dout(7) << " done " << *dir << dendl;

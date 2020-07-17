@@ -2,9 +2,6 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
-import { listLocales } from 'ngx-bootstrap/chronos';
-import { BsLocaleService } from 'ngx-bootstrap/datepicker';
-
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { LanguageSelectorComponent } from './language-selector.component';
 
@@ -14,7 +11,6 @@ describe('LanguageSelectorComponent', () => {
 
   configureTestBed({
     declarations: [LanguageSelectorComponent],
-    providers: [BsLocaleService],
     imports: [FormsModule, HttpClientTestingModule]
   });
 
@@ -31,7 +27,6 @@ describe('LanguageSelectorComponent', () => {
 
   it('should read current language', () => {
     expect(component.selectedLanguage).toBe('en-US');
-    expect(listLocales()).toEqual([]);
   });
 
   const expectLanguageChange = (lang: string) => {

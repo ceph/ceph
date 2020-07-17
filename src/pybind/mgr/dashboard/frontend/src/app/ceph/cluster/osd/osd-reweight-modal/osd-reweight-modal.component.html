@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>Reweight OSD: {{ osdId }}</ng-container>
 
@@ -33,7 +33,7 @@
                           [form]="reweightForm"
                           [disabled]="reweightForm.invalid"
                           i18n>Reweight</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

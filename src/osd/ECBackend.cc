@@ -455,7 +455,7 @@ void ECBackend::handle_recovery_read_complete(
   for(map<pg_shard_t, bufferlist>::iterator i = to_read.get<2>().begin();
       i != to_read.get<2>().end();
       ++i) {
-    from[i->first.shard].claim(i->second);
+    from[i->first.shard] = std::move(i->second);
   }
   dout(10) << __func__ << ": " << from << dendl;
   int r;
@@ -1214,7 +1214,7 @@ void ECBackend::handle_sub_read_reply(
 	sinfo.aligned_offset_len_to_chunk(
 	  make_pair(req_iter->get<0>(), req_iter->get<1>()));
       ceph_assert(adjusted.first == j->first);
-      riter->get<2>()[from].claim(j->second);
+      riter->get<2>()[from] = std::move(j->second);
     }
   }
   for (auto i = op.attrs_read.begin();
@@ -2334,7 +2334,7 @@ struct CallClientContexts :
 	     res.returned.front().get<2>().begin();
 	   j != res.returned.front().get<2>().end();
 	   ++j) {
-	to_decode[j->first.shard].claim(j->second);
+	to_decode[j->first.shard] = std::move(j->second);
       }
       int r = ECUtil::decode(
 	ec->sinfo,

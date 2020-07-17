@@ -1483,8 +1483,7 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
     } catch (buffer::error& err) {
       return -EINVAL;
     }
-    state->bl.clear();
-    state->bl.claim(old);
+    state->bl = std::move(old);
     state->bl.claim_append(more);
     state->p = state->bl.cbegin();
     if ((unsigned)r < chunk)
@@ -5346,7 +5345,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
     if (bletag.length() > 0 && bletag[bletag.length() - 1] == '\0') {
       bufferlist newbl;
       bletag.splice(0, bletag.length() - 1, &newbl);
-      bletag.claim(newbl);
+      bletag = std::move(newbl);
     }
   }
 

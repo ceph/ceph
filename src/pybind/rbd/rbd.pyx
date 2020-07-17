@@ -105,6 +105,8 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_SNAP_REMOVE_FLATTEN "RBD_SNAP_REMOVE_FLATTEN"
         _RBD_SNAP_REMOVE_FORCE "RBD_SNAP_REMOVE_FORCE"
 
+        _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION "RBD_WRITE_ZEROES_FLAG_THICK_PROVISION"
+
     ctypedef void* rados_t
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
@@ -503,6 +505,8 @@ cdef extern from "rbd/librbd.h" nogil:
     ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
                        const char *buf, int op_flags)
     int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
+    int rbd_write_zeroes(rbd_image_t image, uint64_t ofs, uint64_t len,
+                         int zero_flags, int op_flags)
     int rbd_copy3(rbd_image_t src, rados_ioctx_t dest_io_ctx,
                   const char *destname, rbd_image_options_t dest_opts)
     int rbd_deep_copy(rbd_image_t src, rados_ioctx_t dest_io_ctx,
@@ -627,6 +631,8 @@ cdef extern from "rbd/librbd.h" nogil:
                       char *buf, rbd_completion_t c, int op_flags)
     int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
                         rbd_completion_t c)
+    int rbd_aio_write_zeroes(rbd_image_t image, uint64_t off, uint64_t len,
+                             rbd_completion_t c, int zero_flags, int op_flags)
 
     int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb,
                                   rbd_completion_t *c)
@@ -811,6 +817,8 @@ RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR = _RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR
 RBD_SNAP_REMOVE_UNPROTECT = _RBD_SNAP_REMOVE_UNPROTECT
 RBD_SNAP_REMOVE_FLATTEN = _RBD_SNAP_REMOVE_FLATTEN
 RBD_SNAP_REMOVE_FORCE = _RBD_SNAP_REMOVE_FORCE
+
+RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION
 
 class Error(Exception):
     pass
@@ -1031,8 +1039,6 @@ def cstr(val, name, encoding="utf-8", opt=False):
     if isinstance(val, bytes):
         return val
     elif isinstance(val, str):
-        return val.encode(encoding)
-    elif sys.version_info < (3, 0) and isinstance(val, unicode):
         return val.encode(encoding)
     else:
         raise InvalidArgument('%s must be a string' % name)
@@ -4415,6 +4421,23 @@ written." % (self.name, ret, length))
             raise make_ex(ret, msg)
 
     @requires_not_closed
+    def write_zeroes(self, offset, length, zero_flags = 0):
+        """
+        Zero the range from the image. By default it will attempt to
+        discard/unmap as much space as possible but any unaligned
+        extent segments will still be zeroed.
+        """
+        cdef:
+            uint64_t _offset = offset, _length = length
+            int _zero_flags = zero_flags
+        with nogil:
+            ret = rbd_write_zeroes(self.image, _offset, _length,
+                                   _zero_flags, 0)
+        if ret < 0:
+            msg = 'error zeroing region %d~%d' % (offset, length)
+            raise make_ex(ret, msg)
+
+    @requires_not_closed
     def flush(self):
         """
         Block until all writes are fully flushed if caching is enabled.
@@ -5094,6 +5117,34 @@ written." % (self.name, ret, length))
             if ret < 0:
                 raise make_ex(ret, 'error discarding %s %ld~%ld' %
                               (self.name, offset, _length))
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
+
+    @requires_not_closed
+    def aio_write_zeroes(self, offset, length, oncomplete, zero_flags = 0):
+        """
+        Asynchronously Zero the range from the image. By default it will attempt
+        to discard/unmap as much space as possible but any unaligned extent
+        segments will still be zeroed.
+        """
+        cdef:
+            uint64_t _offset = offset
+            size_t _length = length
+            int _zero_flags = zero_flags
+            Completion completion
+
+        completion = self.__get_completion(oncomplete)
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_write_zeroes(self.image, _offset, _length,
+                                           completion.rbd_comp, _zero_flags, 0)
+            if ret < 0:
+                raise make_ex(ret, 'error zeroing %s %ld~%ld' %
+                              (self.name, offset, length))
         except:
             completion.__unpersist()
             raise

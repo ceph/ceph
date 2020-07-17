@@ -7,4 +7,3 @@ bcrypt==3.1.4
 python3-saml==1.4.1
 requests==2.20.0
 Routes==2.4.1
-six==1.14.0

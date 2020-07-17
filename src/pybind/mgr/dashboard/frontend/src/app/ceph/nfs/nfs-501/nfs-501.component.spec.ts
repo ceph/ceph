@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { Nfs501Component } from './nfs-501.component';
 
@@ -12,8 +12,7 @@ describe('Nfs501Component', () => {
 
   configureTestBed({
     declarations: [Nfs501Component],
-    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
-    providers: i18nProviders
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule]
   });
 
   beforeEach(() => {

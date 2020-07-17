@@ -205,7 +205,7 @@ Use the ceph-objectstore-tool to list the contents of the object map (OMAP). The
 
 Manipulating the Object Map Header
 ----------------------------------
-The **ceph-objectstore-tool** utility will output the object map (OMAP) header with the values associated with the object’s keys.
+The **ceph-objectstore-tool** utility will output the object map (OMAP) header with the values associated with the object's keys.
 
 Note: If using FileStore as the OSD backend object store, then add the `--journal-path $PATH_TO_JOURNAL` argument when getting or setting the object map header, where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal; for example `/var/lib/ceph/osd/ceph-0/journal`.
 
@@ -298,10 +298,10 @@ Procedure
 Listing an Object's Attributes
 -------------------------------
 
-Use the **ceph-objectstore-tool** utility to list an object's attributes. The output provides you with the object’s keys and values.
+Use the **ceph-objectstore-tool** utility to list an object's attributes. The output provides you with the object's keys and values.
 Note
 
-If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when listing an object’s attributes, where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal; for example `/var/lib/ceph/osd/ceph-0/journal`.
+If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when listing an object's attributes, where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal; for example `/var/lib/ceph/osd/ceph-0/journal`.
 
 Prerequisites
 ^^^^^^^^^^^^^
@@ -322,7 +322,7 @@ Procedure
 
     [root@osd ~]# systemctl status ceph-osd@1
 
-   List the object’s attributes:
+   List the object's attributes:
 
    Syntax::
 
@@ -336,10 +336,10 @@ Procedure
 MANIPULATING THE OBJECT ATTRIBUTE KEY
 -------------------------------------
 
-Use the ceph-objectstore-tool utility to change an object’s attributes. To manipulate the object’s attributes you need the data and journal paths, the placement group identifier (PG ID), the object, and the key in the object’s attribute.
+Use the ceph-objectstore-tool utility to change an object's attributes. To manipulate the object's attributes you need the data and journal paths, the placement group identifier (PG ID), the object, and the key in the object's attribute.
 Note
 
-If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when getting, setting or removing the object’s attributes. Where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal, for example `/var/lib/ceph/osd/ceph-0/journal`.
+If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when getting, setting or removing the object's attributes. Where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal, for example `/var/lib/ceph/osd/ceph-0/journal`.
 
 Prerequisites
 
@@ -358,7 +358,7 @@ Procedure
 
     [root@osd ~]# systemctl status ceph-osd@1
 
- Get the object’s attributes:
+ Get the object's attributes:
 
  Syntax::
 
@@ -368,7 +368,7 @@ Procedure
 
    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0  --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' get-attrs "oid" > zone_info.default.attr.txt
 
- Set an object’s attributes:
+ Set an object's attributes:
 
  Syntax::
 
@@ -378,7 +378,7 @@ Procedure
 
    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' set-attrs "oid" < zone_info.default.attr.txt
 
- Remove an object’s attributes:
+ Remove an object's attributes:
 
  Syntax::
 

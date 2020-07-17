@@ -7,7 +7,6 @@ pyopenssl
 python3-saml
 requests
 Routes
-six
 -e ../../../python-common
 prettytable
 pyyaml

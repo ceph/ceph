@@ -2,9 +2,9 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { JoinPipe } from '../../../../shared/pipes/join.pipe';
 import { NotificationService } from '../../../../shared/services/notification.service';
@@ -31,11 +31,10 @@ describe('OsdScrubModalComponent', () => {
     declarations: [OsdScrubModalComponent, JoinPipe],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
-      BsModalRef,
+      NgbActiveModal,
       JoinPipe,
       { provide: OsdService, useValue: fakeService },
-      { provide: NotificationService, useValue: fakeService },
-      i18nProviders
+      { provide: NotificationService, useValue: fakeService }
     ]
   });
 

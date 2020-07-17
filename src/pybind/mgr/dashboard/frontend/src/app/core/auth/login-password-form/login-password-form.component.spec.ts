@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { AuthService } from '../../../shared/api/auth.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -33,8 +33,7 @@ describe('LoginPasswordFormComponent', () => {
       ToastrModule.forRoot(),
       SharedModule
     ],
-    declarations: [LoginPasswordFormComponent],
-    providers: i18nProviders
+    declarations: [LoginPasswordFormComponent]
   });
 
   beforeEach(() => {

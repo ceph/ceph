@@ -2,4 +2,4 @@ tasks:
 - cephadm.shell:
     env: [sha1]
     mon.a:
-      - ceph orch upgrade start --image quay.io/ceph-ci/ceph:$sha1
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1

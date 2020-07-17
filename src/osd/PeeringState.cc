@@ -1355,11 +1355,10 @@ bool PeeringState::needs_recovery() const
   }
 
   ceph_assert(!acting_recovery_backfill.empty());
-  auto end = acting_recovery_backfill.end();
-  auto a = acting_recovery_backfill.begin();
-  for (; a != end; ++a) {
-    if (*a == get_primary()) continue;
-    pg_shard_t peer = *a;
+  for (const pg_shard_t& peer : acting_recovery_backfill) {
+    if (peer == get_primary()) {
+      continue;
+    }
     auto pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
       psdout(10) << __func__ << " osd." << peer << " doesn't have missing set"
@@ -1383,11 +1382,9 @@ bool PeeringState::needs_backfill() const
 
   // We can assume that only possible osds that need backfill
   // are on the backfill_targets vector nodes.
-  auto end = backfill_targets.end();
-  auto a = backfill_targets.begin();
-  for (; a != end; ++a) {
-    pg_shard_t peer = *a;
+  for (const pg_shard_t& peer : backfill_targets) {
     auto pi = peer_info.find(peer);
+    ceph_assert(pi != peer_info.end());
     if (!pi->second.last_backfill.is_max()) {
       psdout(10) << __func__ << " osd." << peer
 		 << " has last_backfill " << pi->second.last_backfill << dendl;
@@ -1461,7 +1458,6 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
    * to make changes to this process.  Also, make sure to update it
    * when you find bugs! */
-  eversion_t min_last_update_acceptable = eversion_t::max();
   epoch_t max_last_epoch_started_found = 0;
   for (auto i = infos.begin(); i != infos.end(); ++i) {
     if (!cct->_conf->osd_find_best_info_ignore_history_les &&
@@ -1475,6 +1471,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
       max_last_epoch_started_found = i->second.last_epoch_started;
     }
   }
+  eversion_t min_last_update_acceptable = eversion_t::max();
   for (auto i = infos.begin(); i != infos.end(); ++i) {
     if (max_last_epoch_started_found <= i->second.last_epoch_started) {
       if (min_last_update_acceptable > i->second.last_update)
@@ -4870,11 +4867,11 @@ PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ct
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   pl->request_local_background_io_reservation(
     ps->get_backfill_priority(),
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       LocalBackfillReserved()),
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DeferBackfill(0.0)));
@@ -5027,21 +5024,21 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 	evt.primary_num_bytes, evt.local_num_bytes)) {
     post_event(RejectTooFullRemoteReservation());
   } else {
-    PGPeeringEventRef preempt;
+    PGPeeringEventURef preempt;
     if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
       // older peers will interpret preemption as TOOFULL
-      preempt = std::make_shared<PGPeeringEvent>(
+      preempt = std::make_unique<PGPeeringEvent>(
 	pl->get_osdmap_epoch(),
 	pl->get_osdmap_epoch(),
 	RemoteBackfillPreempted());
     }
     pl->request_remote_recovery_reservation(
       evt.priority,
-      std::make_shared<PGPeeringEvent>(
+      std::make_unique<PGPeeringEvent>(
 	pl->get_osdmap_epoch(),
 	pl->get_osdmap_epoch(),
         RemoteBackfillReserved()),
-      preempt);
+      std::move(preempt));
   }
   return transit<RepWaitBackfillReserved>();
 }
@@ -5055,10 +5052,10 @@ PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
   // (pre-mimic compat)
   int prio = evt.priority ? evt.priority : ps->get_recovery_priority();
 
-  PGPeeringEventRef preempt;
+  PGPeeringEventURef preempt;
   if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
     // older peers can't handle this
-    preempt = std::make_shared<PGPeeringEvent>(
+    preempt = std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       RemoteRecoveryPreempted());
@@ -5066,11 +5063,11 @@ PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
 
   pl->request_remote_recovery_reservation(
     prio,
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       RemoteRecoveryReserved()),
-    preempt);
+    std::move(preempt));
   return transit<RepWaitRecoveryReserved>();
 }
 
@@ -5234,11 +5231,11 @@ PeeringState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ct
   ps->state_set(PG_STATE_RECOVERY_WAIT);
   pl->request_local_background_io_reservation(
     ps->get_recovery_priority(),
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       LocalRecoveryReserved()),
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DeferRecovery(0.0)));
@@ -6253,11 +6250,11 @@ PeeringState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
   pl->cancel_local_background_io_reservation();
   pl->request_local_background_io_reservation(
     context<ToDelete>().priority,
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DeleteReserved()),
-    std::make_shared<PGPeeringEvent>(
+    std::make_unique<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
       ps->get_osdmap_epoch(),
       DeleteInterrupted()));

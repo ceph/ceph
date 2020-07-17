@@ -1,7 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { Icons } from '../../enum/icons.enum';
 
 @Component({
@@ -27,27 +25,25 @@ export class AlertPanelComponent implements OnInit {
 
   icons = Icons;
 
-  constructor(private i18n: I18n) {}
-
   ngOnInit() {
     switch (this.type) {
       case 'warning':
-        this.title = this.title || this.i18n('Warning');
+        this.title = this.title || $localize`Warning`;
         this.typeIcon = this.typeIcon || Icons.warning;
         this.bootstrapClass = this.bootstrapClass || 'warning';
         break;
       case 'error':
-        this.title = this.title || this.i18n('Error');
+        this.title = this.title || $localize`Error`;
         this.typeIcon = this.typeIcon || Icons.destroyCircle;
         this.bootstrapClass = this.bootstrapClass || 'danger';
         break;
       case 'info':
-        this.title = this.title || this.i18n('Information');
+        this.title = this.title || $localize`Information`;
         this.typeIcon = this.typeIcon || Icons.infoCircle;
         this.bootstrapClass = this.bootstrapClass || 'info';
         break;
       case 'success':
-        this.title = this.title || this.i18n('Success');
+        this.title = this.title || $localize`Success`;
         this.typeIcon = this.typeIcon || Icons.check;
         this.bootstrapClass = this.bootstrapClass || 'success';
         break;

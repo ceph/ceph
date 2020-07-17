@@ -8,7 +8,7 @@ import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { SharedModule } from '../../../shared/shared.module';
@@ -91,8 +91,7 @@ describe('CephfsTabsComponent', () => {
       CephfsDetailComponent,
       CephfsDirectoriesComponent,
       CephfsClientsComponent
-    ],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {

@@ -3,8 +3,7 @@
 
 #include <set>
 #include <string>
-
-#include <boost/utility/string_ref.hpp>
+#include <string_view>
 
 #include "rgw_frontend.h"
 #include "rgw_client_io_filters.h"
@@ -96,6 +95,7 @@ int RGWCivetWebFrontend::run()
   set_conf_default(conf_map, "canonicalize_url_path", "no");
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
   set_conf_default(conf_map, "allow_unicode_in_urls", "yes");
+  set_conf_default(conf_map, "request_timeout_ms", "65000");
 
   std::string listening_ports;
   // support multiple port= entries
@@ -122,7 +122,7 @@ int RGWCivetWebFrontend::run()
   }
 
   /* Prepare options for CivetWeb. */
-  const std::set<boost::string_ref> rgw_opts = { "port", "prefix" };
+  const std::set<std::string_view> rgw_opts = { "port", "prefix" };
 
   std::vector<const char*> options;
 

@@ -2,8 +2,9 @@
               cdTableDetail>
   <ul ngbNav
       #nav="ngbNav"
-      class="nav-tabs">
-    <li ngbNavItem>
+      class="nav-tabs"
+      cdStatefulTab="pool-details">
+    <li ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
@@ -13,7 +14,7 @@
         </cd-table-key-value>
       </ng-template>
     </li>
-    <li ngbNavItem
+    <li ngbNavItem="performance-details"
         *ngIf="permissions.grafana.read">
       <a ngbNavLink
          i18n>Performance Details</a>
@@ -24,7 +25,7 @@
         </cd-grafana>
       </ng-template>
     </li>
-    <li ngbNavItem
+    <li ngbNavItem="configuration"
         *ngIf="selection.type === 'replicated'">
       <a ngbNavLink
          i18n>Configuration</a>
@@ -32,7 +33,7 @@
         <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
       </ng-template>
     </li>
-    <li ngbNavItem
+    <li ngbNavItem="cache-tiers-details"
         *ngIf="selection['tiers']?.length > 0">
       <a ngbNavLink
          i18n>Cache Tiers Details</a>

@@ -2,9 +2,7 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
@@ -14,6 +12,7 @@ import { CdForm } from '../../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
@@ -66,18 +65,17 @@ export class OsdFormComponent extends CdForm implements OnInit {
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private orchService: OrchestratorService,
     private router: Router,
-    private bsModalService: BsModalService
+    private modalService: ModalService
   ) {
     super();
-    this.resource = this.i18n('OSDs');
+    this.resource = $localize`OSDs`;
     this.action = this.actionLabels.CREATE;
     this.features = {
       encrypted: {
         key: 'encrypted',
-        desc: this.i18n('Encryption')
+        desc: $localize`Encryption`
       }
     };
     this.featureList = _.map(this.features, (o, key) => Object.assign(o, { key: key }));
@@ -107,11 +105,9 @@ export class OsdFormComponent extends CdForm implements OnInit {
   createForm() {
     this.form = new CdFormGroup({
       walSlots: new FormControl(0, {
-        updateOn: 'blur',
         validators: [Validators.min(0)]
       }),
       dbSlots: new FormControl(0, {
-        updateOn: 'blur',
         validators: [Validators.min(0)]
       }),
       features: new CdFormGroup(
@@ -208,10 +204,10 @@ export class OsdFormComponent extends CdForm implements OnInit {
     // use user name and timestamp for drive group name
     const user = this.authStorageService.getUsername();
     this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
-    const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, {
-      initialState: { driveGroups: [this.driveGroup.spec] }
+    const modalRef = this.modalService.show(OsdCreationPreviewModalComponent, {
+      driveGroups: [this.driveGroup.spec]
     });
-    modalRef.content.submitAction.subscribe(() => {
+    modalRef.componentInstance.submitAction.subscribe(() => {
       this.router.navigate(['/osd']);
     });
     this.previewButton.loading = false;

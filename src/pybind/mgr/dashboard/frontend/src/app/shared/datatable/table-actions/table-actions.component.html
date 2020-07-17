@@ -1,12 +1,12 @@
 <div class="btn-group">
   <ng-container *ngIf="getCurrentButton() as action">
     <button type="button"
+            title="{{ useDisableDesc(action) }}"
             class="btn btn-{{btnColor}}"
             [ngClass]="{'disabled': disableSelectionAction(action)}"
             (click)="useClickAction(action)"
             [routerLink]="useRouterLink(action)"
             [preserveFragment]="action.preserveFragment ? '' : null">
-
       <i [ngClass]="[action.icon]"></i>
       <span>{{ action.name }}</span>
     </button>
@@ -28,6 +28,7 @@
       <ng-container *ngFor="let action of dropDownActions">
         <button ngbDropdownItem
                 class="{{ toClassName(action['name']) }}"
+                title="{{ useDisableDesc(action) }}"
                 (click)="useClickAction(action)"
                 [routerLink]="useRouterLink(action)"
                 [preserveFragment]="action.preserveFragment ? '' : null"

@@ -78,4 +78,5 @@ you may write data with one API and retrieve it with the other.
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
    QAT Acceleration for Encryption and Compression <qat-accel>
+   S3-select <s3select>
 

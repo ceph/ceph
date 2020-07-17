@@ -7,6 +7,8 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 
+#include "test/crimson/seastore/test_block.h"
+
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
@@ -16,42 +18,6 @@ namespace {
     return crimson::get_logger(ceph_subsys_test);
   }
 }
-
-struct CacheTestBlock : CachedExtent {
-  constexpr static segment_off_t SIZE = 4<<10;
-  using Ref = TCachedExtentRef<CacheTestBlock>;
-
-  template <typename... T>
-  CacheTestBlock(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
-
-  CachedExtentRef duplicate_for_write() final {
-    return CachedExtentRef(new CacheTestBlock(*this));
-  };
-
-  static constexpr extent_types_t TYPE = extent_types_t::TEST_BLOCK;
-  extent_types_t get_type() const final {
-    return TYPE;
-  }
-
-  ceph::bufferlist get_delta() final {
-    return ceph::bufferlist();
-  }
-
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
-    ceph_assert(0 == "TODO");
-  }
-
-  void set_contents(char c) {
-    ::memset(get_bptr().c_str(), c, get_length());
-  }
-
-  int checksum() {
-    return ceph_crc32c(
-      1,
-      (const unsigned char *)get_bptr().c_str(),
-      get_length());
-  }
-};
 
 struct cache_test_t : public seastar_test_suite_t {
   segment_manager::EphemeralSegmentManager segment_manager;
@@ -108,6 +74,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	return seastar::do_with(
 	  TransactionRef(new Transaction()),
 	  [this](auto &transaction) {
+	    cache.init();
 	    return cache.mkfs(*transaction).safe_then(
 	      [this, &transaction] {
 		return submit_transaction(std::move(transaction)).then(
@@ -124,7 +91,8 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   seastar::future<> tear_down_fut() final {
-    return seastar::now();
+    return cache.close().handle_error(
+      Cache::close_ertr::assert_all{});
   }
 };
 
@@ -135,9 +103,9 @@ TEST_F(cache_test_t, test_addr_fixup)
     int csum = 0;
     {
       auto t = get_transaction();
-      auto extent = cache.alloc_new_extent<CacheTestBlock>(
+      auto extent = cache.alloc_new_extent<TestBlock>(
 	*t,
-	CacheTestBlock::SIZE);
+	TestBlock::SIZE);
       extent->set_contents('c');
       csum = extent->checksum();
       auto ret = submit_transaction(std::move(t)).get0();
@@ -146,10 +114,10 @@ TEST_F(cache_test_t, test_addr_fixup)
     }
     {
       auto t = get_transaction();
-      auto extent = cache.get_extent<CacheTestBlock>(
+      auto extent = cache.get_extent<TestBlock>(
 	*t,
 	addr,
-	CacheTestBlock::SIZE).unsafe_get0();
+	TestBlock::SIZE).unsafe_get0();
       ASSERT_EQ(extent->get_paddr(), addr);
       ASSERT_EQ(extent->checksum(), csum);
     }
@@ -165,9 +133,9 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // write out initial test block
       auto t = get_transaction();
-      auto extent = cache.alloc_new_extent<CacheTestBlock>(
+      auto extent = cache.alloc_new_extent<TestBlock>(
 	*t,
-	CacheTestBlock::SIZE);
+	TestBlock::SIZE);
       extent->set_contents('c');
       csum = extent->checksum();
       auto reladdr = extent->get_paddr();
@@ -175,10 +143,10 @@ TEST_F(cache_test_t, test_dirty_extent)
       {
 	// test that read with same transaction sees new block though
 	// uncommitted
-	auto extent = cache.get_extent<CacheTestBlock>(
+	auto extent = cache.get_extent<TestBlock>(
 	  *t,
 	  reladdr,
-	  CacheTestBlock::SIZE).unsafe_get0();
+	  TestBlock::SIZE).unsafe_get0();
 	ASSERT_TRUE(extent->is_clean());
 	ASSERT_TRUE(extent->is_pending());
 	ASSERT_TRUE(extent->get_paddr().is_relative());
@@ -192,26 +160,26 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // test that consecutive reads on the same extent get the same ref
       auto t = get_transaction();
-      auto extent = cache.get_extent<CacheTestBlock>(
+      auto extent = cache.get_extent<TestBlock>(
 	*t,
 	addr,
-	CacheTestBlock::SIZE).unsafe_get0();
+	TestBlock::SIZE).unsafe_get0();
       auto t2 = get_transaction();
-      auto extent2 = cache.get_extent<CacheTestBlock>(
+      auto extent2 = cache.get_extent<TestBlock>(
 	*t2,
 	addr,
-	CacheTestBlock::SIZE).unsafe_get0();
+	TestBlock::SIZE).unsafe_get0();
       ASSERT_EQ(&*extent, &*extent2);
     }
     {
       // read back test block
       auto t = get_transaction();
-      auto extent = cache.get_extent<CacheTestBlock>(
+      auto extent = cache.get_extent<TestBlock>(
 	*t,
 	addr,
-	CacheTestBlock::SIZE).unsafe_get0();
+	TestBlock::SIZE).unsafe_get0();
       // duplicate and reset contents
-      extent = cache.duplicate_for_write(*t, extent)->cast<CacheTestBlock>();
+      extent = cache.duplicate_for_write(*t, extent)->cast<TestBlock>();
       extent->set_contents('c');
       csum2 = extent->checksum();
       ASSERT_EQ(extent->get_paddr(), addr);
@@ -219,10 +187,10 @@ TEST_F(cache_test_t, test_dirty_extent)
 	// test that concurrent read with fresh transaction sees old
         // block
 	auto t2 = get_transaction();
-	auto extent = cache.get_extent<CacheTestBlock>(
+	auto extent = cache.get_extent<TestBlock>(
 	  *t2,
 	  addr,
-	  CacheTestBlock::SIZE).unsafe_get0();
+	  TestBlock::SIZE).unsafe_get0();
 	ASSERT_TRUE(extent->is_clean());
 	ASSERT_FALSE(extent->is_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
@@ -231,10 +199,10 @@ TEST_F(cache_test_t, test_dirty_extent)
       }
       {
 	// test that read with same transaction sees new block
-	auto extent = cache.get_extent<CacheTestBlock>(
+	auto extent = cache.get_extent<TestBlock>(
 	  *t,
 	  addr,
-	  CacheTestBlock::SIZE).unsafe_get0();
+	  TestBlock::SIZE).unsafe_get0();
 	ASSERT_TRUE(extent->is_dirty());
 	ASSERT_TRUE(extent->is_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
@@ -252,10 +220,10 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // test that fresh transaction now sees newly dirty block
       auto t = get_transaction();
-      auto extent = cache.get_extent<CacheTestBlock>(
+      auto extent = cache.get_extent<TestBlock>(
 	*t,
 	addr,
-	CacheTestBlock::SIZE).unsafe_get0();
+	TestBlock::SIZE).unsafe_get0();
       ASSERT_TRUE(extent->is_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);

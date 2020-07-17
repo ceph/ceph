@@ -115,7 +115,7 @@ void usage(ostream& out)
 "   listomapvals <obj-name>          list the keys and vals in the object map \n"
 "   getomapval <obj-name> <key> [file] show the value for the specified key\n"
 "                                    in the object's object map\n"
-"   setomapval <obj-name> <key> <val>\n"
+"   setomapval <obj-name> <key> <val | --input-file file>\n"
 "   rmomapkey <obj-name> <key>\n"
 "   clearomap <obj-name> [obj-name2 obj-name3...] clear all the omap keys for the specified objects\n"
 "   getomapheader <obj-name> [file]\n"
@@ -189,6 +189,8 @@ void usage(ostream& out)
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
+"   --input-file file\n"
+"        use the content of the specified file in place of <val>\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
 "   -N namespace\n"
@@ -1179,7 +1181,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   string lock_cookie;
   string lock_description;
   int lock_duration = 0;
-  ClsLockType lock_type = LOCK_EXCLUSIVE;
+  ClsLockType lock_type = ClsLockType::EXCLUSIVE;
 
   map<string, string>::const_iterator i;
   i = opts.find("lock-tag");
@@ -1204,9 +1206,9 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   if (i != opts.end()) {
     const string& type_str = i->second;
     if (type_str.compare("exclusive") == 0) {
-      lock_type = LOCK_EXCLUSIVE;
+      lock_type = ClsLockType::EXCLUSIVE;
     } else if (type_str.compare("shared") == 0) {
-      lock_type = LOCK_SHARED;
+      lock_type = ClsLockType::SHARED;
     } else {
       cerr << "unknown lock type was specified, aborting" << std::endl;
       return -EINVAL;
@@ -1243,7 +1245,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
 
   if (cmd.compare("info") == 0) {
     map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> lockers;
-    ClsLockType type = LOCK_NONE;
+    ClsLockType type = ClsLockType::NONE;
     string tag;
     int ret = rados::cls::lock::get_lock_info(ioctx, oid, lock_name, &lockers, &type, &tag);
     if (ret < 0) {
@@ -1281,7 +1283,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     l.set_description(lock_description);
     int ret;
     switch (lock_type) {
-    case LOCK_SHARED:
+    case ClsLockType::SHARED:
       ret = l.lock_shared(ioctx, oid);
       break;
     default:
@@ -1883,6 +1885,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool omap_key_valid = false;
   std::string omap_key;
   std::string omap_key_pretty;
+  std::string input_file;
   bool with_reference = false;
 
   Rados rados;
@@ -2112,6 +2115,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("with-reference");
   if (i != opts.end()) {
     with_reference = true;
+  }
+  i = opts.find("input_file");
+  if (i != opts.end()) {
+    input_file = i->second;
   }
 
   // open rados
@@ -2760,7 +2767,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     bufferlist bl;
-    if (nargs.size() > min_args) {
+    if (!input_file.empty()) {
+      string err;
+      ret = bl.read_file(input_file.c_str(), &err);
+      if (ret < 0) {
+        cerr << "error reading file " << input_file.c_str() << ": " << err << std::endl;
+        return 1;
+      }
+    } else if (nargs.size() > min_args) {
       string val(nargs[min_args]);
       bl.append(val);
     } else {
@@ -3789,9 +3803,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     string oid(nargs[1]);
 
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.tier_flush();
-    ret = io_ctx.operate(oid, &op);
+    librados::AioCompletion *completion =
+      librados::Rados::aio_create_completion();
+    io_ctx.aio_operate(oid.c_str(), completion, &op,
+		       librados::OPERATION_IGNORE_CACHE |
+		       librados::OPERATION_IGNORE_OVERLAY,
+		       NULL);
+    completion->wait_for_complete();
+    ret = completion->get_return_value();
+    completion->release();
     if (ret < 0) {
       cerr << "error tier-flush " << pool_name << "/" << oid << " : " 
 	   << cpp_strerror(ret) << std::endl;
@@ -4047,6 +4069,8 @@ int main(int argc, const char **argv)
       opts["with-reference"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--pgid", (char*)NULL)) {
       opts["pgid"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--input-file", (char*)NULL)) {
+      opts["input_file"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();

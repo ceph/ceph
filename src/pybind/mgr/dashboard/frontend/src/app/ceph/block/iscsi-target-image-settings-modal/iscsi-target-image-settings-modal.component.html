@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title">
     <ng-container i18n>Configure</ng-container>&nbsp;
     <small>{{ image }}</small>
@@ -86,7 +86,7 @@
         <cd-submit-button i18n
                           [form]="settingsForm"
                           (submitAction)="save()">Confirm</cd-submit-button>
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

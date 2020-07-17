@@ -124,6 +124,16 @@ ENDOFKEY
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
+function ensure_python3_sphinx_on_ubuntu {
+    local sphinx_command=/usr/bin/sphinx-build
+    # python-sphinx points $sphinx_command to
+    # ../share/sphinx/scripts/python2/sphinx-build when it's installed
+    # let's "correct" this
+    if test -e $sphinx_command  && head -n1 $sphinx_command | grep -q python$; then
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove python-sphinx
+    fi
+}
+
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -154,13 +164,13 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     local codename=$1
-    if apt -qq list ceph-libboost1.67-dev 2>/dev/null | grep -q installed; then
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.67.*'
-	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.67.list
+    if apt -qq list ceph-libboost1.72-dev 2>/dev/null | grep -q installed; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.72.*'
+	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.72.list
     fi
     local project=libboost
-    local ver=1.72
-    local sha1=1d7c7a00cc3f37e340bae0360191a757b44ec80c
+    local ver=1.73
+    local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
     install_pkg_on_ubuntu \
 	$project \
 	$sha1 \
@@ -186,31 +196,6 @@ function install_boost_on_ubuntu {
 
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
-}
-
-function ensure_decent_gcc_on_rh {
-    local old=$(gcc -dumpversion)
-    local expected=5.1
-    local dts_ver=$1
-    if version_lt $old $expected; then
-	if test -t 1; then
-	    # interactive shell
-	    cat <<EOF
-Your GCC is too old. Please run following command to add DTS to your environment:
-
-scl enable devtoolset-8 bash
-
-Or add following line to the end of ~/.bashrc to add it permanently:
-
-source scl_source enable devtoolset-8
-
-see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
-EOF
-	else
-	    # non-interactive shell
-	    source /opt/rh/devtoolset-$dts_ver/enable
-	fi
-    fi
 }
 
 for_make_check=false
@@ -288,6 +273,7 @@ else
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
+        ensure_python3_sphinx_on_ubuntu
         case "$VERSION" in
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
@@ -322,49 +308,20 @@ else
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel|ol|virtuozzo)
-        yumdnf="dnf"
         builddepcmd="dnf -y builddep --allowerasing"
-        if [[ $ID =~ centos|rhel ]] && version_lt $VERSION_ID 8; then
-            yumdnf="yum"
-            builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
-        fi
-        echo "Using $yumdnf to install dependencies"
-	if [ "$ID" = "centos" -a "$ARCH" = "aarch64" ]; then
-	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
-	    $SUDO yum-config-manager --disable centos-sclo-rh || true
-	    $SUDO yum remove centos-release-scl || true
-	fi
+        echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
-                $SUDO $yumdnf install -y $yumdnf-utils
+                $SUDO dnf install -y dnf-utils
                 ;;
             centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-                $SUDO $yumdnf install -y $yumdnf-utils
+                $SUDO dnf install -y dnf-utils
                 rpm --quiet --query epel-release || \
-		    $SUDO $yumdnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+		    $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $ID = centos -a $MAJOR_VERSION = 7 ; then
-		    case "$ARCH" in
-			x86_64)
-			    $SUDO $yumdnf -y install centos-release-scl
-			    dts_ver=8
-			    ;;
-			aarch64)
-			    $SUDO $yumdnf -y install centos-release-scl-rh
-			    $SUDO yum-config-manager --disable centos-sclo-rh
-			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=8
-			    ;;
-		    esac
-                elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager \
-			  --enable rhel-server-rhscl-7-rpms \
-			  --enable rhel-7-server-optional-rpms \
-			  --enable rhel-7-server-devtools-rpms
-                    dts_ver=8
-                elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
+		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     $SUDO dnf config-manager --set-enabled PowerTools
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
@@ -378,12 +335,9 @@ else
         esac
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
-        $SUDO $yumdnf install -y python3-devel
+        $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
-	if [ -n "$dts_ver" ]; then
-            ensure_decent_gcc_on_rh $dts_ver
-	fi
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
         ;;

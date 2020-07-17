@@ -1,8 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -23,6 +22,7 @@ import { Task } from '../../../shared/models/task';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
@@ -63,7 +63,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   viewCacheStatusList: any[];
   selection = new CdTableSelection();
 
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   builders = {
     'rbd/create': (metadata: object) =>
@@ -104,10 +104,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     private rbdService: RbdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private dimlessPipe: DimlessPipe,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     private taskListService: TaskListService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
   ) {
@@ -184,58 +183,58 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool_name',
         flexGrow: 2
       },
       {
-        name: this.i18n('Namespace'),
+        name: $localize`Namespace`,
         prop: 'namespace',
         flexGrow: 2
       },
       {
-        name: this.i18n('Size'),
+        name: $localize`Size`,
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Objects'),
+        name: $localize`Objects`,
         prop: 'num_objs',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessPipe
       },
       {
-        name: this.i18n('Object size'),
+        name: $localize`Object size`,
         prop: 'obj_size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Provisioned'),
+        name: $localize`Provisioned`,
         prop: 'disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Total provisioned'),
+        name: $localize`Total provisioned`,
         prop: 'total_disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: this.i18n('Parent'),
+        name: $localize`Parent`,
         prop: 'parent',
         flexGrow: 2,
         cellTemplate: this.parentTpl
@@ -339,22 +338,20 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'RBD',
-        itemNames: [imageSpec],
-        bodyTemplate: this.deleteTpl,
-        bodyContext: {
-          hasSnapshots: this.hasSnapshots(),
-          snapshots: this.listProtectedSnapshots()
-        },
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('rbd/delete', {
-              image_spec: imageSpec.toString()
-            }),
-            call: this.rbdService.delete(imageSpec)
-          })
-      }
+      itemDescription: 'RBD',
+      itemNames: [imageSpec],
+      bodyTemplate: this.deleteTpl,
+      bodyContext: {
+        hasSnapshots: this.hasSnapshots(),
+        snapshots: this.listProtectedSnapshots()
+      },
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('rbd/delete', {
+            image_spec: imageSpec.toString()
+          }),
+          call: this.rbdService.delete(imageSpec)
+        })
     });
   }
 
@@ -365,7 +362,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       imageName: this.selection.first().name,
       hasSnapshots: this.hasSnapshots()
     };
-    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
+    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, initialState);
   }
 
   flattenRbd(imageSpec: ImageSpec) {
@@ -378,7 +375,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       })
       .subscribe({
         complete: () => {
-          this.modalRef.hide();
+          this.modalRef.close();
         }
       });
   }
@@ -408,7 +405,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       }
     };
 
-    this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, initialState);
   }
 
   hasSnapshots() {
@@ -435,9 +432,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   getDeleteDisableDesc(): string {
     const first = this.selection.first();
     if (first && this.hasClonedSnapshots(first)) {
-      return this.i18n(
-        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
-      );
+      return $localize`This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.`;
     }
 
     return '';

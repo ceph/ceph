@@ -2,7 +2,6 @@ import { Component, EventEmitter, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin, Observable, ReplaySubject } from 'rxjs';
 import { first, switchMap } from 'rxjs/operators';
@@ -102,48 +101,47 @@ export class RbdFormComponent extends CdForm implements OnInit {
     private formatter: FormatterService,
     private taskWrapper: TaskWrapperService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n,
     public router: Router
   ) {
     super();
     this.poolPermission = this.authStorageService.getPermissions().pool;
-    this.resource = this.i18n('RBD');
+    this.resource = $localize`RBD`;
     this.features = {
       'deep-flatten': {
-        desc: this.i18n('Deep flatten'),
+        desc: $localize`Deep flatten`,
         requires: null,
         allowEnable: false,
         allowDisable: true
       },
       layering: {
-        desc: this.i18n('Layering'),
+        desc: $localize`Layering`,
         requires: null,
         allowEnable: false,
         allowDisable: false
       },
       'exclusive-lock': {
-        desc: this.i18n('Exclusive lock'),
+        desc: $localize`Exclusive lock`,
         requires: null,
         allowEnable: true,
         allowDisable: true
       },
       'object-map': {
-        desc: this.i18n('Object map (requires exclusive-lock)'),
+        desc: $localize`Object map (requires exclusive-lock)`,
         requires: 'exclusive-lock',
         allowEnable: true,
         allowDisable: true,
         initDisabled: true
       },
       journaling: {
-        desc: this.i18n('Journaling (requires exclusive-lock)'),
+        desc: $localize`Journaling (requires exclusive-lock)`,
         requires: 'exclusive-lock',
         allowEnable: true,
         allowDisable: true,
         initDisabled: true
       },
       'fast-diff': {
-        desc: this.i18n('Fast diff (interlocked with object-map)'),
+        desc: $localize`Fast diff (interlocked with object-map)`,
         requires: 'object-map',
         allowEnable: true,
         allowDisable: true,

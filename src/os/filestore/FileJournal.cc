@@ -1602,7 +1602,7 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   ebl.append((const char*)&h, sizeof(h));
   if (directio)
     ebl.rebuild_aligned(CEPH_DIRECTIO_ALIGNMENT);
-  tbl->claim(ebl);
+  *tbl = std::move(ebl);
   return h.len;
 }
 

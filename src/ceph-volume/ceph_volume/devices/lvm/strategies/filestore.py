@@ -184,7 +184,6 @@ class MixedType(MixedStrategy):
         self.blank_journal_devs = []
         self.journals_needed = len(self.data_devs) * self.osds_per_device
         self.journal_size = get_journal_size(args)
-        self.system_vgs = lvm.VolumeGroups()
         self.validate_compute()
 
     @classmethod

@@ -184,6 +184,7 @@ void MgrClient::reconnect()
   if (service_daemon) {
     daemon_dirty_status = true;
   }
+  task_dirty_status = true;
 
   // Don't send an open if we're just a client (i.e. doing
   // command-sending, not stats etc)
@@ -552,7 +553,7 @@ bool MgrClient::handle_command_reply(
 
   auto &op = command_table.get_command(tid);
   if (op.outbl) {
-    op.outbl->claim(data);
+    *op.outbl = std::move(data);
   }
 
   if (op.outs) {

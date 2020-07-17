@@ -2543,7 +2543,7 @@ static int list_instance_entries(cls_method_context_t hctx,
     }
   }
   if (found_first) {
-    keys[start_after_key].claim(k);
+    keys[start_after_key] = std::move(k);
   }
 
   for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
@@ -2634,7 +2634,7 @@ static int list_olh_entries(cls_method_context_t hctx,
   }
 
   if (found_first) {
-    keys[start_after_key].claim(k);
+    keys[start_after_key] = std::move(k);
   }
 
   for (auto iter = keys.begin(); iter != keys.end(); ++iter) {

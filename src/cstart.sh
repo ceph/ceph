@@ -63,5 +63,5 @@ sudo chmod 755 ceph.client.admin.keyring
 echo 'keyring = ceph.client.admin.keyring' >> ceph.conf
 
 echo
-echo "sudo ../src/script/cpach -t $image_base:$shortid"
+echo "sudo ../src/script/cpatch -t $image_base:$shortid"
 echo

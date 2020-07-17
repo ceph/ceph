@@ -114,8 +114,8 @@
         suffix: sparse
       register: tmpdir
 
-    - name: create a 5GB sparse file
-      command: fallocate -l 5G {{ tmpdir.path }}/sparse.file
+    - name: create a 1GB sparse file
+      command: fallocate -l 1G {{ tmpdir.path }}/sparse.file
 
     - name: find an empty loop device
       command: losetup -f

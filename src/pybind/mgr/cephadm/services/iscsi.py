@@ -5,14 +5,16 @@ from typing import List, cast
 from mgr_module import MonCommandFailed
 from ceph.deployment.service_spec import IscsiServiceSpec
 
-from orchestrator import DaemonDescription
-from .cephadmservice import CephadmService
+from orchestrator import DaemonDescription, OrchestratorError
+from .cephadmservice import CephadmService, CephadmDaemonSpec
 from .. import utils
 
 logger = logging.getLogger(__name__)
 
 
 class IscsiService(CephadmService):
+    TYPE = 'iscsi'
+
     def config(self, spec: IscsiServiceSpec):
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
@@ -20,14 +22,18 @@ class IscsiService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, igw_id, host, spec) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> str:
+        spec = daemon_spec.spec
+        if spec is None:
+            raise OrchestratorError(f'Unable to deploy {daemon_spec.name()}: Service not found.')
+        igw_id = daemon_spec.daemon_id
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': utils.name_to_auth_entity('iscsi') + '.' + igw_id,
+            'entity': utils.name_to_auth_entity('iscsi', igw_id),
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blacklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
-                     'osd', f'allow rwx pool={spec.pool}'],
+                     'osd', 'allow rwx'],
         })
 
         if spec.ssl_cert:
@@ -57,9 +63,12 @@ class IscsiService(CephadmService):
             'spec': spec
         }
         igw_conf = self.mgr.template.render('services/iscsi/iscsi-gateway.cfg.j2', context)
-        extra_config = {'iscsi-gateway.cfg': igw_conf}
-        return self.mgr._create_daemon('iscsi', igw_id, host, keyring=keyring,
-                                       extra_config=extra_config)
+
+        daemon_spec.keyring = keyring
+        daemon_spec.extra_config = {'iscsi-gateway.cfg': igw_conf}
+
+        return self.mgr._create_daemon(daemon_spec)
+
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         def get_set_cmd_dicts(out: str) -> List[dict]:

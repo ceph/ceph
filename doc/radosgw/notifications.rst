@@ -29,6 +29,31 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+
+Topic Management via CLI
+------------------------
+
+Configuration of all topics of a user could be fetched using the following command:
+   
+::
+   
+   # radosgw-admin topic list --uid={user-id}
+
+
+Configuration of a specific topic could be fetched using:
+
+::
+   
+   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+
+
+And removed using:
+
+::
+   
+   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+
+
 Notification Performance Stats
 ------------------------------
 The same counters are shared between the pubsub sync module and the bucket notification mechanism.
@@ -97,12 +122,14 @@ Request parameters:
  - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
  - port defaults to: 5672
  - vhost defaults to: "/"
- - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
  - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
   - "routable": message is considered "delivered" if broker can route to a consumer
+
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
 
 - Kafka endpoint 
 

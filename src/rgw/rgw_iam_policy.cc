@@ -382,7 +382,7 @@ bool ParseState::key(const char* s, size_t l) {
   bool ifexists = false;
   if (w->id == TokenID::Condition && w->kind == TokenKind::statement) {
     static constexpr char IfExists[] = "IfExists";
-    if (boost::algorithm::ends_with(boost::string_view{s, l}, IfExists)) {
+    if (boost::algorithm::ends_with(std::string_view{s, l}, IfExists)) {
       ifexists = true;
       token_len -= sizeof(IfExists)-1;
     }

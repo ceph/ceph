@@ -95,6 +95,16 @@ class SubvolumeTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
+    def pin(self, pin_type, pin_setting):
+        """
+        pin a subvolume
+
+        :param pin_type: type of pin
+        :param pin_setting: setting for pin
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
     def create_snapshot(self, snapname):
         """
         snapshot a subvolume.
@@ -127,34 +137,6 @@ class SubvolumeTemplate(object):
         list all subvolume snapshots.
 
         :param: None
-        :return: None
-        """
-        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
-
-    def is_snapshot_protected(self, snapname):
-        """
-        check if a snapshot is protected.
-
-        :param: snapname: snapshot to protect
-        :return: True if the snapshot is protected, False otherwise.
-        """
-        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
-
-    def protect_snapshot(self, snapname):
-        """
-        protect a subvolume snapshot. only a protected snapshot can be cloned.
-
-        :param: snapname: snapshot to protect
-        :return: None
-        """
-        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
-
-    def unprotect_snapshot(self, snapname):
-        """
-        unprotect a subvolume snapshot. fail to unprotect if there are pending
-        clone operations on the snapshot.
-
-        :param: snapname: snapshot to unprotect
         :return: None
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")

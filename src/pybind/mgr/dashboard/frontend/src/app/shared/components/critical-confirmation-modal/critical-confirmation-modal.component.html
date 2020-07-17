@@ -1,5 +1,5 @@
 <cd-modal #modal
-          [modalRef]="modalRef">
+          [modalRef]="activeModal">
   <ng-container class="modal-title">
     <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
   </ng-container>
@@ -25,6 +25,7 @@
           <ng-template #noNames>
             <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
           </ng-template>
+          <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
           <div class="form-group">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
@@ -46,7 +47,7 @@
                           (submitAction)="callSubmitAction()">
           <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
         </cd-submit-button>
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

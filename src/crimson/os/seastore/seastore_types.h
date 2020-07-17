@@ -202,14 +202,16 @@ std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs);
 std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
 
 /* identifies type of extent, used for interpretting deltas, managing
- * writeback */
+ * writeback.
+ *
+ * Note that any new extent type needs to be added to
+ * Cache::get_extent_by_type in cache.cc
+ */
 enum class extent_types_t : uint8_t {
-  ROOT_LOCATION = 0, // delta only
-  ROOT = 1,
-  LADDR_INTERNAL = 2,
-  LADDR_LEAF = 3,
-  LBA_BLOCK = 4,
-  ONODE_BLOCK = 5,
+  ROOT = 0,
+  LADDR_INTERNAL = 1,
+  LADDR_LEAF = 2,
+  ONODE_BLOCK = 3,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
@@ -234,6 +236,8 @@ struct delta_info_t {
   paddr_t paddr;                               ///< physical address
   /* logical address -- needed for repopulating cache -- TODO don't actually need */
   // laddr_t laddr = L_ADDR_NULL;
+  uint32_t prev_crc;
+  uint32_t final_crc;
   segment_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
   ceph::bufferlist bl;                         ///< payload
@@ -243,6 +247,8 @@ struct delta_info_t {
     denc(v.type, p);
     denc(v.paddr, p);
     //denc(v.laddr, p);
+    denc(v.prev_crc, p);
+    denc(v.final_crc, p);
     denc(v.length, p);
     denc(v.pversion, p);
     denc(v.bl, p);
@@ -253,12 +259,18 @@ struct delta_info_t {
     return (
       type == rhs.type &&
       paddr == rhs.paddr &&
+      prev_crc == rhs.prev_crc &&
+      final_crc == rhs.final_crc &&
       length == rhs.length &&
       pversion == rhs.pversion &&
       bl == rhs.bl
     );
   }
+
+  friend std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 };
+
+std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 
 struct record_t {
   std::vector<extent_t> extents;

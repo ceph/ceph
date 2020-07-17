@@ -278,6 +278,7 @@ HTML files:
 - `htmllint-cli <https://github.com/htmllint/htmllint-cli>`_
 - `Prettier <https://prettier.io/>`_
 - `TSLint <https://palantir.github.io/tslint/>`_
+- `stylelint <https://stylelint.io/>`_
 
 We added 2 npm scripts to help run these tools:
 
@@ -802,11 +803,6 @@ All our supported languages should be registered in both exports in
 ``language-selector.component.spec.ts``.
 
 The ``SupportedLanguages`` enum will provide the list for the default language selection.
-
-The ``languageBootstrapMapping`` variable will provide the
-`language support <https://github.com/valor-software/ngx-bootstrap/tree/development/src/chronos/i18n>`_
-for ngx-bootstrap components like the
-`date picker <https://valor-software.com/ngx-bootstrap/#/datepicker#locales>`_.
 
 Translating process
 ~~~~~~~~~~~~~~~~~~~

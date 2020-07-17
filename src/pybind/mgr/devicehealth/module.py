@@ -9,7 +9,6 @@ import operator
 import rados
 from threading import Event
 from datetime import datetime, timedelta, date, time
-from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -559,7 +558,7 @@ class Module(MgrModule):
                 did += 1
             if to_mark_out:
                 self.mark_out_etc(to_mark_out)
-        for warning, ls in iteritems(health_warnings):
+        for warning, ls in health_warnings.items():
             n = len(ls)
             if n:
                 checks[warning] = {

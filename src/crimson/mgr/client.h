@@ -24,9 +24,8 @@ namespace crimson::mgr
 // implement WithStats if you want to report stats to mgr periodically
 class WithStats {
 public:
-  // the method is not const, because the class sending stats might need to
-  // update a seq number every time it collects the stats
-  virtual MessageRef get_stats() = 0;
+  virtual void update_stats() = 0;
+  virtual MessageRef get_stats() const = 0;
   virtual ~WithStats() {}
 };
 
@@ -36,6 +35,8 @@ public:
 	 WithStats& with_stats);
   seastar::future<> start();
   seastar::future<> stop();
+  void report();
+
 private:
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				Ref<Message> m) override;
@@ -46,7 +47,6 @@ private:
   seastar::future<> handle_mgr_conf(crimson::net::Connection* conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
-  void report();
 
   void print(std::ostream&) const;
   friend std::ostream& operator<<(std::ostream& out, const Client& client);

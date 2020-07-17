@@ -1,11 +1,7 @@
 import json
 import logging
-import time
 from textwrap import dedent
 from teuthology.orchestra.run import CommandFailedError
-from teuthology import misc
-
-from teuthology.orchestra import remote as orchestra_remote
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 from tasks.cephfs.mount import CephFSMount
@@ -76,20 +72,16 @@ class KernelMount(CephFSMount):
 
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
 
-        cmd=['sudo', 'umount', self.mountpoint]
-        if force:
-            cmd.append('-f')
-
         try:
-            self.client_remote.run(args=cmd, timeout=(15*60))
+            cmd=['sudo', 'umount', self.mountpoint]
+            if force:
+                cmd.append('-f')
+            self.client_remote.run(args=cmd, timeout=(15*60), omit_sudo=False)
         except Exception as e:
-            self.client_remote.run(args=[
-                'sudo',
-                run.Raw('PATH=/usr/sbin:$PATH'),
-                'lsof',
-                run.Raw(';'),
-                'ps', 'auxf',
-            ], timeout=(15*60))
+            self.client_remote.run(
+                args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
+                      run.Raw(';'), 'ps', 'auxf'],
+                timeout=(15*60), omit_sudo=False)
             raise e
 
         self.mounted = False
@@ -110,14 +102,9 @@ class KernelMount(CephFSMount):
                 raise
 
             # force delete the netns and umount
-            self.client_remote.run(
-                args=['sudo',
-                      'umount',
-                      '-f',
-                      '-l',
-                      self.mountpoint
-                ],
-                timeout=(15*60))
+            self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
+                                         self.mountpoint],
+                                   timeout=(15*60), omit_sudo=False)
 
             self.mounted = False
             self.cleanup()

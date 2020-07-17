@@ -1,24 +1,23 @@
-<cd-table [data]="data"
+<cd-prometheus-tabs></cd-prometheus-tabs>
+
+<cd-alert-panel *ngIf="!isPrometheusConfigured"
+                type="info"
+                i18n>To see all configured Prometheus alerts, please
+  provide the URL to the API of Prometheus as described in
+  the <a href="{{docsUrl}}"
+         target="_blank">documentation</a>.
+</cd-alert-panel>
+
+<cd-table *ngIf="isPrometheusConfigured"
+          [data]="prometheusAlertService.rules"
           [columns]="columns"
           [hasDetails]="true"
           (updateSelection)="setExpandedRow($event)"
           [selectionType]="'single'">
-  <ng-container cdTableDetail
-                *ngIf="expandedRow">
-    <ul ngbNav
-        #nav="ngbNav"
-        class="nav-tabs">
-      <li ngbNavItem>
-        <a ngbNavLink
-           i18n>Details</a>
-        <ng-template ngbNavContent>
-          <cd-table-key-value [data]="expandedRow"
-                              [renderObjects]="true"
-                              [hideKeys]="hideKeys"></cd-table-key-value>
-        </ng-template>
-      </li>
-    </ul>
-
-    <div [ngbNavOutlet]="nav"></div>
-  </ng-container>
+  <cd-table-key-value cdTableDetail
+                      *ngIf="expandedRow"
+                      [data]="expandedRow"
+                      [renderObjects]="true"
+                      [hideKeys]="hideKeys">
+  </cd-table-key-value>
 </cd-table>

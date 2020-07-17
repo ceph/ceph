@@ -2,7 +2,6 @@ import { ChangeDetectorRef, Component, OnInit, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
@@ -34,6 +33,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
+  clients: any[] = [];
+
   permission: Permission;
   nfsForm: CdFormGroup;
   isEdit = false;
@@ -63,10 +64,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   docsUrl: string;
 
   daemonsSelections: SelectOption[] = [];
-  daemonsMessages = new SelectMessages(
-    { noOptions: this.i18n('There are no daemons available.') },
-    this.i18n
-  );
+  daemonsMessages = new SelectMessages({ noOptions: $localize`There are no daemons available.` });
 
   pathDataSource = (text$: Observable<string>) => {
     return text$.pipe(
@@ -96,12 +94,11 @@ export class NfsFormComponent extends CdForm implements OnInit {
     private cephReleaseNamePipe: CephReleaseNamePipe,
     private taskWrapper: TaskWrapperService,
     private cdRef: ChangeDetectorRef,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
-    this.resource = this.i18n('NFS export');
+    this.resource = $localize`NFS export`;
     this.createForm();
   }
 
@@ -266,7 +263,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     this.nfsForm.patchValue(res);
     this.setPathValidation();
-    this.nfsClients.resolveModel(res.clients);
+    this.clients = res.clients;
   }
 
   resolveDaemons(daemons: Record<string, any>) {

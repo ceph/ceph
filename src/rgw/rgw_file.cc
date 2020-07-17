@@ -2313,7 +2313,7 @@ class RGWReadV
 
 public:
   RGWReadV(buffer::list& _bl, rgw_vio* _vio) : vio(_vio) {
-    bl.claim(_bl);
+    bl = std::move(_bl);
   }
 
   struct rgw_vio* get_vio() { return vio; }

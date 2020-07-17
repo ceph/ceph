@@ -3,15 +3,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  FormHelper,
-  i18nProviders
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../../testing/unit-test-helper';
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -33,7 +29,7 @@ describe('BootstrapCreateModalComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [BsModalRef, BsModalService, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
@@ -69,7 +65,7 @@ describe('BootstrapCreateModalComponent', () => {
   describe('generate token', () => {
     beforeEach(() => {
       spyOn(rbdMirroringService, 'refresh').and.stub();
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
       fixture.detectChanges();
     });
 

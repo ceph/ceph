@@ -162,6 +162,58 @@ with codecs.open(git_dir + "/.githubmap", encoding='utf-8') as f:
 BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
+def get_credits(pr, pr_req):
+    comments = requests.get("https://api.github.com/repos/{project}/{repo}/issues/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
+    if comments.status_code != 200:
+        log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
+        sys.exit(1)
+
+    reviews = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/reviews".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
+    if reviews.status_code != 200:
+        log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
+        sys.exit(1)
+
+    review_comments = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
+    if review_comments.status_code != 200:
+        log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
+        sys.exit(1)
+
+    credits = set()
+    for comment in [pr_req.json()]+comments.json()+reviews.json()+review_comments.json():
+        body = comment["body"]
+        if body:
+            url = comment["html_url"]
+            for m in BZ_MATCH.finditer(body):
+                log.info("[ {url} ] BZ cited: {cite}".format(url=url, cite=m.group(1)))
+            for m in TRACKER_MATCH.finditer(body):
+                log.info("[ {url} ] Ceph tracker cited: {cite}".format(url=url, cite=m.group(1)))
+            for indication in INDICATIONS:
+                for cap in indication.findall(comment["body"]):
+                    credits.add(cap)
+
+    new_new_contributors = {}
+    for review in reviews.json():
+        if review["state"] == "APPROVED":
+            user = review["user"]["login"]
+            try:
+                credits.add("Reviewed-by: "+CONTRIBUTORS[user])
+            except KeyError as e:
+                try:
+                    credits.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
+                except KeyError as e:
+                    try:
+                        name = input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
+                        name = name.strip()
+                        if len(name) == 0:
+                            continue
+                        NEW_CONTRIBUTORS[user] = name
+                        new_new_contributors[user] = name
+                        credits.add("Reviewed-by: "+name)
+                    except EOFError as e:
+                        continue
+
+    return "\n".join(credits), new_new_contributors
+
 def build_branch(args):
     base = args.base
     branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
@@ -251,67 +303,20 @@ def build_branch(args):
                 log.info("[ {sha1} ] Ceph tracker cited: {cite}".format(sha1=short, cite=m.group(1)))
 
         message = message + "\n"
-
-        comments = requests.get("https://api.github.com/repos/{project}/{repo}/issues/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-        if comments.status_code != 200:
-            log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
-            sys.exit(1)
-
-        reviews = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/reviews".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-        if reviews.status_code != 200:
-            log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
-            sys.exit(1)
-
-        review_comments = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
-        if review_comments.status_code != 200:
-            log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
-            sys.exit(1)
-
-        indications = set()
-        for comment in [pr_req.json()]+comments.json()+reviews.json()+review_comments.json():
-            body = comment["body"]
-            if body:
-                url = comment["html_url"]
-                for m in BZ_MATCH.finditer(body):
-                    log.info("[ {url} ] BZ cited: {cite}".format(url=url, cite=m.group(1)))
-                for m in TRACKER_MATCH.finditer(body):
-                    log.info("[ {url} ] Ceph tracker cited: {cite}".format(url=url, cite=m.group(1)))
-                for indication in INDICATIONS:
-                    for cap in indication.findall(comment["body"]):
-                        indications.add(cap)
-
-        new_new_contributors = {}
-        for review in reviews.json():
-            if review["state"] == "APPROVED":
-                user = review["user"]["login"]
-                try:
-                    indications.add("Reviewed-by: "+CONTRIBUTORS[user])
-                except KeyError as e:
-                    try:
-                        indications.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
-                    except KeyError as e:
-                        try:
-                            name = input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
-                            name = name.strip()
-                            if len(name) == 0:
-                                continue
-                            NEW_CONTRIBUTORS[user] = name
-                            new_new_contributors[user] = name
-                            indications.add("Reviewed-by: "+name)
-                        except EOFError as e:
-                            continue
-
-        for indication in indications:
-            message = message + indication + "\n"
+        if args.credits:
+            (addendum, new_contributors) = get_credits(pr, pr_req)
+            message += addendum
+        else:
+            new_contributors = []
 
         G.git.merge(tip.hexsha, '--no-ff', m=message)
 
-        if new_new_contributors:
+        if new_contributors:
             # Check out the PR, add a commit adding to .githubmap
             log.info("adding new contributors to githubmap in merge commit")
             with open(git_dir + "/.githubmap", "a") as f:
-                for c in new_new_contributors:
-                    f.write("%s %s\n" % (c, new_new_contributors[c]))
+                for c in new_contributors:
+                    f.write("%s %s\n" % (c, new_contributors[c]))
             G.index.add([".githubmap"])
             G.git.commit("--amend", "--no-edit")
 
@@ -360,6 +365,7 @@ def main():
     parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
+    parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
     return build_branch(args)

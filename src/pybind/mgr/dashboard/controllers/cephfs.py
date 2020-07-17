@@ -8,7 +8,7 @@ import os
 import cherrypy
 import cephfs
 
-from . import ApiController, RESTController, UiApiController
+from . import ApiController, ControllerDoc, RESTController, UiApiController
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -467,6 +467,7 @@ class CephFSClients(object):
 
 
 @UiApiController('/cephfs', Scope.CEPHFS)
+@ControllerDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
 class CephFsUi(CephFS):
     RESOURCE_ID = 'fs_id'
 

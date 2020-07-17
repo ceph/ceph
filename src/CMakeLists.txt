@@ -294,7 +294,8 @@ list(APPEND mds_files
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
   mds/mdstypes.cc
-  mds/flock.cc)
+  mds/flock.cc
+  mds/cephfs_features.cc)
 
 add_subdirectory(json_spirit)
 
@@ -331,7 +332,14 @@ if(WITH_SEASTAR)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
-  set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member;-Wno-non-virtual-dtor" CACHE STRING "" FORCE)
+  list(APPEND Seastar_CXX_FLAGS
+    "-Wno-error"
+    "-Wno-sign-compare"
+    "-Wno-attributes"
+    "-Wno-pessimizing-move"
+    "-Wno-address-of-packed-member"
+    "-Wno-non-virtual-dtor")
+  set(Seastar_CXX_FLAGS "${Seastar_CXX_FLAGS}" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
@@ -434,7 +442,7 @@ if(WITH_DPDK)
 endif()
 
 if(WIN32)
-  list(APPEND ceph_common_deps ws2_32 mswsock)
+  list(APPEND ceph_common_deps ws2_32 mswsock bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
 endif()
 
@@ -873,3 +881,55 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 add_subdirectory(script)
+
+# add doxygen target
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+  set(DOXYGEN_FILE_PATTERNS *.cc *.c *.cpp *.C *.cxx *.c++ *.CC *.H *.h *.hh *.hpp)
+  set(DOXYGEN_SOURCE_BROWSER YES)
+  set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
+  set(DOXYGEN_CLANG_ASSISTED_PARSING YES)
+  set(DOXYGEN_CLANG_DATABASE_PATH .)
+  set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+  set(DOXYGEN_RECURSIVE YES)
+  set(DOXYGEN_QUIET YES)
+  set(DOXYGEN_GENERATE_LATEX NO)
+  doxygen_add_docs(doxygen
+    auth
+    client
+    cls
+    common
+    compressor
+    crimson
+    crush
+    crypto
+    erasure-code
+    global
+    include
+    journal
+    json_spirit
+    key_value_store
+    kv
+    librados
+    libradosstriper
+    librbd
+    log
+    lua
+    mds
+    messages
+    mgr
+    mon
+    mount
+    msg
+    objclass
+    objsync
+    os
+    osd
+    osdc
+    perfglue
+    rbd_fuse
+    rbd_replay
+    rgw
+    COMMENT "Generate C++ documentation")
+endif()
+

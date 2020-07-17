@@ -1,9 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import * as moment from 'moment';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -22,6 +21,7 @@ import { Permission } from '../../../shared/models/permissions';
 import { Task } from '../../../shared/models/task';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdTrashPurgeModalComponent } from '../rbd-trash-purge-modal/rbd-trash-purge-modal.component';
@@ -46,7 +46,7 @@ export class RbdTrashListComponent implements OnInit {
   columns: CdTableColumn[];
   executingTasks: ExecutingTask[] = [];
   images: any;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   permission: Permission;
   retries: number;
   selection = new CdTableSelection();
@@ -57,11 +57,10 @@ export class RbdTrashListComponent implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private rbdService: RbdService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private cdDatePipe: CdDatePipe,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
@@ -83,34 +82,34 @@ export class RbdTrashListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('ID'),
+        name: $localize`ID`,
         prop: 'id',
         flexGrow: 1,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Namespace'),
+        name: $localize`Namespace`,
         prop: 'namespace',
         flexGrow: 1
       },
       {
-        name: this.i18n('Status'),
+        name: $localize`Status`,
         prop: 'deferment_end_time',
         flexGrow: 1,
         cellTemplate: this.expiresTpl
       },
       {
-        name: this.i18n('Deleted At'),
+        name: $localize`Deleted At`,
         prop: 'deletion_time',
         flexGrow: 1,
         pipe: this.cdDatePipe
@@ -184,7 +183,7 @@ export class RbdTrashListComponent implements OnInit {
       imageId: this.selection.first().id
     };
 
-    this.modalRef = this.modalService.show(RbdTrashRestoreModalComponent, { initialState });
+    this.modalRef = this.modalService.show(RbdTrashRestoreModalComponent, initialState);
   }
 
   deleteModal() {
@@ -195,19 +194,17 @@ export class RbdTrashListComponent implements OnInit {
     const imageIdSpec = new ImageSpec(poolName, namespace, imageId);
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'RBD',
-        itemNames: [imageIdSpec],
-        bodyTemplate: this.deleteTpl,
-        bodyContext: { $implicit: expiresAt },
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('rbd/trash/remove', {
-              image_id_spec: imageIdSpec.toString()
-            }),
-            call: this.rbdService.removeTrash(imageIdSpec, true)
-          })
-      }
+      itemDescription: 'RBD',
+      itemNames: [imageIdSpec],
+      bodyTemplate: this.deleteTpl,
+      bodyContext: { $implicit: expiresAt },
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('rbd/trash/remove', {
+            image_id_spec: imageIdSpec.toString()
+          }),
+          call: this.rbdService.removeTrash(imageIdSpec, true)
+        })
     });
   }
 

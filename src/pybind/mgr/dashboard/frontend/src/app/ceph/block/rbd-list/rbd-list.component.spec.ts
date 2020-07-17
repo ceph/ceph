@@ -4,14 +4,12 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -43,7 +41,6 @@ describe('RbdListComponent', () => {
       BrowserAnimationsModule,
       SharedModule,
       NgbNavModule,
-      ModalModule.forRoot(),
       NgbTooltipModule,
       ToastrModule.forRoot(),
       RouterTestingModule,
@@ -56,7 +53,7 @@ describe('RbdListComponent', () => {
       RbdConfigurationListComponent,
       RbdTabsComponent
     ],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {

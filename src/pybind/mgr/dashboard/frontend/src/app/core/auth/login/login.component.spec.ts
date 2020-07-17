@@ -25,8 +25,8 @@ describe('LoginComponent', () => {
   });
 
   it('should ensure no modal dialogs are opened', () => {
-    component['bsModalService']['modalsCount'] = 2;
+    component['modalService']['modalsCount'] = 2;
     component.ngOnInit();
-    expect(component['bsModalService'].getModalsCount()).toBe(0);
+    expect(component['modalService'].hasOpenModals()).toBeFalsy();
   });
 });

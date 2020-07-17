@@ -1,8 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin, Observable } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';
@@ -16,6 +15,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namespace-form-modal.component';
@@ -29,7 +29,7 @@ import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namesp
 export class RbdNamespaceListComponent implements OnInit {
   columns: CdTableColumn[];
   namespaces: any;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   permission: Permission;
   selection = new CdTableSelection();
   tableActions: CdTableAction[];
@@ -38,9 +38,8 @@ export class RbdNamespaceListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private rbdService: RbdService,
     private poolService: PoolService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
@@ -64,17 +63,17 @@ export class RbdNamespaceListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Namespace'),
+        name: $localize`Namespace`,
         prop: 'namespace',
         flexGrow: 1
       },
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool',
         flexGrow: 1
       },
       {
-        name: this.i18n('Total images'),
+        name: $localize`Total images`,
         prop: 'num_images',
         flexGrow: 1
       }
@@ -120,7 +119,7 @@ export class RbdNamespaceListComponent implements OnInit {
 
   createModal() {
     this.modalRef = this.modalService.show(RbdNamespaceFormModalComponent);
-    this.modalRef.content.onSubmit.subscribe(() => {
+    this.modalRef.componentInstance.onSubmit.subscribe(() => {
       this.refresh();
     });
   }
@@ -129,27 +128,22 @@ export class RbdNamespaceListComponent implements OnInit {
     const pool = this.selection.first().pool;
     const namespace = this.selection.first().namespace;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Namespace',
-        itemNames: [`${pool}/${namespace}`],
-        submitAction: () =>
-          this.rbdService.deleteNamespace(pool, namespace).subscribe(
-            () => {
-              this.notificationService.show(
-                NotificationType.success,
-                this.i18n(`Deleted namespace '{{pool}}/{{namespace}}'`, {
-                  pool: pool,
-                  namespace: namespace
-                })
-              );
-              this.modalRef.hide();
-              this.refresh();
-            },
-            () => {
-              this.modalRef.content.stopLoadingSpinner();
-            }
-          )
-      }
+      itemDescription: 'Namespace',
+      itemNames: [`${pool}/${namespace}`],
+      submitAction: () =>
+        this.rbdService.deleteNamespace(pool, namespace).subscribe(
+          () => {
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Deleted namespace '${pool}/${namespace}'`
+            );
+            this.modalRef.close();
+            this.refresh();
+          },
+          () => {
+            this.modalRef.componentInstance.stopLoadingSpinner();
+          }
+        )
     });
   }
 
@@ -157,7 +151,7 @@ export class RbdNamespaceListComponent implements OnInit {
     const first = this.selection.first();
     if (first) {
       if (first.num_images > 0) {
-        return this.i18n('Namespace contains images');
+        return $localize`Namespace contains images`;
       }
     }
 
