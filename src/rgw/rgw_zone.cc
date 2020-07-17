@@ -2661,6 +2661,28 @@ void RGWZoneParams::decode_json(JSONObj *obj)
 
 }
 
+void RGWDataProvider::dump_dp_extra(Formatter *f) const
+{
+  encode_json("sip_config", sip_config, f);
+}
+
+void RGWDataProvider::decode_json_dp_extra(JSONObj *obj)
+{
+  JSONDecoder::decode_json("sip_config", sip_config, obj);
+}
+
+void RGWDataProvider::SIPConfig::dump(Formatter *f) const
+{
+  encode_json("access_key", access_key, f);
+  encode_json("path_prefix", path_prefix, f);
+}
+
+void RGWDataProvider::SIPConfig::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("access_key", access_key, obj);
+  JSONDecoder::decode_json("path_prefix", path_prefix, obj);
+}
+
 void RGWZone::dump(Formatter *f) const
 {
   encode_json("id", id, f);
