@@ -142,33 +142,34 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     return ret;
   }
 
+  auto state = OBJ_CACHE_PROMOTED;
   if (ret == -ENOENT) {
     // object is empty
+    state = OBJ_CACHE_DNE;
     ret = 0;
-  }
+  } else {
+    std::string cache_file_path = get_cache_file_path(cache_file_name, true);
+    if (cache_file_path == "") {
+      lderr(m_cct) << "fail to write cache file" << dendl;
+      m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
+      delete read_buf;
+      return -ENOSPC;
+    }
 
-  std::string cache_file_path = get_cache_file_path(cache_file_name, true);
+    ret = read_buf->write_file(cache_file_path.c_str());
+    if (ret < 0) {
+      lderr(m_cct) << "fail to write cache file" << dendl;
 
-  if (cache_file_path == "") {
-    lderr(m_cct) << "fail to write cache file" << dendl;
-    m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
-    delete read_buf;
-    return -ENOSPC;
-  }
-
-  ret = read_buf->write_file(cache_file_path.c_str());
-  if (ret < 0) {
-    lderr(m_cct) << "fail to write cache file" << dendl;
-
-    m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
-    delete read_buf;
-    return ret;
+      m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
+      delete read_buf;
+      return ret;
+    }
   }
 
   // update metadata
   ceph_assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
-  m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED, read_buf->length());
-  ceph_assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
+  m_policy->update_status(cache_file_name, state, read_buf->length());
+  ceph_assert(state == m_policy->get_status(cache_file_name));
 
   delete read_buf;
 
@@ -200,6 +201,7 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
     case OBJ_CACHE_PROMOTED:
       target_cache_file_path = get_cache_file_path(cache_file_name);
       return ret;
+    case OBJ_CACHE_DNE:
     case OBJ_CACHE_SKIP:
       return ret;
     default:
