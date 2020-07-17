@@ -67,7 +67,10 @@ int main(int argc, const char **argv) {
     goto cleanup;
   }
 
-  cachectl->run();
+  r = cachectl->run();
+  if (r < 0) {
+    goto cleanup;
+  }
 
  cleanup:
   unregister_async_signal_handler(SIGHUP, sighup_handler);
