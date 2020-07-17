@@ -903,6 +903,8 @@ template <typename Context, typename Iter> inline bool _parse(Context &ctx, inpu
         return false;
       }
 #ifdef PICOJSON_USE_INT64
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtautological-type-limit-compare"
       {
         errno = 0;
         intmax_t ival = strtoimax(num_str.c_str(), &endp, 10);
@@ -912,6 +914,7 @@ template <typename Context, typename Iter> inline bool _parse(Context &ctx, inpu
           return true;
         }
       }
+#pragma clang diagnostic pop
 #endif
       f = strtod(num_str.c_str(), &endp);
       if (endp == num_str.c_str() + num_str.size()) {
