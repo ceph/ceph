@@ -3605,7 +3605,7 @@ MDPeerUpdate* MDCache::get_uncommitted_peer(metareqid_t reqid, mds_rank_t leader
 }
 
 void MDCache::finish_rollback(metareqid_t reqid, MDRequestRef& mdr) {
-  auto p = resolve_need_rollback.find(mdr->reqid);
+  auto p = resolve_need_rollback.find(reqid);
   ceph_assert(p != resolve_need_rollback.end());
   if (mds->is_resolve()) {
     finish_uncommitted_peer(reqid, false);
