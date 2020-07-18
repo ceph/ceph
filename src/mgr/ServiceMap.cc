@@ -3,6 +3,8 @@
 
 #include "mgr/ServiceMap.h"
 
+#include <fmt/format.h>
+
 #include "common/Formatter.h"
 
 using ceph::bufferlist;
@@ -64,6 +66,75 @@ void ServiceMap::Daemon::generate_test_instances(std::list<Daemon*>& ls)
 }
 
 // Service
+
+std::string ServiceMap::Service::get_summary() const
+{
+  if (!summary.empty()) {
+    return summary;
+  }
+  if (daemons.empty()) {
+    return "no daemons active";
+  }
+  std::ostringstream ss;
+  ss << daemons.size() << (daemons.size() > 1 ? " daemons" : " daemon")
+     << " active";
+
+  if (!daemons.empty()) {
+    ss << " (";
+    for (auto p = daemons.begin(); p != daemons.end(); ++p) {
+      if (p != daemons.begin()) {
+	ss << ", ";
+      }
+      ss << p->first;
+    }
+    ss << ")";
+  }
+
+  return ss.str();
+}
+
+bool ServiceMap::Service::has_running_tasks() const
+{
+  return std::any_of(daemons.begin(), daemons.end(), [](auto& daemon) {
+    return !daemon.second.task_status.empty();
+  });
+}
+
+std::string ServiceMap::Service::get_task_summary(const std::string_view task_prefix) const
+{
+  // contruct a map similar to:
+  //     {"service1 status" -> {"service1.0" -> "running"}}
+  //     {"service2 status" -> {"service2.0" -> "idle"},
+  //                           {"service2.1" -> "running"}}
+  std::map<std::string, std::map<std::string, std::string>> by_task;
+  for (const auto& [service_id, daemon] : daemons) {
+    for (const auto& [task_name, status] : daemon.task_status) {
+      by_task[task_name].emplace(fmt::format("{}.{}", task_prefix, service_id),
+				 status);
+    }
+  }
+  std::stringstream ss;
+  for (const auto &[task_name, status_by_service] : by_task) {
+    ss << "\n    " << task_name << ":";
+    for (auto& [service, status] : status_by_service) {
+      ss << "\n        " << service << ": " << status;
+    }
+  }
+  return ss.str();
+}
+
+void ServiceMap::Service::count_metadata(const std::string& field,
+					std::map<std::string,int> *out) const
+{
+  for (auto& p : daemons) {
+    auto q = p.second.metadata.find(field);
+    if (q == p.second.metadata.end()) {
+      (*out)["unknown"]++;
+    } else {
+      (*out)[q->second]++;
+    }
+  }
+}
 
 void ServiceMap::Service::encode(bufferlist& bl, uint64_t features) const
 {
