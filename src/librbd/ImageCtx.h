@@ -8,6 +8,7 @@
 #include <atomic>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -32,13 +33,15 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
 
-#include <boost/asio/io_context.hpp>
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
-class Finisher;
-class ThreadPool;
 class SafeTimer;
+
+namespace neorados {
+class IOContext;
+class RADOS;
+} // namespace neorados
 
 namespace librbd {
 
@@ -109,7 +112,16 @@ namespace librbd {
     std::string name;
     cls::rbd::SnapshotNamespace snap_namespace;
     std::string snap_name;
-    IoCtx data_ctx, md_ctx;
+
+    std::shared_ptr<AsioEngine> asio_engine;
+
+    // New ASIO-style RADOS API
+    neorados::RADOS& rados_api;
+
+    // Legacy RADOS API
+    librados::IoCtx data_ctx;
+    librados::IoCtx md_ctx;
+
     ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
 
@@ -181,8 +193,6 @@ namespace librbd {
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
-    boost::asio::io_context& io_context;
-
     io::ImageDispatcherInterface *io_image_dispatcher = nullptr;
     io::ObjectDispatcherInterface *io_object_dispatcher = nullptr;
 
@@ -193,9 +203,6 @@ namespace librbd {
     typedef boost::lockfree::queue<
       io::AioCompletion*,
       boost::lockfree::allocator<ceph::allocator<void>>> Completions;
-
-    Completions external_callback_completions;
-    std::atomic<bool> external_callback_in_progress = {false};
 
     Completions event_socket_completions;
     EventSocket event_socket;
@@ -344,11 +351,14 @@ namespace librbd {
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
 
-    static AsioEngine* get_asio_engine(CephContext* cct);
-    static void get_work_queue(CephContext *cct,
-                               asio::ContextWQ **op_work_queue);
+    void rebuild_data_io_context();
+    IOContext get_data_io_context() const;
+
     static void get_timer_instance(CephContext *cct, SafeTimer **timer,
                                    ceph::mutex **timer_lock);
+
+  private:
+    std::shared_ptr<neorados::IOContext> data_io_context;
   };
 }
 

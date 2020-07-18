@@ -26,7 +26,7 @@ public:
   int append(const std::string& oid, const bufferlist &bl,
              const SnapContext &snapc) override;
 
-  int assert_exists(const std::string &oid) override;
+  int assert_exists(const std::string &oid, uint64_t snap_id) override;
 
   int create(const std::string& oid, bool exclusive,
              const SnapContext &snapc) override;
@@ -47,7 +47,7 @@ public:
   int omap_set(const std::string& oid, const std::map<std::string,
                bufferlist> &map) override;
   int read(const std::string& oid, size_t len, uint64_t off,
-           bufferlist *bl) override;
+           bufferlist *bl, uint64_t snap_id) override;
   int remove(const std::string& oid, const SnapContext &snapc) override;
   int selfmanaged_snap_create(uint64_t *snapid) override;
   int selfmanaged_snap_remove(uint64_t snapid) override;
@@ -57,7 +57,8 @@ public:
                      uint64_t expected_write_size, uint32_t flags,
                      const SnapContext &snapc) override;
   int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
-                  std::map<uint64_t,uint64_t> *m, bufferlist *data_bl) override;
+                  std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
+                  uint64_t snap_id) override;
   int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) override;
   int truncate(const std::string& oid, uint64_t size,
                const SnapContext &snapc) override;
@@ -67,7 +68,8 @@ public:
                  const SnapContext &snapc) override;
   int writesame(const std::string& oid, bufferlist& bl, size_t len,
                 uint64_t off, const SnapContext &snapc) override;
-  int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) override;
+  int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl,
+             uint64_t snap_id) override;
   int xattr_get(const std::string& oid,
                 std::map<std::string, bufferlist>* attrset) override;
   int xattr_set(const std::string& oid, const std::string &name,
@@ -91,6 +93,7 @@ private:
   void ensure_minimum_length(size_t len, bufferlist *bl);
 
   TestMemCluster::SharedFile get_file(const std::string &oid, bool write,
+                                      uint64_t snap_id,
                                       const SnapContext &snapc);
 
 };

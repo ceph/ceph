@@ -45,14 +45,14 @@ public:
   void expect_parent_attach(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("parent_attach"), _, _, _))
+                     StrEq("parent_attach"), _, _, _, _))
       .WillOnce(Return(r));
   }
 
   void expect_set_parent(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("set_parent"), _, _, _))
+                     StrEq("set_parent"), _, _, _, _))
       .WillOnce(Return(r));
   }
 

@@ -53,7 +53,7 @@ void TestMockFixture::TearDown() {
 
 void TestMockFixture::expect_unlock_exclusive_lock(librbd::ImageCtx &ictx) {
   EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
-              exec(_, _, StrEq("lock"), StrEq("unlock"), _, _, _))
+              exec(_, _, StrEq("lock"), StrEq("unlock"), _, _, _, _))
                 .WillRepeatedly(DoDefault());
 }
 

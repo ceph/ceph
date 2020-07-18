@@ -170,13 +170,13 @@ public:
     m_global_image_id = get_global_image_id(m_remote_ioctx, m_remote_image_id);
 
     auto cct = reinterpret_cast<CephContext*>(m_local_ioctx.cct());
-    m_threads.reset(new Threads<>(cct));
+    m_threads.reset(new Threads<>(m_local_cluster));
 
     m_image_sync_throttler.reset(new Throttler<>(
         cct, "rbd_mirror_concurrent_image_syncs"));
 
     m_instance_watcher = InstanceWatcher<>::create(
-        m_local_ioctx, m_threads->work_queue, nullptr,
+        m_local_ioctx, *m_threads->asio_engine, nullptr,
         m_image_sync_throttler.get());
     m_instance_watcher->handle_acquire_leader();
 

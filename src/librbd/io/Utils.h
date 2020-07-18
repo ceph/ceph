@@ -11,9 +11,13 @@
 
 class ObjectExtent;
 
+namespace neorados { struct Op; }
+
 namespace librbd {
 namespace io {
 namespace util {
+
+void apply_op_flags(uint32_t op_flags, uint32_t flags, neorados::Op* op);
 
 bool assemble_write_same_extent(const LightweightObjectExtent &object_extent,
                                 const ceph::bufferlist& data,

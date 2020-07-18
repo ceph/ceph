@@ -6,6 +6,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ManagedLock.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
@@ -59,9 +60,9 @@ struct C_RemoveInstanceRequest : public Context {
   Context *on_finish;
 
   C_RemoveInstanceRequest(librados::IoCtx &io_ctx,
-                          librbd::asio::ContextWQ *work_queue,
+                          librbd::AsioEngine& asio_engine,
                           const std::string &instance_id, Context *on_finish)
-    : instance_watcher(io_ctx, work_queue, nullptr, nullptr, instance_id),
+    : instance_watcher(io_ctx, asio_engine, nullptr, nullptr, instance_id),
       on_finish(on_finish) {
   }
 
@@ -303,37 +304,38 @@ void InstanceWatcher<I>::get_instances(librados::IoCtx &io_ctx,
 
 template <typename I>
 void InstanceWatcher<I>::remove_instance(librados::IoCtx &io_ctx,
-                                         librbd::asio::ContextWQ *work_queue,
+                                         librbd::AsioEngine& asio_engine,
                                          const std::string &instance_id,
                                          Context *on_finish) {
-  auto req = new C_RemoveInstanceRequest<I>(io_ctx, work_queue, instance_id,
+  auto req = new C_RemoveInstanceRequest<I>(io_ctx, asio_engine, instance_id,
                                             on_finish);
   req->send();
 }
 
 template <typename I>
 InstanceWatcher<I> *InstanceWatcher<I>::create(
-    librados::IoCtx &io_ctx, librbd::asio::ContextWQ *work_queue,
+    librados::IoCtx &io_ctx, librbd::AsioEngine& asio_engine,
     InstanceReplayer<I> *instance_replayer,
     Throttler<I> *image_sync_throttler) {
-  return new InstanceWatcher<I>(io_ctx, work_queue, instance_replayer,
+  return new InstanceWatcher<I>(io_ctx, asio_engine, instance_replayer,
                                 image_sync_throttler,
                                 stringify(io_ctx.get_instance_id()));
 }
 
 template <typename I>
 InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
-                                    librbd::asio::ContextWQ *work_queue,
+                                    librbd::AsioEngine& asio_engine,
                                     InstanceReplayer<I> *instance_replayer,
                                     Throttler<I> *image_sync_throttler,
                                     const std::string &instance_id)
-  : Watcher(io_ctx, work_queue, RBD_MIRROR_INSTANCE_PREFIX + instance_id),
+  : Watcher(io_ctx, asio_engine.get_work_queue(),
+            RBD_MIRROR_INSTANCE_PREFIX + instance_id),
     m_instance_replayer(instance_replayer),
     m_image_sync_throttler(image_sync_throttler), m_instance_id(instance_id),
     m_lock(ceph::make_mutex(
       unique_lock_name("rbd::mirror::InstanceWatcher::m_lock", this))),
     m_instance_lock(librbd::ManagedLock<I>::create(
-      m_ioctx, m_work_queue, m_oid, this, librbd::managed_lock::EXCLUSIVE, true,
+      m_ioctx, asio_engine, m_oid, this, librbd::managed_lock::EXCLUSIVE, true,
       m_cct->_conf.get_val<uint64_t>("rbd_blacklist_expire_seconds"))) {
 }
 

@@ -234,10 +234,11 @@ target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
+  libneorados
   librados
-  cls_rbd_client 
-  cls_lock_client 
-  cls_journal_client 
+  cls_rbd_client
+  cls_lock_client
+  cls_journal_client
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}

@@ -36,7 +36,7 @@ struct ObjectDispatchInterface {
   virtual bool read(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       librados::snap_t snap_id, int op_flags,const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, ExtentMap* extent_map,
+      ceph::bufferlist* read_data, Extents* extent_map,
       int* object_dispatch_flags, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) = 0;
 

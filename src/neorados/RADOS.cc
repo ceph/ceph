@@ -27,6 +27,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/hobject.h"
+#include "common/EventTrace.h"
 
 #include "global/global_init.h"
 
@@ -783,33 +784,52 @@ boost::asio::io_context& RADOS::get_io_context() {
 
 void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
 		    cb::list* bl,
-		    std::unique_ptr<ReadOp::Completion> c, version_t* objver) {
+		    std::unique_ptr<ReadOp::Completion> c, version_t* objver,
+		    const blkin_trace_info *trace_info) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = 0; // Should be in Op.
+  auto flags = op->op.flags;
 
+  ZTracer::Trace trace;
+  if (trace_info) {
+    ZTracer::Trace parent_trace("", nullptr, trace_info);
+    trace.init("rados execute", &impl->objecter->trace_endpoint, &parent_trace);
+  }
+
+  trace.event("init");
   impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
-    std::move(c), objver);
+    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
+
+  trace.event("submitted");
 }
 
 void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
-		    std::unique_ptr<WriteOp::Completion> c, version_t* objver) {
+		    std::unique_ptr<WriteOp::Completion> c, version_t* objver,
+		    const blkin_trace_info *trace_info) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = 0; // Should be in Op.
+  auto flags = op->op.flags;
   ceph::real_time mtime;
   if (op->mtime)
     mtime = *op->mtime;
   else
     mtime = ceph::real_clock::now();
 
+  ZTracer::Trace trace;
+  if (trace_info) {
+    ZTracer::Trace parent_trace("", nullptr, trace_info);
+    trace.init("rados execute", &impl->objecter->trace_endpoint, &parent_trace);
+  }
+
+  trace.event("init");
   impl->objecter->mutate(
     *oid, ioc->oloc, std::move(op->op), ioc->snapc,
     mtime, flags,
-    std::move(c), objver);
+    std::move(c), objver, osd_reqid_t{}, &trace);
+  trace.event("submitted");
 }
 
 void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,
@@ -1536,6 +1556,10 @@ void RADOS::enable_application(std::string_view pool, std::string_view app_name,
 	    ca::post(std::move(c), e);
 	  });
   }
+}
+
+void RADOS::wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c) {
+  impl->objecter->wait_for_latest_osdmap(std::move(c));
 }
 
 void RADOS::mon_command(std::vector<std::string> command,
