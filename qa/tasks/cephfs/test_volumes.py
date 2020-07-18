@@ -109,28 +109,33 @@ class TestVolumes(CephFSTestCase):
         self._verify_clone_attrs(subvolume, clone, source_group=source_group, clone_group=clone_group)
 
     def _generate_random_volume_name(self, count=1):
-        r = random.sample(range(10000), count)
-        volumes = ["{0}_{1}".format(TestVolumes.TEST_VOLUME_PREFIX, c) for c in r]
+        n = self.volume_start
+        volumes = [f"{TestVolumes.TEST_VOLUME_PREFIX}_{i:016}" for i in range(n, n+count)]
+        self.volume_start += count
         return volumes[0] if count == 1 else volumes
 
     def _generate_random_subvolume_name(self, count=1):
-        r = random.sample(range(10000), count)
-        subvolumes = ["{0}_{1}".format(TestVolumes.TEST_SUBVOLUME_PREFIX, c) for c in r]
+        n = self.subvolume_start
+        subvolumes = [f"{TestVolumes.TEST_SUBVOLUME_PREFIX}_{i:016}" for i in range(n, n+count)]
+        self.subvolume_start += count
         return subvolumes[0] if count == 1 else subvolumes
 
     def _generate_random_group_name(self, count=1):
-        r = random.sample(range(100), count)
-        groups = ["{0}_{1}".format(TestVolumes.TEST_GROUP_PREFIX, c) for c in r]
+        n = self.group_start
+        groups = [f"{TestVolumes.TEST_GROUP_PREFIX}_{i:016}" for i in range(n, n+count)]
+        self.group_start += count
         return groups[0] if count == 1 else groups
 
     def _generate_random_snapshot_name(self, count=1):
-        r = random.sample(range(100), count)
-        snaps = ["{0}_{1}".format(TestVolumes.TEST_SNAPSHOT_PREFIX, c) for c in r]
+        n = self.snapshot_start
+        snaps = [f"{TestVolumes.TEST_SNAPSHOT_PREFIX}_{i:016}" for i in range(n, n+count)]
+        self.snapshot_start += count
         return snaps[0] if count == 1 else snaps
 
     def _generate_random_clone_name(self, count=1):
-        r = random.sample(range(1000), count)
-        clones = ["{0}_{1}".format(TestVolumes.TEST_CLONE_PREFIX, c) for c in r]
+        n = self.clone_start
+        clones = [f"{TestVolumes.TEST_CLONE_PREFIX}_{i:016}" for i in range(n, n+count)]
+        self.clone_start += count
         return clones[0] if count == 1 else clones
 
     def _enable_multi_fs(self):
@@ -228,6 +233,11 @@ class TestVolumes(CephFSTestCase):
         self._enable_multi_fs()
         self._create_or_reuse_test_volume()
         self.config_set('mon', 'mon_allow_pool_delete', True)
+        self.volume_start = random.randint(1, (1<<20))
+        self.subvolume_start = random.randint(1, (1<<20))
+        self.group_start = random.randint(1, (1<<20))
+        self.snapshot_start = random.randint(1, (1<<20))
+        self.clone_start = random.randint(1, (1<<20))
 
     def tearDown(self):
         if self.vol_created:
@@ -666,8 +676,8 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "pin", self.volname, group, "distributed", "True")
         # (no effect on distribution) pin the group directory to 0 so rank 0 has all subtree bounds visible
         self._fs_cmd("subvolumegroup", "pin", self.volname, group, "export", "0")
-        for i in range(10):
-            subvolume = self._generate_random_subvolume_name()
+        subvolumes = self._generate_random_subvolume_name(10)
+        for subvolume in subvolumes:
             self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
         self._wait_distributed_subtrees(10, status=status)
 
@@ -992,8 +1002,7 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_subvolume_group_create_with_desired_data_pool_layout(self):
-        group1 = self._generate_random_group_name()
-        group2 = self._generate_random_group_name()
+        group1, group2 = self._generate_random_group_name(2)
 
         # create group
         self._fs_cmd("subvolumegroup", "create", self.volname, group1)
@@ -1054,8 +1063,7 @@ class TestVolumes(CephFSTestCase):
             raise RuntimeError("expected the 'fs subvolumegroup getpath' command to fail")
 
     def test_subvolume_create_with_desired_data_pool_layout_in_group(self):
-        subvol1 = self._generate_random_subvolume_name()
-        subvol2 = self._generate_random_subvolume_name()
+        subvol1, subvol2 = self._generate_random_subvolume_name(2)
         group = self._generate_random_group_name()
 
         # create group. this also helps set default pool layout for subvolumes
@@ -1086,8 +1094,7 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_subvolume_group_create_with_desired_mode(self):
-        group1 = self._generate_random_group_name()
-        group2 = self._generate_random_group_name()
+        group1, group2 = self._generate_random_group_name(2)
         # default mode
         expected_mode1 = "755"
         # desired mode
@@ -1135,9 +1142,8 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolumegroup", "rm", self.volname, subvolgroupname)
 
     def test_subvolume_create_with_desired_mode_in_group(self):
-        subvol1 = self._generate_random_subvolume_name()
-        subvol2 = self._generate_random_subvolume_name()
-        subvol3 = self._generate_random_subvolume_name()
+        subvol1, subvol2, subvol3 = self._generate_random_subvolume_name(3)
+
         group = self._generate_random_group_name()
         # default mode
         expected_mode1 = "755"
