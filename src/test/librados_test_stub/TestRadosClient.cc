@@ -7,7 +7,9 @@
 #include "include/ceph_assert.h"
 #include "common/ceph_json.h"
 #include "common/Finisher.h"
+#include "common/async/context_pool.h"
 #include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/thread.hpp>
 #include <errno.h>
 
@@ -30,6 +32,15 @@ static int get_concurrency() {
 }
 
 namespace librados {
+
+namespace {
+
+const char *config_keys[] = {
+  "librados_thread_count",
+  NULL
+};
+
+} // anonymous namespace
 
 static void finish_aio_completion(AioCompletionImpl *c, int r) {
   c->lock.lock();
@@ -87,7 +98,8 @@ private:
 TestRadosClient::TestRadosClient(CephContext *cct,
                                  TestWatchNotify *watch_notify)
   : m_cct(cct->get()), m_watch_notify(watch_notify),
-    m_aio_finisher(new Finisher(m_cct))
+    m_aio_finisher(new Finisher(m_cct)),
+    m_io_context_pool(std::make_unique<ceph::async::io_context_pool>())
 {
   get();
 
@@ -100,6 +112,11 @@ TestRadosClient::TestRadosClient(CephContext *cct,
 
   // replicate AIO callback processing
   m_aio_finisher->start();
+
+  // replicate neorados callback processing
+  m_cct->_conf.add_observer(this);
+  m_io_context_pool->start(m_cct->_conf.get_val<uint64_t>(
+    "librados_thread_count"));
 }
 
 TestRadosClient::~TestRadosClient() {
@@ -112,8 +129,28 @@ TestRadosClient::~TestRadosClient() {
   m_aio_finisher->stop();
   delete m_aio_finisher;
 
+  m_cct->_conf.remove_observer(this);
+  m_io_context_pool->stop();
+
   m_cct->put();
   m_cct = NULL;
+}
+
+boost::asio::io_context& TestRadosClient::get_io_context() {
+  return m_io_context_pool->get_io_context();
+}
+
+const char** TestRadosClient::get_tracked_conf_keys() const {
+  return config_keys;
+}
+
+void TestRadosClient::handle_conf_change(
+    const ConfigProxy& conf, const std::set<std::string> &changed) {
+  if (changed.count("librados_thread_count")) {
+    m_io_context_pool->stop();
+    m_io_context_pool->start(conf.get_val<std::uint64_t>(
+      "librados_thread_count"));
+  }
 }
 
 void TestRadosClient::get() {
@@ -186,6 +223,18 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
       str << "]}";
       outbl->append(str.str());
       return 0;
+    } else if ((*j_it)->get_data() == "osd blacklist") {
+      auto op_it = parser.find("blacklistop");
+      if (!op_it.end() && (*op_it)->get_data() == "add") {
+        uint32_t expire = 0;
+        auto expire_it = parser.find("expire");
+        if (!expire_it.end()) {
+          expire = boost::lexical_cast<uint32_t>((*expire_it)->get_data());
+        }
+
+        auto addr_it = parser.find("addr");
+        return blacklist_add((*addr_it)->get_data(), expire);
+      }
     }
   }
   return -ENOSYS;

@@ -11,8 +11,9 @@ namespace rbd {
 namespace mirror {
 
 template <typename I>
-Threads<I>::Threads(CephContext *cct) {
-  asio_engine = new librbd::AsioEngine(cct);
+Threads<I>::Threads(std::shared_ptr<librados::Rados>& rados) {
+  auto cct = static_cast<CephContext*>(rados->cct());
+  asio_engine = new librbd::AsioEngine(rados);
   work_queue = asio_engine->get_work_queue();
 
   timer = new SafeTimer(cct, timer_lock, true);

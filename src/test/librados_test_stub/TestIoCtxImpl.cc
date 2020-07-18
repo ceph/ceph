@@ -111,7 +111,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(0),
+    reinterpret_cast<bufferlist*>(0), m_snap_seq,
     snap_context != NULL ? *snap_context : m_snapc), c);
   return 0;
 }
@@ -119,12 +119,13 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
 int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     TestObjectOperationImpl &ops,
                                     AioCompletionImpl *c, int flags,
-                                    bufferlist *pbl) {
+                                    bufferlist *pbl, uint64_t snap_id) {
   // TODO ignoring flags for now
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, boost::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, m_snapc), c);
+    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, snap_id,
+    m_snapc), c);
   return 0;
 }
 
@@ -159,7 +160,7 @@ int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
 int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
-                        const SnapContext &snapc) {
+                        uint64_t snap_id, const SnapContext &snapc) {
   if (m_client->is_blacklisted()) {
     return -EBLACKLISTED;
   }
@@ -170,7 +171,8 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
   }
 
   return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler->get_method_context(this, oid, snapc).get()), &inbl, outbl);
+    handler->get_method_context(this, oid, snap_id, snapc).get()), &inbl,
+    outbl);
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
@@ -201,14 +203,15 @@ void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
                                            m_client->get_instance_id(), bl);
 }
 
-int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops) {
+int TestIoCtxImpl::operate(const std::string& oid,
+                           TestObjectOperationImpl &ops) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(0), m_snapc), comp);
+    reinterpret_cast<bufferlist*>(0), m_snap_seq, m_snapc), comp);
 
   comp->wait_for_complete();
   int ret = comp->get_return_value();
@@ -216,7 +219,8 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   return ret;
 }
 
-int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl &ops,
+int TestIoCtxImpl::operate_read(const std::string& oid,
+                                TestObjectOperationImpl &ops,
                                 bufferlist *pbl) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
@@ -224,7 +228,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl 
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
-    m_snapc), comp);
+    m_snap_seq, m_snapc), comp);
 
   comp->wait_for_complete();
   int ret = comp->get_return_value();
@@ -287,7 +291,7 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
 
   if (size > 0) {
     bufferlist inbl;
-    r = read(oid, size, 0, &inbl);
+    r = read(oid, size, 0, &inbl, CEPH_NOSNAP);
     if (r < 0) {
       return r;
     }
@@ -357,7 +361,7 @@ int TestIoCtxImpl::execute_operation(const std::string& oid,
 
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           TestObjectOperationImpl *ops,
-                                          bufferlist *pbl,
+                                          bufferlist *pbl, uint64_t snap_id,
                                           const SnapContext &snapc) {
   int ret = 0;
   if (m_client->is_blacklisted()) {
@@ -366,7 +370,7 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
     TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
-      ret = (*it)(this, oid, pbl, snapc);
+      ret = (*it)(this, oid, pbl, snap_id, snapc);
       if (ret < 0) {
         break;
       }

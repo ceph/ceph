@@ -47,11 +47,11 @@ public:
     uint64_t object_len;
     librados::snap_t snap_id;
     ceph::bufferlist* read_data;
-    ExtentMap* extent_map;
+    Extents* extent_map;
 
     ReadRequest(uint64_t object_no, uint64_t object_off, uint64_t object_len,
                 librados::snap_t snap_id, ceph::bufferlist* read_data,
-                ExtentMap* extent_map)
+                Extents* extent_map)
       : RequestBase(object_no, object_off),
         object_len(object_len), snap_id(snap_id), read_data(read_data),
         extent_map(extent_map) {
@@ -156,7 +156,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      ExtentMap* extent_map, Context* on_finish) {
+      Extents* extent_map, Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   ReadRequest{object_no, object_off,

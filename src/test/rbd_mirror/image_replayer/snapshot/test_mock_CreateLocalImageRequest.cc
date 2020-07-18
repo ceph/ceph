@@ -170,7 +170,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"),
-                     StrEq("mirror_image_set"), ContentsEqual(bl), _, _))
+                     StrEq("mirror_image_set"), ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 
@@ -181,7 +181,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(StrEq("rbd_mirroring"), _, StrEq("rbd"),
                      StrEq("mirror_image_remove"),
-                     ContentsEqual(bl), _, _))
+                     ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 
