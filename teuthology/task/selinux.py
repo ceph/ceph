@@ -130,6 +130,7 @@ class SELinux(Task):
             'comm="setroubleshootd"',
             'comm="rpm"',
             'tcontext=system_u:object_r:container_runtime_exec_t:s0',
+            'comm="ksmtuned"',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
