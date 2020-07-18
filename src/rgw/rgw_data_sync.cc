@@ -471,6 +471,22 @@ bool RGWListRemoteDataLogCR::spawn_next() {
 struct bucket_instance_meta_info;
 struct read_metadata_list;
 
+struct sip_data_list_result {
+  string marker;
+  bool truncated{false};
+
+  struct entry {
+    string entry_id;
+    string key;
+    rgw_bucket bucket;
+    int shard_id{-1};
+    int num_shards{0};
+    ceph::real_time timestamp;
+  };
+
+  vector<entry> entries;
+};
+
 class RGWDataSyncInfoCRHandler {
 protected:
   RGWDataSyncCtx *sc;
@@ -486,10 +502,7 @@ public:
   virtual RGWCoroutine *init_cr() = 0;
 
   virtual RGWCoroutine *fetch_full_cr(const string& list_marker,
-                                      read_metadata_list *result) = 0;
-
-  virtual RGWCoroutine *get_source_bucket_info_cr(const string& key,
-                                                  bucket_instance_meta_info *result) = 0;
+                                      sip_data_list_result *result) = 0;
 
   virtual RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) = 0;
   virtual RGWCoroutine *fetch_inc_cr(int shard_id,
@@ -842,13 +855,13 @@ class RGWDataSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
 
   public:
     ReadDatalogStatusCR(RGWDataSyncCtx *_sc,
-                     int _shard_id,
-                     string *_marker,
-                     ceph::real_time *_timestamp) : RGWCoroutine(_sc->cct),
-                                                    sc(_sc),
-                                                    shard_id(_shard_id),
-                                                    marker(_marker),
-                                                    timestamp(_timestamp) {}
+                        int _shard_id,
+                        string *_marker,
+                        ceph::real_time *_timestamp) : RGWCoroutine(_sc->cct),
+                                                       sc(_sc),
+                                                       shard_id(_shard_id),
+                                                       marker(_marker),
+                                                       timestamp(_timestamp) {}
 
     int operate() {
       reenter(this) {
@@ -864,6 +877,73 @@ class RGWDataSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
     }
   };
 
+  class FetchFullCR : public RGWCoroutine {
+    RGWDataSyncInfoCRHandler_Legacy *handler;
+    RGWDataSyncCtx *sc;
+    string marker;
+    sip_data_list_result *result;
+
+    read_metadata_list list_result;
+    list<string>::iterator iter;
+    bucket_instance_meta_info meta_info;
+  public:
+    FetchFullCR(RGWDataSyncInfoCRHandler_Legacy *_handler,
+                RGWDataSyncCtx *_sc,
+                const string& _marker,
+                sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
+                                                 handler(_handler),
+                                                 sc(_sc),
+                                                 marker(_marker) {}
+
+    int operate() {
+      reenter(this) {
+        yield {
+          string entrypoint = string("/admin/metadata/bucket.instance");
+
+          rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
+                                         {"marker", marker.c_str()},
+                                         {NULL, NULL}};
+          call(new RGWReadRESTResourceCR<read_metadata_list>(sc->env->cct, sc->conn,
+                                                             sc->env->http_manager,
+                                                             entrypoint, pairs, &list_result));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        result->truncated = list_result.truncated;
+        result->marker = list_result.marker;
+        result->entries.clear();
+
+        for (iter = list_result.keys.begin(); iter != list_result.keys.end(); ++iter) {
+          yield call(handler->get_source_bucket_info_cr(*iter, &meta_info));
+
+          auto& bucket_info = meta_info.data.get_bucket_info();
+
+          sip_data_list_result::entry e;
+          e.entry_id = *iter;
+          e.key = *iter;
+          e.bucket = bucket_info.bucket;
+          e.shard_id = -1;
+          e.num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
+          e.timestamp = bucket_info.creation_time;
+
+          result->entries.emplace_back(std::move(e));
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+  RGWCoroutine *get_source_bucket_info_cr(const string& key,
+                                          bucket_instance_meta_info *result) {
+    rgw_http_param_pair pairs[] = {{"key", key.c_str()},
+                                   {NULL, NULL}};
+
+    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, result);
+  }
+
 public:
 
   RGWDataSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler(_sc) {
@@ -876,23 +956,9 @@ public:
   }
 
   RGWCoroutine *fetch_full_cr(const string& marker,
-                              read_metadata_list *result) override {
-    string entrypoint = string("/admin/metadata/bucket.instance");
+                              sip_data_list_result *result) {
+    return new FetchFullCR(this, sc, marker, result);
 
-    rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
-                                   {"marker", marker.c_str()},
-                                   {NULL, NULL}};
-
-    return new RGWReadRESTResourceCR<read_metadata_list>(sync_env->cct, sc->conn, sync_env->http_manager,
-                                                             entrypoint, pairs, result);
-  }
-
-  RGWCoroutine *get_source_bucket_info_cr(const string& key,
-                                          bucket_instance_meta_info *result) override {
-    rgw_http_param_pair pairs[] = {{"key", key.c_str()},
-                                   {NULL, NULL}};
-
-    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, result);
   }
 
   RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
@@ -979,19 +1045,7 @@ public:
   }
 
   RGWCoroutine *fetch_full_cr(const string& marker,
-                              read_metadata_list *result) override {
-    return nullptr;
-  }
-
-#warning remove this method from interface
-  RGWCoroutine *get_source_bucket_info_cr(const string& key,
-                                          bucket_instance_meta_info *result) override {
-#if 0
-    rgw_http_param_pair pairs[] = {{"key", key.c_str()},
-                                   {NULL, NULL}};
-
-    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, result);
-#endif
+                              sip_data_list_result *result) override {
     return nullptr;
   }
 
@@ -1030,21 +1084,20 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   int req_ret;
   int ret;
 
-  list<string>::iterator iter;
 
   RGWShardedOmapCRManager *entries_index;
 
   string oid_prefix;
 
   string path;
-  bucket_instance_meta_info meta_info;
   string key;
   string s;
   int i;
 
   bool failed;
   bool truncated;
-  read_metadata_list result;
+  sip_data_list_result result;
+  vector<sip_data_list_result::entry>::iterator iter;
 
 public:
   RGWListBucketIndexesCR(RGWDataSyncCtx *_sc,
@@ -1073,22 +1126,18 @@ public:
           return set_cr_error(retcode);
         }
 
-        for (iter = result.keys.begin(); iter != result.keys.end(); ++iter) {
-          ldpp_dout(dpp, 20) << "list metadata: section=bucket.instance key=" << *iter << dendl;
-          key = *iter;
+        for (iter = result.entries.begin(); iter != result.entries.end(); ++iter) {
+          ldout_dpp(dpp, 20) << "fetch full: bucket=" << iter->bucket << dendl;
 
-          yield call(sc->dsi->get_source_bucket_info_cr(key, &meta_info));
-
-          num_shards = meta_info.data.get_bucket_info().layout.current_index.layout.normal.num_shards;
-          if (num_shards > 0) {
-            for (i = 0; i < num_shards; i++) {
+          if (iter->num_shards > 0) {
+            for (i = 0; i < iter->num_shards; i++) {
               char buf[16];
               snprintf(buf, sizeof(buf), ":%d", i);
-              s = key + buf;
-              yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+              s = iter->key + buf;
+              yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(iter->bucket, i));
             }
           } else {
-            yield entries_index->append(key, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
+            yield entries_index->append(iter->key, sync_env->svc->datalog_rados->get_log_shard_id(iter->bucket, -1));
           }
         }
         truncated = result.truncated;

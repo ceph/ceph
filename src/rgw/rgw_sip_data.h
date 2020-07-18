@@ -12,12 +12,19 @@ namespace ceph {
 class RGWMetadataManager;
 
 struct siprovider_data_info : public SIProvider::EntryInfoBase {
-  std::string id;
+  string key;
+  int shard_id{-1}; /* -1: not a specific shard, entry refers to all the shards */
+  int num_shards{0};
   std::optional<ceph::real_time> timestamp;
 
   siprovider_data_info() {}
-  siprovider_data_info(const string& _id,
-                       std::optional<ceph::real_time> _ts) : id(_id), timestamp(_ts) {}
+  siprovider_data_info(const string& _key,
+                       int _shard_id,
+                       int _num_shards,
+                       std::optional<ceph::real_time> _ts) : key(_key),
+                                                             shard_id(_shard_id),
+                                                             num_shards(_num_shards),
+                                                             timestamp(_ts) {}
 
   string get_data_type() const override {
     return "data";
@@ -25,14 +32,18 @@ struct siprovider_data_info : public SIProvider::EntryInfoBase {
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
-    encode(id, bl);
+    encode(key, bl);
+    encode(shard_id, bl);
+    encode(num_shards, bl);
     encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
      DECODE_START(1, bl);
-     decode(id, bl);
+     decode(key, bl);
+     decode(shard_id, bl);
+     decode(num_shards, bl);
      decode(timestamp, bl);
      DECODE_FINISH(bl);
   }
@@ -42,24 +53,18 @@ struct siprovider_data_info : public SIProvider::EntryInfoBase {
 };
 WRITE_CLASS_ENCODER(siprovider_data_info)
 
-static inline SIProvider::Entry siprovider_data_create_entry(const std::string& k,
-                                                             std::optional<ceph::real_time> timestamp,
-                                                             const std::string& m)
-{
-  siprovider_data_info data_info = { k, timestamp };
-  SIProvider::Entry e;
-  e.key = m;
-  data_info.encode(e.data);
-  return e;
-}
-
 class RGWDatadataManager;
+class RGWBucketCtl;
 
 class SIProvider_DataFull : public SIProvider_SingleStage
 {
   struct {
     RGWMetadataManager *mgr;
   } meta;
+
+  struct {
+    RGWBucketCtl *bucket;
+  } ctl;
 
 protected:
   int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
@@ -81,12 +86,14 @@ protected:
 
 public:
   SIProvider_DataFull(CephContext *_cct,
-                      RGWMetadataManager *meta_mgr) : SIProvider_SingleStage(_cct,
-									     "data.full",
-                                                                             std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
-									     SIProvider::StageType::FULL,
-									     1) {
+                      RGWMetadataManager *meta_mgr,
+                      RGWBucketCtl *_bucket_ctl) : SIProvider_SingleStage(_cct,
+									  "data.full",
+                                                                          std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
+									  SIProvider::StageType::FULL,
+									  1) {
     meta.mgr = meta_mgr;
+    ctl.bucket = _bucket_ctl;
   }
 
   int init() {
@@ -103,6 +110,10 @@ class SIProvider_DataInc : public SIProvider_SingleStage
     RGWDataChangesLog *datalog;
   } svc;
 
+  struct {
+    RGWBucketCtl *bucket;
+  } ctl;
+
   RGWDataChangesLog *data_log{nullptr};
 
 protected:
@@ -114,7 +125,8 @@ protected:
   int do_trim( int shard_id, const std::string& marker) override;
 public:
   SIProvider_DataInc(CephContext *_cct,
-                     RGWSI_DataLog *_datalog_svc);
+                     RGWDataChangesLog *_datalog_svc,
+                     RGWBucketCtl *_bucket_ctl);
 
   int init();
 };
