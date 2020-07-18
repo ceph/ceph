@@ -223,7 +223,8 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
 void Cache::complete_commit(
   Transaction &t,
-  paddr_t final_block_start)
+  paddr_t final_block_start,
+  journal_seq_t seq)
 {
   if (t.root) {
     remove_extent(root);

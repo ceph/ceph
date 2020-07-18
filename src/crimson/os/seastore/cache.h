@@ -281,8 +281,9 @@ public:
    * and mutated exents.
    */
   void complete_commit(
-    Transaction &t,           ///< [in, out] current transaction
-    paddr_t final_block_start ///< [in] offset of initial block
+    Transaction &t,            ///< [in, out] current transaction
+    paddr_t final_block_start, ///< [in] offset of initial block
+    journal_seq_t seq          ///< [in] journal commit seq
   );
 
   /**

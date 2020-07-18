@@ -154,7 +154,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   auto submit_record(T&&... _record) {
     auto record{std::forward<T>(_record)...};
     records.push_back(record);
-    auto addr = journal->submit_record(std::move(record)).unsafe_get0();
+    auto [addr, _] = journal->submit_record(std::move(record)).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
   }

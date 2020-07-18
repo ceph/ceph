@@ -59,7 +59,6 @@ ceph::bufferlist Journal::encode_record(
   record_header_t header{
     rsize.mdlength,
     rsize.dlength,
-    current_journal_seq,
     0 /* checksum, TODO */,
     record.deltas.size(),
     record.extents.size()
@@ -85,7 +84,7 @@ ceph::bufferlist Journal::encode_record(
   return metadatabl;
 }
 
-Journal::write_record_ertr::future<> Journal::write_record(
+Journal::write_record_ret Journal::write_record(
   record_size_t rsize,
   record_t &&record)
 {
@@ -99,7 +98,13 @@ Journal::write_record_ertr::future<> Journal::write_record(
     rsize.dlength);
   return current_journal_segment->write(target, to_write).handle_error(
     write_record_ertr::pass_further{},
-    crimson::ct_error::assert_all{ "TODO" });
+    crimson::ct_error::assert_all{ "TODO" }).safe_then([this, target] {
+      return write_record_ret(
+	write_record_ertr::ready_future_marker{},
+	paddr_t{
+	  current_journal_segment->get_segment_id(),
+	  target});
+    });
 }
 
 Journal::record_size_t Journal::get_encoded_record_length(
@@ -121,13 +126,6 @@ bool Journal::needs_roll(segment_off_t length) const
 {
   return length + written_to >
     current_journal_segment->get_write_capacity();
-}
-
-paddr_t Journal::next_record_addr() const
-{
-  paddr_t ret{current_journal_segment->get_segment_id(), written_to};
-  logger().debug("next_record_addr: {}", ret);
-  return ret;
 }
 
 Journal::roll_journal_segment_ertr::future<>

@@ -19,10 +19,6 @@
 
 namespace crimson::os::seastore {
 
-using journal_seq_t = uint64_t;
-static constexpr journal_seq_t NO_DELTAS =
-  std::numeric_limits<journal_seq_t>::max();
-
 /**
  * Segment header
  *
@@ -50,7 +46,6 @@ struct record_header_t {
   // Fixed portion
   extent_len_t  mdlength;       // block aligned, length of metadata
   extent_len_t  dlength;        // block aligned, length of data
-  journal_seq_t seq;            // current journal seqid
   checksum_t    full_checksum;  // checksum for full record (TODO)
   size_t deltas;                // number of deltas
   size_t extents;               // number of extents
@@ -59,7 +54,6 @@ struct record_header_t {
     DENC_START(1, 1, p);
     denc(v.mdlength, p);
     denc(v.dlength, p);
-    denc(v.seq, p);
     denc(v.full_checksum, p);
     denc(v.deltas, p);
     denc(v.extents, p);
@@ -126,15 +120,17 @@ public:
   close_ertr::future<> close() { return close_ertr::now(); }
 
   /**
-   * write_record
+   * submit_record
    *
-   * @param write record and returns offset of first block
+   * @param write record and returns offset of first block and seq
    */
   using submit_record_ertr = crimson::errorator<
     crimson::ct_error::erange,
     crimson::ct_error::input_output_error
     >;
-  using submit_record_ret = submit_record_ertr::future<paddr_t>;
+  using submit_record_ret = submit_record_ertr::future<
+    std::pair<paddr_t, journal_seq_t>
+    >;
   submit_record_ret submit_record(record_t &&record) {
     auto rsize = get_encoded_record_length(record);
     auto total = rsize.mdlength + rsize.dlength;
@@ -146,10 +142,11 @@ public:
       : roll_journal_segment_ertr::now();
     return roll.safe_then(
       [this, rsize, record=std::move(record)]() mutable {
-	auto ret = next_record_addr();
 	return write_record(rsize, std::move(record)
-	).safe_then([this, ret] {
-	  return ret.add_offset(block_size);
+	).safe_then([this](auto addr) {
+	  return std::make_pair(
+	    addr.add_offset(block_size),
+	    get_journal_seq(addr));
 	});
       });
   }
@@ -179,7 +176,10 @@ private:
   segment_off_t written_to = 0;
 
   segment_id_t next_journal_segment_seq = NULL_SEG_ID;
-  journal_seq_t current_journal_seq = 0;
+
+  journal_seq_t get_journal_seq(paddr_t addr) {
+    return journal_seq_t{current_journal_segment_seq, addr};
+  }
 
   /// prepare segment for writes, writes out segment header
   using initialize_segment_ertr = crimson::errorator<
@@ -212,7 +212,8 @@ private:
   /// do record write
   using write_record_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  write_record_ertr::future<> write_record(
+  using write_record_ret = write_record_ertr::future<paddr_t>;
+  write_record_ret write_record(
     record_size_t rsize,
     record_t &&record);
 
@@ -223,9 +224,6 @@ private:
 
   /// returns true iff current segment has insufficient space
   bool needs_roll(segment_off_t length) const;
-
-  /// returns next record addr
-  paddr_t next_record_addr() const;
 
   /// return ordered vector of segments to replay
   using find_replay_segments_ertr = crimson::errorator<

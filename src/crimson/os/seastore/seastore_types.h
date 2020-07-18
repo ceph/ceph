@@ -181,6 +181,30 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 using objaddr_t = uint32_t;
 constexpr objaddr_t OBJ_ADDR_MIN = std::numeric_limits<objaddr_t>::min();
 
+/* Monotonically increasing identifier for the location of a
+ * journal_record.
+ */
+struct journal_seq_t {
+  segment_seq_t segment_seq = 0;
+  paddr_t offset;
+
+  DENC(journal_seq_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.segment_seq, p);
+    denc(v.offset, p);
+    DENC_FINISH(p);
+  }
+};
+WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
+WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
+
+std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
+
+static constexpr journal_seq_t NO_DELTAS = journal_seq_t{
+  NULL_SEG_SEQ,
+  P_ADDR_NULL
+};
+
 // logical addr, see LBAManager, TransactionManager
 using laddr_t = uint64_t;
 constexpr laddr_t L_ADDR_MIN = std::numeric_limits<laddr_t>::min();
@@ -314,4 +338,5 @@ struct record_t {
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)

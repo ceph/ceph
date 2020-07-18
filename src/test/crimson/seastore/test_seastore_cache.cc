@@ -23,6 +23,7 @@ struct cache_test_t : public seastar_test_suite_t {
   segment_manager::EphemeralSegmentManager segment_manager;
   Cache cache;
   paddr_t current{0, 0};
+  journal_seq_t seq;
 
   cache_test_t()
     : segment_manager(segment_manager::DEFAULT_TEST_EPHEMERAL),
@@ -55,7 +56,7 @@ struct cache_test_t : public seastar_test_suite_t {
       true
     ).safe_then(
       [this, prev, t=std::move(t)]() mutable {
-	cache.complete_commit(*t, prev);
+	cache.complete_commit(*t, prev, seq /* TODO */);
 	return seastar::make_ready_future<std::optional<paddr_t>>(prev);
       },
       crimson::ct_error::all_same_way([](auto e) {
