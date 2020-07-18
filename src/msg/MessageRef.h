@@ -88,7 +88,7 @@ class MMDSOpenIno;
 class MMDSOpenInoReply;
 class MMDSResolveAck;
 class MMDSResolve;
-class MMDSSlaveRequest;
+class MMDSPeerRequest;
 class MMDSSnapUpdate;
 class MMDSTableRequest;
 class MMgrBeacon;

@@ -29,7 +29,7 @@
 class MDSRank;
 class MDLog;
 class LogSegment;
-struct MDSlaveUpdate;
+struct MDPeerUpdate;
 
 /*
  * a bunch of metadata in the journal
@@ -590,7 +590,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
+  void replay(MDSRank *mds, LogSegment *ls, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
