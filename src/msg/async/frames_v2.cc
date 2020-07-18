@@ -249,7 +249,7 @@ bufferlist FrameAssembler::assemble_frame(Tag tag, bufferlist segment_bls[],
   preamble_block_t preamble;
   fill_preamble(tag, preamble);
 
-  if (m_crypto->rx) {
+  if (m_crypto->tx) {
     for (size_t i = 0; i < m_descs.size(); i++) {
       ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
       // We're padding segments to biggest cipher's block size. Although
