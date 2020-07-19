@@ -1,10 +1,9 @@
 """
 Deploy and configure Tempest for Teuthology
 """
+import configparser
 import contextlib
 import logging
-
-from six.moves import configparser
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
