@@ -378,7 +378,7 @@ def init_rabbitmq():
     # TODO: support multiple brokers per host using env
     # make sure we don't collide with the default
     try:
-        proc = subprocess.Popen('rabbitmq-server')
+        proc = subprocess.Popen(['sudo', 'rabbitmq-server'])
     except Exception as error:
         log.info('failed to execute rabbitmq-server: %s', str(error))
         print('failed to execute rabbitmq-server: %s' % str(error))
@@ -391,7 +391,7 @@ def init_rabbitmq():
 def clean_rabbitmq(proc): #, data_dir, log_dir)
     """ stop the rabbitmq broker """
     try:
-        subprocess.call(['rabbitmqctl', 'stop'])
+        subprocess.call(['sudo', 'rabbitmqctl', 'stop'])
         time.sleep(5)
         proc.terminate()
     except:
@@ -1458,6 +1458,111 @@ def test_ps_s3_notification_push_amqp_on_master():
     # delete the bucket
     master_zone.delete_bucket(bucket_name)
     clean_rabbitmq(proc)
+
+
+def test_ps_s3_persistent_cleanup():
+    """ test reservation cleanup after gateway crash """
+    return SkipTest("only used in manual testing")
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 200
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+
+    gw = master_zone
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = gw.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf = PSTopicS3(gw.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:Put']
+        }]
+    s3_notification_conf = PSNotificationS3(gw.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    # stop gateway while clients are sending
+    os.system("killall -9 radosgw");
+    zonegroup.master_zone.gateways[0].stop()
+    print('wait for 10 sec for before restarting the gateway')
+    time.sleep(10)
+    zonegroup.master_zone.gateways[0].start()
+    [thr.join() for thr in client_threads] 
+   
+    keys = list(bucket.list())
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    # check http receiver
+    events = http_server.get_and_reset_events()
+
+    print(str(len(events) ) + " events found out of " + str(number_of_objects))
+    
+    # make sure that things are working now
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+   
+    keys = list(bucket.list())
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    print('wait for 180 sec for reservations to be stale before queue deletion')
+    time.sleep(180)
+
+    # check http receiver
+    events = http_server.get_and_reset_events()
+
+    print(str(len(events)) + " events found out of " + str(number_of_objects))
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    gw.delete_bucket(bucket_name)
+    http_server.close()
 
 
 def test_ps_s3_persistent_gateways_recovery():

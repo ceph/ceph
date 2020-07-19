@@ -653,7 +653,7 @@ TEST_F(TestCls2PCQueue, Cleanup)
   for (const auto& r : all_reservations) {
     if (good_reservations.find(r.first) == good_reservations.end()) {
       // not in the "good" list
-      ASSERT_GT(stale_time.time_since_epoch().count(), 
+      ASSERT_GE(stale_time.time_since_epoch().count(), 
           r.second.timestamp.time_since_epoch().count());
     }
   }
