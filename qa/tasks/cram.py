@@ -4,8 +4,6 @@ Cram tests
 import logging
 import os
 
-import six
-
 from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc as teuthology
@@ -126,7 +124,7 @@ def _run_tests(ctx, role):
     :param ctx: Context
     :param role: Roles
     """
-    assert isinstance(role, six.string_types)
+    assert isinstance(role, str)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
