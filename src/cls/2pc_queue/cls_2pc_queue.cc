@@ -450,6 +450,7 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
   }
   
   CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %lu reservation entries found", urgent_data.reservations.size());
+  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: current reservations: %lu (bytes)", urgent_data.reserved_size);
 
   uint64_t reservation_size = 0U;
   auto stale_found = false;
@@ -509,7 +510,7 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
 
   if (stale_found || xattr_stale_found) { 
     urgent_data.reserved_size -= reservation_size;
-    CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: current reservations: %lu (bytes)", urgent_data.reserved_size);
+    CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: reservations after cleanup: %lu (bytes)", urgent_data.reserved_size);
     // write back head without stale reservations
     head.bl_urgent_data.clear();
     encode(urgent_data, head.bl_urgent_data);
