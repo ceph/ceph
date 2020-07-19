@@ -11,9 +11,8 @@ import json
 import re
 import uuid
 
-from io import BytesIO
+from io import BytesIO, StringIO
 import toml
-from six import StringIO
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
