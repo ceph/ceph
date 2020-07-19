@@ -1235,7 +1235,7 @@ void MDSRank::handle_message(const cref_t<Message> &m)
       break;
 
     default:
-      derr << "unrecogonized message " << *m << dendl;
+      derr << "unrecognized message " << *m << dendl;
     }
   }
 }
