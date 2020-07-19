@@ -8,7 +8,6 @@ import crypt
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
 import math
-from six import ensure_str
 from time import sleep
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.misc import sudo_write_file
@@ -26,6 +25,13 @@ def humansize(nbytes):
     f = ('%d' % nbytes).rstrip('.')
     return '%s%s' % (f, suffixes[i])
 
+def ensure_str(s):
+    if isinstance(s, str):
+        return s
+    if isinstance(s, bytes):
+        return s.decode()
+    raise TypeError("not expecting type '%s'" % type(s))
+    
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
