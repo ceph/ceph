@@ -181,6 +181,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 int ObjectCacheStore::lookup_object(std::string pool_nspace,
                                     uint64_t pool_id, uint64_t snap_id,
                                     std::string object_name,
+                                    bool return_dne_path,
                                     std::string& target_cache_file_path) {
   ldout(m_cct, 20) << "object name = " << object_name
                    << " in pool ID : " << pool_id << dendl;
@@ -202,6 +203,10 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
       target_cache_file_path = get_cache_file_path(cache_file_name);
       return ret;
     case OBJ_CACHE_DNE:
+      if (return_dne_path) {
+        target_cache_file_path = get_cache_file_path(cache_file_name);
+      }
+      return ret;
     case OBJ_CACHE_SKIP:
       return ret;
     default:
