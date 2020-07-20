@@ -235,8 +235,7 @@ def configure(ctx, config):
             )
         conf_fp = BytesIO()
         s3tests_conf.write(conf_fp)
-        teuthology.write_file(
-            remote=remote,
+        remote.write_file(
             path='{tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
@@ -249,11 +248,7 @@ def configure(ctx, config):
             conf = f.read().format(
                 idle_timeout=config.get('idle_timeout', 30)
                 )
-            teuthology.write_file(
-                remote=remote,
-                path='{tdir}/boto.cfg'.format(tdir=testdir),
-                data=conf.encode(),
-                )
+            remote.write_file('{tdir}/boto.cfg'.format(tdir=testdir), conf)
 
     try:
         yield
