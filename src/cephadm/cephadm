@@ -4005,11 +4005,13 @@ def check_time_sync(enabler=None):
 
 def command_check_host():
     # type: () -> None
+    global container_path
+
     errors = []
     commands = ['systemctl', 'lvcreate']
 
     if args.docker:
-            container_path = find_program('docker')
+        container_path = find_program('docker')
     else:
         for i in CONTAINER_PREFERENCE:
             try:
