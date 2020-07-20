@@ -2137,15 +2137,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   if (!is_primary()) {
     if (!recovery_state.can_serve_replica_read(oid)) {
-      dout(20) << __func__ << ": oid " << oid
-	       << " unstable write on replica, bouncing to primary."
+      dout(20) << __func__
+               << ": unstable write on replica, bouncing to primary "
 	       << *m << dendl;
       osd->reply_op_error(op, -EAGAIN);
       return;
-    } else {
-      dout(20) << __func__ << ": serving replica read on oid" << oid
-	       << dendl;
     }
+    dout(20) << __func__ << ": serving replica read on oid " << oid
+             << dendl;
   }
 
   int r = find_object_context(
