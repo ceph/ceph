@@ -1756,13 +1756,13 @@ public:
           break;
         }
 #define INCREMENTAL_MAX_ENTRIES 100
-        ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << " truncated=" << truncated << dendl;
         if (!period_marker.empty() && period_marker <= mdlog_marker) {
           tn->log(10, SSTR("finished syncing current period: mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
           done_with_period = true;
           break;
         }
-	if (mdlog_marker <= max_marker) {
+	if (mdlog_marker <= max_marker || !truncated) {
 	  /* we're at the tip, try to bring more entries */
           ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
           yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog,
