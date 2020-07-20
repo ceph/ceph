@@ -16,6 +16,7 @@
 #include <limits.h>
 #include <sstream>
 #include <regex>
+#include <time.h>
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -681,6 +682,36 @@ bool HealthMonitor::check_leader_health()
   }
 
   health_check_map_t next;
+
+ // DAEMON_VERSION_INCORRECT
+  std::map<string, map<int, std::pair<int,string>>, std::greater<std::string>> multiple_versions;
+  int correct_versions = 0;
+  double timeout = 600;
+  mon->check_daemon_versions(multiple_versions);
+  if (multiple_versions.size() > 1){
+    time_t current = time(NULL);
+    if ((timeout < difftime(current, start))){
+      while (correct_versions > 0){
+        multiple_versions.erase(multiple_versions.begin());
+        correct_versions = correct_versions - 1;
+      }
+      ostringstream ss, ds;
+      if (multiple_versions.size() == 1){
+        ss << "There is a daemon running an inconsistent version of ceph \n";
+      }
+      else{
+        ss << "There are daemons running inconsistent versions of ceph \n";
+      }
+      auto& d = next.add("DAE_INCORRECT_VERSION", HEALTH_WARN, ss.str(), 1);
+      for(auto& g:multiple_versions){
+          for (auto& i : g.second){
+            ds << "daemon id " << i.second.second << "." << mon->monmap->get_name(i.second.first) << " is running incorrect ceph version: " << g.first <<" \n";
+        }
+      }
+      d.detail.push_back(ds.str());
+      start = time(NULL);
+    }
+  }
 
   // MON_DOWN
   {

@@ -22,7 +22,7 @@ class HealthMonitor : public PaxosService
   std::map<int,health_check_map_t> quorum_checks;  // for each quorum member
   health_check_map_t leader_checks;           // leader only
   std::map<std::string,health_mute_t> mutes;
-
+  time_t start = time(NULL); //keeps track of the time in which the last DAEMON_VERSION_INCORRECT occured
   std::map<std::string,health_mute_t> pending_mutes;
 
 public:

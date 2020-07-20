@@ -5337,6 +5337,16 @@ void Monitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
+void Monitor::check_daemon_versions(map<string,map<int, std::pair<int,string>>, std::greater<std::string>> &versions){
+  int i = 0;
+  for (auto& p : mon_metadata) {
+    auto q = p.second.find("ceph_version");
+    auto l = p.second.find("hostname");
+    versions[q->second][i] = std::make_pair(p.first, l->second);
+    i = i + 1;
+  }
+}
+
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
   map<string, list<string> > mons;	// hostname => mon
@@ -6415,3 +6425,4 @@ int Monitor::ms_handle_authentication(Connection *con)
 
   return ret;
 }
+
