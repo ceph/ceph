@@ -151,6 +151,7 @@ spec:
     model: MC-55-44-XZ
   db_devices:
     model: SSD-123-foo
+  filter_logic: AND
   objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987

@@ -143,7 +143,7 @@ class DriveGroupSpec(ServiceSpec):
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size", "unmanaged"
+        "journal_size", "unmanaged", "filter_logic"
     ]
 
     def __init__(self,
@@ -165,6 +165,7 @@ class DriveGroupSpec(ServiceSpec):
                  journal_size=None,  # type: Optional[int]
                  service_type=None,  # type: Optional[str]
                  unmanaged=False,  # type: bool
+                 filter_logic='AND'  # type: str
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -214,6 +215,10 @@ class DriveGroupSpec(ServiceSpec):
         #: Optional: mapping of host -> List of osd_ids that should be replaced
         #: See :ref:`orchestrator-osd-replace`
         self.osd_id_claims = osd_id_claims or dict()
+
+        #: The logic gate we use to match disks with filters.
+        #: defaults to 'AND'
+        self.filter_logic = filter_logic.upper()
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):
@@ -296,6 +301,9 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError('block_wal_size must be of type int')
         if self.block_db_size is not None and type(self.block_db_size) != int:
             raise DriveGroupValidationError('block_db_size must be of type int')
+
+        if self.filter_logic not in ['AND', 'OR']:
+            raise DriveGroupValidationError('filter_logic must be either <AND> or <OR>')
 
     def __repr__(self):
         keys = [
