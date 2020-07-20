@@ -507,9 +507,7 @@ public:
   virtual RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) = 0;
   virtual RGWCoroutine *fetch_inc_cr(int shard_id,
                                      const string& marker,
-                                     list<rgw_data_change_log_entry> *result,
-                                     string *next_marker,
-                                     bool *truncated) = 0;
+                                     sip_data_list_result *result) = 0;
 };
 
 using RGWDataSyncInfoCRHandlerRef = std::shared_ptr<RGWDataSyncInfoCRHandler>;
@@ -893,7 +891,8 @@ class RGWDataSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
                 sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
                                                  handler(_handler),
                                                  sc(_sc),
-                                                 marker(_marker) {}
+                                                 marker(_marker),
+                                                 result(_result) {}
 
     int operate() {
       reenter(this) {
@@ -936,6 +935,65 @@ class RGWDataSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
     }
   };
 
+  class FetchIncCR : public RGWCoroutine {
+    RGWDataSyncInfoCRHandler_Legacy *handler;
+    RGWDataSyncCtx *sc;
+    int shard_id;
+    string marker;
+    sip_data_list_result *result;
+
+    list<rgw_data_change_log_entry> fetch_result;
+    list<rgw_data_change_log_entry>::iterator iter;
+  public:
+    FetchIncCR(RGWDataSyncInfoCRHandler_Legacy *_handler,
+               RGWDataSyncCtx *_sc,
+               int _shard_id,
+               const string& _marker,
+               sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
+                                                handler(_handler),
+                                                sc(_sc),
+                                                shard_id(_shard_id),
+                                                marker(_marker),
+                                                result(_result) {}
+
+    int operate() {
+      reenter(this) {
+        yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id,
+                                                   marker,
+                                                   &result->marker,
+                                                   &fetch_result,
+                                                   &result->truncated));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        result->entries.clear();
+
+        for (iter = fetch_result.begin(); iter != fetch_result.end(); ++iter) {
+          auto& log_entry = *iter;
+
+          sip_data_list_result::entry e;
+          e.key = log_entry.entry.key;
+
+          int r = rgw_bucket_parse_bucket_key(sc->cct, e.key,
+                                              &e.bucket, &e.shard_id);
+          if (r < 0) {
+            ldout(sc->cct, 0) << "ERROR: " << __func__ << "(): failed to parse bucket key: " << e.key << ", r=" << r << ", skipping entry" << dendl;
+            continue;
+          }
+
+          e.entry_id = log_entry.log_id;
+          e.num_shards = -1; /* unknown */
+          e.timestamp = log_entry.log_timestamp;
+
+          result->entries.emplace_back(std::move(e));
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
   RGWCoroutine *get_source_bucket_info_cr(const string& key,
                                           bucket_instance_meta_info *result) {
     rgw_http_param_pair pairs[] = {{"key", key.c_str()},
@@ -967,14 +1025,8 @@ public:
 
   RGWCoroutine *fetch_inc_cr(int shard_id,
                              const string& marker,
-                             list<rgw_data_change_log_entry> *result,
-                             string *next_marker,
-                             bool *truncated) override {
-    return new RGWReadRemoteDataLogShardCR(sc, shard_id,
-                                           marker,
-                                           next_marker,
-                                           result,
-                                           truncated);
+                             sip_data_list_result *result) {
+    return new FetchIncCR(this, sc, shard_id, marker, result);
   }
 };
 
@@ -1058,9 +1110,7 @@ public:
 
   RGWCoroutine *fetch_inc_cr(int shard_id,
                              const string& marker,
-                             list<rgw_data_change_log_entry> *result,
-                             string *next_marker,
-                             bool *truncated) override {
+                             sip_data_list_result *result) {
 #if 0
     return new RGWReadRemoteDataLogShardCR(sc, shard_id,
                                            marker,
@@ -1757,10 +1807,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   std::optional<RGWDataSyncShardMarkerTrack> marker_tracker;
 
-  std::string next_marker;
-  list<rgw_data_change_log_entry> log_entries;
-  list<rgw_data_change_log_entry>::iterator log_iter;
-  bool truncated = false;
+  sip_data_list_result fetch_result;
+  vector<sip_data_list_result::entry>::iterator fetch_iter;
 
   ceph::mutex inc_lock = ceph::make_mutex("RGWDataSyncShardCR::inc_lock");
   ceph::condition_variable inc_cond;
@@ -2064,8 +2112,7 @@ public:
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker));
         yield call(sc->dsi->fetch_inc_cr(shard_id, sync_marker.marker,
-                                         &log_entries, &next_marker,
-                                         &truncated));
+                                         &fetch_result));
         if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
           lease_cr->go_down();
@@ -2073,23 +2120,18 @@ public:
           return set_cr_error(retcode);
         }
 
-        if (log_entries.size() > 0) {
+        if (fetch_result.entries.size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
         }
 
-        for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
-          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key));
-          retcode = parse_bucket_key(log_iter->entry.key, source_bs);
-          if (retcode < 0) {
-            tn->log(1, SSTR("failed to parse bucket shard: " << log_iter->entry.key));
-            marker_tracker->try_update_high_marker(log_iter->log_id, 0, log_iter->log_timestamp);
-            continue;
-          }
-          if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
-            tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
+        for (fetch_iter = fetch_result.entries.begin(); fetch_iter != fetch_result.entries.end(); ++fetch_iter) {
+          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << fetch_iter->entry_id << ":" << fetch_iter->timestamp << ":" << fetch_iter->key));
+          if (!marker_tracker->start(fetch_iter->entry_id, 0, fetch_iter->timestamp)) {
+            tn->log(0, SSTR("ERROR: cannot start syncing " << fetch_iter->entry_id << ". Duplicate entry?"));
           } else {
-            spawn(sync_single_entry(source_bs, log_iter->entry.key, log_iter->log_id,
-                                    log_iter->log_timestamp, false), false);
+            source_bs = rgw_bucket_shard{fetch_iter->bucket, fetch_iter->shard_id};
+            spawn(sync_single_entry(source_bs, fetch_iter->key, fetch_iter->entry_id,
+                                    fetch_iter->timestamp, false), false);
           }
 
           drain_all_but_stack_cb(lease_stack.get(),
@@ -2101,13 +2143,13 @@ public:
         }
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker
-                         << " next_marker=" << next_marker << " truncated=" << truncated));
-        if (!next_marker.empty()) {
-          sync_marker.marker = next_marker;
-        } else if (!log_entries.empty()) {
-          sync_marker.marker = log_entries.back().log_id;
+                         << " fetch_result.marker=" << fetch_result.marker << " truncated=" << fetch_result.truncated));
+        if (!fetch_result.marker.empty()) {
+          sync_marker.marker = fetch_result.marker;
+        } else if (!fetch_result.entries.empty()) {
+          sync_marker.marker = fetch_result.entries.back().entry_id;
         }
-        if (!truncated) {
+        if (!fetch_result.truncated) {
           // we reached the end, wait a while before checking for more
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 	  yield wait(get_idle_interval());
@@ -3445,9 +3487,7 @@ class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
   rgw_data_sync_marker* sync_marker;
   int count;
 
-  std::string next_marker;
-  list<rgw_data_change_log_entry> log_entries;
-  bool truncated;
+  sip_data_list_result fetch_result;
 
 public:
   RGWReadPendingBucketShardsCoroutine(RGWDataSyncCtx *_sc, const int _shard_id,
@@ -3482,8 +3522,7 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
     count = 0;
     do{
       yield call(sc->dsi->fetch_inc_cr(shard_id, marker,
-                                       &log_entries, &next_marker,
-                                       &truncated));
+                                       &fetch_result));
 
       if (retcode == -ENOENT) {
         break;
@@ -3495,15 +3534,15 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
         return set_cr_error(retcode);
       }
 
-      if (log_entries.empty()) {
+      if (fetch_result.entries.empty()) {
         break;
       }
 
-      count += log_entries.size();
-      for (const auto& entry : log_entries) {
-        pending_buckets.insert(entry.entry.key);
+      count += fetch_result.entries.size();
+      for (const auto& entry : fetch_result.entries) {
+        pending_buckets.insert(entry.key);
       }
-    }while(truncated && count < max_entries);
+    } while (fetch_result.truncated && count < max_entries);
 
     return set_cr_done();
   }
