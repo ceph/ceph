@@ -10,8 +10,8 @@
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/io/CopyupRequest.h"
-#include "librbd/io/ImageRequest.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/Utils.h"
 
 namespace librbd {
 namespace {
@@ -53,24 +53,38 @@ struct CopyupRequest<librbd::MockTestImageCtx> : public CopyupRequest<librbd::Mo
   }
 };
 
-template <>
-struct ImageRequest<librbd::MockTestImageCtx> {
-  static ImageRequest *s_instance;
-  static void aio_read(librbd::MockImageCtx *ictx, AioCompletion *c,
-                       Extents &&image_extents, ReadResult &&read_result,
-                       int op_flags, const ZTracer::Trace &parent_trace) {
-    s_instance->aio_read(c, image_extents);
-  }
+CopyupRequest<librbd::MockTestImageCtx>* CopyupRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
-  MOCK_METHOD2(aio_read, void(AioCompletion *, const Extents&));
+namespace util {
 
-  ImageRequest() {
+namespace {
+
+struct Mock {
+  static Mock* s_instance;
+
+  Mock() {
     s_instance = this;
   }
+
+  MOCK_METHOD8(read_parent,
+               void(librbd::MockTestImageCtx *, uint64_t, uint64_t, uint64_t,
+                    librados::snap_t, const ZTracer::Trace &, ceph::bufferlist*,
+                    Context*));
 };
 
-CopyupRequest<librbd::MockTestImageCtx>* CopyupRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-ImageRequest<librbd::MockTestImageCtx>* ImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+Mock *Mock::s_instance = nullptr;
+
+} // anonymous namespace
+
+template<> void read_parent(
+    librbd::MockTestImageCtx *image_ctx, uint64_t object_no, uint64_t off,
+    uint64_t len, librados::snap_t snap_id, const ZTracer::Trace &trace,
+    ceph::bufferlist* data, Context* on_finish) {
+  Mock::s_instance->read_parent(image_ctx, object_no, off, len, snap_id, trace,
+                                data, on_finish);
+}
+
+} // namespace util
 
 } // namespace io
 } // namespace librbd
@@ -97,7 +111,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   typedef ObjectCompareAndWriteRequest<librbd::MockTestImageCtx> MockObjectCompareAndWriteRequest;
   typedef AbstractObjectWriteRequest<librbd::MockTestImageCtx> MockAbstractObjectWriteRequest;
   typedef CopyupRequest<librbd::MockTestImageCtx> MockCopyupRequest;
-  typedef ImageRequest<librbd::MockTestImageCtx> MockImageRequest;
+  typedef util::Mock MockUtils;
 
   void expect_object_may_exist(MockTestImageCtx &mock_image_ctx,
                                uint64_t object_no, bool exists) {
@@ -182,14 +196,12 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     }
   }
 
-  void expect_aio_read(MockTestImageCtx &mock_image_ctx,
-                       MockImageRequest& mock_image_request,
-                       Extents&& extents, int r) {
-    EXPECT_CALL(mock_image_request, aio_read(_, extents))
-      .WillOnce(WithArg<0>(Invoke([&mock_image_ctx, r](AioCompletion* aio_comp) {
-                             aio_comp->set_request_count(1);
-                             mock_image_ctx.image_ctx->op_work_queue->queue(new C_AioRequest(aio_comp), r);
-                           })));
+  void expect_read_parent(MockUtils &mock_utils, uint64_t object_no,
+                          uint64_t off, uint64_t len, librados::snap_t snap_id,
+                          int r) {
+    EXPECT_CALL(mock_utils,
+                read_parent(_, object_no, off, len, snap_id, _, _, _))
+      .WillOnce(WithArg<7>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
   }
 
   void expect_copyup(MockCopyupRequest& mock_copyup_request, int r) {
@@ -438,10 +450,8 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
 
-  MockImageRequest mock_image_request;
-  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
-  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, 0);
+  MockUtils mock_utils;
+  expect_read_parent(mock_utils, 0, 0, 4096, CEPH_NOSNAP, 0);
 
   bufferlist bl;
   Extents extent_map;
@@ -485,10 +495,8 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
 
-  MockImageRequest mock_image_request;
-  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
-  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, -EPERM);
+  MockUtils mock_utils;
+  expect_read_parent(mock_utils, 0, 0, 4096, CEPH_NOSNAP, -EPERM);
 
   bufferlist bl;
   Extents extent_map;
@@ -532,10 +540,8 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
   expect_get_read_flags(mock_image_ctx, CEPH_NOSNAP, 0);
   expect_read(mock_image_ctx, ictx->get_object_name(0), 0, 4096, "", -ENOENT);
 
-  MockImageRequest mock_image_request;
-  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
-  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, 0);
+  MockUtils mock_utils;
+  expect_read_parent(mock_utils, 0, 0, 4096, CEPH_NOSNAP, 0);
 
   MockCopyupRequest mock_copyup_request;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
