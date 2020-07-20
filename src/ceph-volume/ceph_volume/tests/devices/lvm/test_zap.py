@@ -1,6 +1,7 @@
 import os
 import pytest
 from copy import deepcopy
+from mock.mock import patch, call
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
 
@@ -183,6 +184,16 @@ class TestEnsureAssociatedLVs(object):
         assert '/dev/VolGroup/lvjournal' in result
         assert '/dev/VolGroup/lvwal' in result
         assert '/dev/VolGroup/lvdb' in result
+
+    @patch('ceph_volume.devices.lvm.zap.api.get_lvs')
+    def test_ensure_associated_lvs(self, m_get_lvs):
+        zap.ensure_associated_lvs([], lv_tags={'ceph.osd_id': '1'})
+        calls = [
+            call(tags={'ceph.type': 'journal', 'ceph.osd_id': '1'}),
+            call(tags={'ceph.type': 'db', 'ceph.osd_id': '1'}),
+            call(tags={'ceph.type': 'wal', 'ceph.osd_id': '1'})
+        ]
+        m_get_lvs.assert_has_calls(calls, any_order=True)
 
 
 class TestWipeFs(object):
