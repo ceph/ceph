@@ -3,7 +3,10 @@ import errno
 import logging
 import sys
 
-from typing import List
+try:
+    from typing import List
+except ImportError:
+    pass  # For typing only
 
 from contextlib import contextmanager
 from threading import Lock, Condition
