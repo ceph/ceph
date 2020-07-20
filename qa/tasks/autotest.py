@@ -120,8 +120,7 @@ def _run_tests(testdir, remote, role, tests):
             id=id_,
             )
         control = '{tdir}/control.{tag}'.format(tdir=testdir, tag=tag)
-        teuthology.write_file(
-            remote=remote,
+        remote.write_file(
             path=control,
             data='import json; data=json.loads({data!r}); job.run_test(**data)'.format(
                 data=json.dumps(dict(
