@@ -3292,7 +3292,7 @@ def _list_ipv6_networks():
 
 def _parse_ipv6_route(routes, ips):
     r = {}  # type: Dict[str,List[str]]
-    route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) pref (\S+)$')
+    route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) .*pref (\S+)$')
     ip_p = re.compile(r'^\s+inet6 (\S+)/(.*)scope (.*)$')
     for line in routes.splitlines():
         m = route_p.findall(line)
