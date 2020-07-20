@@ -38,7 +38,8 @@ class RGWRESTMgr_Account : public RGWRESTMgr {
   RGWRESTMgr_Account() = default;
   ~RGWRESTMgr_Account() override = default;
 
-  RGWHandler_REST *get_handler(struct req_state*,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+                               struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Account(auth_registry);
