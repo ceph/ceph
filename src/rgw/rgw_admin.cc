@@ -9230,7 +9230,7 @@ next:
        return -ret;
      }
 
-     encode_json("AccountInfo", account_info, formatter);
+     encode_json("AccountInfo", account_info, formatter.get());
      formatter->flush(cout);
    }
 
@@ -9250,7 +9250,7 @@ next:
        return -ret;
      }
 
-     encode_json("AccountInfo", account_info, formatter);
+     encode_json("AccountInfo", account_info, formatter.get());
      formatter->flush(cout);
 
    }
@@ -9301,7 +9301,7 @@ next:
        return -ret;
      }
 
-     encode_json("account_user_list", users, formatter);
+     encode_json("account_user_list", users, formatter.get());
      formatter->flush(cout);
    }
  }
