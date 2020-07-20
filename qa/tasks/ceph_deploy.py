@@ -346,13 +346,11 @@ def build_ceph_cluster(ctx, config):
             confp = config.get('conf')
             for section, keys in confp.items():
                 lines = '[{section}]\n'.format(section=section)
-                teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
-                                                sudo=True)
+                ceph_admin.sudo_write_file(conf_path, lines, append=True)
                 for key, value in keys.items():
                     log.info("[%s] %s = %s" % (section, key, value))
                     lines = '{key} = {value}\n'.format(key=key, value=value)
-                    teuthology.append_lines_to_file(
-                        ceph_admin, conf_path, lines, sudo=True)
+                    ceph_admin.sudo_write_file(conf_path, lines, append=True)
 
         # install ceph
         dev_branch = ctx.config['branch']
@@ -637,13 +635,11 @@ def cli_test(ctx, config):
         confp = config.get('conf')
         for section, keys in confp.items():
             lines = '[{section}]\n'.format(section=section)
-            teuthology.append_lines_to_file(admin, conf_path, lines,
-                                            sudo=True)
+            admin.sudo_write_file(conf_path, lines, append=True)
             for key, value in keys.items():
                 log.info("[%s] %s = %s" % (section, key, value))
                 lines = '{key} = {value}\n'.format(key=key, value=value)
-                teuthology.append_lines_to_file(admin, conf_path, lines,
-                                                sudo=True)
+                admin.sudo_write_file(conf_path, lines, append=True)
     new_mon_install = 'install {branch} --mon '.format(
         branch=test_branch) + nodename
     new_mgr_install = 'install {branch} --mgr '.format(
