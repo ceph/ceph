@@ -3,8 +3,9 @@ from __future__ import absolute_import
 import logging
 
 from functools import wraps
-from typing import List, Optional
+from typing import List, Optional, Dict
 
+from ceph.deployment.service_spec import ServiceSpec
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
 from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
@@ -109,6 +110,15 @@ class ServiceManager(ResourceManager):
         self.api.orchestrator_wait(completion_list)
         for c in completion_list:
             raise_if_exception(c)
+
+    @wait_api_result
+    def apply(self, service_spec: Dict) -> Completion:
+        spec = ServiceSpec.from_json(service_spec)
+        return self.api.apply([spec])
+
+    @wait_api_result
+    def remove(self, service_name: str) -> List[str]:
+        return self.api.remove_service(service_name)
 
 
 class OsdManager(ResourceManager):
