@@ -3627,7 +3627,9 @@ void Client::check_caps(Inode *in, unsigned flags)
 
     if (!(flags & CHECK_CAPS_NODELAY)) {
       ldout(cct, 10) << "delaying cap release" << dendl;
-      cap_delay_requeue(in);
+      if (!in->delay_cap_item.is_on_list()) {
+        cap_delay_requeue(in);
+      }
       continue;
     }
 
