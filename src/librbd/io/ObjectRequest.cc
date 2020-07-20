@@ -19,8 +19,6 @@
 #include "librbd/asio/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/CopyupRequest.h"
-#include "librbd/io/ImageRequest.h"
-#include "librbd/io/ReadResult.h"
 #include "librbd/io/Utils.h"
 
 #include <boost/optional.hpp>
@@ -36,6 +34,8 @@ namespace librbd {
 namespace io {
 
 using librbd::util::data_object_name;
+using librbd::util::create_context_callback;
+using librbd::util::create_trace;
 
 namespace {
 
@@ -104,7 +104,7 @@ ObjectRequest<I>::ObjectRequest(
     const ZTracer::Trace &trace, Context *completion)
   : m_ictx(ictx), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-    m_trace(librbd::util::create_trace(*ictx, "", trace)) {
+    m_trace(create_trace(*ictx, "", trace)) {
   ceph_assert(m_ictx->data_ctx.is_valid());
   if (m_trace.valid()) {
     m_trace.copy_name(trace_name + std::string(" ") +
@@ -251,38 +251,14 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
 template <typename I>
 void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
-
-  std::shared_lock image_locker{image_ctx->image_lock};
-
-  // calculate reverse mapping onto the image
-  Extents parent_extents;
-  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
-                          this->m_object_no, this->m_object_off,
-                          this->m_object_len, parent_extents);
-
-  uint64_t parent_overlap = 0;
-  uint64_t object_overlap = 0;
-  int r = image_ctx->get_parent_overlap(this->m_snap_id, &parent_overlap);
-  if (r == 0) {
-    object_overlap = image_ctx->prune_parent_extents(parent_extents,
-                                                     parent_overlap);
-  }
-
-  if (object_overlap == 0) {
-    image_locker.unlock();
-
-    this->finish(-ENOENT);
-    return;
-  }
-
   ldout(image_ctx->cct, 20) << dendl;
 
-  auto parent_completion = AioCompletion::create_and_start<
-    ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_parent>(
-      this, librbd::util::get_image_ctx(image_ctx->parent), AIO_TYPE_READ);
-  ImageRequest<I>::aio_read(image_ctx->parent, parent_completion,
-                            std::move(parent_extents), ReadResult{m_read_data},
-                            0, this->m_trace);
+  auto ctx = create_context_callback<
+    ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_parent>(this);
+
+  io::util::read_parent<I>(image_ctx, this->m_object_no, this->m_object_off,
+                           this->m_object_len, this->m_snap_id, this->m_trace,
+                           m_read_data, ctx);
 }
 
 template <typename I>
