@@ -2,7 +2,8 @@
   "extends": "../tsconfig.json",
   "exclude": [],
   "include": [
-    "**/*.ts"
+    "**/*.ts",
+    "plugins/index.js"
   ],
   "compilerOptions": {
     "types": [
