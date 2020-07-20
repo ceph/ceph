@@ -458,6 +458,94 @@ class Remote(object):
             ])
         return self.run(args=args, wait=False, stdout=run.PIPE)
 
+    def copy_file(self, src, dst, sudo=False, mode=None, owner=None,
+                                              mkdir=False, append=False):
+        """
+        Copy data to remote file
+
+        :param src:     source file path on remote host
+        :param dst:     destination file path on remote host
+        :param sudo:    use sudo to write file, defaults False
+        :param mode:    set file mode bits if provided
+        :param owner:   set file owner if provided
+        :param mkdir:   ensure the destination directory exists, defaults False
+        :param append:  append data to the file, defaults False
+        """
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' if=' + src + ' of=' + dst
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(dst)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + dst
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + dst
+        args = 'set -ex' + '\n' + args
+        self.run(args=args)
+
+    def move_file(self, src, dst, sudo=False, mode=None, owner=None,
+                                              mkdir=False):
+        """
+        Move data to remote file
+
+        :param src:     source file path on remote host
+        :param dst:     destination file path on remote host
+        :param sudo:    use sudo to write file, defaults False
+        :param mode:    set file mode bits if provided
+        :param owner:   set file owner if provided
+        :param mkdir:   ensure the destination directory exists, defaults False
+        """
+        mv = 'sudo mv' if sudo else 'mv'
+        args = mv + ' ' + src + ' ' + dst
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(dst)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += ' && ' + chmod + ' ' + mode + ' ' + dst
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += ' && ' + chown + ' ' + owner + ' ' + dst
+        self.run(args=args)
+
+    def read_file(self, path, sudo=False, stdout=None,
+                              offset=0, length=0):
+        """
+        Read data from remote file
+
+        :param path:    file path on remote host
+        :param sudo:    use sudo to read the file, defaults False
+        :param stdout:  output object, defaults to io.BytesIO()
+        :param offset:  number of bytes to skip from the file
+        :param length:  number of bytes to read from the file
+        """
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' if=' + path + ' of=/dev/stdout'
+        iflags=[]
+        # we have to set defaults here instead of the method's signature,
+        # because python is reusing the object from call to call
+        stdout = stdout or BytesIO()
+        if offset:
+            args += ' skip=' + str(offset)
+            iflags += 'skip_bytes'
+        if length:
+            args += ' count=' + str(length)
+            iflags += 'count_bytes'
+        if iflags:
+            args += ' iflag=' + ','.join(iflags)
+        args = 'set -ex' + '\n' + args
+        proc = self.run(args=args, stdout=stdout)
+        return proc.stdout.getvalue()
+
+
     def write_file(self, path, data, sudo=False, mode=None, owner=None,
                                      mkdir=False, append=False):
         """
