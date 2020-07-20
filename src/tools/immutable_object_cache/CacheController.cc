@@ -102,6 +102,9 @@ void CacheController::handle_request(CacheSession* session,
     case RBDSC_REGISTER: {
       // TODO(dehao): skip register and allow clients to lookup directly
 
+      auto req_reg_data = reinterpret_cast <ObjectCacheRegData*> (req);
+      session->set_client_version(req_reg_data->version);
+
       ObjectCacheRequest* reply = new ObjectCacheRegReplyData(
         RBDSC_REGISTER_REPLY, req->seq);
       session->send(reply);
@@ -112,9 +115,11 @@ void CacheController::handle_request(CacheSession* session,
       std::string cache_path;
       ObjectCacheReadData* req_read_data =
         reinterpret_cast <ObjectCacheReadData*> (req);
+      bool return_dne_path = session->client_version().empty();
       int ret = m_object_cache_store->lookup_object(
         req_read_data->pool_namespace, req_read_data->pool_id,
-        req_read_data->snap_id, req_read_data->oid, cache_path);
+        req_read_data->snap_id, req_read_data->oid, return_dne_path,
+        cache_path);
       ObjectCacheRequest* reply = nullptr;
       if (ret != OBJ_CACHE_PROMOTED && ret != OBJ_CACHE_DNE) {
         reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);
