@@ -171,12 +171,7 @@ for bucket in conn.get_all_buckets():
         print(bucket.name + "\t" + bucket.creation_date)
 """.format(access_key=access_key, secret_key=secret_key, dns_name=dns_name, bucket_name=bucket_name)
     py_bucket_file = '{testdir}/create_bucket.py'.format(testdir=testdir)
-    misc.sudo_write_file(
-        remote=client,
-        path=py_bucket_file,
-        data=create_bucket,
-        perms='0744',
-        )
+    client.sudo_write_file(py_bucket_file, create_bucket, mode='0744')
     client.run(
         args=[
             'cat',
@@ -283,10 +278,6 @@ def configure_s3a(client, dns_name, access_key, secret_key, bucket_name, testdir
 </configuration>
 """.format(name=dns_name, bucket_name=bucket_name, access_key=access_key, secret_key=secret_key)
     config_path = testdir + '/hadoop/hadoop-tools/hadoop-aws/src/test/resources/auth-keys.xml'
-    misc.write_file(
-        remote=client,
-        path=config_path,
-        data=config_template,
-    )
+    client.write_file(config_path, config_template)
     # output for debug
     client.run(args=['cat', config_path])
