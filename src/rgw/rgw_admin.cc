@@ -63,6 +63,7 @@ extern "C" {
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
+#include "rgw_account.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -129,6 +130,7 @@ void usage()
   cout << "  subuser rm                 remove subuser\n";
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
+  cout << "  account create             create an account\n";
   cout << "  bucket list                list buckets (specify --allow-unordered for\n";
   cout << "                             faster, unsorted listing)\n";
   cout << "  bucket limit check         show bucket sharding stats\n";
@@ -307,6 +309,7 @@ void usage()
   cout << "   --uid=<id>                user id\n";
   cout << "   --new-uid=<id>            new user id\n";
   cout << "   --subuser=<name>          subuser name\n";
+  cout << "   --account=<id>            account id\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>           user's email address\n";
   cout << "   --secret/--secret-key=<key>\n";
@@ -822,7 +825,8 @@ enum class OPT {
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
-  SCRIPT_PACKAGE_LIST
+  SCRIPT_PACKAGE_LIST,
+  ACCOUNT_CREATE,
 };
 
 }
@@ -1056,6 +1060,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
+  { "account create", OPT::ACCOUNT_CREATE },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3439,6 +3444,7 @@ int main(int argc, const char **argv)
   std::unique_ptr<rgw::sal::User> user;
   string tenant;
   string user_ns;
+  string account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -3680,6 +3686,8 @@ int main(int argc, const char **argv)
       opt_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--user_ns", (char*)NULL)) {
       user_ns = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account", (char*)NULL)) {
+      account_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -10460,6 +10468,15 @@ next:
 #endif
   }
 
+  if (opt_cmd == OPT::ACCOUNT_CREATE) {
+    if (account_id.empty()) {
+      cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
+    }
+
+    RGWAccountInfo account_info(account_id, tenant);
+    encode_json("AccountInfo", account_info, formatter.get());
+    formatter->flush(cout);
+  }
   return 0;
 }
 

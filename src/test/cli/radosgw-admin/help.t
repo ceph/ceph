@@ -18,6 +18,7 @@
     subuser rm                 remove subuser
     key create                 create access key
     key rm                     remove access key
+    account create             create an account
     bucket list                list buckets (specify --allow-unordered for
                                faster, unsorted listing)
     bucket limit check         show bucket sharding stats
@@ -196,6 +197,7 @@
      --uid=<id>                user id
      --new-uid=<id>            new user id
      --subuser=<name>          subuser name
+     --account=<id>            account id
      --access-key=<key>        S3 access key
      --email=<email>           user's email address
      --secret/--secret-key=<key>
