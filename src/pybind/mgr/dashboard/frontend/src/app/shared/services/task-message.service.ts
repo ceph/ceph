@@ -429,6 +429,13 @@ export class TaskMessageService {
         this.i18n('Identified')
       ),
       (metadata) => this.i18n(`device '{{device}}' on host '{{hostname}}'`, metadata)
+    ),
+    // Service tasks
+    'service/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.service(metadata)
+    ),
+    'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.service(metadata)
     )
   };
 
@@ -474,6 +481,10 @@ export class TaskMessageService {
     return this.i18n(`NFS {{nfs_id}}`, {
       nfs_id: `'${metadata.cluster_id}:${metadata.export_id ? metadata.export_id : metadata.path}'`
     });
+  }
+
+  service(metadata: any) {
+    return this.i18n(`Service '{{service_name}}'`, { service_name: metadata.service_name });
   }
 
   _getTaskTitle(task: Task) {

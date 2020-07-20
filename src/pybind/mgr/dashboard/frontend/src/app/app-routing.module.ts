@@ -41,6 +41,7 @@ import { ChangePasswordGuardService } from './shared/services/change-password-gu
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
+import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
@@ -102,8 +103,15 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        component: ServicesComponent,
-        data: { breadcrumbs: 'Cluster/Services' }
+        data: { breadcrumbs: 'Cluster/Services' },
+        children: [
+          { path: '', component: ServicesComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: ServiceFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          }
+        ]
       },
       {
         path: 'inventory',

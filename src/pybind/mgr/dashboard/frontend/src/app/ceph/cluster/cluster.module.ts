@@ -50,6 +50,7 @@ import { SilenceListComponent } from './prometheus/silence-list/silence-list.com
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
 import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
 import { ServiceDetailsComponent } from './services/service-details/service-details.component';
+import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
 
@@ -124,7 +125,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     HostFormComponent,
     ServiceDetailsComponent,
     ServiceDaemonListComponent,
-    TelemetryComponent
+    TelemetryComponent,
+    ServiceFormComponent
   ]
 })
 export class ClusterModule {}
