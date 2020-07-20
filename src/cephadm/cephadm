@@ -4387,99 +4387,6 @@ class YumDnf(Packager):
         self.install(['podman'])
 
 
-class Zypper(Packager):
-    DISTRO_NAMES = [
-        'sles',
-        'opensuse-tumbleweed',
-        'opensuse-leap'
-    ]
-
-    def __init__(self, stable, version, branch, commit,
-                 distro, distro_version):
-        super(Zypper, self).__init__(stable=stable, version=version,
-                                     branch=branch, commit=commit)
-        self.tool = 'zypper'
-        self.distro = 'opensuse'
-        self.distro_version = '15.1'
-        if 'tumbleweed' not in distro and distro_version is not None:
-            self.distro_version = distro_version
-
-    def custom_repo(self, **kw):
-        """
-        See YumDnf for format explanation.
-        """
-        lines = []
-
-        # by using tuples (vs a dict) we preserve the order of what we want to
-        # return, like starting with a [repo name]
-        tmpl = (
-            ('reponame', '[%s]'),
-            ('name', 'name=%s'),
-            ('baseurl', 'baseurl=%s'),
-            ('enabled', 'enabled=%s'),
-            ('gpgcheck', 'gpgcheck=%s'),
-            ('_type', 'type=%s'),
-            ('gpgkey', 'gpgkey=%s'),
-            ('proxy', 'proxy=%s'),
-            ('priority', 'priority=%s'),
-        )
-
-        for line in tmpl:
-            tmpl_key, tmpl_value = line  # key values from tmpl
-
-            # ensure that there is an actual value (not None nor empty string)
-            if tmpl_key in kw and kw.get(tmpl_key) not in (None, ''):
-                lines.append(tmpl_value % kw.get(tmpl_key))
-
-        return '\n'.join(lines)
-
-    def repo_path(self):
-        return '/etc/zypp/repos.d/ceph.repo'
-
-    def repo_baseurl(self):
-        assert self.stable or self.version
-        if self.version:
-            return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
-        else:
-            return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
-
-    def add_repo(self):
-        if self.stable or self.version:
-            content = ''
-            for n, t in {
-                    'Ceph': '$basearch',
-                    'Ceph-noarch': 'noarch',
-                    'Ceph-source': 'SRPMS'}.items():
-                content += '[%s]\n' % (n)
-                content += self.custom_repo(
-                    name='Ceph %s' % t,
-                    baseurl=self.repo_baseurl() + '/' + t,
-                    enabled=1,
-                    gpgcheck=1,
-                    gpgkey=self.repo_gpgkey()[0],
-                )
-                content += '\n\n'
-        else:
-            content = self.query_shaman(self.distro, self.distro_version,
-                                        self.branch,
-                                        self.commit)
-
-        logging.info('Writing repo to %s...' % self.repo_path())
-        with open(self.repo_path(), 'w') as f:
-            f.write(content)
-
-    def rm_repo(self):
-        if os.path.exists(self.repo_path()):
-            os.unlink(self.repo_path())
-
-    def install(self, ls):
-        logger.info('Installing packages %s...' % ls)
-        call_throws([self.tool, 'in', '-y'] + ls)
-
-    def install_podman(self):
-        self.install(['podman'])
-
-
 def create_packager(stable=None, version=None, branch=None, commit=None):
     distro, distro_version, distro_codename = get_distro()
     if distro in YumDnf.DISTRO_NAMES:
@@ -4491,10 +4398,6 @@ def create_packager(stable=None, version=None, branch=None, commit=None):
                    branch=branch, commit=commit,
                    distro=distro, distro_version=distro_version,
                    distro_codename=distro_codename)
-    elif distro in Zypper.DISTRO_NAMES:
-        return Zypper(stable=stable, version=version,
-                      branch=branch, commit=commit,
-                      distro=distro, distro_version=distro_version)
     raise Error('Distro %s version %s not supported' % (distro, distro_version))
 
 
