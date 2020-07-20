@@ -16,6 +16,8 @@
 #include <limits.h>
 #include <sstream>
 #include <regex>
+#include <time.h>
+#include <iterator>
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -681,6 +683,45 @@ bool HealthMonitor::check_leader_health()
   }
 
   health_check_map_t next;
+
+ // DAEMON_OLD_VERSION
+  if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
+  std::map<string, std::list<string> > all_versions;
+  mon->get_all_versions(all_versions);
+  if (all_versions.size() > 1) {
+    dout(20) << __func__ << " all_versions=" << all_versions << dendl;
+    // The last entry has the largest version
+    dout(20) << __func__ << " highest version daemon count "
+             << all_versions.rbegin()->second.size() << dendl;
+    // Erase last element (the highest version running)
+    all_versions.erase(all_versions.rbegin()->first);
+    ceph_assert(all_versions.size() > 0);
+    ostringstream ss;
+    unsigned daemon_count = 0;
+    for (auto& g:all_versions) {
+      daemon_count += g.second.size();
+    }
+    int ver_count = all_versions.size();
+    ceph_assert(!(daemon_count == 1 && ver_count != 1));
+    ss << "There " << (daemon_count == 1 ? "is a daemon" : "are daemons")
+       << " running " << (ver_count > 1 ? "multiple old versions" : "an older version")  << " of ceph";
+    health_status_t status;
+    if (ver_count > 1)
+      status = HEALTH_ERR;
+    else
+      status = HEALTH_WARN;
+    auto& d = next.add("DAEMON_OLD_VERSION", status, ss.str(), all_versions.size());
+    for (auto& g:all_versions) {
+      ostringstream ds;
+      for (auto& i : g.second) { // Daemon list
+        ds << i << " ";
+      }
+      ds << (g.second.size() == 1 ? "is" : "are")
+         << " running an older version of ceph: " << g.first;
+      d.detail.push_back(ds.str());
+    }
+  }
+  }
 
   // MON_DOWN
   {

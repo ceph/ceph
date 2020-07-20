@@ -5359,6 +5359,23 @@ void Monitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
+void Monitor::get_all_versions(std::map<string, list<string> > &versions)
+{
+  // mon
+  get_versions(versions);
+  dout(20) << __func__ << " all versions=" << versions << dendl;
+}
+
+void Monitor::get_versions(std::map<string, list<string> > &versions)
+{
+  int i = 0;
+  for (auto& [rank, metadata] : mon_metadata) {
+    auto q = metadata.find("ceph_version_short");
+    versions[q->second].push_back(string("mon.") + monmap->get_name(rank));
+    i = i + 1;
+  }
+}
+
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
   map<string, list<string> > mons;	// hostname => mon
