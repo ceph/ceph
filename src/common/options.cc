@@ -2228,6 +2228,11 @@ std::vector<Option> get_global_options() {
 		     "only be rejected later, when they are used.")
     .set_flag(Option::FLAG_RUNTIME),
 
+    Option("mon_warn_on_older_version", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue DAEMON_OLD_VERSION health warning if daemons are not all running the same version"),
+
     // PAXOS
 
     Option("paxos_stash_full_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
