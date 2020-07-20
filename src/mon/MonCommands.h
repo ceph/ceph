@@ -742,7 +742,7 @@ COMMAND("osd crush weight-set reweight-compat "
 	"osd", "rw")
 COMMAND("osd setmaxosd "
 	"name=newmax,type=CephInt,range=0",
-	"set new maximum osd value", "osd", "rw")
+	"set new maxnum osd value", "osd", "rw")
 COMMAND("osd set-full-ratio "
 	"name=ratio,type=CephFloat,range=0.0|1.0",
 	"set usage ratio at which OSDs are marked full",
