@@ -42,6 +42,12 @@ install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_volume_client.py
   DESTINATION ${PYTHON3_INSTDIR})
 
+if(WITH_SEASTAR)
+  install(FILES
+  ${CMAKE_CURRENT_SOURCE_DIR}/seastar-addr2line
+  DESTINATION ${PYTHON3_INSTDIR})
+endif()
+
 if(WITH_MGR)
   execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import ssl; print('.'.join(map(str,ssl.OPENSSL_VERSION_INFO[0:3])))"

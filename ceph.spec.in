@@ -1203,6 +1203,7 @@ popd
 %if 0%{with seastar}
 # package crimson-osd with the name of ceph-osd
 install -m 0755 %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd
+install -m 0755 %{buildroot}%{python3_sitelib}/seastar-addr2line %{buildroot}%{_bindir}/seastar-addr2line
 %endif
 
 install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
@@ -1939,6 +1940,11 @@ fi
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 %config(noreplace) %{_sysctldir}/90-ceph-osd.conf
 %{_sysconfdir}/sudoers.d/ceph-osd-smartctl
+%if 0%{with seastar}
+%{buildroot}%{_bindir}/seastar-addr2line
+%{python3_sitelib}/seastar-addr2line
+%endif
+
 
 %post osd
 %if 0%{?suse_version}
