@@ -2,7 +2,6 @@ import os
 import uuid
 import errno
 import logging
-from enum import Enum, unique
 from hashlib import md5
 
 import cephfs
@@ -14,8 +13,7 @@ from ...exception import MetadataMgrException, VolumeException
 
 log = logging.getLogger(__name__)
 
-@unique
-class SubvolumeFeatures(Enum):
+class SubvolumeFeatures():
     FEATURE_SNAPSHOT_CLONE       = "snapshot-clone"
     FEATURE_SNAPSHOT_AUTOPROTECT = "snapshot-autoprotect"
 

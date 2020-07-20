@@ -36,7 +36,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
     @property
     def features(self):
-        return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value]
+        return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT]
 
     def create(self, size, isolate_nspace, pool, mode, uid, gid):
         subvolume_type = SubvolumeBase.SUBVOLUME_TYPE_NORMAL
