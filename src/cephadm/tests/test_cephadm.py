@@ -99,6 +99,7 @@ default via 10.3.64.1 dev eno1 proto static metric 100
 ::1 dev lo proto kernel metric 256 pref medium
 fdbc:7574:21fe:9200::/64 dev wlp2s0 proto ra metric 600 pref medium
 fdd8:591e:4969:6363::/64 dev wlp2s0 proto ra metric 600 pref medium
+fde4:8dba:82e1::/64 dev eth1 proto kernel metric 256 expires 1844sec pref medium
 fe80::/64 dev tun0 proto kernel metric 256 pref medium
 fe80::/64 dev wlp2s0 proto kernel metric 600 pref medium
 default dev tun0 proto static metric 50 pref medium
@@ -127,6 +128,10 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
        valid_lft 6745sec preferred_lft 0sec
     inet6 fe80::1111:2222:3333:4444/64 scope link noprefixroute 
        valid_lft forever preferred_lft forever
+    inet6 fde4:8dba:82e1:0:ec4a:e402:e9df:b357/64 scope global temporary dynamic
+       valid_lft 1074sec preferred_lft 1074sec
+    inet6 fde4:8dba:82e1:0:5054:ff:fe72:61af/64 scope global dynamic mngtmpaddr
+       valid_lft 1074sec preferred_lft 1074sec
 12: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 state UNKNOWN qlen 100
     inet6 fe80::cafe:cafe:cafe:cafe/64 scope link stable-privacy 
        valid_lft forever preferred_lft forever
@@ -141,6 +146,8 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
                                              "fdd8:591e:4969:6363:103a:abcd:af1f:57f3",
                                              "fdd8:591e:4969:6363:a128:1234:2bdd:1b6f",
                                              "fdd8:591e:4969:6363:d581:4321:380b:3905"],
+                "fde4:8dba:82e1::/64": ["fde4:8dba:82e1:0:ec4a:e402:e9df:b357",
+                                        "fde4:8dba:82e1:0:5054:ff:fe72:61af"],
                 "fe80::/64": ["fe80::1111:2222:3333:4444",
                               "fe80::cafe:cafe:cafe:cafe"]
             }
