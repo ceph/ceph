@@ -756,7 +756,7 @@ COMMAND("osd set-nearfull-ratio "
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw")
 COMMAND("osd get-require-min-compat-client",
-        "get the minimum client version we will maintain compatibility with",
+        "get the mininum client version we will maintain compatibility with",
         "osd", "r")
 COMMAND("osd set-require-min-compat-client "
 	"name=version,type=CephString "
