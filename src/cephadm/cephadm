@@ -4374,17 +4374,10 @@ class YumDnf(Packager):
         if self.distro_code.startswith('el'):
             logger.info('Enabling EPEL...')
             call_throws([self.tool, 'install', '-y', 'epel-release'])
-        if self.distro_code == 'el8':
-            # we also need Ken's copr repo, at least for now
-            logger.info('Enabling supplementary copr repo ktdreyer/ceph-el8...')
-            call_throws(['dnf', 'copr', 'enable', '-y', 'ktdreyer/ceph-el8'])
 
     def rm_repo(self):
         if os.path.exists(self.repo_path()):
             os.unlink(self.repo_path())
-        if self.distro_code == 'el8':
-            logger.info('Disabling supplementary copr repo ktdreyer/ceph-el8...')
-            call_throws(['dnf', 'copr', 'disable', '-y', 'ktdreyer/ceph-el8'])
 
     def install(self, ls):
         logger.info('Installing packages %s...' % ls)
