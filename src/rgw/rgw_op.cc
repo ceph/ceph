@@ -5063,6 +5063,24 @@ void RGWCopyObj::execute()
 
   encode_delete_at_attr(delete_at, attrs);
 
+  if (!s->system_request) { // no quota enforcement for system requests
+    // get src object size (cached in obj_ctx from verify_permission())
+    RGWObjState* astate = nullptr;
+    op_ret = store->get_obj_state(s->obj_ctx, src_bucket_info, src_obj,
+                                  &astate, true, false);
+    if (op_ret < 0) {
+      return;
+    }
+    // enforce quota against the destination bucket owner
+    op_ret = store->check_quota(dest_bucket_info.owner,
+                                dest_bucket_info.bucket,
+                                user_quota, bucket_quota,
+                                astate->accounted_size);
+    if (op_ret < 0) {
+      return;
+    }
+  }
+
   bool high_precision_time = (s->system_request);
 
   /* Handle object versioning of Swift API. In case of copying to remote this
