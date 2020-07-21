@@ -1200,7 +1200,7 @@ static void bulkdelete_respond(const unsigned num_deleted,
 
   if (!failures.empty()) {
     int reason = ERR_INVALID_REQUEST;
-    for (const auto fail_desc : failures) {
+    for (const auto& fail_desc : failures) {
       if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
         reason = fail_desc.err;
       }
@@ -1223,7 +1223,7 @@ static void bulkdelete_respond(const unsigned num_deleted,
   encode_json("Response Status", resp_status, &formatter);
 
   formatter.open_array_section("Errors");
-  for (const auto fail_desc : failures) {
+  for (const auto& fail_desc : failures) {
     formatter.open_array_section("object");
 
     stringstream ss_name;
@@ -1353,7 +1353,7 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state
     }
   }
 
-  for (const auto kv : response_attrs) {
+  for (const auto& kv : response_attrs) {
     dump_header(s, kv.first, kv.second);
   }
 
@@ -2989,7 +2989,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::RGWRadosStore* store,
     /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
     const vector<string> skipped_prefixes = { "AUTH_", "KEY_" };
 
-    for (const auto pfx : skipped_prefixes) {
+    for (const auto& pfx : skipped_prefixes) {
       const size_t comp_len = min(account_name.length(), pfx.length());
       if (account_name.compare(0, comp_len, pfx) == 0) {
         /* Prefix is present. Drop it. */

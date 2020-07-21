@@ -10,7 +10,6 @@
 #include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/bind.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
@@ -7277,9 +7276,12 @@ void RGWBulkUploadOp::execute()
         case rgw::tar::FileType::NORMAL_FILE: {
           ldpp_dout(this, 2) << "handling regular file" << dendl;
 
-          std::string_view filename = bucket_path.empty() ? header->get_filename() : \
-                            file_prefix + std::string(header->get_filename());
-          auto body = AlignedStreamGetter(0, header->get_filesize(),
+          std::string_view filename;
+	  if (bucket_path.empty())
+	    filename = header->get_filename();
+	  else
+	    filename = file_prefix + std::string(header->get_filename());
+	  auto body = AlignedStreamGetter(0, header->get_filesize(),
                                           rgw::tar::BLOCK_SIZE, *stream);
           op_ret = handle_file(filename,
                                header->get_filesize(),

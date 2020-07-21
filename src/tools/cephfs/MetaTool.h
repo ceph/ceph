@@ -21,7 +21,7 @@ class MetaTool : public MDSUtility
 public:
   class inode_meta_t {
   public:
-    inode_meta_t(snapid_t f = CEPH_NOSNAP, char t = 255, InodeStore* i = NULL):
+    inode_meta_t(snapid_t f = CEPH_NOSNAP, char t = char(255), InodeStore* i = NULL):
         _f(f),_t(t),_i(i) {
     };
     snapid_t get_snapid() const { 

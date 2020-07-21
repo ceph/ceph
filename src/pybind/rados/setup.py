@@ -1,11 +1,17 @@
 from __future__ import print_function
+import pkgutil
+if not pkgutil.find_loader('setuptools'):
+    from distutils.core import setup
+    from distutils.extension import Extension
+else:
+    from setuptools import setup
+    from setuptools.extension import Extension
 import distutils.sysconfig
 from distutils.errors import CompileError, LinkError
 from distutils.ccompiler import new_compiler
 from itertools import filterfalse, takewhile
 
 import os
-import pkgutil
 import shutil
 import subprocess
 import sys
@@ -44,14 +50,6 @@ def monkey_with_compiler(customize):
 
 distutils.sysconfig.customize_compiler = \
     monkey_with_compiler(distutils.sysconfig.customize_compiler)
-
-if not pkgutil.find_loader('setuptools'):
-    from distutils.core import setup
-    from distutils.extension import Extension
-else:
-    from setuptools import setup
-    from setuptools.extension import Extension
-
 
 distutils.sysconfig.customize_compiler = \
     monkey_with_compiler(distutils.sysconfig.customize_compiler)

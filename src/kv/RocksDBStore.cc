@@ -603,7 +603,6 @@ bool RocksDBStore::parse_sharding_def(const std::string_view text_def_in,
       column_def = column_def.substr(0, eqpos);
     }
 
-    std::string_view shards_def;
     size_t bpos = column_def.find('(');
     if (bpos != std::string_view::npos) {
       name = column_def.substr(0, bpos);

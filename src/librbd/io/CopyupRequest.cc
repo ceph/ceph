@@ -21,7 +21,6 @@
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 
-#include <boost/bind.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 

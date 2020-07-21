@@ -39,7 +39,7 @@ public:
     if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
       return -EINVAL;
     }
-    for (const auto param : s->info.args.get_params()) {
+    for (const auto& param : s->info.args.get_params()) {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
       }
@@ -299,7 +299,7 @@ void RGWHandler_REST_PSTopic_AWS::rgw_topic_parse_input() {
         }
       }
       // update the regular args with the content of the attribute map
-      for (const auto attr : map) {
+      for (const auto& attr : map) {
           s->info.args.append(attr.second.get_key(), attr.second.get_value());
       }
     }

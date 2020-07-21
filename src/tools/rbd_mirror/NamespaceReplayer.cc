@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "NamespaceReplayer.h"
-#include <boost/bind.hpp>
 #include "common/Formatter.h"
 #include "common/debug.h"
 #include "common/errno.h"
