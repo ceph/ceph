@@ -21,8 +21,11 @@ from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.rook import placement_spec_to_k8s
 from ceph.deployment.service_spec import ServiceSpec
 from mgr_util import merge_dicts
+from rook.rook_client.ceph.cephcluster import DriveGroupsList
 
 try:
     from typing import Optional
@@ -521,8 +524,8 @@ class RookCluster(object):
             return new
         return self._patch(cnfs.CephNFS, 'cephnfses',svc_id, _update_nfs_count)
 
-    def add_osds(self, drive_group, matching_hosts):
-        # type: (DriveGroupSpec, List[str]) -> str
+    def add_osds(self, drive_group, all_hosts):
+        # type: (DriveGroupSpec, List[HostSpec]) -> str
         """
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
@@ -534,41 +537,29 @@ class RookCluster(object):
         def _add_osds(current_cluster, new_cluster):
             # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
 
+            if not hasattr(new_cluster.spec, 'driveGroups') or new_cluster.spec.driveGroups is None:
+                new_cluster.spec.driveGroups = DriveGroupsList()
+
+            count, affinity = placement_spec_to_k8s(all_hosts, drive_group.placement)
+
             # FIXME: this is all not really atomic, because jsonpatch doesn't
             # let us do "test" operations that would check if items with
             # matching names were in existing lists.
 
-            if not hasattr(new_cluster.spec.storage, 'nodes'):
-                new_cluster.spec.storage.nodes = ccl.NodesList()
+            assert drive_group.service_id is not None
 
-            current_nodes = getattr(current_cluster.spec.storage, 'nodes', ccl.NodesList())
-            matching_host = matching_hosts[0]
+            for dg in new_cluster.spec.driveGroups:
+                if dg.name == drive_group.service_id:
+                    dg.placement = affinity.to_dict()
+                    dg.spec = drive_group.to_json()['spec']
+                    return new_cluster
 
-            if matching_host not in [n.name for n in current_nodes]:
-                pd = ccl.NodesItem(
-                    name=matching_host,
-                    config=ccl.Config(
-                        storeType=drive_group.objectstore
-                    )
-                )
-
-                if block_devices:
-                    pd.devices = ccl.DevicesList(
-                        ccl.DevicesItem(name=d.path) for d in block_devices
-                    )
-                new_cluster.spec.storage.nodes.append(pd)
-            else:
-                for _node in new_cluster.spec.storage.nodes:
-                    current_node = _node  # type: ccl.NodesItem
-                    if current_node.name == matching_host:
-                        if block_devices:
-                            if not hasattr(current_node, 'devices'):
-                                current_node.devices = ccl.DevicesList()
-                            new_devices = list(set(block_devices) - set([d.name for d in current_node.devices]))
-                            current_node.devices.extend(
-                                ccl.DevicesItem(name=n.path) for n in new_devices
-                            )
-
+            dgi = ccl.DriveGroupsItem(
+                name=drive_group.service_id,
+                placement=affinity.to_dict(),
+                spec=drive_group.to_json()['spec']
+            )
+            new_cluster.spec.driveGroups.append(dgi)
             return new_cluster
 
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)

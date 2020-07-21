@@ -493,13 +493,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
-            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts_)
+            matching_hosts = drive_group.placement.filter_matching_hostspecs(all_hosts_)
 
-            assert len(matching_hosts) == 1
-
-            if not self.rook_cluster.node_exists(matching_hosts[0]):
-                raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                                   "cluster".format(matching_hosts))
 
             # Validate whether cluster CRD can accept individual OSD
             # creations (i.e. not useAllDevices)
@@ -512,7 +507,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                         matching_hosts,
                         targets),
                 mgr=self,
-                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, matching_hosts),
+                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts_),
                 calc_percent=lambda: has_osds(matching_hosts)
             )
 

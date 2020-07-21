@@ -9,4 +9,4 @@ execnet
 remoto
 Jinja2
 pyfakefs
-
+jsonpatch
