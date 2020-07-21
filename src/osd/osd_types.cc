@@ -1942,9 +1942,10 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     v = 26;
   } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 27;
+  } else if (!is_stretch_pool()) {
+    v = 29;
   }
 
-  uint8_t new_compat = 0;
   ENCODE_START(v, 5, bl);
   encode(type, bl);
   encode(size, bl);
@@ -2033,20 +2034,13 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (v >= 29) {
     encode(last_pg_merge_meta, bl);
   }
-  if (peering_crush_bucket_barrier != 0 ||
-      peering_crush_bucket_target != 0 ||
-      peering_crush_bucket_count !=0 ||
-      peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
-    ceph_assert(v >= 30);
-    new_compat = 30;
-  }
   if (v >= 30) {
     encode(peering_crush_bucket_count, bl);
     encode(peering_crush_bucket_target, bl);
     encode(peering_crush_bucket_barrier, bl);
     encode(peering_crush_mandatory_member, bl);
   }
-  ENCODE_FINISH_NEW_COMPAT(bl, new_compat);
+  ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
