@@ -5704,7 +5704,7 @@ int Client::resolve_mds(
       return -ENOENT;
     }
 
-    for (const auto i : mds_info) {
+    for (const auto& i : mds_info) {
       targets->push_back(i.first);
     }
   } else {
@@ -5833,7 +5833,7 @@ int Client::mds_command(
   // If daemons are laggy, we won't send them commands.  If all
   // are laggy then we fail.
   std::vector<mds_gid_t> non_laggy;
-  for (const auto gid : targets) {
+  for (const auto& gid : targets) {
     const auto info = fsmap->get_info_gid(gid);
     if (!info.laggy()) {
       non_laggy.push_back(gid);
@@ -5852,7 +5852,7 @@ int Client::mds_command(
 
   // Send commands to targets
   C_GatherBuilder gather(cct, onfinish);
-  for (const auto target_gid : non_laggy) {
+  for (const auto& target_gid : non_laggy) {
     const auto info = fsmap->get_info_gid(target_gid);
 
     // Open a connection to the target MDS

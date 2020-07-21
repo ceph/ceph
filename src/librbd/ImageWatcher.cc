@@ -16,7 +16,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -32,6 +32,8 @@ using util::create_rados_callback;
 
 using ceph::encode;
 using ceph::decode;
+
+using namespace boost::placeholders;
 
 static const double	RETRY_DELAY_SECONDS = 1.0;
 

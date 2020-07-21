@@ -20,7 +20,6 @@
 #include "gtest/gtest.h"
 #include <boost/assign/std/set.hpp>
 #include <boost/assign/std/map.hpp>
-#include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/thread/thread.hpp>
 #include <iostream>

@@ -8,7 +8,7 @@
 #include "common/Finisher.h"
 #include "test/librados_test_stub/TestCluster.h"
 #include "test/librados_test_stub/TestRadosClient.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/function.hpp>
 #include "include/ceph_assert.h"
 

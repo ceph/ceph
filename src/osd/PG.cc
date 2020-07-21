@@ -3075,8 +3075,8 @@ void PG::scrub_compare_maps()
   set<hobject_t> master_set;
 
   // Construct master set
-  for (const auto map : maps) {
-    for (const auto i : map.second->objects) {
+  for (const auto& map : maps) {
+    for (const auto& i : map.second->objects) {
       master_set.insert(i.first);
     }
   }

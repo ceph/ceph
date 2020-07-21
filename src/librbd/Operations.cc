@@ -38,7 +38,7 @@
 #include "librbd/operation/SnapshotLimitRequest.h"
 #include "librbd/operation/SparsifyRequest.h"
 #include <set>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -46,6 +46,8 @@
 #define dout_prefix *_dout << "librbd::Operations: "
 
 namespace librbd {
+
+using namespace boost::placeholders;
 
 namespace {
 

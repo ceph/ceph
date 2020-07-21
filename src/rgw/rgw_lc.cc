@@ -1450,7 +1450,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   }
 
   auto stack_guard = make_scope_guard(
-    [&worker, &bucket_info]
+    [&worker]
       {
 	worker->workpool->drain();
       }

@@ -11,7 +11,7 @@
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include <iostream>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/program_options.hpp>
 #include "global/global_context.h"
 
@@ -22,6 +22,7 @@ namespace list {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+using namespace boost::placeholders;
 
 enum WorkerState {
   STATE_IDLE = 0,
