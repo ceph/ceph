@@ -37,3 +37,9 @@ class TestCephadmCLI(MgrTestCase):
 
         out = self._orch_cmd('status', '--format', 'yaml')
         self.assertNotIn('!!python', out)
+
+    def test_pause(self):
+        self._orch_cmd('pause')
+        self.wait_for_health('CEPHADM_PAUSED', 30)
+        self._orch_cmd('resume')
+        self.wait_for_health_clear(30)
