@@ -646,12 +646,17 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 10;
+    uint8_t target_v = 9; // if bumping this, be aware of stretch_mode target_v 10!
     uint8_t new_compat_v = 0;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       target_v = 6;
+    }
+    if (change_stretch_mode) {
+      ceph_assert(target_v >= 9);
+      target_v = std::max((uint8_t)10, target_v);
+      new_compat_v = std::max((uint8_t)10, std::max(new_compat_v, struct_compat));
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -701,10 +706,6 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
       encode(new_recovering_stretch_mode, bl);
       encode(new_stretch_mode_bucket, bl);
       encode(stretch_mode_enabled, bl);
-    }
-    if (change_stretch_mode) {
-      ceph_assert(target_v >= 10);
-      new_compat_v = 10;
     }
     ENCODE_FINISH_NEW_COMPAT(bl, new_compat_v); // osd-only data
   }
@@ -3030,7 +3031,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 10;
+    uint8_t target_v = 9; // when bumping this, be aware of stretch_mode target_v 10!
     uint8_t new_compat_v = 0;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
@@ -3038,6 +3039,11 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       target_v = 5;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       target_v = 6;
+    }
+    if (stretch_mode_enabled) {
+      ceph_assert(target_v >= 9);
+      target_v = std::max((uint8_t)10, target_v);
+      new_compat_v = std::max((uint8_t)10, std::max(new_compat_v, struct_compat));
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3086,10 +3092,6 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 9) {
       encode(device_class_flags, bl);
-    }
-    if (stretch_mode_enabled) {
-      ceph_assert(target_v >= 10);
-      new_compat_v = 10;
     }
     if (target_v >= 10) {
       encode(stretch_mode_enabled, bl);
