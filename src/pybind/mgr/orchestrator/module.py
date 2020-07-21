@@ -348,6 +348,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_write_command(
+        'orch host ok-to-stop',
+        'name=hostname,type=CephString',
+        desc='Check if the specified host can be safely stopped without reducing availability')
+    def _host_ok_to_stop(self, hostname: str):
+        completion = self.host_ok_to_stop(hostname)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_read_command(
         'orch device ls',
         "name=hostname,type=CephString,n=N,req=false "
