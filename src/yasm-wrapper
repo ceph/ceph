@@ -1,10 +1,11 @@
-#!/bin/sh -e
+#!/bin/sh
 
 # libtool and yasm do not get along.
 # filter out any crap that libtool feeds us that yasm does not understand.
 #echo $0: got $*
 new=""
 touch=""
+object=""
 while [ -n "$*" ]; do
     case "$1" in
 	-f )
@@ -29,6 +30,12 @@ while [ -n "$*" ]; do
 	    touch="$1"
 	    shift
 	    ;;
+	-o )
+	    shift
+	    object="$1"
+	    new="$new -o $1"
+	    shift
+	    ;;
 	* )
 	    new="$new $1"
 	    shift
@@ -36,8 +43,14 @@ while [ -n "$*" ]; do
     esac
 done
 
-#echo $0: yasm $new
-yasm $new
+#echo ${0}: yasm ${new}
+yasm ${new}
+
+echo ${new} | grep -- "crc32c_intel_fast*asm\.s"
+if [ $? -ne 0 ]; then
+    ld -r -z ibt -z shstk -z noexecstack -o ${object}.tmp ${object}
+    mv ${object}.tmp ${object}
+fi
 
 [ -n "$touch" ] && touch $touch
 

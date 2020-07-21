@@ -1,5 +1,5 @@
 ;
-; Copyright 2012-2013 Intel Corporation All Rights Reserved.
+; Copyright 2012-2015 Intel Corporation All Rights Reserved.
 ; All rights reserved.
 ;
 ; http://opensource.org/licenses/BSD-3-Clause
@@ -59,16 +59,34 @@
 	xor     rbx, rbx                ;; rbx = crc1 = 0;
 	xor     r10, r10                ;; r10 = crc2 = 0;
 
+	cmp	len, %%bSize*3*2
+	jbe	%%non_prefetch
+
  %assign i 0
  %rep %%bSize/8 - 1
-	crc32   rax, [bufptmp+i + 0*%%bSize]  ;; update crc0
-	crc32   rbx, [bufptmp+i + 1*%%bSize]  ;; update crc1
-	crc32   r10, [bufptmp+i + 2*%%bSize]  ;; update crc2
+ %if i < %%bSize*3/4
+	prefetchnta	[bufptmp+ %%bSize*3 + i*4]
+ %endif
+	crc32   rax, qword [bufptmp+i + 0*%%bSize]  ;; update crc0
+	crc32   rbx, qword [bufptmp+i + 1*%%bSize]  ;; update crc1
+	crc32   r10, qword [bufptmp+i + 2*%%bSize]  ;; update crc2
 	%assign i (i+8)
  %endrep
-	crc32   rax, [bufptmp+i + 0*%%bSize]  ;; update crc0
-	crc32   rbx, [bufptmp+i + 1*%%bSize]  ;; update crc1
-; SKIP  ;crc32  r10, [bufptmp+i + 2*%%bSize]  ;; update crc2
+	jmp %%next %+ %1
+
+%%non_prefetch:
+ %assign i 0
+ %rep %%bSize/8 - 1
+	crc32   rax, qword [bufptmp+i + 0*%%bSize]  ;; update crc0
+	crc32   rbx, qword [bufptmp+i + 1*%%bSize]  ;; update crc1
+	crc32  r10, qword [bufptmp+i + 2*%%bSize]  ;; update crc2
+	%assign i (i+8)
+ %endrep
+
+%%next %+ %1:
+	crc32   rax, qword [bufptmp+i + 0*%%bSize]  ;; update crc0
+	crc32   rbx, qword [bufptmp+i + 1*%%bSize]  ;; update crc1
+; SKIP	;crc32  r10, qword [bufptmp+i + 2*%%bSize]  ;; update crc2
 
 	; merge in crc0
 	movzx   bufp_dw, al
@@ -180,11 +198,14 @@ crc32_iscsi_00:
 %define crc_init_dw     r8d 
 %endif
 
-
+	endbranch
 	push    rdi
 	push    rbx
 
 	mov     rax, crc_init           ;; rax = crc_init;
+
+	cmp	len, 8
+	jb	less_than_8
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 1) ALIGN: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -194,9 +215,6 @@ crc32_iscsi_00:
 	and     bufp, 7                 ;; calculate the unalignment
 					;; amount of the address
 	je      proc_block              ;; Skip if aligned
-
-	cmp     len, 8
-	jb      less_than_8
 
 	;;;; Calculate CRC of unaligned bytes of the buffer (if any) ;;;;
 	mov     rbx, [bufptmp]          ;; load a quadword from the buffer
@@ -233,7 +251,7 @@ bit8:
 	jnc     bit7                    ;; jump to bit-6 if bit-7 == 0
  %assign i 0
  %rep 16
-	crc32   rax, [bufptmp+i]        ;; compute crc32 of 8-byte data
+	crc32   rax, qword [bufptmp+i]  ;; compute crc32 of 8-byte data
 	%assign i (i+8)
  %endrep
 	je      do_return               ;; return if remaining data is zero
@@ -244,7 +262,7 @@ bit7:
 	jnc     bit6                    ;; jump to bit-6 if bit-7 == 0
  %assign i 0
  %rep 8
-	crc32   rax, [bufptmp+i]        ;; compute crc32 of 8-byte data
+	crc32   rax, qword [bufptmp+i]  ;; compute crc32 of 8-byte data
 	%assign i (i+8)
  %endrep
 	je      do_return               ;; return if remaining data is zero
@@ -254,7 +272,7 @@ bit6:
 	jnc     bit5                    ;; jump to bit-5 if bit-6 == 0
  %assign i 0
  %rep 4
-	crc32   rax, [bufptmp+i]        ;;    compute crc32 of 8-byte data
+	crc32   rax, qword [bufptmp+i]  ;;    compute crc32 of 8-byte data
 	%assign i (i+8)
  %endrep
 	je      do_return               ;; return if remaining data is zero
@@ -264,7 +282,7 @@ bit5:
 	jnc     bit4                    ;; jump to bit-4 if bit-5 == 0
  %assign i 0
  %rep 2
-	crc32   rax, [bufptmp+i]        ;;    compute crc32 of 8-byte data
+	crc32   rax, qword [bufptmp+i]  ;;    compute crc32 of 8-byte data
 	%assign i (i+8)
  %endrep
 	je      do_return               ;; return if remaining data is zero
@@ -272,11 +290,11 @@ bit5:
 bit4:
 	shl     len_b, 1                ;; shift-out MSB (bit-4)
 	jnc     bit3                    ;; jump to bit-3 if bit-4 == 0
-	crc32   rax, [bufptmp]          ;; compute crc32 of 8-byte data
+	crc32   rax, qword [bufptmp]    ;; compute crc32 of 8-byte data
 	je      do_return               ;; return if remaining data is zero
 	add     bufptmp, 8              ;; buf +=8; (next 8 bytes)
 bit3:
-	mov     rbx, [bufptmp]          ;; load a 8-bytes from the buffer:
+	mov     rbx, qword [bufptmp]    ;; load a 8-bytes from the buffer:
 	shl     len_b, 1                ;; shift-out MSB (bit-3)
 	jnc     bit2                    ;; jump to bit-2 if bit-3 == 0
 	crc32   eax, ebx                ;; compute crc32 of 4-byte data
@@ -671,4 +689,34 @@ slversion crc32_iscsi_00, 00,   02,  0014
 %ifidn __OUTPUT_FORMAT__, elf64
 ; inform linker that this doesn't require executable stack
 section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
+
+%if 0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; sample of a .note.gnu.property with IBT and SHSTK
+;
+; f33/rawhide's yasm-1.3.0-12 has support for .note.gnu.property sections
+;
+; see https://github.com/yasm/yasm/pull/148 but the latest release 1.3.0
+; was in 2014, so who knows if and when there will be an update.
+;
+; In the mean time use ld -r in yasm-wrapper to create a .note.gnu.property
+;
+SECTION .note.gnu.property align=8 noexec               ; section number 22, const
+
+        db 04H, 00H, 00H, 00H, 20H, 00H, 00H, 00H       ; 0000 _ .... ...
+        db 05H, 00H, 00H, 00H, 47H, 4EH, 55H, 00H       ; 0008 _ ....GNU.
+        db 00H, 00H, 00H, 0C0H, 04H, 00H, 00H, 00H      ; 0010 _ ........
+        db 00H, 00H, 00H, 00H, 00H, 00H, 00H, 00H       ; 0018 _ ........
+        db 01H, 00H, 00H, 0C0H, 04H, 00H, 00H, 00H      ; 0020 _ ........
+        db 00H, 00H, 00H, 00H, 00H, 00H, 00H, 00H       ; 0028 _ ........
+        db 04H, 00H, 00H, 00H, 10H, 00H, 00H, 00H       ; 0030 _ ........
+        db 05H, 00H, 00H, 00H, 47H, 4EH, 55H, 00H       ; 0038 _ ....GNU.
+        db 02H, 00H, 00H, 0C0H, 04H, 00H, 00H, 00H      ; 0040 _ ........
+        db 03H, 00H, 00H, 00H, 00H, 00H, 00H, 00H       ; 0048 _ ........
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 %endif

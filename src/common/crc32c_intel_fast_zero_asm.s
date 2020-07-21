@@ -1,5 +1,5 @@
 ;
-; Copyright 2012-2013 Intel Corporation All Rights Reserved.
+; Copyright 2012-2015 Intel Corporation All Rights Reserved.
 ; All rights reserved.
 ;
 ; http://opensource.org/licenses/BSD-3-Clause
@@ -59,6 +59,9 @@
 	xor     rbx, rbx                ;; rbx = crc1 = 0;
 	xor     r10, r10                ;; r10 = crc2 = 0;
 
+	cmp	len, %%bSize*3*2
+	jbe	%%non_prefetch
+
  %assign i 0
  %rep %%bSize/8 - 1
 	crc32   rax, bufptmp  ;; update crc0
@@ -66,6 +69,18 @@
 	crc32   r10, bufptmp  ;; update crc2
 	%assign i (i+8)
  %endrep
+	jmp %%next %+ %1
+
+%%non_prefetch:
+ %assign i 0
+ %rep %%bSize/8 - 1
+	crc32   rax, bufptmp  ;; update crc0
+	crc32   rbx, bufptmp  ;; update crc1
+	crc32   r10, bufptmp  ;; update crc2
+	%assign i (i+8)
+ %endrep
+
+%%next %+ %1:
 	crc32   rax, bufptmp  ;; update crc0
 	crc32   rbx, bufptmp  ;; update crc1
 ; SKIP  ;crc32  r10, bufptmp  ;; update crc2
@@ -180,11 +195,14 @@ crc32_iscsi_zero_00:
 %define crc_init_dw     r8d
 %endif
 
-
+	endbranch
 	push    rdi
 	push    rbx
 
 	mov     rax, crc_init           ;; rax = crc_init;
+
+	cmp	len, 8
+	jb	less_than_8
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 1) ALIGN: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -653,4 +671,35 @@ slversion crc32_iscsi_zero_00, 00,   02,  0014
 %ifidn __OUTPUT_FORMAT__, elf64
 ; inform linker that this doesn't require executable stack
 section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
+
+%if 0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; sample of a .note.gnu.property with IBT and SHSTK
+;
+; f33/rawhide's yasm-1.3.0-12 has support for .note.gnu.property sections
+;
+; see https://github.com/yasm/yasm/pull/148 but the latest release 1.3.0
+; was in 2014, so who knows if and when there will be an update.
+;
+; In the mean time use ld -r in yasm-wrapper to create a .note.gnu.property
+;
+
+SECTION .note.gnu.property align=8 noexec               ; section number 22, const
+
+        db 04H, 00H, 00H, 00H, 20H, 00H, 00H, 00H       ; 0000 _ .... ...
+        db 05H, 00H, 00H, 00H, 47H, 4EH, 55H, 00H       ; 0008 _ ....GNU.
+        db 00H, 00H, 00H, 0C0H, 04H, 00H, 00H, 00H      ; 0010 _ ........
+        db 00H, 00H, 00H, 00H, 00H, 00H, 00H, 00H       ; 0018 _ ........
+        db 01H, 00H, 00H, 0C0H, 04H, 00H, 00H, 00H      ; 0020 _ ........
+        db 00H, 00H, 00H, 00H, 00H, 00H, 00H, 00H       ; 0028 _ ........
+        db 04H, 00H, 00H, 00H, 10H, 00H, 00H, 00H       ; 0030 _ ........
+        db 05H, 00H, 00H, 00H, 47H, 4EH, 55H, 00H       ; 0038 _ ....GNU.
+        db 02H, 00H, 00H, 0C0H, 04H, 00H, 00H, 00H      ; 0040 _ ........
+        db 03H, 00H, 00H, 00H, 00H, 00H, 00H, 00H       ; 0048 _ ........
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 %endif
