@@ -1,0 +1,42 @@
+# install requires
+apache-libcloud
+gevent
+PyYAML
+argparse>=1.2.1
+configobj
+six>=1.9
+pexpect
+docopt
+netaddr
+paramiko
+psutil >= 2.1.0
+configparser
+ansible>=2.0
+prettytable
+manhole
+humanfriendly
+# orchestra requires
+backports.ssl-match-hostname
+beanstalkc3>=0.4.0
+httplib2
+ndg-httpsclient
+pyasn1
+pyopenssl>=0.13
+python-dateutil
+python-novaclient
+python-openstackclient
+raven
+requests!=2.13.0
+# test requires
+boto>=2.0b4
+boto3
+cryptography>=2.7
+nose
+pip-tools
+pytest
+requests
+tox
+xmltodict
+PyJWT
+ipy
+toml

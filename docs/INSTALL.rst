@@ -65,11 +65,11 @@ interacting with the services to schedule tests and to report the test results.
 Update Dependencies
 -------------------
 
-We track the dependencies using ``requirements.txt`` . These packages are
-tested, and should work  with teuthology. But if you want to bump up the
+We track the dependencies using ``requirements.txt``. These packages are
+tested, and should work with teuthology. But if you want to bump up the
 versions of them, please use the following command to update these files::
 
-  ./update-requirements.sh
+  ./update-requirements.sh -P <package-name>
 
 Please upgrade pip-tool using following command ::
 
@@ -83,3 +83,25 @@ if the command above fails like::
   File "/home/kchai/teuthology/virtualenv/local/lib/python2.7/site-packages/piptools/scripts/compile.py", line 11, in <module>
     from pip.req import InstallRequirement, parse_requirements
   ImportError: No module named req
+
+Add Dependencies
+----------------
+
+td,dr: please add the new dependencies in both ``setup.py`` and
+``requirements.in``.
+
+We also use ``pip install <URL>`` to install teuthology in some Ceph's unit
+tests. To cater their needs, some requirements are listed in ``setup.py`` as
+well, so that ``pip install`` can pick them up. We could just avoid duplicating
+the packages specifications in two places by putting::
+
+  -e .[orchestra,test]
+
+in ``requirements.in``. But dependabot includes::
+
+  -e file:///home/dependabot/dependabot-updater/tmp/dependabot_20200617-72-1n8af4b  # via -r requirements.in
+
+in the generated ``requirements.txt``. This renders the created pull request
+useless without human intervention. To appease dependabot, a full-blown
+``requirements.in`` collecting all direct dependencies listed by ``setup.py``
+is used instead.
