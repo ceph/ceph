@@ -52,7 +52,7 @@ export class FaviconService implements OnDestroy {
       context.save();
       context.globalCompositeOperation = 'destination-out';
       context.beginPath();
-      context.arc(canvas.width - radius, radius, radius + 1, 0, 2 * Math.PI);
+      context.arc(canvas.width - radius, radius, radius + 2, 0, 2 * Math.PI);
       context.fill();
       context.restore();
 
