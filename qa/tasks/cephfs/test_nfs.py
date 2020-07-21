@@ -361,6 +361,27 @@ class TestNFS(MgrTestCase):
             if e.exitstatus != errno.ENOENT:
                 raise
 
+    def test_export_create_with_relative_pseudo_path_and_root_directory(self):
+        '''
+        Test creating cephfs export with relative or '/' pseudo path.
+        '''
+        def check_pseudo_path(pseudo_path):
+            try:
+                self._nfs_cmd('export', 'create', 'cephfs', self.fs_name, self.cluster_id,
+                              pseudo_path)
+                self.fail(f"Export created for {pseudo_path}")
+            except CommandFailedError as e:
+                # Command should fail for test to pass
+                if e.exitstatus != errno.EINVAL:
+                    raise
+
+        self._test_create_cluster()
+        self._cmd('fs', 'volume', 'create', self.fs_name)
+        check_pseudo_path('invalidpath')
+        check_pseudo_path('/')
+        check_pseudo_path('//')
+        self._test_delete_cluster()
+
     def test_cluster_info(self):
         '''
         Test cluster info outputs correct ip and hostname
