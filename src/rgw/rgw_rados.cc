@@ -8274,6 +8274,9 @@ int RGWRados::get_bucket_entrypoint_info(RGWSysObjectCtx& obj_ctx,
 			       bucket_entry, bl, objv_tracker, pmtime, pattrs,
 			       cache_info, refresh_version);
   if (ret < 0) {
+    if (ret == -ENOENT) {
+      return -ERR_NO_SUCH_BUCKET;
+    }
     return ret;
   }
 

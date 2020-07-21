@@ -215,7 +215,7 @@ int rgw_link_bucket(RGWRados* const store,
 
   if (update_entrypoint) {
     ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
-    if (ret < 0 && ret != -ENOENT) {
+    if (ret < 0 && ret != -ERR_NO_SUCH_BUCKET) {
       ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                              << cpp_strerror(-ret) << dendl;
     }
@@ -276,7 +276,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
   map<string, bufferlist> attrs;
   RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
   ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
-  if (ret == -ENOENT)
+  if (ret == -ERR_NO_SUCH_BUCKET)
     return 0;
   if (ret < 0)
     return ret;
@@ -2581,11 +2581,11 @@ public:
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
     int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, old_be, &old_ot, &orig_mtime, &attrs);
-    if (ret < 0 && ret != -ENOENT)
+    if (ret < 0 && ret != -ERR_NO_SUCH_BUCKET)
       return ret;
 
     // are we actually going to perform this put, or is it too old?
-    if (ret != -ENOENT &&
+    if (ret != -ERR_NO_SUCH_BUCKET &&
         !check_versions(old_ot.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_type)) {
       return STATUS_NO_APPLY;
