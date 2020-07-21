@@ -1391,6 +1391,24 @@ TEST(BufferList, append_bench) {
   }
 }
 
+TEST(BufferList, append_hole_bench) {
+  constexpr size_t targeted_bl_size = 1048576/4;
+
+  for (size_t step = 2048; step <= 16384; step *= 2) {
+    const utime_t start = ceph_clock_now();
+    constexpr size_t rounds = 80000;
+    for (size_t r = 0; r < rounds; ++r) {
+      ceph::bufferlist bl;
+      while (bl.length() < targeted_bl_size) {
+	bl.append_hole(step);
+      }
+    }
+    cout << rounds << " fills of buffer len " << targeted_bl_size
+	 << " with " << step << " byte long append_hole in "
+	 << (ceph_clock_now() - start) << std::endl;
+  }
+}
+
 TEST(BufferList, operator_assign_rvalue) {
   bufferlist from;
   {
