@@ -1033,6 +1033,8 @@ public:
 class RGWDataSyncInfoCRHandler_SIP : public RGWDataSyncInfoCRHandler {
   friend class InitCR;
 
+  static constexpr int max_entries = 1000;
+
   std::unique_ptr<SIProviderCRMgr_REST> sip_full;
   std::vector<SIProvider::stage_id_t> full_stages;
 
@@ -1040,6 +1042,7 @@ class RGWDataSyncInfoCRHandler_SIP : public RGWDataSyncInfoCRHandler {
   std::vector<SIProvider::stage_id_t> inc_stages;
 
   SIProvider::TypeHandlerProviderRef type_provider;
+  SIProvider::TypeHandler *type_handler;
 
   class InitCR : public RGWCoroutine {
     RGWDataSyncInfoCRHandler_SIP *siph;
@@ -1075,9 +1078,91 @@ class RGWDataSyncInfoCRHandler_SIP : public RGWDataSyncInfoCRHandler {
     }
   };
 
+  class FetchCR : public RGWCoroutine {
+    RGWDataSyncInfoCRHandler_SIP *handler;
+
+    RGWDataSyncCtx *sc;
+    SIProviderCRMgr_REST *provider;
+    SIProvider::stage_id_t sid;
+    int shard_id;
+    string marker;
+    sip_data_list_result *result;
+
+    SIProvider::fetch_result provider_result;
+    vector<SIProvider::Entry>::iterator iter;
+  public:
+    FetchCR(RGWDataSyncInfoCRHandler_SIP *_handler,
+            RGWDataSyncCtx *_sc,
+            SIProviderCRMgr_REST *_provider,
+            const SIProvider::stage_id_t& _sid,
+            int _shard_id,
+            const string& _marker,
+            sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
+                                             handler(_handler),
+                                             sc(_sc),
+                                             provider(_provider),
+                                             sid(_sid),
+                                             shard_id(_shard_id),
+                                             marker(_marker),
+                                             result(_result) {}
+
+    int operate() {
+      reenter(this) {
+        yield call(provider->fetch_cr(sid, shard_id, marker, handler->max_entries, &provider_result));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        result->truncated = provider_result.more;
+        if (!provider_result.entries.empty()) {
+          result->marker = provider_result.entries.back().key;
+        } else {
+          result->marker.clear();
+        }
+        result->entries.clear();
+
+        for (iter = provider_result.entries.begin(); iter != provider_result.entries.end(); ++iter) {
+          auto& log_entry = *iter;
+
+          sip_data_list_result::entry e;
+
+          e.entry_id = log_entry.key;
+
+          int r = handler->type_handler->handle_entry(sid, log_entry, [&](SIProvider::EntryInfoBase& _info) {
+            auto& info = static_cast<siprovider_data_info&>(_info);
+
+            e.key = info.key;
+
+            int r = rgw_bucket_parse_bucket_key(sc->cct, info.key,
+                                                &e.bucket, &e.shard_id);
+            if (r < 0) {
+              ldout(sc->cct, 0) << "ERROR: " << __func__ << "(): failed to parse bucket key: " << info.key << ", r=" << r << ", skipping entry" << dendl;
+              return r;
+            }
+
+            e.shard_id = info.shard_id;
+            e.num_shards = info.num_shards;
+            if (info.timestamp) {
+              e.timestamp = *info.timestamp;
+            }
+
+            return 0;
+          });
+          if (r < 0) {
+            continue;
+          }
+          result->entries.emplace_back(std::move(e));
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
 public:
   RGWDataSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
+    type_handler = type_provider->get_type_handler();
     sip_full.reset(new SIProviderCRMgr_REST(sync_env->cct,
                                             sc->conn,
                                             sync_env->http_manager,
@@ -1098,27 +1183,22 @@ public:
 
   RGWCoroutine *fetch_full_cr(const string& marker,
                               sip_data_list_result *result) override {
-    return nullptr;
+#warning FIXME sid
+    auto& sid = full_stages.front();
+    return new FetchCR(this, sc, sip_full.get(), sid, 0 /* shard id */, marker, result);
   }
 
   RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
-#if 0
-    return new ReadDatalogStatusCR(sc, shard_id, marker, timestamp);
-#endif
+#warning FIXME
     return nullptr;
   }
 
   RGWCoroutine *fetch_inc_cr(int shard_id,
                              const string& marker,
                              sip_data_list_result *result) {
-#if 0
-    return new RGWReadRemoteDataLogShardCR(sc, shard_id,
-                                           marker,
-                                           next_marker,
-                                           result,
-                                           truncated);
-#endif
-    return nullptr;
+#warning FIXME sid
+    auto& sid = inc_stages.front();
+    return new FetchCR(this, sc, sip_inc.get(), sid, shard_id, marker, result);
   }
 };
 
