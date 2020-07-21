@@ -846,6 +846,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def host_ok_to_stop(self, hostname:str) -> Completion:
+        """
+        Check if the specified host can be safely stopped without reducing availability
+
+        :param host: hostname
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, host_filter=None, refresh=False):
         # type: (Optional[InventoryFilter], bool) -> Completion[List[InventoryHost]]
         """

@@ -1222,6 +1222,29 @@ you may want to run:
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
 
+    @trivial_completion
+    def host_ok_to_stop(self, hostname: str):
+        if hostname not in self.cache.get_hosts():
+            raise OrchestratorError(f'Cannot find host "{hostname}"')
+
+        daemons = self.cache.get_daemons()
+        daemon_map = defaultdict(lambda: [])
+        for dd in daemons:
+            if dd.hostname == hostname:
+                daemon_map[dd.daemon_type].append(dd.daemon_id)
+
+        for daemon_type,daemon_ids in daemon_map.items():
+            r = self.cephadm_services[daemon_type].ok_to_stop(daemon_ids)
+            if r.retval:
+                self.log.error(f'It is NOT safe to stop host {hostname}')
+                raise orchestrator.OrchestratorError(
+                        r.stderr,
+                        errno=r.retval)
+
+        msg = f'It is presumed safe to stop host {hostname}'
+        self.log.info(msg)
+        return msg
+
     def update_osdspec_previews(self, search_host: str = ''):
         # Set global 'pending' flag for host
         self.cache.loading_osdspec_preview.add(search_host)
