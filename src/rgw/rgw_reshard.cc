@@ -317,20 +317,28 @@ int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* 
 
 static int set_target_layout(rgw::sal::RGWRadosStore *store,
 				      int new_num_shards,
-				      RGWBucketInfo& bucket_info,
-				      map<string, bufferlist>& attrs)
+				      RGWBucketInfo& bucket_info)
 {
   assert(!bucket_info.layout.target_index);
   bucket_info.layout.target_index.emplace();
 
   bucket_info.layout.target_index->layout.normal.num_shards = new_num_shards;
+  
+  //increment generation number
+  bucket_info.layout.target_index->gen = bucket_info.layout.current_index.gen;
+  bucket_info.layout.target_index->gen++;
 
   bucket_info.layout.resharding = rgw::BucketReshardState::IN_PROGRESS;
 
-  int ret = store->getRados()->put_bucket_instance_info(bucket_info, true, real_time(), &attrs);
+  int ret = store->getRados()->put_bucket_instance_info(bucket_info, true, real_time(), nullptr);
   if (ret < 0) {
     cerr << "ERROR: failed to store updated bucket instance info: " << cpp_strerror(-ret) << std::endl;
     return ret;
+  }
+
+    ret = store->svc()->bi->init_index(bucket_info, *(bucket_info.layout.target_index));
+  if (ret < 0) {
+      return ret;
   }
 
   return 0;
@@ -339,7 +347,7 @@ static int set_target_layout(rgw::sal::RGWRadosStore *store,
 int RGWBucketReshard::set_target_layout(int new_num_shards)
 {
   return ::set_target_layout(store, new_num_shards,
-				      bucket_info, bucket_attrs);
+				      bucket_info);
 }
 
 int RGWBucketReshard::cancel()
@@ -359,13 +367,12 @@ class BucketInfoReshardUpdate
 {
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
-  std::map<string, bufferlist> bucket_attrs;
 
   bool in_progress{false};
 
   int set_status(rgw::BucketReshardState s) {
     bucket_info.layout.resharding = s;
-    int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
+    int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
       return ret;
@@ -375,11 +382,9 @@ class BucketInfoReshardUpdate
 
 public:
   BucketInfoReshardUpdate(rgw::sal::RGWRadosStore *_store,
-			  RGWBucketInfo& _bucket_info,
-                          map<string, bufferlist>& _bucket_attrs) :
+			  RGWBucketInfo& _bucket_info) :
     store(_store),
-    bucket_info(_bucket_info),
-    bucket_attrs(_bucket_attrs)
+    bucket_info(_bucket_info)
   {}
 
   ~BucketInfoReshardUpdate() {
@@ -514,7 +519,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   // NB: destructor cleans up sharding state if reshard does not
   // complete successfully
-  BucketInfoReshardUpdate bucket_info_updater(store, bucket_info, bucket_attrs);
+  BucketInfoReshardUpdate bucket_info_updater(store, bucket_info);
 
 
   int ret = bucket_info_updater.start();
@@ -522,10 +527,6 @@ int RGWBucketReshard::do_reshard(int num_shards,
     ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
     return ret;
   }
-
-  //increment generation number
-  bucket_info.layout.target_index->gen = bucket_info.layout.current_index.gen;
-  bucket_info.layout.target_index->gen++;
 
   auto target_shards = bucket_info.layout.target_index->layout.normal.num_shards;
   int num_target_shards = (target_shards > 0 ? num_shards : 1);
@@ -639,17 +640,13 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   //overwrite current_index for the next reshard process
+  const auto prev_index = bucket_info.layout.current_index;
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
   bucket_info.layout.resharding = rgw::BucketReshardState::NONE;
-  ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
+  ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed writing bucket instance info: " << dendl;
-      return ret;
-  }
-
-  ret = store->svc()->bi->init_index(bucket_info, bucket_info.layout.current_index);
-  if (ret < 0) {
       return ret;
   }
 
@@ -735,7 +732,7 @@ error_out:
 
   // restore old index if reshard fails
   bucket_info.layout.current_index = prev_index;
-  ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
+  ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed writing bucket instance info: " << dendl;
       return ret;
