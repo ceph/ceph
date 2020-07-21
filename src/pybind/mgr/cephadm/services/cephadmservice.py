@@ -109,7 +109,7 @@ class CephadmService(metaclass=ABCMeta):
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         raise NotImplementedError()
 
-    def _inventory_get_addr(self, hostname: str):
+    def _inventory_get_addr(self, hostname: str) -> str:
         """Get a host's address with its hostname."""
         return self.mgr.inventory.get_addr(hostname)
 
@@ -218,10 +218,11 @@ class CephadmService(metaclass=ABCMeta):
 class MonService(CephadmService):
     TYPE = 'mon'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         """
         Create a new monitor on the given host.
         """
+        assert self.TYPE == daemon_spec.daemon_type
         name, host, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
 
         # get mon. key
@@ -248,7 +249,7 @@ class MonService(CephadmService):
                 'who': 'mon',
                 'key': 'public_network',
             })
-            network = network.strip() # type: ignore
+            network = network.strip() if network else network
             if not network:
                 raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
             if '/' not in network:
@@ -260,8 +261,7 @@ class MonService(CephadmService):
 
         return self.mgr._create_daemon(daemon_spec)
 
-    def _check_safe_to_destroy(self, mon_id):
-        # type: (str) -> None
+    def _check_safe_to_destroy(self, mon_id: str) -> None:
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'quorum_status',
         })
@@ -297,11 +297,13 @@ class MonService(CephadmService):
 class MgrService(CephadmService):
     TYPE = 'mgr'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
         """
         Create a new manager instance on a host.
         """
+        assert self.TYPE == daemon_spec.daemon_type
         mgr_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -319,9 +321,11 @@ class MgrService(CephadmService):
 class MdsService(CephadmService):
     TYPE = 'mds'
 
-    def config(self, spec: ServiceSpec):
-        # ensure mds_join_fs is set for these daemons
+    def config(self, spec: ServiceSpec) -> None:
+        assert self.TYPE == spec.service_type
         assert spec.service_id
+
+        # ensure mds_join_fs is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
             'who': 'mds.' + spec.service_id,
@@ -329,7 +333,8 @@ class MdsService(CephadmService):
             'value': spec.service_id,
         })
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         mds_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
@@ -348,7 +353,9 @@ class MdsService(CephadmService):
 class RgwService(CephadmService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec):
+    def config(self, spec: RGWSpec) -> None:
+        assert self.TYPE == spec.service_type
+
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
@@ -403,8 +410,10 @@ class RgwService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
@@ -421,7 +430,8 @@ class RgwService(CephadmService):
 class RbdMirrorService(CephadmService):
     TYPE = 'rbd-mirror'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
@@ -439,7 +449,8 @@ class RbdMirrorService(CephadmService):
 class CrashService(CephadmService):
     TYPE = 'crash'
 
-    def create(self, daemon_spec: CephadmDaemonSpec):
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
