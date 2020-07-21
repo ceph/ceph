@@ -528,7 +528,6 @@ class RookCluster(object):
         treat all drive groups as just a list of individual OSDs.
         """
         block_devices = drive_group.data_devices.paths if drive_group.data_devices else []
-        directories = drive_group.data_directories
 
         assert drive_group.objectstore in ("bluestore", "filestore")
 
@@ -557,10 +556,6 @@ class RookCluster(object):
                     pd.devices = ccl.DevicesList(
                         ccl.DevicesItem(name=d.path) for d in block_devices
                     )
-                if directories:
-                    pd.directories = ccl.DirectoriesList(
-                        ccl.DirectoriesItem(path=p) for p in directories
-                    )
                 new_cluster.spec.storage.nodes.append(pd)
             else:
                 for _node in new_cluster.spec.storage.nodes:
@@ -574,13 +569,6 @@ class RookCluster(object):
                                 ccl.DevicesItem(name=n.path) for n in new_devices
                             )
 
-                        if directories:
-                            if not hasattr(current_node, 'directories'):
-                                current_node.directories = ccl.DirectoriesList()
-                            new_dirs = list(set(directories) - set([d.path for d in current_node.directories]))
-                            current_node.directories.extend(
-                                ccl.DirectoriesItem(path=n) for n in new_dirs
-                            )
             return new_cluster
 
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)
