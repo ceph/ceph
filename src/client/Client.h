@@ -948,7 +948,6 @@ protected:
   // global client lock
   //  - protects Client and buffer cache both!
   ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
-;
 
   std::map<snapid_t, int> ll_snap_ref;
 
