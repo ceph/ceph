@@ -105,6 +105,10 @@ public:
     get_decoratee().to_str(out);
   }
 
+  string get_role_tenant() const override {     /* in/out */
+    return get_decoratee().get_role_tenant();
+  }
+
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
     return get_decoratee().load_acct_info(dpp, user_info);
   }

@@ -279,6 +279,7 @@ void usage()
   cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
+  cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
   cout << "   --uid=<id>                user id\n";
   cout << "   --new-uid=<id>            new user id\n";
   cout << "   --subuser=<name>          subuser name\n";
@@ -3025,6 +3026,7 @@ int main(int argc, const char **argv)
 
   rgw_user user_id;
   string tenant;
+  string user_ns;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -3230,6 +3232,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
       opt_tenant = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--user_ns", (char*)NULL)) {
+      user_ns = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -3707,6 +3711,11 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       user_id.tenant = tenant;
+    }
+    if (user_ns.empty()) {
+      user_ns = user_id.ns;
+    } else {
+      user_id.ns = user_ns;
     }
 
     if (!new_user_id.empty() && !tenant.empty()) {
