@@ -161,8 +161,10 @@ data_devices:
         self._orch_cmd("apply", "nfs", "service_name", "2")
 
     def test_error(self):
-        ret = self._orch_cmd_result("host", "add", "raise_no_support")
-        self.assertEqual(ret, errno.ENOENT)
+        ret = self._orch_cmd_result("host", "add", "raise_validation_error")
+        self.assertEqual(ret, errno.EINVAL)
+        ret = self._orch_cmd_result("host", "add", "raise_error")
+        self.assertEqual(ret, errno.EINVAL)
         ret = self._orch_cmd_result("host", "add", "raise_bug")
         self.assertEqual(ret, errno.EINVAL)
         ret = self._orch_cmd_result("host", "add", "raise_not_implemented")
