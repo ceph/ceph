@@ -910,6 +910,12 @@ class Orchestrator(object):
             completion = completion.then(next)
         return completion
 
+    def plan(self, spec: List["GenericSpec"]):
+        """
+        Plan (Dry-run, Preview) a List of Specs.
+        """
+        raise NotImplementedError()
+
     def remove_daemons(self, names):
         # type: (List[str]) -> Completion
         """

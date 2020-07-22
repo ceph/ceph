@@ -42,8 +42,10 @@ class SimpleScheduler(BaseScheduler):
         if not host_pool:
             return []
         host_pool = [x for x in host_pool]
+        # gen seed off of self.spec to make shuffling deterministic
+        seed = hash(self.spec.service_name())
         # shuffle for pseudo random selection
-        random.shuffle(host_pool)
+        random.Random(seed).shuffle(host_pool)
         return host_pool[:count]
 
 

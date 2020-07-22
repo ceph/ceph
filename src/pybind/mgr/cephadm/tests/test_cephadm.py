@@ -272,7 +272,7 @@ class TestCephadm(object):
                 )
             )
 
-            c = cephadm_module.apply_drivegroups([spec])
+            c = cephadm_module.apply([spec])
             assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
 
             inventory = Devices([
@@ -302,7 +302,7 @@ class TestCephadm(object):
             json_spec = {'service_type': 'osd', 'placement': {'host_pattern': 'test'}, 'service_id': 'foo', 'data_devices': {'all': True}}
             spec = ServiceSpec.from_json(json_spec)
             assert isinstance(spec, DriveGroupSpec)
-            c = cephadm_module.apply_drivegroups([spec])
+            c = cephadm_module.apply([spec])
             assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
             _save_spec.assert_called_with(spec)
 
