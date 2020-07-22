@@ -105,7 +105,7 @@ int Credentials::generateCredentials(CephContext* cct,
   if (user)
     token.user = *user;
   else {
-    rgw_user u({}, {});
+    rgw_user u({}, {}, {});
     token.user = u;
   }
 
