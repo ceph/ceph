@@ -228,7 +228,7 @@ which are as follows:
   Add a zone to a zonegroup.
 
 :command:`zonegroup create`
-  Create a new zone group info.
+  Create a new zonegroup info.
 
 :command:`zonegroup default`
   Set the default zone group.
