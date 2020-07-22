@@ -104,7 +104,7 @@ RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
 
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
-                   'wal_device', 'instance')
+                   'wal_device', 'instance', 'devices', 'device_ids')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
@@ -680,6 +680,11 @@ class Module(MgrModule):
             if osd_dev_node and osd_dev_node == "unknown":
                 osd_dev_node = None
 
+            # fetch the devices and ids (vendor, model, serial) from the
+            # osd_metadata
+            osd_devs = osd_metadata.get('devices', '') or 'N/A'
+            osd_dev_ids = osd_metadata.get('device_ids', '') or 'N/A'
+
             osd_hostname = osd_metadata.get('hostname', None)
             if osd_dev_node and osd_hostname:
                 self.log.debug("Got dev for osd {0}: {1}/{2}".format(
@@ -689,7 +694,9 @@ class Module(MgrModule):
                     osd_dev_node,
                     osd_db_dev_node,
                     osd_wal_dev_node,
-                    osd_hostname
+                    osd_hostname,
+                    osd_devs,
+                    osd_dev_ids,
                 ))
             else:
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
