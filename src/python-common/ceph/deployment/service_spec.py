@@ -1,3 +1,4 @@
+import errno
 import fnmatch
 import re
 from collections import namedtuple, OrderedDict
@@ -14,9 +15,11 @@ class ServiceSpecValidationError(Exception):
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
     """
-
-    def __init__(self, msg):
+    def __init__(self,
+                 msg: str,
+                 errno: int = -errno.EINVAL):
         super(ServiceSpecValidationError, self).__init__(msg)
+        self.errno = errno
 
 
 def assert_valid_host(name):

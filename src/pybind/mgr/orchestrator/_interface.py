@@ -48,8 +48,12 @@ class OrchestratorError(Exception):
 
     It's not intended for programming errors or orchestrator internal errors.
     """
-    def __init__(self, msg, event_kind_subject: Optional[Tuple[str, str]]=None):
+    def __init__(self,
+                 msg: str,
+                 errno: int = -errno.EINVAL,
+                 event_kind_subject: Optional[Tuple[str, str]] = None):
         super(Exception, self).__init__(msg)
+        self.errno = errno
         # See OrchestratorEvent.subject
         self.event_subject = event_kind_subject
 
@@ -59,7 +63,7 @@ class NoOrchestrator(OrchestratorError):
     No orchestrator in configured.
     """
     def __init__(self, msg="No orchestrator configured (try `ceph orch set backend`)"):
-        super(NoOrchestrator, self).__init__(msg)
+        super(NoOrchestrator, self).__init__(msg, errno=-errno.ENOENT)
 
 
 class OrchestratorValidationError(OrchestratorError):
@@ -83,8 +87,10 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (OrchestratorError, ImportError, ServiceSpecValidationError) as e:
+        except (OrchestratorError, ServiceSpecValidationError) as e:
             # Do not print Traceback for expected errors.
+            return HandleCommandResult(e.errno, stderr=str(e))
+        except ImportError as e:
             return HandleCommandResult(-errno.ENOENT, stderr=str(e))
         except NotImplementedError:
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
