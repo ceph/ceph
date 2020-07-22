@@ -28,6 +28,12 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "allowedCommonJsDependencies": [
+              "chart.js",
+              "core-js",
+              "file-saver",
+              "lodash"
+            ],
             "i18nLocale": "en",
             "aot": true,
             "i18nMissingTranslation": "ignore",
