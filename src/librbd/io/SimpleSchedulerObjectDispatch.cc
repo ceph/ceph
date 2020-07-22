@@ -7,6 +7,7 @@
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/io/FlushTracker.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
@@ -174,6 +175,7 @@ template <typename I>
 SimpleSchedulerObjectDispatch<I>::SimpleSchedulerObjectDispatch(
     I* image_ctx)
   : m_image_ctx(image_ctx),
+    m_flush_tracker(new FlushTracker<I>(image_ctx)),
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
       "librbd::io::SimpleSchedulerObjectDispatch::lock", this))),
     m_max_delay(image_ctx->config.template get_val<uint64_t>(
@@ -190,6 +192,7 @@ SimpleSchedulerObjectDispatch<I>::SimpleSchedulerObjectDispatch(
 
 template <typename I>
 SimpleSchedulerObjectDispatch<I>::~SimpleSchedulerObjectDispatch() {
+  delete m_flush_tracker;
 }
 
 template <typename I>
@@ -206,6 +209,7 @@ void SimpleSchedulerObjectDispatch<I>::shut_down(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
+  m_flush_tracker->shut_down();
   on_finish->complete(0);
 }
 
@@ -260,6 +264,15 @@ bool SimpleSchedulerObjectDispatch<I>::write(
   std::lock_guard locker{m_lock};
   if (try_delay_write(object_no, object_off, std::move(data), snapc, op_flags,
                       *object_dispatch_flags, on_dispatched)) {
+
+    auto dispatch_seq = ++m_dispatch_seq;
+    m_flush_tracker->start_io(dispatch_seq);
+    *on_finish = new LambdaContext(
+      [this, dispatch_seq, ctx=*on_finish](int r) {
+        ctx->complete(r);
+        m_flush_tracker->finish_io(dispatch_seq);
+      });
+
     *dispatch_result = DISPATCH_RESULT_COMPLETE;
     return true;
   }
@@ -316,10 +329,15 @@ bool SimpleSchedulerObjectDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  std::lock_guard locker{m_lock};
-  dispatch_all_delayed_requests();
+  {
+    std::lock_guard locker{m_lock};
+    dispatch_all_delayed_requests();
+  }
 
-  return false;
+  *dispatch_result = DISPATCH_RESULT_CONTINUE;
+  m_flush_tracker->flush(on_dispatched);
+
+  return true;
 }
 
 template <typename I>
@@ -403,24 +421,30 @@ void SimpleSchedulerObjectDispatch<I>::register_in_flight_request(
   auto it = res.first;
 
   auto dispatch_seq = ++m_dispatch_seq;
+  m_flush_tracker->start_io(dispatch_seq);
+
   it->second->set_dispatch_seq(dispatch_seq);
   *on_finish = new LambdaContext(
     [this, object_no, dispatch_seq, start_time, ctx=*on_finish](int r) {
       ctx->complete(r);
 
-      std::lock_guard locker{m_lock};
+      std::unique_lock locker{m_lock};
       if (m_latency_stats && start_time != utime_t()) {
         auto latency = ceph_clock_now() - start_time;
         m_latency_stats->add(latency.to_nsec());
       }
+
       auto it = m_requests.find(object_no);
       if (it == m_requests.end() ||
           it->second->get_dispatch_seq() != dispatch_seq) {
         ldout(m_image_ctx->cct, 20) << "already dispatched" << dendl;
-        return;
+      } else {
+        dispatch_delayed_requests(it->second);
+        m_requests.erase(it);
       }
-      dispatch_delayed_requests(it->second);
-      m_requests.erase(it);
+      locker.unlock();
+
+      m_flush_tracker->finish_io(dispatch_seq);
     });
 }
 

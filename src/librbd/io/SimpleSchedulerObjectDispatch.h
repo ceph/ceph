@@ -22,6 +22,7 @@ class ImageCtx;
 
 namespace io {
 
+template <typename> class FlushTracker;
 class LatencyStats;
 
 /**
@@ -175,6 +176,8 @@ private:
   typedef std::map<uint64_t, ObjectRequestsRef> Requests;
 
   ImageCtxT *m_image_ctx;
+
+  FlushTracker<ImageCtxT>* m_flush_tracker;
 
   ceph::mutex m_lock;
   SafeTimer *m_timer;
