@@ -2342,6 +2342,12 @@ public:
         return set_cr_error(retcode);
       }
 
+      yield call(sc->dsi->init_cr());
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to init sync dsi, retcode=" << retcode));
+        return set_cr_error(retcode);
+      }
+
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         tn->log(20, SSTR("init"));
