@@ -3999,6 +3999,8 @@ def check_time_sync(enabler=None):
 
 def command_check_host():
     # type: () -> None
+    global container_path
+
     errors = []
     commands = ['systemctl', 'lvcreate']
 
