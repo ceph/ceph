@@ -17,7 +17,7 @@
   <div class="progress-bar bg-info"
        role="progressbar"
        [style.width]="usedPercentage + '%'">
-    <span>{{ usedPercentage }}%</span>
+    <span>{{ usedPercentage | number: '1.0-' + decimals }}%</span>
   </div>
   <div class="progress-bar bg-freespace"
        role="progressbar"
