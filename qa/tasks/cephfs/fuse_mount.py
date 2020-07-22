@@ -27,7 +27,9 @@ class FuseMount(CephFSMount):
         self.inst = None
         self.addr = None
 
-    def mount(self, mount_path=None, mount_fs_name=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+        if mountpoint is not None:
+            self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
 
         try:
@@ -51,14 +53,8 @@ class FuseMount(CephFSMount):
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(15*60)
-        )
+        self.client_remote.run(args=['mkdir', '-p', self.mountpoint],
+                               timeout=(15*60), cwd=self.test_dir)
 
         run_cmd = [
             'sudo',
@@ -83,6 +79,7 @@ class FuseMount(CephFSMount):
             self.mountpoint,
         ]
 
+        cwd = self.test_dir
         if self.client_config.get('valgrind') is not None:
             run_cmd = misc.get_valgrind_args(
                 self.test_dir,
@@ -90,6 +87,7 @@ class FuseMount(CephFSMount):
                 run_cmd,
                 self.client_config.get('valgrind'),
             )
+            cwd = None # misc.get_valgrind_args chdir for us
 
         run_cmd.extend(fuse_cmd)
 
@@ -123,6 +121,7 @@ class FuseMount(CephFSMount):
 
         proc = self.client_remote.run(
             args=run_cmd,
+            cwd=cwd,
             logger=log.getChild('ceph-fuse.{id}'.format(id=self.client_id)),
             stdin=run.PIPE,
             wait=False,
@@ -191,6 +190,7 @@ class FuseMount(CephFSMount):
                 '--',
                 self.mountpoint,
             ],
+            cwd=self.test_dir,
             stdout=StringIO(),
             stderr=StringIO(),
             wait=False,
@@ -236,7 +236,7 @@ class FuseMount(CephFSMount):
         # unrestricted access to the filesystem mount.
         try:
             stderr = StringIO()
-            self.client_remote.run(args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(15*60), stderr=stderr)
+            self.client_remote.run(args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(15*60), cwd=self.test_dir, stderr=stderr)
         except run.CommandFailedError:
             stderr = stderr.getvalue()
             if "Read-only file system".lower() in stderr.lower():
@@ -245,7 +245,7 @@ class FuseMount(CephFSMount):
                 raise
 
     def _mountpoint_exists(self):
-        return self.client_remote.run(args=["ls", "-d", self.mountpoint], check_status=False, timeout=(15*60)).exitstatus == 0
+        return self.client_remote.run(args=["ls", "-d", self.mountpoint], check_status=False, cwd=self.test_dir, timeout=(15*60)).exitstatus == 0
 
     def umount(self):
         try:
@@ -257,6 +257,7 @@ class FuseMount(CephFSMount):
                     '-u',
                     self.mountpoint,
                 ],
+                cwd=self.test_dir,
                 timeout=(30*60),
             )
         except run.CommandFailedError:
@@ -351,8 +352,10 @@ class FuseMount(CephFSMount):
                     '--',
                     self.mountpoint,
                 ],
+                cwd=self.test_dir,
                 stderr=stderr,
-                timeout=(60*5)
+                timeout=(60*5),
+                check_status=False,
             )
         except CommandFailedError:
             if "No such file or directory" in stderr.getvalue():
@@ -401,6 +404,7 @@ class FuseMount(CephFSMount):
                 '-rf',
                 self.mountpoint,
             ],
+            cwd=self.test_dir,
             timeout=(60*5)
         )
 

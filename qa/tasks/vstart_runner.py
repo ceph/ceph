@@ -474,16 +474,12 @@ class LocalFuseMount(FuseMount):
         if self.is_mounted():
             super(LocalFuseMount, self).umount()
 
-    def mount(self, mount_path=None, mount_fs_name=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+        if mountpoint is not None:
+            self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-        )
+        self.client_remote.run(args=['mkdir', '-p', self.mountpoint])
 
         def list_connections():
             self.client_remote.run(
