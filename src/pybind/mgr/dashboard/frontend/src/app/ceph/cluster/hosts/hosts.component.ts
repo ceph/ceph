@@ -36,7 +36,7 @@ const BASE_URL = 'hosts';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class HostsComponent extends ListWithDetails implements OnInit {
-  @ViewChild(TableComponent, { static: true })
+  @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('servicesTpl', { static: true })
   public servicesTpl: TemplateRef<any>;
