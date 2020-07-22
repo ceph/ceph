@@ -17,10 +17,7 @@ ceph::bufferlist OnodeBlock::get_delta()
   return bl;
 }
 
-void OnodeBlock::on_initial_write()
-{}
-
-void OnodeBlock::on_delta_write(paddr_t)
+void OnodeBlock::logical_on_delta_write()
 {
   // journal submitted to disk, now update the memory
   apply_pending_changes(true);
