@@ -9,9 +9,8 @@ import socket
 import threading
 import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
-from mgr_util import get_default_addr
+from mgr_util import get_default_addr, profile_method
 from rbd import RBD
-
 try:
     from typing import Optional, Dict, Any, Set
 except:
@@ -434,12 +433,14 @@ class Module(MgrModule):
 
         return metrics
 
+    @profile_method()
     def get_health(self):
         health = json.loads(self.get('health')['json'])
         self.metrics['health_status'].set(
             health_status_to_number(health['status'])
         )
 
+    @profile_method()
     def get_pool_stats(self):
         # retrieve pool stats to provide per pool recovery metrics
         # (osd_pool_stats moved to mgr in Mimic)
@@ -451,6 +452,7 @@ class Module(MgrModule):
                     (pool['pool_id'],)
                 )
 
+    @profile_method()
     def get_df(self):
         # maybe get the to-be-exported metrics from a config?
         df = self.get('df')
@@ -464,6 +466,7 @@ class Module(MgrModule):
                     (pool['id'],)
                 )
 
+    @profile_method()
     def get_fs(self):
         fs_map = self.get('fs_map')
         servers = self.get_service_list()
@@ -497,6 +500,7 @@ class Module(MgrModule):
                     daemon['rank'], host_version[1]
                 ))
 
+    @profile_method()
     def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
         servers = self.get_service_list()
@@ -514,6 +518,7 @@ class Module(MgrModule):
                 'mon.{}'.format(id_),
             ))
 
+    @profile_method()
     def get_mgr_status(self):
         mgr_map = self.get('mgr_map')
         servers = self.get_service_list()
@@ -559,6 +564,7 @@ class Module(MgrModule):
             self.metrics['mgr_module_status'].set(_state, (mod_name,))
             self.metrics['mgr_module_can_run'].set(_can_run, (mod_name,))
 
+    @profile_method()
     def get_pg_status(self):
 
         pg_summary = self.get('pg_summary')
@@ -578,6 +584,7 @@ class Module(MgrModule):
                 except KeyError:
                     self.log.warning("skipping pg in unknown state {}".format(state))
 
+    @profile_method()
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
@@ -597,6 +604,7 @@ class Module(MgrModule):
                 ret.update({(service['id'], service['type']): (host, version)})
         return ret
 
+    @profile_method()
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
         osd_flags = osd_map['flags'].split(',')
@@ -727,12 +735,14 @@ class Module(MgrModule):
                         for k in RBD_MIRROR_METADATA)
                 )
 
+    @profile_method()
     def get_num_objects(self):
         pg_sum = self.get('pg_summary')['pg_stats_sum']['stat_sum']
         for obj in NUM_OBJECTS:
             stat = 'num_objects_{}'.format(obj)
             self.metrics[stat].set(pg_sum[stat])
 
+    @profile_method()
     def get_rbd_stats(self):
         # Per RBD image stats is collected by registering a dynamic osd perf
         # stats query that tells OSDs to group stats for requests associated
@@ -1005,6 +1015,7 @@ class Module(MgrModule):
 
         self.metrics.update(new_metrics)
 
+    @profile_method(True)
     def collect(self):
         # Clear the metrics before scraping
         for k in self.metrics.keys():
