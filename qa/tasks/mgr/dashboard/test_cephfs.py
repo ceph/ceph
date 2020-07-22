@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import six
 from contextlib import contextmanager
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
@@ -154,11 +153,11 @@ class CephfsTest(DashboardTestCase):
 
         # Name
         self.assertToHave(data, 'name')
-        self.assertIsInstance(data['name'], six.string_types)
+        self.assertIsInstance(data['name'], str)
 
         # Standbys
         self.assertToHave(data, 'standbys')
-        self.assertIsInstance(data['standbys'], six.string_types)
+        self.assertIsInstance(data['standbys'], str)
 
         # MDS counters
         counters = data['mds_counters']

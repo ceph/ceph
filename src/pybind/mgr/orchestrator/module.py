@@ -6,7 +6,6 @@ import re
 import ast
 
 import yaml
-import six
 from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
@@ -69,9 +68,8 @@ def to_format(what, format: str, many: bool, cls):
         return yaml.dump(to_yaml(copy), default_flow_style=False)
 
 
-
-@six.add_metaclass(CLICommandMeta)
-class OrchestratorCli(OrchestratorClientMixin, MgrModule):
+class OrchestratorCli(OrchestratorClientMixin, MgrModule,
+                      metaclass=CLICommandMeta):
     MODULE_OPTIONS = [
         {
             'name': 'orchestrator',

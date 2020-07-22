@@ -5,10 +5,11 @@ import base64
 import logging
 import time
 
+from urllib import parse
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.twofactor.totp import TOTP
 from cryptography.hazmat.primitives.hashes import SHA1
-from six.moves.urllib import parse
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 

@@ -16,7 +16,6 @@ from teuthology.task.common_fs_utils import generic_mkfs
 from teuthology.task.common_fs_utils import generic_mount
 from teuthology.task.common_fs_utils import default_image_name
 
-import six
 
 #V1 image unsupported but required for testing purposes
 os.environ["RBD_FORCE_ALLOW_V1"] = "1"
@@ -348,16 +347,16 @@ def run_xfstests(ctx, config):
     with parallel() as p:
         for role, properties in config.items():
             p.spawn(run_xfstests_one_client, ctx, role, properties)
-        exc_info = None
+        exc = None
         while True:
             try:
                 p.next()
             except StopIteration:
                 break
             except:
-                exc_info = sys.exc_info()
-        if exc_info:
-            six.reraise(exc_info[0], exc_info[1], exc_info[2])
+                exc = sys.exc_info()[1]
+        if exc is not None:
+            raise exc
     yield
 
 def run_xfstests_one_client(ctx, role, properties):

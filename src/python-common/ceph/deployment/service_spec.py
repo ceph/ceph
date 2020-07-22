@@ -4,7 +4,6 @@ from collections import namedtuple, OrderedDict
 from functools import wraps
 from typing import Optional, Dict, Any, List, Union, Callable, Iterator
 
-import six
 import yaml
 
 from ceph.deployment.hostspec import HostSpec
@@ -123,9 +122,9 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
             try:
                 # if subnets are defined, also verify the validity
                 if '/' in network:
-                    ip_network(six.text_type(network))
+                    ip_network(network)
                 else:
-                    ip_address(six.text_type(network))
+                    ip_address(network)
             except ValueError as e:
                 # logging?
                 raise e
