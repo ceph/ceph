@@ -184,6 +184,7 @@ $sidebar-width: 200px;
         display: block;
         font-size: 1.1em;
         padding: 10px;
+        padding-left: 27px;
 
         text-decoration: none;
 
@@ -225,7 +226,7 @@ $sidebar-width: 200px;
   ul ul a {
     background: lighten(bd.$color-navbar-bg, 10);
     font-size: 0.9em !important;
-    padding-left: 30px !important;
+    padding-left: 40px !important;
   }
 
   .cd-navbar-primary a:focus {
