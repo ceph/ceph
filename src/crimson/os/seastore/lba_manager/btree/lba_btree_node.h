@@ -183,6 +183,24 @@ struct LBANode : CachedExtent {
   virtual bool at_min_capacity() const = 0;
 
   virtual ~LBANode() = default;
+
+  void on_delta_write(paddr_t record_block_offset) final {
+    // All in-memory relative addrs are necessarily record-relative
+    resolve_relative_addrs(record_block_offset);
+  }
+
+  void on_initial_write() final {
+    // All in-memory relative addrs are necessarily block-relative
+    resolve_relative_addrs(get_paddr());
+  }
+
+  void on_clean_read() final {
+    // From initial write of block, relative addrs are necessarily block-relative
+    resolve_relative_addrs(get_paddr());
+  }
+
+protected:
+  virtual void resolve_relative_addrs(paddr_t base) = 0;
 };
 using LBANodeRef = LBANode::LBANodeRef;
 
