@@ -279,7 +279,7 @@ static ceph::spinlock debug_lock;
 
   ceph::unique_leakable_ptr<buffer::raw> buffer::copy(const char *c, unsigned len) {
     auto r = buffer::create_aligned(len, sizeof(size_t));
-    memcpy(r->data, c, len);
+    memcpy(r->get_data(), c, len);
     return r;
   }
 
@@ -288,7 +288,7 @@ static ceph::spinlock debug_lock;
   }
   ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len, char c) {
     auto ret = buffer::create_aligned(len, sizeof(size_t));
-    memset(ret->data, c, len);
+    memset(ret->get_data(), c, len);
     return ret;
   }
   ceph::unique_leakable_ptr<buffer::raw>
@@ -539,7 +539,7 @@ static ceph::spinlock debug_lock;
     return _raw->get_data()[_off + n];
   }
 
-  const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->data; }
+  const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->get_data(); }
   unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->len; }
   int buffer::ptr::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
 
@@ -547,7 +547,7 @@ static ceph::spinlock debug_lock;
     ceph_assert(_raw);
     if (o+l > _len)
         throw end_of_buffer();
-    char* src =  _raw->data + _off + o;
+    char* src =  _raw->get_data() + _off + o;
     maybe_inline_memcpy(dest, src, l, 8);
   }
 
@@ -580,7 +580,7 @@ static ceph::spinlock debug_lock;
   {
     ceph_assert(_raw);
     ceph_assert(1 <= unused_tail_length());
-    char* ptr = _raw->data + _off + _len;
+    char* ptr = _raw->get_data() + _off + _len;
     *ptr = c;
     _len++;
     return _len + _off;
@@ -590,7 +590,7 @@ static ceph::spinlock debug_lock;
   {
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
-    char* c = _raw->data + _off + _len;
+    char* c = _raw->get_data() + _off + _len;
     maybe_inline_memcpy(c, p, l, 32);
     _len += l;
     return _len + _off;
@@ -600,7 +600,7 @@ static ceph::spinlock debug_lock;
   {
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
-    char* c = _raw->data + _off + _len;
+    char* c = _raw->get_data() + _off + _len;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c, 0, l);
     _len += l;
@@ -612,7 +612,7 @@ static ceph::spinlock debug_lock;
     ceph_assert(_raw);
     ceph_assert(o <= _len);
     ceph_assert(o+l <= _len);
-    char* dest = _raw->data + _off + o;
+    char* dest = _raw->get_data() + _off + o;
     if (crc_reset)
         _raw->invalidate_crc();
     maybe_inline_memcpy(dest, src, l, 64);
@@ -2179,7 +2179,7 @@ buffer::ptr_node* buffer::ptr_node::cloner::operator()(
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.load() << ")";
+  return out << "buffer::raw(" << (void*)r.get_data() << " len " << r.len << " nref " << r.nref.load() << ")";
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
