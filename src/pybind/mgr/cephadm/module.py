@@ -12,7 +12,6 @@ from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, Iterator
 
 import datetime
-import six
 import os
 import random
 import tempfile
@@ -135,8 +134,8 @@ def trivial_completion(f: Callable) -> Callable[..., CephadmCompletion]:
     return wrapper
 
 
-@six.add_metaclass(CLICommandMeta)
-class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
+class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
+                          metaclass=CLICommandMeta):
 
     _STORE_HOST_PREFIX = "host"
 

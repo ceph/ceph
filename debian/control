@@ -75,7 +75,6 @@ Build-Depends: cmake (>= 3.10.2),
 # Make-Check   python3-nose,
 # Make-Check   python3-pecan,
 # Make-Check   python3-bcrypt,
-# Make-Check   python3-six,
 # Make-Check   tox,
 # Make-Check   python3-coverage,
 # Make-Check   python3-dateutil,
@@ -315,7 +314,6 @@ Description: ceph manager modules which are always enabled
 Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-six,
          python3-jsonpatch
          ${misc:Depends},
          ${python:Depends},
@@ -348,7 +346,6 @@ Package: ceph-mgr-cephadm
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
 	 cephadm,
-	 python3-six,
          ${misc:Depends},
          ${python:Depends},
          openssh-client,

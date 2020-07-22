@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from six import StringIO
+from io import StringIO
 
 import json
 

@@ -8,7 +8,6 @@ from collections import namedtuple
 import time
 
 import requests
-import six
 from teuthology.exceptions import CommandFailedError
 
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -461,13 +460,10 @@ class DashboardTestCase(MgrTestCase):
                 return obj
         return None
 
-
+# TODP: pass defaults=(False,) to namedtuple() if python3.7
 class JLeaf(namedtuple('JLeaf', ['typ', 'none'])):
     def __new__(cls, typ, none=False):
-        if typ == str:
-            typ = six.string_types
-        return super(JLeaf, cls).__new__(cls, typ, none)
-
+        return super().__new__(cls, typ, none)
 
 JList = namedtuple('JList', ['elem_typ'])
 
@@ -556,7 +552,7 @@ def _validate_json(val, schema, path=[]):
                 for key in unknown_keys
             )
         return result
-    if schema in [str, int, float, bool, six.string_types]:
+    if schema in [str, int, float, bool]:
         return _validate_json(val, JLeaf(schema), path)
 
     assert False, str(path)

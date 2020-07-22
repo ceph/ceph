@@ -7,7 +7,6 @@ try:
     from typing import Optional, List, Dict, Any
 except ImportError:
     pass
-import six
 
 
 class DeviceSelection(object):
@@ -262,7 +261,7 @@ class DriveGroupSpec(ServiceSpec):
 
         for key in ('block_wal_size', 'block_db_size', 'journal_size'):
             if key in json_drive_group:
-                if isinstance(json_drive_group[key], six.string_types):
+                if isinstance(json_drive_group[key], str):
                     from ceph.deployment.drive_selection import SizeMatcher
                     json_drive_group[key] = SizeMatcher.str_to_byte(json_drive_group[key])
 
@@ -282,7 +281,7 @@ class DriveGroupSpec(ServiceSpec):
         if not self.service_id:
             raise DriveGroupValidationError('service_id is required')
 
-        if not isinstance(self.placement.host_pattern, six.string_types) and \
+        if not isinstance(self.placement.host_pattern, str) and \
                 self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
 

@@ -7,8 +7,9 @@ import boto.s3.connection
 import datetime
 import dateutil
 
+from itertools import zip_longest  # type: ignore
+
 from nose.tools import eq_ as eq
-from six.moves import range
 
 from .multisite import *
 from .tests import *

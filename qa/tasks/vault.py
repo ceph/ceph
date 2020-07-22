@@ -8,8 +8,8 @@ import logging
 import time
 import json
 from os import path
-from six.moves import http_client
-from six.moves.urllib.parse import urljoin
+from http import client as http_client
+from urllib.parse import urljoin
 
 from teuthology import misc as teuthology
 from teuthology import contextutil

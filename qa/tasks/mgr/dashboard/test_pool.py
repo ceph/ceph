@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 
 import logging
-import six
 import time
 from contextlib import contextmanager
 
@@ -405,16 +404,16 @@ class PoolTest(DashboardTestCase):
     def test_pool_info(self):
         self._get("/ui-api/pool/info")
         self.assertSchemaBody(JObj({
-            'pool_names': JList(six.string_types),
-            'compression_algorithms': JList(six.string_types),
-            'compression_modes': JList(six.string_types),
+            'pool_names': JList(str),
+            'compression_algorithms': JList(str),
+            'compression_modes': JList(str),
             'is_all_bluestore': bool,
-            'bluestore_compression_algorithm': six.string_types,
+            'bluestore_compression_algorithm': str,
             'osd_count': int,
             'crush_rules_replicated': JList(JObj({}, allow_unknown=True)),
             'crush_rules_erasure': JList(JObj({}, allow_unknown=True)),
-            'pg_autoscale_default_mode': six.string_types,
-            'pg_autoscale_modes': JList(six.string_types),
+            'pg_autoscale_default_mode': str,
+            'pg_autoscale_modes': JList(str),
             'erasure_code_profiles': JList(JObj({}, allow_unknown=True)),
             'used_rules': JObj({}, allow_unknown=True),
             'used_profiles': JObj({}, allow_unknown=True),
