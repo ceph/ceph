@@ -41,8 +41,7 @@ struct OnodeBlock final : LogicalCachedExtent {
   // before the transaction carrying these mutations is committed to
   // disk
   ceph::bufferlist get_delta() final;
-  void on_initial_write() final;
-  void on_delta_write(paddr_t record_block_offset) final;
+  void logical_on_delta_write() final;
   void apply_delta(const ceph::bufferlist &bl) final;
 
   void sync() {
