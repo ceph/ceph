@@ -85,7 +85,8 @@ bool WriteAroundObjectDispatch<I>::discard(
 template <typename I>
 bool WriteAroundObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    const ::SnapContext &snapc, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context**on_finish, Context* on_dispatched) {

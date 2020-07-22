@@ -118,8 +118,8 @@ private:
     if (is_within_overlap_bounds()) {
       bufferlist bl;
       auto req = new io::ObjectWriteRequest<I>(&image_ctx, m_object_no, 0,
-                                               std::move(bl), m_snapc, 0, {},
-                                               ctx);
+                                               std::move(bl), m_snapc, 0, 0,
+                                               std::nullopt, {}, ctx);
 
       ldout(cct, 20) << "copyup object req " << req << ", object_no "
                      << m_object_no << dendl;
