@@ -57,10 +57,10 @@ function main {
     printf "branch: %s\nsha1: %s\n" "$branch" "$sha"
 
     if [ -z "$2" ]; then
-        printf "specify the build environment [default \"centos:7\"]: "
+        printf "specify the build environment [default \"centos:8\"]: "
         read env
         if [ -z "$env" ]; then
-            env=centos:7
+            env=centos:8
         fi
     else
         env="$2"
@@ -96,16 +96,27 @@ RUN apt-key add cephdev.asc && \
 EOF
         time run docker build $CACHE --tag "$tag" .
     else # try RHEL flavor
+        case "$env" in
+            centos:7)
+                python_bindings="python36-rados python36-cephfs"
+                ceph_debuginfo="ceph-debuginfo"
+                ;;
+            centos:8)
+                python_bindings="python3-rados python3-cephfs"
+                ceph_debuginfo="ceph-base-debuginfo"
+                ;;
+        esac
+        IFS=":" read -r distro distro_release <<< "$env"
         time run docker build $CACHE --tag "$tag" - <<EOF
 FROM ${env}
 
 WORKDIR /root
 RUN yum update -y && \
-    yum install -y screen epel-release wget psmisc ca-certificates gdb
-RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/centos/7/repo && \
+    yum install -y tmux epel-release wget psmisc ca-certificates gdb
+RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${distro}/${distro_release}/repo && \
     yum clean all && \
     yum upgrade -y && \
-    yum install -y ceph ceph-debuginfo ceph-fuse python34-rados python34-cephfs
+    yum install -y ceph ${ceph_debuginfo} ceph-fuse ${python_bindings}
 EOF
     fi
     popd
