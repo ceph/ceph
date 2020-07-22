@@ -12,6 +12,7 @@ import socket
 import tempfile
 import threading
 import time
+
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr, ServerConfigException, verify_tls_files, \
     create_self_signed_cert
@@ -28,15 +29,6 @@ from .services.sso import load_sso_db
 if cherrypy is not None:
     from .cherrypy_backports import patch_cherrypy
     patch_cherrypy(cherrypy.__version__)
-
-if 'COVERAGE_ENABLED' in os.environ:
-    import coverage
-    __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
-                              data_suffix=True)
-
-    cherrypy.engine.subscribe('start', __cov.start)
-    cherrypy.engine.subscribe('after_request', __cov.save)
-    cherrypy.engine.subscribe('stop', __cov.stop)
 
 # pylint: disable=wrong-import-position
 from . import mgr
@@ -296,6 +288,16 @@ class Module(MgrModule, CherryPyConfig):
         return os.path.join(current_dir, 'frontend/dist')
 
     def serve(self):
+
+        if 'COVERAGE_ENABLED' in os.environ:
+            import coverage
+            __cov = coverage.Coverage(config_file="{}/.coveragerc"
+                                      .format(os.path.dirname(__file__)),
+                                      data_suffix=True)
+            __cov.start()
+            cherrypy.engine.subscribe('after_request', __cov.save)
+            cherrypy.engine.subscribe('stop', __cov.stop)
+
         AuthManager.initialize()
         load_sso_db()
 
