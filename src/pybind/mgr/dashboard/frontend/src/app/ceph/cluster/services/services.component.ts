@@ -18,7 +18,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   styleUrls: ['./services.component.scss']
 })
 export class ServicesComponent extends ListWithDetails implements OnChanges, OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
   @Input() hostname: string;

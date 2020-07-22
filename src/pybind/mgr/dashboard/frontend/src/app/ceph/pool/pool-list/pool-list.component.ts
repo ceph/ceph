@@ -40,7 +40,7 @@ const BASE_URL = 'pool';
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent extends ListWithDetails implements OnInit {
-  @ViewChild(TableComponent, { static: true })
+  @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('poolUsageTpl', { static: true })
   poolUsageTpl: TemplateRef<any>;
