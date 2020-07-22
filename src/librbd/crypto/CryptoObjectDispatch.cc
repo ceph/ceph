@@ -141,7 +141,8 @@ bool CryptoObjectDispatch<I>::read(
 template <typename I>
 bool CryptoObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    const ::SnapContext &snapc, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -188,7 +189,7 @@ bool CryptoObjectDispatch<I>::write_same(
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   auto req = io::ObjectDispatchSpec::create_write(
           m_image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, object_no,
-          object_off, std::move(ws_data), snapc, op_flags, 0,
+          object_off, std::move(ws_data), snapc, op_flags, 0, std::nullopt, 0,
           parent_trace, ctx);
   req->send();
   return true;

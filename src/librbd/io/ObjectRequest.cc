@@ -54,10 +54,12 @@ template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_write(
     I *ictx, uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    const ::SnapContext &snapc, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, Context *completion) {
   return new ObjectWriteRequest<I>(ictx, object_no, object_off,
                                    std::move(data), snapc, op_flags,
+                                   write_flags, assert_version,
                                    parent_trace, completion);
 }
 
@@ -642,6 +644,11 @@ void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
 
 template <typename I>
 void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
+  if ((m_write_flags & OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
+    wr->create(true);
+  } else if (m_assert_version.has_value()) {
+    wr->assert_version(m_assert_version.value());
+  }
   if (this->m_full_object) {
     wr->write_full(bufferlist{m_write_data});
   } else {

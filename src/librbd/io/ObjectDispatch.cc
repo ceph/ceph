@@ -71,7 +71,8 @@ bool ObjectDispatch<I>::discard(
 template <typename I>
 bool ObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    const ::SnapContext &snapc, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -82,6 +83,7 @@ bool ObjectDispatch<I>::write(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   auto req = new ObjectWriteRequest<I>(m_image_ctx, object_no, object_off,
                                        std::move(data), snapc, op_flags,
+                                       write_flags, assert_version,
                                        parent_trace, on_dispatched);
   req->send();
   return true;
