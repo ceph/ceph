@@ -498,7 +498,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
   }
   if (params->find_first_of('+') != std::string::npos) {
     copy_params = *params;
-    boost::replace_all(copy_params, "+", " ");
+    boost::replace_all(copy_params, "+", "%20");
     params = &copy_params;
   }
 
