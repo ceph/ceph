@@ -21,6 +21,12 @@ class Segment : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>{
 public:
 
+  enum class segment_state_t {
+    EMPTY,
+    OPEN,
+    CLOSED
+  };
+
   /**
    * get_segment_id
    */
