@@ -98,12 +98,14 @@ class VolumeClient(object):
                 "that is what you want, re-issue the command followed by " \
                 "--yes-i-really-mean-it.".format(volname)
 
-        ret, out, err = self.mgr.check_mon_command({
+        ret, out, err = self.mgr.mon_command({
             'prefix': 'config get',
             'key': 'mon_allow_pool_delete',
-            'who': 'mon',
+            'who': 'mon.*',
             'format': 'json',
         })
+        if ret != 0:
+            return ret, out, err
         mon_allow_pool_delete = json.loads(out)
         if not mon_allow_pool_delete:
             return -errno.EPERM, "", "pool deletion is disabled; you must first " \
