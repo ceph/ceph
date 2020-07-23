@@ -36,7 +36,9 @@ Exclusive locking is mostly transparent to the user.
 Note that it is perfectly possible for two or more concurrently
 running processes to merely open the image, and also to read from
 it. The client acquires the exclusive lock only when attempting to
-write to the image.
+write to the image. To disable transparent lock transitions between
+multiple clients, it needs to acquire the lock specifically with
+``RBD_LOCK_MODE_EXCLUSIVE``.
 
 
 Blacklisting
