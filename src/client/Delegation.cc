@@ -20,7 +20,6 @@ public:
 	  ": delegation return timeout for inode 0x" <<
 	  std::hex << in->ino << ". Forcibly unmounting client. "<<
 	  client << std::dec << dendl;
-    std::scoped_lock l(client->client_lock);
     client->_unmount(false);
   }
 };
