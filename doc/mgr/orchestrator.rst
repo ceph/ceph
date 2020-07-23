@@ -478,6 +478,7 @@ Many service specifications can then be applied at once using
       host_pattern: "mgr*"
     ---
     service_type: osd
+    service_id: default_drive_group
     placement:
       host_pattern: "osd*"
     data_devices:
