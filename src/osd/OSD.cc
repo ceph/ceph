@@ -2731,7 +2731,6 @@ will start to track new ops received afterwards.";
   }
 
   else if (prefix == "bench") {
-    lock_guard l(osd_lock);
     int64_t count;
     int64_t bsize;
     int64_t osize, onum;
