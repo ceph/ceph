@@ -68,18 +68,23 @@ void Cache::mark_dirty(CachedExtentRef ref)
     return;
   }
 
-  assert(ref->is_valid());
-  assert(!ref->primary_ref_list_hook.is_linked());
-  intrusive_ptr_add_ref(&*ref);
-  dirty.push_back(*ref);
+  add_to_dirty(ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
 
   logger().debug("mark_dirty: {}", *ref);
 }
 
-void Cache::retire_extent(CachedExtentRef ref)
+void Cache::add_to_dirty(CachedExtentRef ref)
 {
-  logger().debug("retire_extent: {}", *ref);
+  assert(ref->is_valid());
+  assert(!ref->primary_ref_list_hook.is_linked());
+  intrusive_ptr_add_ref(&*ref);
+  dirty.push_front(*ref);
+}
+
+void Cache::remove_extent(CachedExtentRef ref)
+{
+  logger().debug("remove_extent: {}", *ref);
   assert(ref->is_valid());
   extents.erase(*ref);
 
@@ -89,6 +94,21 @@ void Cache::retire_extent(CachedExtentRef ref)
     intrusive_ptr_release(&*ref);
   } else {
     ceph_assert(!ref->primary_ref_list_hook.is_linked());
+  }
+}
+
+void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
+{
+  assert(next->get_paddr() == prev->get_paddr());
+  assert(next->version == prev->version + 1);
+  extents.replace(*next, *prev);
+
+  if (prev->is_dirty()) {
+    ceph_assert(prev->primary_ref_list_hook.is_linked());
+    dirty.insert(dirty.iterator_to(*prev), *next);
+    dirty.erase(dirty.iterator_to(*prev));
+    intrusive_ptr_release(&*prev);
+    intrusive_ptr_add_ref(&*next);
   }
 }
 
@@ -105,7 +125,7 @@ CachedExtentRef Cache::duplicate_for_write(
     t.root = ret->cast<RootBlock>();
   } else {
     ret->last_committed_crc = i->last_committed_crc;
-    t.add_to_retired_set(i);
+    ret->prior_instance = i;
     t.add_mutated_extent(ret);
   }
 
@@ -124,16 +144,6 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
   record_t record;
 
-  // Transaction is now a go, set up in-memory cache state
-  // invalidate now invalid blocks
-  for (auto &i: t.retired_set) {
-    logger().debug("try_construct_record: retiring {}", *i);
-    ceph_assert(!i->is_pending());
-    ceph_assert(i->is_valid());
-    retire_extent(i);
-    i->state = CachedExtent::extent_state_t::INVALID;
-  }
-
   t.write_set.clear();
 
   // Add new copy of mutated blocks, set_io_wait to block until written
@@ -144,9 +154,13 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       continue;
     }
     logger().debug("try_construct_record: mutating {}", *i);
-    add_extent(i);
+
+    assert(i->prior_instance);
+    replace_extent(i, i->prior_instance);
+
     i->prepare_write();
     i->set_io_wait();
+
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
     record.deltas.push_back(
@@ -181,6 +195,15 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 	t.root->get_version() - 1,
 	t.root->get_delta()
       });
+  }
+
+  // Transaction is now a go, set up in-memory cache state
+  // invalidate now invalid blocks
+  for (auto &i: t.retired_set) {
+    logger().debug("try_construct_record: retiring {}", *i);
+    ceph_assert(i->is_valid());
+    remove_extent(i);
+    i->state = CachedExtent::extent_state_t::INVALID;
   }
 
   record.extents.reserve(t.fresh_block_list.size());
@@ -231,20 +254,21 @@ void Cache::complete_commit(
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
+    logger().debug("complete_commit: mutated {}", *i);
+    assert(i->prior_instance);
+    i->on_delta_write(final_block_start);
+    i->prior_instance = CachedExtentRef();
     if (!i->is_valid()) {
-      logger().debug("complete_commit: ignoring invalid {}", *i);
+      logger().debug("complete_commit: not dirtying invalid {}", *i);
       continue;
     }
     i->state = CachedExtent::extent_state_t::DIRTY;
-    logger().debug("complete_commit: mutated {}", *i);
-    i->on_delta_write(final_block_start);
+    if (i->version == 1) {
+      add_to_dirty(i);
+    }
   }
 
   for (auto &i: t.mutated_block_list) {
-    if (!i->is_valid()) {
-      logger().debug("complete_commit: ignoring invalid {}", *i);
-      continue;
-    }
     i->complete_io();
   }
 }

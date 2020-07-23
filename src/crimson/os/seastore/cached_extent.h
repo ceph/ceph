@@ -49,6 +49,10 @@ class CachedExtent : public boost::intrusive_ref_counter<
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
 
   uint32_t last_committed_crc = 0;
+
+  // Points at current version while in state MUTATION_PENDING
+  CachedExtentRef prior_instance;
+
 public:
   /**
    *  duplicate_for_write
@@ -335,6 +339,10 @@ protected:
     return new T(std::move(ptr));
   }
 
+  CachedExtentRef get_prior_instance() {
+    return prior_instance;
+  }
+
   /// Sets last_committed_crc
   void set_last_committed_crc(uint32_t crc) {
     last_committed_crc = crc;
@@ -465,6 +473,12 @@ public:
     extent.parent_index = nullptr;
   }
 
+  void replace(CachedExtent &to, CachedExtent &from) {
+    extent_index.replace_node(extent_index.s_iterator_to(from), to);
+    from.parent_index = nullptr;
+    to.parent_index = this;
+  }
+
   bool empty() const {
     return extent_index.empty();
   }
@@ -506,6 +520,7 @@ using LBAPinRef = std::unique_ptr<LBAPin>;
 class LBAPin {
 public:
   virtual void link_extent(LogicalCachedExtent *ref) = 0;
+  virtual void take_pin(LBAPin &pin) = 0;
   virtual extent_len_t get_length() const = 0;
   virtual paddr_t get_paddr() const = 0;
   virtual laddr_t get_laddr() const = 0;
@@ -578,6 +593,8 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
+    assert(get_prior_instance());
+    pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
     logical_on_delta_write();
   }
 

@@ -62,10 +62,11 @@ public:
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
       retired_set.insert(ref);
+    } else {
+      ref->state = CachedExtent::extent_state_t::INVALID;
     }
     if (ref->is_pending()) {
       write_set.erase(*ref);
-      ref->state = CachedExtent::extent_state_t::INVALID;
     }
   }
 
