@@ -2385,6 +2385,11 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
                                           std::string* const error_content)
 {
+  if (!s->bucket.get()) {
+    /* No bucket, default no-op handler */
+    return err_no;
+  }
+
   const auto& ws_conf = s->bucket->get_info().website_conf;
 
   if (can_be_website_req() && ! ws_conf.error_doc.empty()) {

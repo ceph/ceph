@@ -1017,7 +1017,7 @@ struct perm_state_from_req_state : public perm_state_base {
   perm_state_from_req_state(req_state * const _s) : perm_state_base(_s->cct,
                                                                     _s->env,
                                                                     _s->auth.identity.get(),
-                                                                    _s->bucket->get_info(),
+                                                                    _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
                                                                     _s->perm_mask,
                                                                     _s->defer_to_bucket_acls,
                                                                     _s->bucket_access_conf),
