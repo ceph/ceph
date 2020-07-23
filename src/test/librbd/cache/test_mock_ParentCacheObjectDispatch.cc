@@ -93,13 +93,13 @@ public :
    }
 
   void expect_cache_lookup_object(MockParentImageCache& mparent_image_cache,
-                                  Context* on_finish) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()),
-                               internal_lookup(_, _, _, _));
-
-     expect.WillOnce(WithArg<3>(Invoke([on_finish](std::string oid) {
-       on_finish->complete(0);
-     })));
+                                  const std::string &cache_path) {
+    EXPECT_CALL(*(mparent_image_cache.get_cache_client()),
+                lookup_object(_, _, _, _, _))
+      .WillOnce(WithArg<4>(Invoke([cache_path](CacheGenContextURef on_finish) {
+        auto ack = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, 0, cache_path);
+        on_finish.release()->complete(ack);
+      })));
   }
 
   void expect_cache_close(MockParentImageCache& mparent_image_cache, int ret_val) {
@@ -321,17 +321,18 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   expect_cache_session_state(*mock_parent_image_cache, true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
 
-  C_SaferCond cond;
-  Context* on_finish = &cond;
-
   auto& expect = EXPECT_CALL(*(mock_parent_image_cache->get_cache_client()), is_session_work());
   expect.WillOnce(Return(true));
 
-  expect_cache_lookup_object(*mock_parent_image_cache, on_finish);
+  expect_cache_lookup_object(*mock_parent_image_cache, "/dev/null");
 
-  mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {},
-                        nullptr, nullptr, nullptr, nullptr, &on_finish, nullptr);
-  ASSERT_EQ(0, cond.wait());
+  C_SaferCond on_dispatched;
+  io::DispatchResult dispatch_result;
+  ceph::bufferlist read_data;
+  mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {}, &read_data,
+                                nullptr, nullptr, &dispatch_result, nullptr,
+                                &on_dispatched);
+  ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();
   mock_parent_image_cache->get_cache_client()->stop();
