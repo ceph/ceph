@@ -268,7 +268,7 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 
 Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   : Dispatcher(m->cct),
-    timer(m->cct, client_lock),
+    timer(m->cct, timer_lock, false),
     messenger(m),
     monclient(mc),
     objecter(objecter_),
@@ -608,6 +608,10 @@ void Client::shutdown()
     std::lock_guard l{client_lock};
     ceph_assert(initialized);
     initialized = false;
+  }
+
+  {
+    std::scoped_lock l(timer_lock);
     timer.shutdown();
   }
   objecter_finisher.wait_for_empty();
@@ -5960,7 +5964,7 @@ int Client::subscribe_mdsmap(const std::string &fs_name)
 int Client::mount(const std::string &mount_root, const UserPerm& perms,
 		  bool require_mds, const std::string &fs_name)
 {
-  std::lock_guard lock(client_lock);
+  std::unique_lock lock(client_lock);
 
   if (mounted) {
     ldout(cct, 5) << "already mounted" << dendl;
@@ -5975,7 +5979,9 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
     return r;
   }
 
+  lock.unlock();
   tick(); // start tick
+  lock.lock();
   
   if (require_mds) {
     while (1) {
@@ -6173,9 +6179,13 @@ void Client::_unmount(bool abort)
     }
     return mds_requests.empty();
   });
-  if (tick_event)
-    timer.cancel_event(tick_event);
-  tick_event = 0;
+
+  {
+    std::scoped_lock l(timer_lock);
+    if (tick_event)
+      timer.cancel_event(tick_event);
+    tick_event = 0;
+  }
 
   cwd.reset();
 
@@ -6310,21 +6320,26 @@ void Client::flush_cap_releases()
 
 void Client::tick()
 {
+  ldout(cct, 20) << "tick" << dendl;
+
+  {
+    std::scoped_lock l(timer_lock);
+    tick_event = timer.add_event_after(
+      cct->_conf->client_tick_interval,
+      new LambdaContext([this](int) {
+          tick();
+      }));
+  }
+
   if (cct->_conf->client_debug_inject_tick_delay > 0) {
     sleep(cct->_conf->client_debug_inject_tick_delay);
     ceph_assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
     cct->_conf.apply_changes(nullptr);
   }
 
-  ldout(cct, 21) << "tick" << dendl;
-  tick_event = timer.add_event_after(
-    cct->_conf->client_tick_interval,
-    new LambdaContext([this](int) {
-	// Called back via Timer, which takes client_lock for us
-	ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
-	tick();
-      }));
   utime_t now = ceph_clock_now();
+
+  std::lock_guard lock(client_lock);
 
   if (!mounted && !mds_requests.empty()) {
     MetaRequest *req = mds_requests.begin()->second;
@@ -14830,7 +14845,11 @@ int StandaloneClient::init()
   int r = monclient->init();
   if (r < 0) {
     // need to do cleanup because we're in an intermediate init state
-    timer.shutdown();
+    {
+      std::scoped_lock l(timer_lock);
+      timer.shutdown();
+    }
+
     client_lock.unlock();
     objecter->shutdown();
     objectcacher->stop();
