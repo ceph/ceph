@@ -1941,7 +1941,7 @@ fi
 %config(noreplace) %{_sysctldir}/90-ceph-osd.conf
 %{_sysconfdir}/sudoers.d/ceph-osd-smartctl
 %if 0%{with seastar}
-%{buildroot}%{_bindir}/seastar-addr2line
+%{_bindir}/seastar-addr2line
 %{python3_sitelib}/seastar-addr2line
 %endif
 

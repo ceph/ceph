@@ -916,7 +916,21 @@ def cluster(ctx, config):
                         '--mkfs',
                         '--mkkey',
                         '-i', id_,
-                    '--monmap', monmap_path,
+                        '--monmap', monmap_path,
+                        '2>&1',
+                        '|',
+                        'tee',
+                        '/var/log/ceph/crimson_debug.log',
+                    ],
+                )
+            except run.CommandCrashError:
+                remote.run(
+                    args=[
+                        'seastar-addr2line',
+                        '-e',
+                        'ceph-osd',
+                        '-f',
+                        '/var/log/ceph/crimson_debug.log',
                     ],
                 )
             except run.CommandFailedError:
