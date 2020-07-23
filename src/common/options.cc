@@ -7751,7 +7751,7 @@ static std::vector<Option> get_rbd_mirror_options() {
 static std::vector<Option> get_immutable_object_cache_options() {
   return std::vector<Option>({
     Option("immutable_object_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/tmp")
+    .set_default("/tmp/ceph_immutable_object_cache")
     .set_description("immutable object cache data dir"),
 
     Option("immutable_object_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
