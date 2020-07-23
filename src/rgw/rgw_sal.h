@@ -160,7 +160,7 @@ class RGWBucket {
     virtual RGWObject* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual RGWAttrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(RGWAttrs a) { attrs = a; return 0; }
-    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y) = 0;
+    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(RGWAccessControlPolicy& acl, optional_yield y) = 0;
     virtual int get_bucket_info(optional_yield y) = 0;
@@ -274,6 +274,7 @@ class RGWObject {
     uint64_t obj_size;
     RGWAttrs attrs;
     ceph::real_time mtime;
+    bool delete_marker;
 
   public:
 
@@ -303,28 +304,34 @@ class RGWObject {
       index_hash_source(),
       obj_size(),
       attrs(),
-      mtime() {}
+      mtime(),
+      delete_marker(false) {}
     RGWObject(const rgw_obj_key& _k)
       : key(_k),
       bucket(),
       index_hash_source(),
       obj_size(),
       attrs(),
-      mtime() {}
+      mtime(),
+      delete_marker(false) {}
     RGWObject(const rgw_obj_key& _k, RGWBucket* _b)
       : key(_k),
       bucket(_b),
       index_hash_source(),
       obj_size(),
       attrs(),
-      mtime() {}
+      mtime(),
+      delete_marker(false) {}
     RGWObject(RGWObject& _o) = default;
 
     virtual ~RGWObject() = default;
 
     virtual int read(off_t offset, off_t length, std::iostream& stream) = 0;
     virtual int write(off_t offset, off_t length, std::iostream& stream) = 0;
-    virtual int delete_object(void) = 0;
+    virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
+			      ACLOwner bucket_owner, ceph::real_time unmod_since,
+			      bool high_precision_time, uint64_t epoch,
+			      string& version_id,optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     virtual void set_atomic(RGWObjectCtx *rctx) const = 0;
@@ -349,10 +356,11 @@ class RGWObject {
     std::string get_hash_source(void) { return index_hash_source; }
     void set_hash_source(std::string s) { index_hash_source = s; }
     std::string get_oid(void) const { return key.get_oid(); }
+    bool get_delete_marker(void) { return delete_marker; }
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
 
     /* OPs */
-    virtual ReadOp* get_read_op(RGWObjectCtx *) = 0;
+    virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) = 0;
 
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
@@ -421,6 +429,7 @@ class RGWRadosObject : public RGWObject {
     RGWAccessControlPolicy acls;
 
   public:
+
     struct RadosReadOp : public ReadOp {
     private:
       RGWRadosObject* source;
@@ -452,7 +461,10 @@ class RGWRadosObject : public RGWObject {
 
     int read(off_t offset, off_t length, std::iostream& stream) { return length; }
     int write(off_t offset, off_t length, std::iostream& stream) { return length; }
-    int delete_object(void) { return 0; }
+    virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
+			      ACLOwner bucket_owner, ceph::real_time unmod_since,
+			      bool high_precision_time, uint64_t epoch,
+			      string& version_id,optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     int set_acl(const RGWAccessControlPolicy& acl) { acls = acl; return 0; }
     virtual void set_atomic(RGWObjectCtx *rctx) const;
@@ -471,7 +483,7 @@ class RGWRadosObject : public RGWObject {
     }
 
     /* OPs */
-    virtual ReadOp* get_read_op(RGWObjectCtx *) override;
+    virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) override;
 
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
@@ -536,7 +548,7 @@ class RGWRadosBucket : public RGWBucket {
     RGWBucketList* list(void) { return new RGWBucketList(); }
     virtual int list(ListParams&, int, ListResults&, optional_yield y) override;
     RGWObject* create_object(const rgw_obj_key& key /* Attributes */) override;
-    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y) override;
+    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     virtual int set_acl(RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(optional_yield y) override;
@@ -611,15 +623,13 @@ class RGWRadosStore : public RGWStore {
 
     int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx *ioctx);
+    int forward_request_to_master(RGWUser* user, obj_version *objv,
+				  bufferlist& in_data, JSONParser *jp, req_info& info);
 
     // implements DoutPrefixProvider
     std::ostream& gen_prefix(std::ostream& out) const { return out << "RGWRadosStore "; }
     CephContext* get_cct() const override { return rados->ctx(); }
     unsigned get_subsys() const override { return ceph_subsys_rgw; }
-
-  private:
-    int forward_request_to_master(RGWUser* user, obj_version *objv,
-				  bufferlist& in_data, JSONParser *jp, req_info& info);
 
 };
 

@@ -3432,7 +3432,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, s->yield);
+  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, false, nullptr, s->yield);
 
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
@@ -4791,28 +4791,20 @@ void RGWDeleteObj::execute()
     }
 
     if (!ver_restored) {
+      uint64_t epoch;
+
       /* Swift's versioning mechanism hasn't found any previous version of
        * the object that could be restored. This means we should proceed
        * with the regular delete path. */
-      RGWRados::Object del_target(store->getRados(), s->bucket->get_info(), *obj_ctx, s->object->get_obj());
-      RGWRados::Object::Delete del_op(&del_target);
-
-      op_ret = get_system_versioning_params(s, &del_op.params.olh_epoch,
-                                            &del_op.params.marker_version_id);
+      op_ret = get_system_versioning_params(s, &epoch, &version_id);
       if (op_ret < 0) {
-        return;
+	return;
       }
 
-      del_op.params.bucket_owner = s->bucket_owner.get_id();
-      del_op.params.versioning_status = s->bucket->get_info().versioning_status();
-      del_op.params.obj_owner = s->owner;
-      del_op.params.unmod_since = unmod_since;
-      del_op.params.high_precision_time = s->system_request; /* system request uses high precision time */
-
-      op_ret = del_op.delete_obj(s->yield);
+      op_ret = s->object->delete_object(obj_ctx, s->owner, s->bucket_owner, unmod_since,
+					s->system_request, epoch, version_id, s->yield);
       if (op_ret >= 0) {
-        delete_marker = del_op.result.delete_marker;
-        version_id = del_op.result.version_id;
+	delete_marker = s->object->get_delete_marker();
       }
 
       /* Check whether the object has expired. Swift API documentation
@@ -6473,14 +6465,15 @@ void RGWDeleteMultiObj::execute()
   for (iter = multi_delete->objects.begin();
         iter != multi_delete->objects.end();
         ++iter) {
-    rgw::sal::RGWRadosObject obj(store, *iter, bucket);
+    std::string version_id;
+    std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(*iter);
     if (s->iam_policy || ! s->iam_user_policies.empty()) {
       auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               iter->instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
-                                              ARN(obj.get_obj()));
+                                              ARN(obj->get_obj()));
       if (usr_policy_res == Effect::Deny) {
         send_partial_response(*iter, false, "", -EACCES);
         continue;
@@ -6493,7 +6486,7 @@ void RGWDeleteMultiObj::execute()
 				   iter->instance.empty() ?
 				   rgw::IAM::s3DeleteObject :
 				   rgw::IAM::s3DeleteObjectVersion,
-				   ARN(obj.get_obj()));
+				   ARN(obj->get_obj()));
       }
       if ((e == Effect::Deny) ||
 	  (usr_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
@@ -6502,30 +6495,23 @@ void RGWDeleteMultiObj::execute()
       }
     }
 
-    obj.set_atomic(obj_ctx);
+    obj->set_atomic(obj_ctx);
 
-    RGWRados::Object del_target(store->getRados(), s->bucket->get_info(), *obj_ctx, obj.get_obj());
-    RGWRados::Object::Delete del_op(&del_target);
-
-    del_op.params.bucket_owner = s->bucket_owner.get_id();
-    del_op.params.versioning_status = s->bucket->get_info().versioning_status();
-    del_op.params.obj_owner = s->owner;
-
-    op_ret = del_op.delete_obj(s->yield);
+    op_ret = obj->delete_object(obj_ctx, s->owner, s->bucket_owner, ceph::real_time(),
+				false, 0, version_id, s->yield);
     if (op_ret == -ENOENT) {
       op_ret = 0;
     }
 
-    send_partial_response(*iter, del_op.result.delete_marker,
-			  del_op.result.version_id, op_ret);
+    send_partial_response(*iter, obj->get_delete_marker(), version_id, op_ret);
 
-    const auto obj_state = obj_ctx->get_state(obj.get_obj());
+    const auto obj_state = obj_ctx->get_state(obj->get_obj());
     bufferlist etag_bl;
     const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
-    obj.set_obj_size(obj_state->size);
+    obj->set_obj_size(obj_state->size);
 
-    const auto ret = rgw::notify::publish(s, &obj, ceph::real_clock::now(), etag,
-            del_op.result.delete_marker && obj.get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+    const auto ret = rgw::notify::publish(s, obj.get(), ceph::real_clock::now(), etag,
+            obj->get_delete_marker() && s->object->get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
             store);
     if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
@@ -6572,67 +6558,41 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
 
 bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 {
-  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
-  RGWBucketInfo binfo;
-  map<string, bufferlist> battrs;
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
   ACLOwner bowner;
   RGWObjVersionTracker ot;
 
-  rgw_bucket b(rgw_bucket_key(s->user->get_tenant(), path.bucket_name));
-
-  int ret = store->ctl()->bucket->read_bucket_info(b, &binfo, s->yield,
-						RGWBucketCtl::BucketInstance::GetParams()
-						  .set_attrs(&battrs),
-						&ot);
+  int ret = store->get_bucket(s->user, s->user->get_tenant(), path.bucket_name, &bucket);
   if (ret < 0) {
     goto binfo_fail;
   }
 
-  if (!verify_permission(binfo, battrs, bowner)) {
+  ret = bucket->get_bucket_info(s->yield);
+  if (ret < 0) {
+    goto binfo_fail;
+  }
+
+  if (!verify_permission(bucket->get_info(), bucket->get_attrs().attrs, bowner)) {
     ret = -EACCES;
     goto auth_fail;
   }
 
   if (!path.obj_key.empty()) {
-    rgw_obj obj(binfo.bucket, path.obj_key);
-    obj_ctx.set_atomic(obj);
+    ACLOwner bucket_owner;
+    std::string version_id;
 
-    RGWRados::Object del_target(store->getRados(), binfo, obj_ctx, obj);
-    RGWRados::Object::Delete del_op(&del_target);
+    bucket_owner.set_id(bucket->get_info().owner);
+    std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(path.obj_key);
+    obj->set_atomic(s->obj_ctx);
 
-    del_op.params.bucket_owner = binfo.owner;
-    del_op.params.versioning_status = binfo.versioning_status();
-    del_op.params.obj_owner = bowner;
-
-    ret = del_op.delete_obj(s->yield);
+    ret = obj->delete_object(s->obj_ctx, bowner, bucket_owner, ceph::real_time(), false, 0, version_id, s->yield);
     if (ret < 0) {
       goto delop_fail;
     }
   } else {
-    ret = store->getRados()->delete_bucket(binfo, ot, s->yield);
-    if (0 == ret) {
-      ret = store->ctl()->bucket->unlink_bucket(binfo.owner, binfo.bucket, s->yield, false);
-      if (ret < 0) {
-        ldpp_dout(s, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
-      }
-    }
+    ret = bucket->remove_bucket(false, string(), string(), true, &s->info, s->yield);
     if (ret < 0) {
       goto delop_fail;
-    }
-
-    if (!store->svc()->zone->is_meta_master()) {
-      bufferlist in_data;
-      ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-                                      nullptr);
-      if (ret < 0) {
-        if (ret == -ENOENT) {
-          /* adjust error, we want to return with NoSuchBucket and not
-           * NoSuchKey */
-          ret = -ERR_NO_SUCH_BUCKET;
-        }
-        goto delop_fail;
-      }
     }
   }
 
