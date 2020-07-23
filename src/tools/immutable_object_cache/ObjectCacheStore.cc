@@ -60,17 +60,19 @@ int ObjectCacheStore::init(bool reset) {
 
   // TODO(dehao): fsck and reuse existing cache objects
   if (reset) {
-    std::error_code ec;
-    if (efs::exists(m_cache_root_dir)) {
-      // remove all sub folders
-      for (auto& p : efs::directory_iterator(m_cache_root_dir)) {
-        efs::remove_all(p.path());
+    try {
+      if (efs::exists(m_cache_root_dir)) {
+        // remove all sub folders
+        for (auto& p : efs::directory_iterator(m_cache_root_dir)) {
+          efs::remove_all(p.path());
+        }
+      } else {
+        efs::create_directories(m_cache_root_dir);
       }
-    } else {
-      if (!efs::create_directories(m_cache_root_dir, ec)) {
-        lderr(m_cct) << "fail to create cache store dir: " << ec << dendl;
-        return ec.value();
-      }
+    } catch (const efs::filesystem_error& e) {
+      lderr(m_cct) << "failed to initialize cache store directory: "
+                   << e.what() << dendl;
+      return -e.code().value();
     }
   }
   return 0;
