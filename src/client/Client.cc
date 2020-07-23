@@ -6149,7 +6149,7 @@ void Client::_abort_mds_sessions(int err)
 
 void Client::_unmount(bool abort)
 {
-  std::unique_lock lock{client_lock, std::adopt_lock};
+  std::unique_lock lock{client_lock};
   if (unmounting)
     return;
 
@@ -6285,19 +6285,16 @@ void Client::_unmount(bool abort)
 
   mounted = false;
 
-  lock.release();
   ldout(cct, 2) << "unmounted." << dendl;
 }
 
 void Client::unmount()
 {
-  std::lock_guard lock(client_lock);
   _unmount(false);
 }
 
 void Client::abort_conn()
 {
-  std::lock_guard lock(client_lock);
   _unmount(true);
 }
 
