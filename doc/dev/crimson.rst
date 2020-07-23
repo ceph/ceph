@@ -148,19 +148,19 @@ When a seastar application crashes, it leaves us a serial of addresses, like::
 
   Segmentation fault.
   Backtrace:
-  0x00000000108254aa
-  0x00000000107f74b9
-  0x00000000105366cc
-  0x000000001053682c
-  0x00000000105d2c2e
-  0x0000000010629b96
-  0x0000000010629c31
-  0x00002a02ebd8272f
-  0x00000000105d93ee
-  0x00000000103eff59
-  0x000000000d9c1d0a
-  /lib/x86_64-linux-gnu/libc.so.6+0x000000000002409a
-  0x000000000d833ac9
+    0x00000000108254aa
+    0x00000000107f74b9
+    0x00000000105366cc
+    0x000000001053682c
+    0x00000000105d2c2e
+    0x0000000010629b96
+    0x0000000010629c31
+    0x00002a02ebd8272f
+    0x00000000105d93ee
+    0x00000000103eff59
+    0x000000000d9c1d0a
+    /lib/x86_64-linux-gnu/libc.so.6+0x000000000002409a
+    0x000000000d833ac9
   Segmentation fault
 
 ``seastar-addr2line`` offered by Seastar can be used to decipher these
@@ -170,18 +170,18 @@ so we need to copy and paste the above addresses, then send the EOF by inputting
 
   $ ../src/seastar/scripts/seastar-addr2line -e bin/crimson-osd
 
-  0x00000000108254aa
-  0x00000000107f74b9
-  0x00000000105366cc
-  0x000000001053682c
-  0x00000000105d2c2e
-  0x0000000010629b96
-  0x0000000010629c31
-  0x00002a02ebd8272f
-  0x00000000105d93ee
-  0x00000000103eff59
-  0x000000000d9c1d0a
-  0x00000000108254aa
+    0x00000000108254aa
+    0x00000000107f74b9
+    0x00000000105366cc
+    0x000000001053682c
+    0x00000000105d2c2e
+    0x0000000010629b96
+    0x0000000010629c31
+    0x00002a02ebd8272f
+    0x00000000105d93ee
+    0x00000000103eff59
+    0x000000000d9c1d0a
+    0x00000000108254aa
   [Backtrace #0]
   seastar::backtrace_buffer::append_backtrace() at /home/kefu/dev/ceph/build/../src/seastar/src/core/reactor.cc:1136
   seastar::print_with_backtrace(seastar::backtrace_buffer&) at /home/kefu/dev/ceph/build/../src/seastar/src/core/reactor.cc:1157
@@ -193,3 +193,13 @@ so we need to copy and paste the above addresses, then send the EOF by inputting
   seastar::smp::configure(boost::program_options::variables_map, seastar::reactor_config) at /home/kefu/dev/ceph/build/../src/seastar/src/core/reactor.cc:5418
   seastar::app_template::run_deprecated(int, char**, std::function<void ()>&&) at /home/kefu/dev/ceph/build/../src/seastar/src/core/app-template.cc:173 (discriminator 5)
   main at /home/kefu/dev/ceph/build/../src/crimson/osd/main.cc:131 (discriminator 1)
+
+Please note, ``seastar-addr2line`` is able to extract the addresses from
+the input, so you can also paste the log messages like::
+
+  2020-07-22T11:37:04.500 INFO:teuthology.orchestra.run.smithi061.stderr:Backtrace:
+  2020-07-22T11:37:04.500 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e78dbc
+  2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e7f0
+  2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e8b8
+  2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e985
+  2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  /lib64/libpthread.so.0+0x0000000000012dbf
