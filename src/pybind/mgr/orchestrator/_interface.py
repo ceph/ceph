@@ -1333,13 +1333,13 @@ class DaemonDescription(object):
             # daemon_id == "service_id"
             return self.daemon_id
 
-        if self.daemon_type in ['mds', 'nfs', 'iscsi', 'rgw']:
+        if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
             return _match()
 
         return self.daemon_id
 
     def service_name(self):
-        if self.daemon_type in ['rgw', 'mds', 'nfs', 'iscsi']:
+        if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
             return f'{self.daemon_type}.{self.service_id()}'
         return self.daemon_type
 
