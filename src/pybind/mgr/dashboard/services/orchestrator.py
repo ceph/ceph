@@ -114,7 +114,7 @@ class ServiceManager(ResourceManager):
 class OsdManager(ResourceManager):
     @wait_api_result
     def create(self, drive_group_specs):
-        return self.api.apply_drivegroups(drive_group_specs)
+        return self.api.apply(drive_group_specs)
 
     @wait_api_result
     def remove(self, osd_ids, replace=False, force=False):
