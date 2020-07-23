@@ -88,7 +88,7 @@ So, a typical command to start a single-crimson-node cluster is::
 
   MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x --without-dashboard --memstore \
     --crimson --nodaemon --redirect-output \
-    --osd-args "--memory 4G --smp 1 --cpuset 0"
+    --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
 Please refer ``crimson-osd --help-seastar`` for more Seastar specific command
