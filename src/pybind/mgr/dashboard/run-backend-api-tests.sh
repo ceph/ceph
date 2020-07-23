@@ -82,8 +82,8 @@ display_log() {
 on_tests_error() {
     if [[ -n "$JENKINS_HOME" ]]; then
         CEPH_OUT_DIR=${CEPH_OUT_DIR:-"$LOCAL_BUILD_DIR"/out}
-        display_log "mgr" 60000
-        display_log "osd" 60000
+        display_log "mgr" 100000
+        display_log "osd" 100000
     fi
 }
 
