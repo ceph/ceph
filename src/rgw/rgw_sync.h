@@ -340,15 +340,19 @@ public:
 template <class T, class K>
 class RGWSyncShardMarkerTrack {
   struct marker_entry {
+    T marker;
     uint64_t pos;
     real_time timestamp;
 
     marker_entry() : pos(0) {}
-    marker_entry(uint64_t _p, const real_time& _ts) : pos(_p), timestamp(_ts) {}
+    marker_entry(const T& _marker, uint64_t _p, const real_time& _ts) : marker(_marker), pos(_p), timestamp(_ts) {}
   };
-  typename std::map<T, marker_entry> pending;
 
-  std::map<T, marker_entry> finish_markers;
+  typename std::map<T, uint64_t> keys;
+  typename std::map<uint64_t, marker_entry> pending;
+
+  std::map<uint64_t, marker_entry> finish_markers;
+  uint64_t max_keys{0};
 
   int window_size;
   int updates_since_flush;
@@ -370,48 +374,62 @@ public:
     }
   }
 
-  bool start(const T& pos, int index_pos, const real_time& timestamp) {
-    if (pending.find(pos) != pending.end()) {
+  bool start(const T& marker, int index_pos, const real_time& timestamp) {
+    if (keys.find(marker) != keys.end()) {
       return false;
     }
-    pending[pos] = marker_entry(index_pos, timestamp);
+    auto i = ++max_keys;
+    keys[marker] = i;
+    pending[i] = marker_entry(marker, index_pos, timestamp);
     return true;
   }
 
-  void try_update_high_marker(const T& pos, int index_pos, const real_time& timestamp) {
-    finish_markers[pos] = marker_entry(index_pos, timestamp);
+  void try_update_high_marker(const T& marker, int index_pos, const real_time& timestamp) {
+    auto iter = keys.find(marker);
+    if (iter == keys.end()) {
+      return;
+    }
+    finish_markers[iter->second] = marker_entry(marker, index_pos, timestamp);
   }
 
-  RGWCoroutine *finish(const DoutPrefixProvider *dpp, const T& pos) {
+  RGWCoroutine *finish(const DoutPrefixProvider *dpp, const T& marker) {
     if (pending.empty()) {
       /* can happen, due to a bug that ended up with multiple objects with the same name and version
        * -- which can happen when versioning is enabled an the version is 'null'.
        */
-      return NULL;
+      return nullptr;
     }
 
-    typename std::map<T, marker_entry>::iterator iter = pending.begin();
+    auto kiter = keys.find(marker);
+    if (kiter == keys.end()) {
+      return nullptr;
+    }
+    auto& k = kiter->second;
 
-    bool is_first = (pos == iter->first);
+    typename std::map<uint64_t, marker_entry>::iterator iter = pending.begin();
 
-    typename std::map<T, marker_entry>::iterator pos_iter = pending.find(pos);
-    if (pos_iter == pending.end()) {
+    bool is_first = (marker == iter->second.marker);
+
+    auto marker_iter = pending.find(k);
+    if (marker_iter == pending.end()) {
       /* see pending.empty() comment */
-      return NULL;
+      return nullptr;
     }
 
-    finish_markers[pos] = pos_iter->second;
+    finish_markers[k] = marker_iter->second;
 
-    pending.erase(pos);
+    pending.erase(marker_iter);
+    keys.erase(kiter);
 
-    handle_finish(pos);
+    handle_finish(marker);
 
     updates_since_flush++;
+
 
     if (is_first && (updates_since_flush >= window_size || pending.empty())) {
       return flush(dpp);
     }
-    return NULL;
+    return nullptr;
   }
 
   RGWCoroutine *flush(const DoutPrefixProvider *dpp) {
@@ -419,7 +437,7 @@ public:
       return NULL;
     }
 
-    typename std::map<T, marker_entry>::iterator i;
+    typename std::map<uint64_t, marker_entry>::iterator i;
 
     if (pending.empty()) {
       i = finish_markers.end();
@@ -433,9 +451,8 @@ public:
 
     auto last = i;
     --i;
-    const T& high_marker = i->first;
     marker_entry& high_entry = i->second;
-    RGWCoroutine *cr = order(store_marker(dpp, high_marker, high_entry.pos, high_entry.timestamp));
+    RGWCoroutine *cr = order(store_marker(dpp, high_entry.marker, high_entry.pos, high_entry.timestamp));
     finish_markers.erase(finish_markers.begin(), last);
     return cr;
   }
