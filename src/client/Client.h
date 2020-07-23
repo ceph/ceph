@@ -732,6 +732,16 @@ public:
   void flush_cap_releases();
   void tick();
 
+  void cap_hit() {
+    ++cap_hits;
+  }
+  void cap_miss() {
+    ++cap_misses;
+  }
+  std::pair<uint64_t, uint64_t> get_cap_hit_rates() {
+    return std::make_pair(cap_hits, cap_misses);
+  }
+
   xlist<Inode*> &get_dirty_list() { return dirty_list; }
 
   SafeTimer timer;
@@ -1281,6 +1291,9 @@ private:
   int reclaim_errno = 0;
   epoch_t reclaim_osd_epoch = 0;
   entity_addrvec_t reclaim_target_addrs;
+
+  uint64_t cap_hits = 0;
+  uint64_t cap_misses = 0;
 };
 
 /**
