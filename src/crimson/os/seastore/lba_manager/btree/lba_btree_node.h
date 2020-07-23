@@ -186,6 +186,8 @@ struct LBANode : CachedExtent {
 
   void on_delta_write(paddr_t record_block_offset) final {
     // All in-memory relative addrs are necessarily record-relative
+    assert(get_prior_instance());
+    pin.take_pin(get_prior_instance()->cast<LBANode>()->pin);
     resolve_relative_addrs(record_block_offset);
   }
 

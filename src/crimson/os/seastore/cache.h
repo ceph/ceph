@@ -380,8 +380,14 @@ private:
   /// Mark exising extent ref dirty -- mainly for replay
   void mark_dirty(CachedExtentRef ref);
 
+  /// Add dirty extent to dirty list
+  void add_to_dirty(CachedExtentRef ref);
+
   /// Remove extent from extents handling dirty and refcounting
-  void retire_extent(CachedExtentRef ref);
+  void remove_extent(CachedExtentRef ref);
+
+  /// Replace prev with next
+  void replace_extent(CachedExtentRef next, CachedExtentRef prev);
 
   /**
    * get_extent_by_type
