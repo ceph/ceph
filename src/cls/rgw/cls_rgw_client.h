@@ -146,16 +146,19 @@ public:
     value_by_shards[shard] = value;
   }
 
-  const std::string& get(int shard, const std::string& default_value) {
+  const std::string& get(int shard, const std::string& default_value) const {
     auto iter = value_by_shards.find(shard);
     return (iter == value_by_shards.end() ? default_value : iter->second);
   }
 
+  const std::map<int, std::string>& get() const {
+    return value_by_shards;
+  }
   std::map<int, std::string>& get() {
     return value_by_shards;
   }
 
-  bool empty() {
+  bool empty() const {
     return value_by_shards.empty();
   }
 

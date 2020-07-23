@@ -29,6 +29,7 @@
     bucket chown               link bucket to specified user and update its object ACLs
     bucket reshard             reshard bucket
     bucket rewrite             rewrite all objects in the specified bucket
+    bucket sync checkpoint     poll a bucket's sync status until it catches up to its remote
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
     bucket radoslist           list rados objects backing bucket's objects
