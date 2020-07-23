@@ -7447,16 +7447,15 @@ void OSD::sched_scrub()
     return;
   }
   bool allow_requested_repair_only = false;
-  if (service.is_recovery_active()) {
-    if (!cct->_conf->osd_scrub_during_recovery && cct->_conf->osd_repair_during_recovery) {
-      dout(10) << __func__
-               << " will only schedule explicitly requested repair due to active recovery"
-               << dendl;
-      allow_requested_repair_only = true;
-    } else if (!cct->_conf->osd_scrub_during_recovery && !cct->_conf->osd_repair_during_recovery) {
+  if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
+    if (!cct->_conf->osd_repair_during_recovery) {
       dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
       return;
     }
+    dout(10) << __func__
+             << " will only schedule explicitly requested repair due to active recovery"
+             << dendl;
+    allow_requested_repair_only = true;
   }
 
   utime_t now = ceph_clock_now();
