@@ -370,23 +370,13 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
     if not target_zone.syncs_from(source_zone.name):
         return
 
-    log_status = bucket_source_log_status(source_zone, bucket_name)
-    log.info('starting bucket checkpoint for target_zone=%s source_zone=%s bucket=%s', target_zone.name, source_zone.name, bucket_name)
-
-    for _ in range(config.checkpoint_retries):
-        sync_status = bucket_sync_status(target_zone, source_zone, bucket_name)
-
-        log.debug('log_status=%s', log_status)
-        log.debug('sync_status=%s', sync_status)
-
-        if compare_bucket_status(target_zone, source_zone, bucket_name, log_status, sync_status):
-            log.info('finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s', target_zone.name, source_zone.name, bucket_name)
-            return
-
-        time.sleep(config.checkpoint_delay)
-
-    assert False, 'failed bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
-                  (target_zone.name, source_zone.name, bucket_name)
+    cmd = ['bucket', 'sync', 'checkpoint']
+    cmd += ['--bucket', bucket_name, '--source-zone', source_zone.name]
+    retry_delay_ms = config.checkpoint_delay * 1000
+    timeout_sec = config.checkpoint_retries * config.checkpoint_delay
+    cmd += ['--retry-delay-ms', str(retry_delay_ms), '--timeout-sec', str(timeout_sec)]
+    cmd += target_zone.zone_args()
+    target_zone.cluster.admin(cmd, debug_rgw=1)
 
 def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
     for source_conn in zonegroup_conns.rw_zones:
