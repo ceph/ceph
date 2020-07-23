@@ -1,8 +1,13 @@
-import re
+import logging
+from functools import wraps
+from typing import Optional, Callable, TypeVar, List
 
 from orchestrator import OrchestratorError
 
-from typing import Optional
+
+T = TypeVar('T')
+logger = logging.getLogger(__name__)
+
 
 def name_to_config_section(name: str) -> str:
     """
@@ -37,3 +42,35 @@ def name_to_auth_entity(daemon_type,  # type: str
         return daemon_type + "." + daemon_id
     else:
         raise OrchestratorError("unknown auth entity name")
+
+
+def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
+    @wraps(f)
+    def forall_hosts_wrapper(*args) -> List[T]:
+        from cephadm.module import CephadmOrchestrator
+
+        # Some weired logic to make calling functions with multiple arguments work.
+        if len(args) == 1:
+            vals = args[0]
+            self = None
+        elif len(args) == 2:
+            self, vals = args
+        else:
+            assert 'either f([...]) or self.f([...])'
+
+        def do_work(arg):
+            if not isinstance(arg, tuple):
+                arg = (arg, )
+            try:
+                if self:
+                    return f(self, *arg)
+                return f(*arg)
+            except Exception as e:
+                logger.exception(f'executing {f.__name__}({args}) failed.')
+                raise
+
+        assert CephadmOrchestrator.instance is not None
+        return CephadmOrchestrator.instance._worker_pool.map(do_work, vals)
+
+
+    return forall_hosts_wrapper

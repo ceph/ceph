@@ -45,6 +45,7 @@ from .schedule import HostAssignment, HostPlacementSpec
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
+from .utils import forall_hosts
 
 try:
     import remoto
@@ -84,37 +85,6 @@ DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
-
-
-def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
-    @wraps(f)
-    def forall_hosts_wrapper(*args) -> List[T]:
-
-        # Some weired logic to make calling functions with multiple arguments work.
-        if len(args) == 1:
-            vals = args[0]
-            self = None
-        elif len(args) == 2:
-            self, vals = args
-        else:
-            assert 'either f([...]) or self.f([...])'
-
-        def do_work(arg):
-            if not isinstance(arg, tuple):
-                arg = (arg, )
-            try:
-                if self:
-                    return f(self, *arg)
-                return f(*arg)
-            except Exception as e:
-                logger.exception(f'executing {f.__name__}({args}) failed.')
-                raise
-
-        assert CephadmOrchestrator.instance is not None
-        return CephadmOrchestrator.instance._worker_pool.map(do_work, vals)
-
-
-    return forall_hosts_wrapper
 
 
 class CephadmCompletion(orchestrator.Completion):
