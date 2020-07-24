@@ -199,13 +199,13 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
     }
     return seastar::now();
   }
-  need_addr = false;
 
   if (get_myaddr().get_type() == entity_addr_t::TYPE_NONE) {
     // Not bound
     entity_addr_t addr = peer_addr_for_me;
     addr.set_type(entity_addr_t::TYPE_ANY);
     addr.set_port(0);
+    need_addr = false;
     return set_myaddrs(entity_addrvec_t{addr}
     ).then([this, &conn, peer_addr_for_me] {
       logger().info("{} learned myaddr={} (unbound) from {}",
@@ -230,6 +230,7 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
       entity_addr_t addr = peer_addr_for_me;
       addr.set_type(get_myaddr().get_type());
       addr.set_port(get_myaddr().get_port());
+      need_addr = false;
       return set_myaddrs(entity_addrvec_t{addr}
       ).then([this, &conn, peer_addr_for_me] {
         logger().info("{} learned myaddr={} (blank IP) from {}",
@@ -241,6 +242,7 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     } else {
+      need_addr = false;
       return seastar::now();
     }
   }
