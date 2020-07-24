@@ -87,11 +87,11 @@ CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
 
 
-class CephadmCompletion(orchestrator.Completion):
+class CephadmCompletion(orchestrator.Completion[T]):
     def evaluate(self):
         self.finalize(None)
 
-def trivial_completion(f: Callable) -> Callable[..., CephadmCompletion]:
+def trivial_completion(f: Callable[..., T]) -> Callable[..., CephadmCompletion[T]]:
     """
     Decorator to make CephadmCompletion methods return
     a completion object that executes themselves.
@@ -1192,7 +1192,7 @@ you may want to run:
         return "Removed host '{}'".format(host)
 
     @trivial_completion
-    def update_host_addr(self, host, addr):
+    def update_host_addr(self, host, addr) -> str:
         self.inventory.set_addr(host, addr)
         self._reset_con(host)
         self.event.set()  # refresh stray health check
@@ -1211,13 +1211,13 @@ you may want to run:
         return list(self.inventory.all_specs())
 
     @trivial_completion
-    def add_host_label(self, host, label):
+    def add_host_label(self, host, label) -> str:
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
         return 'Added label %s to host %s' % (label, host)
 
     @trivial_completion
-    def remove_host_label(self, host, label):
+    def remove_host_label(self, host, label) -> str:
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
@@ -1420,7 +1420,7 @@ you may want to run:
 
     @trivial_completion
     def describe_service(self, service_type=None, service_name=None,
-                         refresh=False):
+                         refresh=False) -> List[orchestrator.ServiceDescription]:
         if refresh:
             # ugly sync path, FIXME someday perhaps?
             for host in self.inventory.keys():
@@ -1508,7 +1508,7 @@ you may want to run:
 
     @trivial_completion
     def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None,
-                     host=None, refresh=False):
+                     host=None, refresh=False) -> List[orchestrator.DaemonDescription]:
         if refresh:
             # ugly sync path, FIXME someday perhaps?
             if host:
@@ -1531,7 +1531,7 @@ you may want to run:
         return result
 
     @trivial_completion
-    def service_action(self, action, service_name):
+    def service_action(self, action, service_name) -> List[str]:
         args = []
         for host, dm in self.cache.daemons.items():
             for name, d in dm.items():
@@ -1542,7 +1542,7 @@ you may want to run:
         return self._daemon_actions(args)
 
     @forall_hosts
-    def _daemon_actions(self, daemon_type, daemon_id, host, action):
+    def _daemon_actions(self, daemon_type, daemon_id, host, action) -> str:
         with set_exception_subject('daemon', DaemonDescription(
             daemon_type=daemon_type,
             daemon_id=daemon_id
@@ -1579,7 +1579,7 @@ you may want to run:
         return "{} {} from host '{}'".format(action, name, daemon_spec.host)
 
     @trivial_completion
-    def daemon_action(self, action, daemon_type, daemon_id):
+    def daemon_action(self, action, daemon_type, daemon_id) -> List[str]:
         args = []
         for host, dm in self.cache.daemons.items():
             for name, d in dm.items():
@@ -1609,19 +1609,19 @@ you may want to run:
         return self._remove_daemons(args)
 
     @trivial_completion
-    def remove_service(self, service_name):
+    def remove_service(self, service_name) -> str:
         self.log.info('Remove service %s' % service_name)
         self._trigger_preview_refresh(service_name=service_name)
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
-            return ['Removed service %s' % service_name]
+            return 'Removed service %s' % service_name
         else:
             # must be idempotent: still a success.
-            return [f'Failed to remove service. <{service_name}> was not found.']
+            return f'Failed to remove service. <{service_name}> was not found.'
 
     @trivial_completion
-    def get_inventory(self, host_filter=None, refresh=False):
+    def get_inventory(self, host_filter=None, refresh=False) -> List[orchestrator.InventoryHost]:
         """
         Return the storage inventory of hosts matching the given filter.
 
@@ -1648,7 +1648,7 @@ you may want to run:
         return result
 
     @trivial_completion
-    def zap_device(self, host, path):
+    def zap_device(self, host, path) -> str:
         self.log.info('Zap device %s:%s' % (host, path))
         out, err, code = self._run_cephadm(
             host, 'osd', 'ceph-volume',
@@ -1660,7 +1660,7 @@ you may want to run:
         return '\n'.join(out + err)
 
     @trivial_completion
-    def blink_device_light(self, ident_fault, on, locs):
+    def blink_device_light(self, ident_fault, on, locs) -> List[str]:
         @forall_hosts
         def blink(host, dev, path):
             cmd = [
@@ -1724,7 +1724,7 @@ you may want to run:
             self.cache.osdspec_previews_refresh_queue.append(host)
 
     @trivial_completion
-    def apply_drivegroups(self, specs: List[DriveGroupSpec]):
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> List[str]:
         """
         Deprecated. Please use `apply()` instead.
 
@@ -1733,7 +1733,7 @@ you may want to run:
         return [self._apply(spec) for spec in specs]
 
     @trivial_completion
-    def create_osds(self, drive_group: DriveGroupSpec):
+    def create_osds(self, drive_group: DriveGroupSpec) -> str:
         return self.osd_service.create_from_spec(drive_group)
 
     def _preview_osdspecs(self,
@@ -2147,7 +2147,7 @@ you may want to run:
         return create_func_map(args)
 
     @trivial_completion
-    def apply_mon(self, spec):
+    def apply_mon(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
@@ -2198,7 +2198,7 @@ you may want to run:
         }
 
     @trivial_completion
-    def plan(self, specs: List[GenericSpec]):
+    def plan(self, specs: List[GenericSpec]) -> List:
         results = [{'warning': 'WARNING! Dry-Runs are snapshots of a certain point in time and are bound \n'
                                'to the current inventory setup. If any on these conditions changes, the \n'
                                'preview will be invalid. Please make sure to have a minimal \n'
@@ -2246,30 +2246,30 @@ you may want to run:
         return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
-    def apply(self, specs: List[GenericSpec]):
+    def apply(self, specs: List[GenericSpec]) -> List[str]:
         results = []
         for spec in specs:
             results.append(self._apply(spec))
         return results
 
     @trivial_completion
-    def apply_mgr(self, spec):
+    def apply_mgr(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
-    def add_mds(self, spec: ServiceSpec):
+    def add_mds(self, spec: ServiceSpec) -> List[str]:
         return self._add_daemon('mds', spec, self.mds_service.create, self.mds_service.config)
 
     @trivial_completion
-    def apply_mds(self, spec: ServiceSpec):
+    def apply_mds(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @trivial_completion
-    def add_rgw(self, spec):
+    def add_rgw(self, spec) -> List[str]:
         return self._add_daemon('rgw', spec, self.rgw_service.create, self.rgw_service.config)
 
     @trivial_completion
-    def apply_rgw(self, spec):
+    def apply_rgw(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
@@ -2278,23 +2278,23 @@ you may want to run:
         return self._add_daemon('iscsi', spec, self.iscsi_service.create, self.iscsi_service.config)
 
     @trivial_completion
-    def apply_iscsi(self, spec):
+    def apply_iscsi(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
-    def add_rbd_mirror(self, spec):
+    def add_rbd_mirror(self, spec) -> List[str]:
         return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.create)
 
     @trivial_completion
-    def apply_rbd_mirror(self, spec):
+    def apply_rbd_mirror(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
-    def add_nfs(self, spec):
+    def add_nfs(self, spec) -> List[str]:
         return self._add_daemon('nfs', spec, self.nfs_service.create, self.nfs_service.config)
 
     @trivial_completion
-    def apply_nfs(self, spec):
+    def apply_nfs(self, spec) -> str:
         return self._apply(spec)
 
     def _get_dashboard_url(self):
@@ -2302,11 +2302,11 @@ you may want to run:
         return self.get('mgr_map').get('services', {}).get('dashboard', '')
 
     @trivial_completion
-    def add_prometheus(self, spec):
+    def add_prometheus(self, spec) -> List[str]:
         return self._add_daemon('prometheus', spec, self.prometheus_service.create)
 
     @trivial_completion
-    def apply_prometheus(self, spec):
+    def apply_prometheus(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
@@ -2316,7 +2316,7 @@ you may want to run:
                                 self.node_exporter_service.create)
 
     @trivial_completion
-    def apply_node_exporter(self, spec):
+    def apply_node_exporter(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
@@ -2326,7 +2326,7 @@ you may want to run:
                                 self.crash_service.create)
 
     @trivial_completion
-    def apply_crash(self, spec):
+    def apply_crash(self, spec) -> str:
         return self._apply(spec)
 
     @trivial_completion
@@ -2335,7 +2335,7 @@ you may want to run:
         return self._add_daemon('grafana', spec, self.grafana_service.create)
 
     @trivial_completion
-    def apply_grafana(self, spec: ServiceSpec):
+    def apply_grafana(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @trivial_completion
@@ -2344,7 +2344,7 @@ you may want to run:
         return self._add_daemon('alertmanager', spec, self.alertmanager_service.create)
 
     @trivial_completion
-    def apply_alertmanager(self, spec: ServiceSpec):
+    def apply_alertmanager(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     def _get_container_image_id(self, image_name):
@@ -2373,7 +2373,7 @@ you may want to run:
         return image_id, ceph_version
 
     @trivial_completion
-    def upgrade_check(self, image, version):
+    def upgrade_check(self, image, version) -> str:
         if version:
             target_name = self.container_image_base + ':v' + version
         elif image:
@@ -2404,29 +2404,29 @@ you may want to run:
         return json.dumps(r, indent=4, sort_keys=True)
 
     @trivial_completion
-    def upgrade_status(self):
+    def upgrade_status(self) -> orchestrator.UpgradeStatusSpec:
         return self.upgrade.upgrade_status()
 
     @trivial_completion
-    def upgrade_start(self, image, version):
+    def upgrade_start(self, image, version) -> str:
         return self.upgrade.upgrade_start(image, version)
 
     @trivial_completion
-    def upgrade_pause(self):
+    def upgrade_pause(self) -> str:
         return self.upgrade.upgrade_pause()
 
     @trivial_completion
-    def upgrade_resume(self):
+    def upgrade_resume(self) -> str:
         return self.upgrade.upgrade_resume()
 
     @trivial_completion
-    def upgrade_stop(self):
+    def upgrade_stop(self) -> str:
         return self.upgrade.upgrade_stop()
 
     @trivial_completion
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
-                    force: bool = False):
+                    force: bool = False) -> str:
         """
         Takes a list of OSDs and schedules them for removal.
         The function that takes care of the actual removal is
@@ -2453,7 +2453,7 @@ you may want to run:
         return "Scheduled OSD(s) for removal"
 
     @trivial_completion
-    def remove_osds_status(self):
+    def remove_osds_status(self) -> Set[OSDRemoval]:
         """
         The CLI call to retrieve an osd removal report
         """
