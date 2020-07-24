@@ -91,9 +91,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             () => this.editAction()
           );
         },
-        disable: (selection: CdTableSelection) =>
-          !selection.hasSingleSelection || !selection.first().sources.orchestrator,
-        disableDesc: this.getEditDisableDesc.bind(this)
+        disable: this.getEditDisableDesc.bind(this)
       },
       {
         name: this.actionLabels.DELETE,
@@ -106,10 +104,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             () => this.deleteAction()
           );
         },
-        disable: (selection: CdTableSelection) =>
-          !selection.hasSelection ||
-          !selection.selected.every((selected) => selected.sources.orchestrator),
-        disableDesc: this.getDeleteDisableDesc.bind(this)
+        disable: this.getDeleteDisableDesc.bind(this)
       }
     ];
   }
@@ -186,11 +181,16 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     });
   }
 
-  getEditDisableDesc(selection: CdTableSelection): string | undefined {
-    if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
-      return $localize`Host editing is disabled because the selected host is not managed by Orchestrator.`;
+  getEditDisableDesc(selection: CdTableSelection): boolean | string {
+    if (selection?.hasSingleSelection) {
+      if (!selection?.first().sources.orchestrator) {
+        return $localize`Host editing is disabled because the selected host is not managed by Orchestrator.`;
+      }
+
+      return false;
     }
-    return undefined;
+
+    return true;
   }
 
   deleteAction() {
@@ -207,15 +207,16 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     });
   }
 
-  getDeleteDisableDesc(selection: CdTableSelection): string | undefined {
-    if (
-      selection &&
-      selection.hasSelection &&
-      !selection.selected.every((selected) => selected.sources.orchestrator)
-    ) {
-      return $localize`Host deletion is disabled because a selected host is not managed by Orchestrator.`;
+  getDeleteDisableDesc(selection: CdTableSelection): boolean | string {
+    if (selection?.hasSelection) {
+      if (!selection.selected.every((selected) => selected.sources.orchestrator)) {
+        return $localize`Host deletion is disabled because a selected host is not managed by Orchestrator.`;
+      }
+
+      return false;
     }
-    return undefined;
+
+    return true;
   }
 
   getHosts(context: CdTableFetchDataContext) {

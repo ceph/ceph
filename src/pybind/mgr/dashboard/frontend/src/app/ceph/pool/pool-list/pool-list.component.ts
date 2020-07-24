@@ -92,8 +92,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         icon: Icons.destroy,
         click: () => this.deletePoolModal(),
         name: this.actionLabels.DELETE,
-        disable: () => !this.selection.first() || !this.monAllowPoolDelete,
-        disableDesc: () => this.getDisableDesc()
+        disable: this.getDisableDesc.bind(this)
       }
     ];
 
@@ -291,12 +290,16 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     }
   }
 
-  getDisableDesc(): string | undefined {
-    if (!this.monAllowPoolDelete) {
-      return $localize`Pool deletion is disabled by the mon_allow_pool_delete configuration setting.`;
+  getDisableDesc(): boolean | string {
+    if (this.selection?.hasSelection) {
+      if (!this.monAllowPoolDelete) {
+        return $localize`Pool deletion is disabled by the mon_allow_pool_delete configuration setting.`;
+      }
+
+      return false;
     }
 
-    return undefined;
+    return true;
   }
 
   setExpandedRow(expandedRow: any) {
