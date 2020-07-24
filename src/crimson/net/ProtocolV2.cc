@@ -56,15 +56,15 @@ seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_ms);
 }
 
-void abort_in_fault() {
+[[noreturn]] void abort_in_fault() {
   throw std::system_error(make_error_code(crimson::net::error::negotiation_failure));
 }
 
-void abort_protocol() {
+[[noreturn]] void abort_protocol() {
   throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
+[[noreturn]] void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
   proto.close(dispatch_reset);
   abort_protocol();
 }
