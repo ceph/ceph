@@ -48,7 +48,6 @@ void CloseImageRequest<I>::handle_close_image(int r) {
          << dendl;
   }
 
-  delete *m_image_ctx;
   *m_image_ctx = nullptr;
 
   m_on_finish->complete(0);
