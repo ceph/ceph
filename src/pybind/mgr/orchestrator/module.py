@@ -858,35 +858,53 @@ Usage:
         "name=replace,type=CephBool,req=false "
         "name=force,type=CephBool,req=false",
         'Remove OSD services')
-    def _osd_rm(self, svc_id: List[str],
-                replace: bool = False,
-                force: bool = False) -> HandleCommandResult:
-        completion = self.remove_osds(svc_id, replace, force)
+    def _osd_rm_start(self,
+                      svc_id: List[str],
+                      replace: bool = False,
+                      force: bool = False) -> HandleCommandResult:
+        completion = self.remove_osds(svc_id, replace=replace, force=force)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch osd rm stop',
+        "name=svc_id,type=CephString,n=N",
+        'Remove OSD services')
+    def _osd_rm_stop(self, svc_id: List[str]) -> HandleCommandResult:
+        completion = self.stop_remove_osds(svc_id)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
         'orch osd rm status',
+        "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false",
         desc='status of OSD removal operation')
-    def _osd_rm_status(self) -> HandleCommandResult:
+    def _osd_rm_status(self, format='plain') -> HandleCommandResult:
         completion = self.remove_osds_status()
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         report = completion.result
+
         if not report:
             return HandleCommandResult(stdout="No OSD remove/replace operations reported")
-        table = PrettyTable(
-            ['NAME', 'HOST', 'PGS', 'STARTED_AT'],
-            border=False)
-        table.align = 'l'
-        table.left_padding_width = 0
-        table.right_padding_width = 1
-        # TODO: re-add sorted and sort by pg_count
-        for osd in report:
-            table.add_row((osd.fullname, osd.nodename, osd.pg_count_str, osd.started_at))
 
-        return HandleCommandResult(stdout=table.get_string())
+        if format != 'plain':
+            out = to_format(report, format, many=True, cls=None)
+        else:
+            table = PrettyTable(
+                ['OSD_ID', 'HOST', 'STATE', 'PG_COUNT', 'REPLACE', 'FORCE', 'DRAIN_STARTED_AT'],
+                border=False)
+            table.align = 'l'
+            table.left_padding_width = 0
+            table.right_padding_width = 2
+            for osd in sorted(report, key=lambda o: o.osd_id):
+                table.add_row([osd.osd_id, osd.nodename, osd.drain_status_human(),
+                               osd.get_pg_count(), osd.replace, osd.replace, osd.drain_started_at])
+            out = table.get_string()
+
+        return HandleCommandResult(stdout=out)
 
     @_cli_write_command(
         'orch daemon add',
