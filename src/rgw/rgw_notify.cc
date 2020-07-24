@@ -46,11 +46,11 @@ void populate_record_from_request(const req_state *s,
   // opaque data will be filled from topic configuration
 }
 
-bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, EventType event) {
+bool match(const rgw_pubsub_topic_filter& filter, const req_state* s, const rgw::sal::RGWObject* obj, EventType event) {
   if (!::match(filter.events, event)) { 
     return false;
   }
-  if (!::match(filter.s3_filter.key_filter, s->object->get_name())) {
+  if (!::match(filter.s3_filter.key_filter, obj->get_name())) {
     return false;
   }
   if (!::match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
@@ -83,7 +83,7 @@ int publish(const req_state* s,
     for (const auto& bucket_topic : bucket_topics.topics) {
         const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
         const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
-        if (!match(topic_filter, s, event_type)) {
+        if (!match(topic_filter, s, obj, event_type)) {
             // topic does not apply to req_state
             continue;
         }
