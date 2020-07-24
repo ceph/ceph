@@ -333,6 +333,11 @@ struct RGWDataSyncEnv {
 
 class RGWDataSyncInfoCRHandler;
 
+struct RGWDataSyncInfoCRHandlerPair {
+  std::shared_ptr<RGWDataSyncInfoCRHandler> full;
+  std::shared_ptr<RGWDataSyncInfoCRHandler> inc;
+};
+
 struct RGWDataSyncCtx {
   CephContext *cct{nullptr};
   RGWDataSyncEnv *env{nullptr};
@@ -340,7 +345,7 @@ struct RGWDataSyncCtx {
   RGWRESTConn *conn{nullptr};
   rgw_zone_id source_zone;
 
-  std::shared_ptr<RGWDataSyncInfoCRHandler> dsi;
+  RGWDataSyncInfoCRHandlerPair dsi;
 
   void init(RGWDataSyncEnv *_env,
             RGWRESTConn *_conn,
