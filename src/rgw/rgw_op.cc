@@ -7412,7 +7412,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
     ceph::bufferlist tmp;
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
-    cs_info.orig_size = s->obj_size;
+    cs_info.orig_size = size;
     cs_info.blocks = std::move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     attrs.emplace(RGW_ATTR_COMPRESSION, std::move(tmp));
