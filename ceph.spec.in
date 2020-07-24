@@ -1657,7 +1657,6 @@ fi
 %{_datadir}/ceph/mgr/localpool
 %{_datadir}/ceph/mgr/orchestrator
 %{_datadir}/ceph/mgr/osd_perf_query
-%{_datadir}/ceph/mgr/osd_support
 %{_datadir}/ceph/mgr/pg_autoscaler
 %{_datadir}/ceph/mgr/progress
 %{_datadir}/ceph/mgr/prometheus
