@@ -122,9 +122,8 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> write_flush(bufferlist&& buf);
 
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
-  boost::container::static_vector<ceph::msgr::v2::segment_t,
-				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
-  ceph::msgr::v2::FrameAssembler tx_frame_asm;
+  ceph::msgr::v2::FrameAssembler tx_frame_asm{&session_stream_handlers, false};
+  ceph::msgr::v2::FrameAssembler rx_frame_asm{&session_stream_handlers, false};
   ceph::msgr::v2::segment_bls_t rx_segments_data;
 
   size_t get_current_msg_size() const;
