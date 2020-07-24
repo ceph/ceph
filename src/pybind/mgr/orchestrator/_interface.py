@@ -1017,6 +1017,12 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def stop_remove_osds(self, osd_ids: List[str]) -> Completion:
+        """
+        TODO
+        """
+        raise NotImplementedError()
+
     def remove_osds_status(self):
         # type: () -> Completion
         """
