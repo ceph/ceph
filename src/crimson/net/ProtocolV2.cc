@@ -294,13 +294,9 @@ seastar::future<> ProtocolV2::read_frame_payload()
       return read_exactly(onwire_len).then([this] (auto tmp_bl) {
         logger().trace("{} RECV({}) frame segment[{}]",
                        conn, tmp_bl.size(), rx_segments_data.size());
-        bufferlist data;
-        data.append(buffer::create(std::move(tmp_bl)));
-        if (session_stream_handlers.rx) {
-          // TODO
-          ceph_assert(false);
-        }
-        rx_segments_data.emplace_back(std::move(data));
+        bufferlist segment;
+        segment.append(buffer::create(std::move(tmp_bl)));
+        rx_segments_data.emplace_back(std::move(segment));
       });
     }
   ).then([this] {
