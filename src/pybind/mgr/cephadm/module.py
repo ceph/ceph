@@ -38,7 +38,7 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
     RbdMirrorService, CrashService, CephadmService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
-from .services.osd import RemoveUtil, OSDRemoval, OSDService
+from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from .schedule import HostAssignment, HostPlacementSpec
@@ -318,7 +318,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cache = HostCache(self)
         self.cache.load()
+
         self.rm_util = RemoveUtil(self)
+        self.to_remove_osds = OSDQueue()
+        self.rm_util.load_from_store()
 
         self.spec_store = SpecStore(self)
         self.spec_store.load()
@@ -495,7 +498,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 self._update_paused_health()
 
                 if not self.paused:
-                    self.rm_util._remove_osds_bg()
+                    self.rm_util.process_removal_queue()
 
                     self.migration.migrate()
                     if self.migration.is_migration_ongoing():
@@ -564,6 +567,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 monmap['modified'], CEPH_DATEFMT)
             if self.last_monmap and self.last_monmap > datetime.datetime.utcnow():
                 self.last_monmap = None  # just in case clocks are skewed
+            self.cache.distribute_new_etc_ceph_ceph_conf()
+        if notify_type == "pg_summary":
+            self._trigger_osd_removal()
+
+    def _trigger_osd_removal(self):
+        data = self.get("osd_stats")
+        for osd in data.get('osd_stats', []):
+            if osd.get('num_pgs') == 0:
+                # if _ANY_ osd that is currently in the queue appears to be empty,
+                # start the removal process
+                if int(osd.get('osd')) in self.to_remove_osds.as_osd_ids():
+                    self.log.debug(f"Found empty osd. Starting removal process")
+                    # if the osd that is now empty is also part of the removal queue
+                    # start the process
+                    self.rm_util.process_removal_queue()
 
     def pause(self):
         if not self.paused:
@@ -2461,31 +2479,53 @@ you may want to run:
         """
         Takes a list of OSDs and schedules them for removal.
         The function that takes care of the actual removal is
-        _remove_osds_bg().
+        process_removal_queue().
         """
 
-        daemons = self.cache.get_daemons_by_service('osd')
-        found: Set[OSDRemoval] = set()
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_service('osd')
+        to_remove_daemons = list()
         for daemon in daemons:
-            if daemon.daemon_id not in osd_ids:
-                continue
-            found.add(OSDRemoval(daemon.daemon_id, replace, force,
-                                 daemon.hostname, daemon.name(),
-                                 datetime.datetime.utcnow(), -1))
+            if daemon.daemon_id in osd_ids:
+                to_remove_daemons.append(daemon)
+        if not to_remove_daemons:
+            return f"Unable to find OSDs: {osd_ids}"
 
-        not_found = {osd_id for osd_id in osd_ids if osd_id not in [x.osd_id for x in found]}
-        if not_found:
-            raise OrchestratorError('Unable to find OSD: %s' % not_found)
-
-        self.rm_util.queue_osds_for_removal(found)
+        for daemon in to_remove_daemons:
+            try:
+                self.to_remove_osds.enqueue(OSD(osd_id=int(daemon.daemon_id),
+                                                replace=replace,
+                                                force=force,
+                                                hostname=daemon.hostname,
+                                                fullname=daemon.name(),
+                                                process_started_at=datetime.datetime.utcnow(),
+                                                remove_util=self.rm_util))
+            except NotFoundError:
+                return f"Unable to find OSDs: {osd_ids}"
 
         # trigger the serve loop to initiate the removal
         self._kick_serve_loop()
         return "Scheduled OSD(s) for removal"
 
     @trivial_completion
-    def remove_osds_status(self) -> Set[OSDRemoval]:
+    def stop_remove_osds(self, osd_ids: List[str]):
+        """
+        Stops a `removal` process for a List of OSDs.
+        This will revert their weight and remove it from the osds_to_remove queue
+        """
+        for osd_id in osd_ids:
+            try:
+                self.to_remove_osds.rm(OSD(osd_id=int(osd_id),
+                                           remove_util=self.rm_util))
+            except (NotFoundError, KeyError):
+                return f'Unable to find OSD in the queue: {osd_id}'
+
+        # trigger the serve loop to halt the removal
+        self._kick_serve_loop()
+        return "Stopped OSD(s) removal"
+
+    @trivial_completion
+    def remove_osds_status(self):
         """
         The CLI call to retrieve an osd removal report
         """
-        return self.rm_util.report
+        return self.to_remove_osds.all_osds()
