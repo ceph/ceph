@@ -32,6 +32,7 @@
 
 #include "os/Transaction.h"
 #include "osd/ClassHandler.h"
+#include "osd/OSDCap.h"
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
 
@@ -662,9 +663,29 @@ void OSD::ms_handle_remote_reset(crimson::net::ConnectionRef conn)
 }
 
 void OSD::handle_authentication(const EntityName& name,
-				const AuthCapsInfo& caps)
+				const AuthCapsInfo& caps_info)
 {
-  // todo
+  // TODO: store the parsed cap and associate it with the connection
+  if (caps_info.allow_all) {
+    logger().debug("{} {} has all caps", __func__, name);
+    return;
+  }
+  if (caps_info.caps.length() > 0) {
+    auto p = caps_info.caps.cbegin();
+    string str;
+    try {
+      decode(str, p);
+    } catch (ceph::buffer::error& e) {
+      logger().warn("{} {} failed to decode caps string", __func__, name);
+      return;
+    }
+    OSDCap caps;
+    if (caps.parse(str)) {
+      logger().debug("{} {} has caps {}", __func__, name, str);
+    } else {
+      logger().warn("{} {} failed to parse caps {}", __func__, name, str);
+    }
+  }
 }
 
 void OSD::update_stats()
