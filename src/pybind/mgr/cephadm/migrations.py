@@ -9,7 +9,7 @@ from orchestrator import OrchestratorError
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 1
+LAST_MIGRATION = 2
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,10 @@ class Migrations:
         if self.mgr.migration_current == 0:
             if self.migrate_0_1():
                 self.set(1)
+
+        if self.mgr.migration_current == 1:
+            if self.migrate_1_2():
+                self.set(2)
 
     def migrate_0_1(self) -> bool:
         """
@@ -124,5 +128,31 @@ class Migrations:
 
         for spec in specs:
             convert_to_explicit(spec)
+
+        return True
+
+    def migrate_1_2(self) -> bool:
+        """
+        After 15.2.4, we unified some service IDs: MONs, MGRs etc no longer have a service id.
+        Which means, the service names changed:
+
+        mon.foo -> mon
+        mgr.foo -> mgr
+
+        This fixes the data structure consistency
+        """
+        bad_specs = {}
+        for name, spec in self.mgr.spec_store.specs.items():
+            if name != spec.service_name():
+                bad_specs[name] = (spec.service_name(), spec)
+
+        for old, (new, old_spec) in bad_specs.items():
+            if new not in self.mgr.spec_store.specs:
+                spec = old_spec
+            else:
+                spec = self.mgr.spec_store.specs[new]
+            spec.unmanaged = True
+            self.mgr.spec_store.save(spec)
+            self.mgr.spec_store.rm(old)
 
         return True
