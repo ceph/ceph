@@ -202,6 +202,8 @@ class ProtocolV2 final : public Protocol {
                          uint64_t new_client_cookie,
                          entity_name_t new_peer_name,
                          uint64_t new_conn_features,
+                         bool tx_is_rev1,
+                         bool rx_is_rev1,
                          // reconnect
                          uint64_t new_connect_seq,
                          uint64_t new_msg_seq);

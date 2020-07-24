@@ -1065,6 +1065,8 @@ ProtocolV2::reuse_connection(
                                     client_cookie,
                                     conn.get_peer_name(),
                                     connection_features,
+                                    tx_frame_asm.get_is_rev1(),
+                                    rx_frame_asm.get_is_rev1(),
                                     conn_seq,
                                     msg_seq);
 #ifdef UNIT_TESTS_BUILT
@@ -1684,6 +1686,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_client_cookie,
                                    entity_name_t new_peer_name,
                                    uint64_t new_conn_features,
+                                   bool tx_is_rev1,
+                                   bool rx_is_rev1,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
@@ -1700,6 +1704,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_socket = std::move(new_socket),
                   new_auth_meta = std::move(new_auth_meta),
                   new_rxtx = std::move(new_rxtx),
+                  tx_is_rev1, rx_is_rev1,
                   new_client_cookie, new_peer_name,
                   new_conn_features, new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
@@ -1714,6 +1719,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
              new_socket = std::move(new_socket),
              new_auth_meta = std::move(new_auth_meta),
              new_rxtx = std::move(new_rxtx),
+             tx_is_rev1, rx_is_rev1,
              new_client_cookie, new_peer_name,
              new_conn_features, new_peer_global_seq,
              new_connect_seq, new_msg_seq] () mutable {
@@ -1749,6 +1755,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
           conn.set_peer_id(new_peer_name.num());
         }
         connection_features = new_conn_features;
+        tx_frame_asm.set_is_rev1(tx_is_rev1);
+        rx_frame_asm.set_is_rev1(rx_is_rev1);
         return send_server_ident();
       }
     }).then([this, reconnect] {
