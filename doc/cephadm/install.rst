@@ -59,6 +59,7 @@ There are a few ways to install cephadm:
     # zypper install -y cephadm
 
 
+.. _cluster_bootstrap: 
 
 Bootstrap a new cluster
 =======================

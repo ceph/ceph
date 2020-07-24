@@ -5,6 +5,10 @@
 Ceph uniquely delivers **object, block, and file storage in one unified
 system**.
 
++----------------------------------+-------------------------------------+
+|`Octopus Getting Started`_        |              :ref:`dev_index`       |
++----------------------------------+-------------------------------------+
+
 .. raw:: html
 
 	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
@@ -86,6 +90,8 @@ about Ceph, see our `Architecture`_ section.
 .. _Ceph File System: cephfs
 .. _Getting Started: install
 .. _Architecture: architecture
+.. _Octopus Getting Started: cephadm/octopus_gsg
+.. _Developer Guide: dev_index
 
 .. toctree::
    :maxdepth: 3
