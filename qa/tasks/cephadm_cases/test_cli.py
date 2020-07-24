@@ -12,6 +12,9 @@ class TestCephadmCLI(MgrTestCase):
     def _orch_cmd(self, *args):
         return self._cmd("orch", *args)
 
+    def _cephadm_cmd(self, *args):
+        return self._cmd("cephadm", *args)
+
     def setUp(self):
         super(TestCephadmCLI, self).setUp()
 
@@ -43,3 +46,6 @@ class TestCephadmCLI(MgrTestCase):
         self.wait_for_health('CEPHADM_PAUSED', 30)
         self._orch_cmd('resume')
         self.wait_for_health_clear(30)
+
+    def test_query_latest_version(self):
+        self._cephadm_cmd('upgrade', 'query-latest-version')

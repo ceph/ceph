@@ -23,6 +23,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
+from cephadm.registry import get_latest_container_image_tag
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult
@@ -2352,6 +2353,12 @@ you may want to run:
     @trivial_completion
     def upgrade_stop(self):
         return self.upgrade.upgrade_stop()
+
+    @orchestrator._cli_read_command(
+        'cephadm upgrade query-latest-version',
+        desc='Query the container registry for the latest minor release available')
+    def query_latest_version(self):
+        return HandleCommandResult(stdout=get_latest_container_image_tag(self))
 
     @trivial_completion
     def remove_osds(self, osd_ids: List[str],
