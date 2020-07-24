@@ -441,11 +441,6 @@ static ceph::spinlock debug_lock;
     return *this;
   }
 
-  ceph::unique_leakable_ptr<buffer::raw> buffer::ptr::clone()
-  {
-    return _raw->clone();
-  }
-
   void buffer::ptr::swap(ptr& other) noexcept
   {
     raw *r = _raw;
