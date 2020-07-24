@@ -44,6 +44,15 @@ Since we want to have more complex setups, there are more filters than just the 
 Filters
 =======
 
+.. note::
+   Filters are applied using a `AND` gate by default. This essentially means that a drive needs to fulfill all filter
+   criteria in order to get selected.
+   If you wish to change this behavior you can adjust this behavior by setting
+
+    `filter_logic: OR`  # valid arguments are `AND`, `OR`
+
+   in the OSD Specification.
+
 You can assign disks to certain groups by their attributes using filters.
 
 The attributes are based off of ceph-volume's disk query. You can retrieve the information

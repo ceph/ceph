@@ -310,7 +310,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             out = []
 
             table = PrettyTable(
-                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE', 'AVAIL',
+                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE_ID', 'MODEL', 'VENDOR', 'ROTATIONAL', 'AVAIL',
                  'REJECT REASONS'],
                 border=False)
             table.align = 'l'
@@ -326,6 +326,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                             d.human_readable_type,
                             format_bytes(d.sys_api.get('size', 0), 5),
                             d.device_id,
+                            d.sys_api.get('model') or 'n/a',
+                            d.sys_api.get('vendor') or 'n/a',
+                            d.sys_api.get('rotational') or 'n/a',
                             d.available,
                             ', '.join(d.rejected_reasons)
                         )
@@ -1278,14 +1281,14 @@ Usage:
             raise_if_exception(e1)
             assert False
         except ZeroDivisionError as e:
-            assert e.args == ('hello', 'world')
+            assert e.args == ('hello, world',)
 
         e2 = self.remote('selftest', 'remote_from_orchestrator_cli_self_test', "OrchestratorError")
         try:
             raise_if_exception(e2)
             assert False
         except OrchestratorError as e:
-            assert e.args == ('hello', 'world')
+            assert e.args == ('hello, world',)
 
         c = TrivialReadCompletion(result=True)
         assert c.has_result

@@ -12,15 +12,21 @@ from orchestrator import DaemonDescription
 import cephadm
 from .. import utils
 
-from .cephadmservice import CephadmService
+from .cephadmservice import CephadmService, CephadmDaemonSpec
+
 logger = logging.getLogger(__name__)
 
 
 class NFSService(CephadmService):
     TYPE = 'nfs'
 
-    def _generate_nfs_config(self, daemon_type, daemon_id, host):
-        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+
+        daemon_type = daemon_spec.daemon_type
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+
         deps = []  # type: List[str]
 
         # find the matching NFSServiceSpec
@@ -62,16 +68,25 @@ class NFSService(CephadmService):
 
         return cephadm_config, deps
 
-    def config(self, spec):
+    def config(self, spec: NFSServiceSpec) -> None:
+        assert self.TYPE == spec.service_type
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
+
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_id, host, spec):
+    def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
+
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+        spec = daemon_spec.spec
+
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
-        return self.mgr._create_daemon('nfs', daemon_id, host)
+        return self.mgr._create_daemon(daemon_spec)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         
@@ -111,20 +126,16 @@ class NFSGanesha(object):
         self.daemon_id = daemon_id
         self.spec = spec
 
-    def get_daemon_name(self):
-        # type: () -> str
+    def get_daemon_name(self) -> str:
         return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
-    def get_rados_user(self):
-        # type: () -> str
+    def get_rados_user(self) -> str:
         return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
-    def get_keyring_entity(self):
-        # type: () -> str
+    def get_keyring_entity(self) -> str:
         return utils.name_to_config_section(self.get_rados_user())
 
-    def get_or_create_keyring(self, entity=None):
-        # type: (Optional[str]) -> str
+    def get_or_create_keyring(self, entity: Optional[str] = None) -> str:
         if not entity:
             entity = self.get_keyring_entity()
 
@@ -140,8 +151,7 @@ class NFSGanesha(object):
                             % (entity, ret, err))
         return keyring
 
-    def update_keyring_caps(self, entity=None):
-        # type: (Optional[str]) -> None
+    def update_keyring_caps(self, entity: Optional[str] = None) -> None:
         if not entity:
             entity = self.get_keyring_entity()
 
@@ -162,8 +172,7 @@ class NFSGanesha(object):
                     'Unable to update keyring caps %s: %s %s' \
                             % (entity, ret, err))
 
-    def create_rados_config_obj(self, clobber=False):
-        # type: (Optional[bool]) -> None
+    def create_rados_config_obj(self, clobber: Optional[bool] = False) -> None:
         obj = self.spec.rados_config_name()
 
         with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
@@ -184,8 +193,7 @@ class NFSGanesha(object):
                 logger.info('Creating rados config object: %s' % obj)
                 ioctx.write_full(obj, ''.encode('utf-8'))
 
-    def get_ganesha_conf(self):
-        # type: () -> str
+    def get_ganesha_conf(self) -> str:
         context = dict(user=self.get_rados_user(),
                        nodeid=self.get_daemon_name(),
                        pool=self.spec.pool,
@@ -193,8 +201,7 @@ class NFSGanesha(object):
                        url=self.spec.rados_config_location())
         return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
-    def get_cephadm_config(self):
-        # type: () -> Dict
+    def get_cephadm_config(self) -> Dict[str, Any]:
         config = {'pool' : self.spec.pool} # type: Dict
         if self.spec.namespace:
             config['namespace'] = self.spec.namespace

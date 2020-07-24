@@ -23,8 +23,7 @@ from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, mon_command, match_glob, with_host
-from cephadm.module import CephadmOrchestrator
-
+from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
 
 """
 TODOs:
@@ -93,12 +92,13 @@ class TestCephadm(object):
 
             c = cephadm_module.list_daemons()
 
-            def remove_id(dd):
+            def remove_id_events(dd):
                 out = dd.to_json()
                 del out['daemon_id']
+                del out['events']
                 return out
 
-            assert [remove_id(dd) for dd in wait(cephadm_module, c)] == [
+            assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
                 {
                     'daemon_type': 'mds',
                     'hostname': 'test',
@@ -134,9 +134,12 @@ class TestCephadm(object):
                     'service_id': 'r.z',
                     'service_name': 'rgw.r.z',
                     'service_type': 'rgw',
-                    'status': {'running': 0, 'size': 1}
+                    'status': {'running': 0, 'size': 1},
                 }
             ]
+            for o in out:
+                if 'events' in o:
+                    del o['events']  # delete it, as it contains a timestamp
             assert out == expected
             assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
 
@@ -161,7 +164,9 @@ class TestCephadm(object):
             )
         ])
     ))
-    def test_daemon_action(self, cephadm_module):
+    #@mock.patch("mgr_module.MgrModule._ceph_get")
+    @mock.patch("ceph_module.BaseMgrModule._ceph_get")
+    def test_daemon_action(self, _ceph_get, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
@@ -172,6 +177,11 @@ class TestCephadm(object):
             for what in ('start', 'stop', 'restart'):
                 c = cephadm_module.daemon_action(what, 'rgw', 'myrgw.foobar')
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
+
+            now = datetime.datetime.utcnow().strftime(CEPH_DATEFMT)
+            _ceph_get.return_value = {'modified': now}
+
+            cephadm_module._check_daemons()
 
             assert_rm_daemon(cephadm_module, 'rgw.myrgw.foobar', 'test')
 
@@ -579,7 +589,7 @@ class TestCephadm(object):
             _get_connection.side_effect = HostNotFound
             code, out, err = cephadm_module.check_host('test')
             assert out == ''
-            assert 'Failed to connect to test (test)' in err
+            assert "Host 'test' not found" in err
 
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test', status='Offline').to_json()
