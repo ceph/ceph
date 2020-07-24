@@ -482,6 +482,9 @@ ProtocolV2::banner_exchange(bool is_connect)
       if (this->peer_required_features == 0) {
         this->connection_features = msgr2_required;
       }
+      const bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+      tx_frame_asm.set_is_rev1(is_rev1);
+      rx_frame_asm.set_is_rev1(is_rev1);
 
       auto hello = HelloFrame::Encode(messenger.get_mytype(),
                                       conn.target_addr);
