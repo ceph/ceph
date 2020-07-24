@@ -163,7 +163,9 @@ struct rgw_data_sync_marker {
   };
   uint16_t state;
   std::string marker;
+  std::string sip_name;
   std::string next_step_marker;
+  std::string next_sip_name;
   uint64_t total_entries;
   uint64_t pos;
   real_time timestamp;
@@ -171,25 +173,31 @@ struct rgw_data_sync_marker {
   rgw_data_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(state, bl);
     encode(marker, bl);
     encode(next_step_marker, bl);
     encode(total_entries, bl);
     encode(pos, bl);
     encode(timestamp, bl);
+    encode(sip_name, bl);
+    encode(next_sip_name, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(state, bl);
     decode(marker, bl);
     decode(next_step_marker, bl);
     decode(total_entries, bl);
     decode(pos, bl);
     decode(timestamp, bl);
-     DECODE_FINISH(bl);
+    if (struct_v >= 2) {
+      decode(sip_name, bl);
+      decode(next_sip_name, bl);
+    }
+    DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
@@ -207,7 +215,9 @@ struct rgw_data_sync_marker {
     }
     encode_json("status", s, f);
     encode_json("marker", marker, f);
+    encode_json("sip_name", sip_name, f);
     encode_json("next_step_marker", next_step_marker, f);
+    encode_json("next_sip_name", next_sip_name, f);
     encode_json("total_entries", total_entries, f);
     encode_json("pos", pos, f);
     encode_json("timestamp", utime_t(timestamp), f);
