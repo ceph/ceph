@@ -4871,19 +4871,19 @@ void RGWDeleteObj::execute()
       ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
     }
     populate_metadata_in_request(s, attrs.attrs);
-  } else {
-    op_ret = -EINVAL;
-  }
-
-  s->object->set_obj_size(s->obj_size);
-  const auto ret = rgw::notify::publish(s, s->object.get(), ceph::real_clock::now(), attrs.attrs[RGW_ATTR_ETAG].to_str(),
+    const auto obj_state = obj_ctx->get_state(s->object->get_obj());
+    s->object->set_obj_size(obj_state->size);
+    const auto ret = rgw::notify::publish(s, s->object.get(), ceph::real_clock::now(), attrs.attrs[RGW_ATTR_ETAG].to_str(),
           delete_marker && s->object->get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
           store);
-  if (ret < 0) {
-    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
-	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
-	// this should be global conf (probably returnign a different handler)
-    // so we don't need to read the configured values before we perform it
+    if (ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	    // TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	    // this should be global conf (probably returnign a different handler)
+      // so we don't need to read the configured values before we perform it
+    }
+  } else {
+    op_ret = -EINVAL;
   }
 }
 
@@ -6557,7 +6557,7 @@ void RGWDeleteMultiObj::execute()
     obj.set_obj_size(obj_state->size);
 
     const auto ret = rgw::notify::publish(s, &obj, ceph::real_clock::now(), etag,
-            del_op.result.delete_marker && s->object->get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+            del_op.result.delete_marker && obj.get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
             store);
     if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
