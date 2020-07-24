@@ -133,7 +133,7 @@ describe('RbdListComponent', () => {
           }
         ]
       });
-      expect(component.getDeleteDisableDesc()).toBe(
+      expect(component.getDeleteDisableDesc(component.selection)).toBe(
         'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
       );
     });

@@ -194,8 +194,7 @@ describe('IscsiTargetListComponent', () => {
             id: '-1'
           }
         ];
-        expect(action.disable(undefined)).toBeTruthy();
-        expect(action.disableDesc(undefined)).toBe('Unavailable gateway(s)');
+        expect(action.disable(undefined)).toBe('Unavailable gateway(s)');
       });
 
       it('should be enabled if active sessions', () => {
@@ -208,7 +207,6 @@ describe('IscsiTargetListComponent', () => {
           }
         ];
         expect(action.disable(undefined)).toBeFalsy();
-        expect(action.disableDesc(undefined)).toBeUndefined();
       });
 
       it('should be enabled if no active sessions', () => {
@@ -221,7 +219,6 @@ describe('IscsiTargetListComponent', () => {
           }
         ];
         expect(action.disable(undefined)).toBeFalsy();
-        expect(action.disableDesc(undefined)).toBeUndefined();
       });
     });
 
@@ -236,8 +233,7 @@ describe('IscsiTargetListComponent', () => {
             id: '-1'
           }
         ];
-        expect(action.disable(undefined)).toBeTruthy();
-        expect(action.disableDesc(undefined)).toBe('Unavailable gateway(s)');
+        expect(action.disable(undefined)).toBe('Unavailable gateway(s)');
       });
 
       it('should be disabled if active sessions', () => {
@@ -249,8 +245,7 @@ describe('IscsiTargetListComponent', () => {
             }
           }
         ];
-        expect(action.disable(undefined)).toBeTruthy();
-        expect(action.disableDesc(undefined)).toBe('Target has active sessions');
+        expect(action.disable(undefined)).toBe('Target has active sessions');
       });
 
       it('should be enabled if no active sessions', () => {
@@ -263,7 +258,6 @@ describe('IscsiTargetListComponent', () => {
           }
         ];
         expect(action.disable(undefined)).toBeFalsy();
-        expect(action.disableDesc(undefined)).toBeUndefined();
       });
     });
   });

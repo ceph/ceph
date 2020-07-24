@@ -138,11 +138,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       icon: Icons.destroy,
       click: () => this.deleteRbdModal(),
       name: this.actionLabels.DELETE,
-      disable: (selection: CdTableSelection) =>
-        !this.selection.first() ||
-        !this.selection.hasSingleSelection ||
-        this.hasClonedSnapshots(selection.first()),
-      disableDesc: () => this.getDeleteDisableDesc()
+      disable: (selection: CdTableSelection) => this.getDeleteDisableDesc(selection)
     };
     const copyAction: CdTableAction = {
       permission: 'create',
@@ -439,12 +435,17 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     }, []);
   }
 
-  getDeleteDisableDesc(): string {
-    const first = this.selection.first();
+  getDeleteDisableDesc(selection: CdTableSelection): string | boolean {
+    const first = selection.first();
+
     if (first && this.hasClonedSnapshots(first)) {
       return $localize`This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.`;
     }
 
-    return '';
+    return (
+      !selection.first() ||
+      !selection.hasSingleSelection ||
+      this.hasClonedSnapshots(selection.first())
+    );
   }
 }
