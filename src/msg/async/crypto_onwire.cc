@@ -162,7 +162,6 @@ ceph::bufferlist AES128GCM_OnWireTxHandler::authenticated_encrypt_final()
 
 // RX PART
 class AES128GCM_OnWireRxHandler : public ceph::crypto::onwire::RxHandler {
-  CephContext* const cct;
   std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)> ectx;
   nonce_t nonce;
   bool new_nonce_format;  // 64-bit counter?
@@ -173,8 +172,7 @@ public:
 			    const key_t& key,
 			    const nonce_t& nonce,
 			    bool new_nonce_format)
-    : cct(cct),
-      ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
+    : ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
       nonce(nonce), new_nonce_format(new_nonce_format) {
     ceph_assert_always(ectx);
     ceph_assert_always(key.size() * CHAR_BIT == 128);
