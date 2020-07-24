@@ -568,7 +568,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 monmap['modified'], CEPH_DATEFMT)
             if self.last_monmap and self.last_monmap > datetime.datetime.utcnow():
                 self.last_monmap = None  # just in case clocks are skewed
-            self.cache.distribute_new_etc_ceph_ceph_conf()
         if notify_type == "pg_summary":
             self._trigger_osd_removal()
 
