@@ -359,7 +359,7 @@ static ceph::spinlock debug_lock;
   buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
     : _raw(r.release()),
       _off(0),
-      _len(_raw->len)
+      _len(_raw->get_len())
   {
     _raw->nref.store(1, std::memory_order_release);
     bdout << "ptr " << this << " get " << _raw << bendl;
@@ -474,7 +474,7 @@ static ceph::spinlock debug_lock;
         (1 == cached_raw->nref.load(std::memory_order_acquire));
       if (likely(last_one) || --cached_raw->nref == 0) {
 	bdout << "deleting raw " << static_cast<void*>(cached_raw)
-	      << " len " << cached_raw->len << bendl;
+	      << " len " << cached_raw->get_len() << bendl;
 	ANNOTATE_HAPPENS_AFTER(&cached_raw->nref);
 	ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&cached_raw->nref);
 	delete cached_raw;  // dealloc old (if any)
@@ -521,10 +521,7 @@ static ceph::spinlock debug_lock;
 
   unsigned buffer::ptr::unused_tail_length() const
   {
-    if (_raw)
-      return _raw->len - (_off+_len);
-    else
-      return 0;
+    return _raw ? _raw->get_len() - (_off + _len) : 0;
   }
   const char& buffer::ptr::operator[](unsigned n) const
   {
@@ -540,7 +537,7 @@ static ceph::spinlock debug_lock;
   }
 
   const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->get_data(); }
-  unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->len; }
+  unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->get_len(); }
   int buffer::ptr::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
 
   void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
@@ -553,7 +550,7 @@ static ceph::spinlock debug_lock;
 
   unsigned buffer::ptr::wasted() const
   {
-    return _raw->len - _len;
+    return _raw->get_len() - _len;
   }
 
   int buffer::ptr::cmp(const ptr& o) const
@@ -1156,7 +1153,7 @@ static ceph::spinlock debug_lock;
       if (r == last)
 	continue;
       last = r;
-      total += r->len;
+      total += r->get_len();
     }
     // If multiple buffers are sharing the same raw buffer and they overlap
     // with each other, the wasted space will be underestimated.
@@ -2179,7 +2176,9 @@ buffer::ptr_node* buffer::ptr_node::cloner::operator()(
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.get_data() << " len " << r.len << " nref " << r.nref.load() << ")";
+  return out << "buffer::raw("
+             << (void*)r.get_data() << " len " << r.get_len()
+             << " nref " << r.nref.load() << ")";
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
