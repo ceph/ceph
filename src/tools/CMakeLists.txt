@@ -141,6 +141,8 @@ if(WITH_RBD)
   endif()
 endif(WITH_RBD)
 
+add_subdirectory(cephfs_mirror)
+
 if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
