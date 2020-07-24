@@ -250,7 +250,6 @@ struct error_code;
 
     bool have_raw() const { return _raw ? true:false; }
 
-    ceph::unique_leakable_ptr<raw> clone();
     void swap(ptr& other) noexcept;
 
     iterator begin(size_t offset=0) {
