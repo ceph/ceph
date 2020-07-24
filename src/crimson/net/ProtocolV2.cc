@@ -300,7 +300,6 @@ seastar::future<> ProtocolV2::read_frame_payload()
       });
     }
   ).then([this] {
-    ceph_assert(!session_stream_handlers.rx);
     return read_exactly(rx_frame_asm.get_epilogue_onwire_len());
   }).then([this] (auto bl) {
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
@@ -572,9 +571,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
             abort_in_fault();
           }
           auth_meta->con_mode = auth_done.con_mode();
-          // TODO
-          ceph_assert(!auth_meta->is_mode_secure());
-          session_stream_handlers = { nullptr, nullptr };
+          session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
+              nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), false);
           return finish_auth();
         });
       default: {
@@ -970,9 +968,8 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
                    ceph_con_mode_name(auth_meta->con_mode), reply.length());
     return write_frame(auth_done).then([this] {
       ceph_assert(auth_meta);
-      // TODO
-      ceph_assert(!auth_meta->is_mode_secure());
-      session_stream_handlers = { nullptr, nullptr };
+      session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
+          nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), true);
       return finish_auth();
     });
    }
