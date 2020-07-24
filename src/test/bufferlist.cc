@@ -68,8 +68,7 @@ TEST(Buffer, constructors) {
     bufferptr ptr(buffer::claim_char(len, str));
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
-    bufferptr clone = ptr.clone();
-    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    EXPECT_EQ(0, ::memcmp(str, ptr.c_str(), len));
     delete [] str;
   }
   //
@@ -100,8 +99,7 @@ TEST(Buffer, constructors) {
     bufferptr ptr(buffer::claim_malloc(len, str));
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
-    bufferptr clone = ptr.clone();
-    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    EXPECT_EQ(0, ::memcmp(str, ptr.c_str(), len));
   }
   //
   // buffer::copy
@@ -123,8 +121,6 @@ TEST(Buffer, constructors) {
 #ifndef DARWIN
     ASSERT_TRUE(ptr.is_page_aligned());
 #endif // DARWIN 
-    bufferptr clone = ptr.clone();
-    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
   }
 }
 
@@ -331,14 +327,6 @@ TEST(BufferPtr, assignment) {
     ASSERT_EQ(original.offset(), ptr.offset());
     ASSERT_EQ(original.length(), ptr.length());
   }
-}
-
-TEST(BufferPtr, clone) {
-  unsigned len = 17;
-  bufferptr ptr(len);
-  ::memset(ptr.c_str(), 'X', len);
-  bufferptr clone = ptr.clone();
-  EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
 }
 
 TEST(BufferPtr, swap) {
