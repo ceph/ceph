@@ -20,15 +20,7 @@ CURRENT_PATH=`pwd`
 # for rocksdb
 case $(distro_id) in
 	ubuntu|debian|devuan)
-		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev
-        case $(distro_version) in
-            *Xenial*)
-                install_cmake3_on_xenial
-                ;;
-            *)
-                install cmake
-                ;;
-        esac
+		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
 		;;
 	centos|fedora|rhel)
 		install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64
