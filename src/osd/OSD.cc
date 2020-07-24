@@ -9870,6 +9870,12 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
     service.poolctx.stop();
     service.poolctx.start(conf.get_val<std::uint64_t>("osd_asio_thread_count"));
   }
+  if (changed.count("osd_op_thread_timeout")) {
+    op_shardedwq.set_timeout(cct->_conf->osd_op_thread_timeout);
+  }
+  if (changed.count("osd_op_thread_suicide_timeout")) {
+    op_shardedwq.set_suicide_timeout(cct->_conf->osd_op_thread_suicide_timeout);
+  }
 }
 
 void OSD::update_log_config()

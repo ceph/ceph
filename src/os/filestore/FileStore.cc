@@ -6158,6 +6158,12 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
       dump_stop();
     }
   }
+  if (changed.count("filestore_op_thread_timeout")) {
+    op_wq.set_timeout(conf->osd_op_thread_timeout);
+  }
+  if (changed.count("filestore_op_thread_suicide_timeout")) {
+    op_wq.set_suicide_timeout(conf->osd_op_thread_suicide_timeout);
+  }
 }
 
 int FileStore::set_throttle_params()
