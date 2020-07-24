@@ -259,12 +259,12 @@ size_t ProtocolV2::get_current_msg_size() const
 
 seastar::future<Tag> ProtocolV2::read_main_preamble()
 {
-  return read_exactly(sizeof(preamble_block_t))
+  rx_preamble.clear();
+  return read_exactly(rx_frame_asm.get_preamble_onwire_len())
     .then([this] (auto bl) {
       rx_segments_data.clear();
       try {
-        bufferlist preamble;
-        preamble.append(buffer::create(std::move(bl)));
+        rx_preamble.append(buffer::create(std::move(bl)));
         const Tag tag = rx_frame_asm.disassemble_preamble(rx_preamble);
         INTERCEPT_FRAME(tag, bp_type_t::READ);
         return tag;
@@ -306,7 +306,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
     bool ok = false;
     try {
-      // TODO: v2.1 rx_frame_asm.disassemble_first_segment();
+      rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
       bufferlist rx_epilogue;
       rx_epilogue.append(buffer::create(std::move(bl)));
       ok = rx_frame_asm.disassemble_remaining_segments(rx_segments_data.data(), rx_epilogue);
