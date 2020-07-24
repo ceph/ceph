@@ -221,7 +221,7 @@ which automates the process and takes away most of the guesswork.
 The ceph-backport.sh script
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Similar to the case of creating the `Backport tracker issues`_, staging the actual
+Similar to the case of `creating backport tracker issues`_, staging the actual
 backport PR and updating the Backport tracker issue is difficult - if not
 impossible - to get right if you're doing it manually, and quickly becomes
 tedious if you do it more than once in a long while.
@@ -234,13 +234,19 @@ the backport branch with the cherry-picks in it.
 
 The script is located at ``src/script/ceph-backport.sh`` in the ``master``
 branch. Though there might be an older version of this script in a stable
-branch, do not use it. Only use the most recent version from master.
+branch, do not use it. Only use the most recent version from the master branch.
+To do this from anywhere and from any branch use the following
+alias that will use the most recent script in ``upstream/master`` of your
+local ceph clone on every call::
 
-This is just a bash script, so the only dependency is ``bash`` itself, but it
-does need to be run in the top level of a local clone of ``ceph/ceph.git``.
-A small up-front time investment is required to get the script working in your
-environment. This is because the script needs to autenticate itself (i.e., as
-you) in order to use the GitHub and Redmine REST API services.
+    alias ceph-backport="bash <(git --git-dir=$pathToCephClone/.git --no-pager show upstream/master:src/script/ceph-backport.sh)"
+
+``ceph-backport.sh`` is just a bash script, so the only dependency is ``bash``
+itself, but it does need to be run in the top level of a local clone of
+``ceph/ceph.git``. A small up-front time investment is required to get the
+script working in your environment. This is because the script needs to
+authenticate itself (i.e., as you) in order to use the GitHub and Redmine REST
+API services.
 
 The script is self-documenting. Just run the script and proceed from there.
 
@@ -276,6 +282,23 @@ branch naming convention for all your backporting work.) Then, run the script::
 
 The script will see that the backport branch already exists, and use it.
 
+Once the script hits the first cherry-pick conflict, it will no longer provide
+any cherry-picking assistance, so in that case it's up to you to resolve the conflict(s)
+(as described in `Conflict resolution`_) and finish cherry-picking
+all of the remaining commits. Once you are satisfied that the backport is complete in
+your local branch, `ceph-backport.sh` can finish the job of creating the pull request
+and updating the backport tracker issue. To make that happen, just re-run the script
+exactly as you did before::
+
+    ceph-backport.sh $BACKPORT_TRACKER_ID
+
+The script will detect that it is running from a branch with the same name as the one it
+would normally create on the first run and continues after the cherry-picking phase.
+
+For a quick reference on CLI, that contains above information, you can run::
+
+    ceph-backport.sh --usage
+
 Conflict resolution
 ^^^^^^^^^^^^^^^^^^^
 
@@ -291,7 +314,7 @@ Git will present a draft commit message with a "Conflicts" section.
 Unfortunately, in recent versions of git, the Conflicts section is commented
 out. Since the Conflicts section is mandatory for Ceph backports that do not
 apply cleanly, you will need to uncomment the entire "Conflicts" section
-of the commit message before committing the cherry-pick. You can also 
+of the commit message before committing the cherry-pick. You can also
 include commentary on what the conflicts were and how you resolved
 them. For example::
 
@@ -306,11 +329,11 @@ following that line. Here is an example::
     osd: check batlo before setting blatz
 
     Setting blatz requires special precautions. Check batlo first.
-    
+
     Fixes: https://tracker.ceph.com/issues/99999
     Signed-off-by: Random J Developer <random@developer.example.com>
     (cherry picked from commit 01d73020da12f40ccd95ea1e49cfcf663f1a3a75)
-    
+
     Conflicts:
     	src/osd/batlo.cc
     - add_batlo_check has an extra arg in newer code
@@ -326,6 +349,8 @@ editing. If you need to add additional information to the cherry-pick commit
 message, append that information below this line. Once again: do not modify the
 original commit message.
 
+If you use `ceph-backport.sh` for your backport creation (which is recommended),
+read up at the end of `The ceph-backport.sh script`_ on how to continue from here.
 
 Labelling of backport PRs
 -------------------------
