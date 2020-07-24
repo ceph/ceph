@@ -1038,7 +1038,7 @@ public:
     utime_t sleep_start;
 
     // flags to indicate explicitly requested scrubs (by admin)
-    bool must_scrub, must_deep_scrub, must_repair, need_auto;
+    bool must_scrub, must_deep_scrub, must_repair, need_auto, req_scrub;
 
     // Priority to use for scrub scheduling
     unsigned priority = 0;
@@ -1163,6 +1163,7 @@ public:
       must_deep_scrub = false;
       must_repair = false;
       need_auto = false;
+      req_scrub = false;
       time_for_deep = false;
       auto_repair = false;
       check_repair = false;
@@ -1199,6 +1200,7 @@ public:
 
 protected:
   bool scrub_after_recovery;
+  bool save_req_scrub; // Saved for scrub_after_recovery
 
   int active_pushes;
 
@@ -1218,6 +1220,7 @@ protected:
     const std::list<std::pair<ScrubMap::object, pg_shard_t> > &ok_peers,
     const std::set<pg_shard_t> &bad_peers);
 
+  void abort_scrub();
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   /**
