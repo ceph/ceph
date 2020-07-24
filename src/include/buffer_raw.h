@@ -34,8 +34,8 @@ inline namespace v15_2_0 {
 			 alignof(ptr_node)>::type bptr_storage;
   protected:
     char *data;
-  public:
     unsigned len;
+  public:
     ceph::atomic<unsigned> nref { 0 };
     int mempool;
 
@@ -88,6 +88,9 @@ private:
 public:
     char *get_data() const {
       return data;
+    }
+    unsigned get_len() const {
+      return len;
     }
     virtual raw* clone_empty() = 0;
     ceph::unique_leakable_ptr<raw> clone() {
