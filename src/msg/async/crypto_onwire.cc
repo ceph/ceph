@@ -68,8 +68,8 @@ public:
   }
 
   ~AES128GCM_OnWireTxHandler() override {
-    ::ceph::crypto::zeroize_for_security(&nonce, sizeof(nonce));
-    ::ceph::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
+    ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
+    ::TOPNSPC::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
   }
 
   void reset_tx_handler(const uint32_t* first, const uint32_t* last) override;
@@ -189,7 +189,7 @@ public:
   }
 
   ~AES128GCM_OnWireRxHandler() override {
-    ::ceph::crypto::zeroize_for_security(&nonce, sizeof(nonce));
+    ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
   }
 
   std::uint32_t get_extra_size_at_final() override {
