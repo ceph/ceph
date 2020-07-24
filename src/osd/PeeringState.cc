@@ -3276,7 +3276,8 @@ void PeeringState::update_calc_stats()
       // Primary should not be in the peer_info, skip if it is.
       if (peer.first == pg_whoami) continue;
       int64_t missing = 0;
-      int64_t peer_num_objects = peer.second.stats.stats.sum.num_objects;
+      int64_t peer_num_objects =
+        std::max((int64_t)0, peer.second.stats.stats.sum.num_objects);
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
       if (is_backfill_target(peer.first)) {
