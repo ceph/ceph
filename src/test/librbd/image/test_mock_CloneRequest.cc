@@ -291,9 +291,6 @@ public:
       .WillOnce(WithArg<1>(Invoke([this, r](Context* ctx) {
                              image_ctx->op_work_queue->queue(ctx, r);
                            })));
-    if (r < 0) {
-      EXPECT_CALL(mock_image_ctx, destroy());
-    }
   }
 
   void expect_attach_parent(MockAttachParentRequest& mock_request, int r) {
@@ -352,7 +349,6 @@ public:
       .WillOnce(Invoke([this, r](Context* ctx) {
                   image_ctx->op_work_queue->queue(ctx, r);
                 }));
-    EXPECT_CALL(mock_image_ctx, destroy());
   }
 
   void expect_remove(MockRemoveRequest& mock_remove_request, int r) {

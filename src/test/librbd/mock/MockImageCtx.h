@@ -40,7 +40,6 @@ struct MockImageCtx {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }
-  MOCK_METHOD0(destroy, void());
 
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),

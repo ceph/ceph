@@ -122,7 +122,6 @@ struct TestMockTrashRemoveRequest : public TestMockFixture {
       .WillOnce(Invoke([r](Context *on_finish) {
                   on_finish->complete(r);
                 }));
-    EXPECT_CALL(mock_image_ctx, destroy());
   }
 
   void expect_remove_image(MockImageRemoveRequest& mock_image_remove_request,
