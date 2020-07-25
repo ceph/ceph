@@ -6,8 +6,8 @@
 #include "common/Clock.h"
 #include "common/RWLock.h"
 #include "include/err.h"
+#include <functional>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/bind.hpp>
 #include <errno.h>
 #include <include/compat.h>
 
@@ -59,8 +59,8 @@ TestIoCtxImpl *TestMemIoCtxImpl::clone() {
 
 int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c, int flags) {
   m_client->add_aio_operation(oid, true,
-                              boost::bind(&TestMemIoCtxImpl::remove, this, oid,
-                                          get_snap_context()),
+                              std::bind(&TestMemIoCtxImpl::remove, this, oid,
+					get_snap_context()),
                               c);
   return 0;
 }

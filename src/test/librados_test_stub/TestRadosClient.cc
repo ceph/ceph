@@ -8,12 +8,12 @@
 #include "common/ceph_json.h"
 #include "common/Finisher.h"
 #include "common/async/context_pool.h"
-#include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/thread.hpp>
 #include <errno.h>
 
 #include <atomic>
+#include <functional>
 #include <sstream>
 
 static int get_concurrency() {
@@ -30,6 +30,8 @@ static int get_concurrency() {
   }
   return concurrency;
 }
+
+using namespace std::placeholders;
 
 namespace librados {
 
@@ -82,7 +84,7 @@ public:
     int ret = m_callback();
     if (m_comp != NULL) {
       if (m_finisher != NULL) {
-        m_finisher->queue(new LambdaContext(boost::bind(
+        m_finisher->queue(new LambdaContext(std::bind(
           &finish_aio_completion, m_comp, ret)));
       } else {
         finish_aio_completion(m_comp, ret);
@@ -252,7 +254,7 @@ void TestRadosClient::add_aio_operation(const std::string& oid,
 struct WaitForFlush {
   int flushed() {
     if (--count == 0) {
-      aio_finisher->queue(new LambdaContext(boost::bind(
+      aio_finisher->queue(new LambdaContext(std::bind(
         &finish_aio_completion, c, 0)));
       delete this;
     }
@@ -281,7 +283,7 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
 
   for (size_t i = 0; i < m_finishers.size(); ++i) {
     AioFunctionContext *ctx = new AioFunctionContext(
-      boost::bind(&WaitForFlush::flushed, wait_for_flush),
+      std::bind(&WaitForFlush::flushed, wait_for_flush),
       nullptr, nullptr);
     m_finishers[i]->queue(ctx);
   }
@@ -289,7 +291,7 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
 
 int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {
   c->get();
-  Context *ctx = new LambdaContext(boost::bind(
+  Context *ctx = new LambdaContext(std::bind(
     &TestRadosClient::finish_aio_completion, this, c, _1));
   get_watch_notify()->aio_flush(this, ctx);
   return 0;
