@@ -2939,8 +2939,10 @@ void BlueFS::wait_for_aio(FileWriter *h)
 {
   // NOTE: this is safe to call without a lock, as long as our reference is
   // stable.
-  dout(10) << __func__ << " " << h << dendl;
-  utime_t start = ceph_clock_now();
+  utime_t start;
+  lgeneric_subdout(cct, bluefs, 10) << __func__;
+  start = ceph_clock_now();
+  *_dout << " " << h << dendl;
   for (auto p : h->iocv) {
     if (p) {
       p->aio_wait();
@@ -3269,8 +3271,10 @@ void BlueFS::sync_metadata(bool avoid_compact)
   if (log_t.empty() && dirty_files.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
   } else {
-    dout(10) << __func__ << dendl;
-    utime_t start = ceph_clock_now();
+    utime_t start;
+    lgeneric_subdout(cct, bluefs, 10) << __func__;
+    start = ceph_clock_now();
+    *_dout <<  dendl;
     flush_bdev(); // FIXME?
     _flush_and_sync_log(l);
     dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
