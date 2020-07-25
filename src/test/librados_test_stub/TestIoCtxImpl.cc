@@ -10,7 +10,7 @@
 #include "common/Finisher.h"
 #include "common/valgrind.h"
 #include "objclass/objclass.h"
-#include <boost/bind.hpp>
+#include <functional>
 #include <errno.h>
 
 namespace librados {
@@ -109,7 +109,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
   // TODO flags for now
   ops.get();
   m_pending_ops++;
-  m_client->add_aio_operation(oid, true, boost::bind(
+  m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snap_seq,
     snap_context != NULL ? *snap_context : m_snapc), c);
@@ -123,7 +123,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   // TODO ignoring flags for now
   ops.get();
   m_pending_ops++;
-  m_client->add_aio_operation(oid, true, boost::bind(
+  m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, snap_id,
     m_snapc), c);
   return 0;
@@ -209,7 +209,7 @@ int TestIoCtxImpl::operate(const std::string& oid,
 
   ops.get();
   m_pending_ops++;
-  m_client->add_aio_operation(oid, false, boost::bind(
+  m_client->add_aio_operation(oid, false, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snap_seq, m_snapc), comp);
 
@@ -226,7 +226,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid,
 
   ops.get();
   m_pending_ops++;
-  m_client->add_aio_operation(oid, false, boost::bind(
+  m_client->add_aio_operation(oid, false, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
     m_snap_seq, m_snapc), comp);
 
@@ -240,14 +240,14 @@ void TestIoCtxImpl::aio_selfmanaged_snap_create(uint64_t *snapid,
                                                 AioCompletionImpl *c) {
   m_client->add_aio_operation(
     "", true,
-    boost::bind(&TestIoCtxImpl::selfmanaged_snap_create, this, snapid), c);
+    std::bind(&TestIoCtxImpl::selfmanaged_snap_create, this, snapid), c);
 }
 
 void TestIoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
                                                 AioCompletionImpl *c) {
   m_client->add_aio_operation(
     "", true,
-    boost::bind(&TestIoCtxImpl::selfmanaged_snap_remove, this, snapid), c);
+    std::bind(&TestIoCtxImpl::selfmanaged_snap_remove, this, snapid), c);
 }
 
 int TestIoCtxImpl::selfmanaged_snap_set_write_ctx(snap_t seq,
