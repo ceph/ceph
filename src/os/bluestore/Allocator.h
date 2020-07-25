@@ -52,7 +52,7 @@ public:
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
-  virtual double get_fragmentation(uint64_t alloc_unit)
+  virtual double get_fragmentation()
   {
     return 0.0;
   }
@@ -61,6 +61,9 @@ public:
 
   static Allocator *create(CephContext* cct, string type, int64_t size,
 			   int64_t block_size, const std::string& name = "");
+
+  const string& get_name() const;
+
 private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;

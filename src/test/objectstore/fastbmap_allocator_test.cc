@@ -44,6 +44,14 @@ public:
   {
     _free_l2(r);
   }
+  void mark_free(uint64_t o, uint64_t len)
+  {
+    _mark_free(o, len);
+  }
+  void mark_allocated(uint64_t o, uint64_t len)
+  {
+    _mark_allocated(o, len);
+  }
 };
 
 const uint64_t _1m = 1024 * 1024;
@@ -930,4 +938,124 @@ TEST(TestAllocatorLevel01, test_4G_alloc_bug3)
       ASSERT_EQ(a4[1].offset, 2048ull * _1m);
       ASSERT_EQ(a4[1].length, 2048ull * _1m);
   }
+}
+
+TEST(TestAllocatorLevel01, test_claim_free_l2)
+{
+  TestAllocatorLevel02 al2;
+  uint64_t num_l2_entries = 64;// *512;
+  uint64_t capacity = num_l2_entries * 256 * 512 * 4096;
+  al2.init(capacity, 0x1000);
+  std::cout << "Init L2" << std::endl;
+
+  uint64_t max_available = 0x20000;
+  al2.mark_allocated(max_available, capacity - max_available);
+
+  uint64_t allocated1 = 0;
+  interval_vector_t a1;
+  al2.allocate_l2(0x2000, 0x2000, &allocated1, &a1);
+  ASSERT_EQ(allocated1, 0x2000u);
+  ASSERT_EQ(a1[0].offset, 0u);
+  ASSERT_EQ(a1[0].length, 0x2000u);
+
+  uint64_t allocated2 = 0;
+  interval_vector_t a2;
+  al2.allocate_l2(0x2000, 0x2000, &allocated2, &a2);
+  ASSERT_EQ(allocated2, 0x2000u);
+  ASSERT_EQ(a2[0].offset, 0x2000u);
+  ASSERT_EQ(a2[0].length, 0x2000u);
+
+  uint64_t allocated3 = 0;
+  interval_vector_t a3;
+  al2.allocate_l2(0x3000, 0x3000, &allocated3, &a3);
+  ASSERT_EQ(allocated3, 0x3000u);
+  ASSERT_EQ(a3[0].offset, 0x4000u);
+  ASSERT_EQ(a3[0].length, 0x3000u);
+
+  al2.free_l2(a1);
+  al2.free_l2(a3);
+  ASSERT_EQ(max_available - 0x2000, al2.debug_get_free());
+
+  auto claimed = al2.claim_free_to_right(0x4000);
+  ASSERT_EQ(max_available - 0x4000u, claimed);
+  ASSERT_EQ(0x2000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_right(0x4000);
+  ASSERT_EQ(0, claimed);
+  ASSERT_EQ(0x2000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_left(0x2000);
+  ASSERT_EQ(0x2000u, claimed);
+  ASSERT_EQ(0, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_left(0x2000);
+  ASSERT_EQ(0, claimed);
+  ASSERT_EQ(0, al2.debug_get_free());
+
+
+  al2.mark_free(0x3000, 0x4000);
+  ASSERT_EQ(0x4000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_right(0x7000);
+  ASSERT_EQ(0, claimed);
+  ASSERT_EQ(0x4000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_right(0x6000);
+  ASSERT_EQ(0x1000, claimed);
+  ASSERT_EQ(0x3000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_right(0x6000);
+  ASSERT_EQ(0, claimed);
+  ASSERT_EQ(0x3000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_left(0x3000);
+  ASSERT_EQ(0u, claimed);
+  ASSERT_EQ(0x3000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_left(0x4000);
+  ASSERT_EQ(0x1000, claimed);
+  ASSERT_EQ(0x2000, al2.debug_get_free());
+
+  // extend allocator space up to 64M
+  auto max_available2 = 64 * 1024 * 1024;
+  al2.mark_free(max_available, max_available2 - max_available);
+  ASSERT_EQ(max_available2 - max_available + 0x2000, al2.debug_get_free());
+
+  // pin some allocations
+  al2.mark_allocated(0x400000 + 0x2000, 1000);
+  al2.mark_allocated(0x400000 + 0x5000, 1000);
+  al2.mark_allocated(0x400000 + 0x20000, 1000);
+  ASSERT_EQ(max_available2 - max_available - 0x1000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_left(0x403000);
+  ASSERT_EQ(0x0, claimed);
+
+  claimed = al2.claim_free_to_left(0x404000);
+  ASSERT_EQ(0x1000, claimed);
+  ASSERT_EQ(max_available2 - max_available - 0x2000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_left(max_available);
+  ASSERT_EQ(0, claimed);
+
+  claimed = al2.claim_free_to_left(0x400000);
+  ASSERT_EQ(0x3e0000, claimed);
+  ASSERT_EQ(max_available2 - max_available - 0x3e2000, al2.get_available());
+  ASSERT_EQ(max_available2 - max_available - 0x3e2000, al2.debug_get_free());
+
+  claimed = al2.claim_free_to_right(0x407000);
+  ASSERT_EQ(0x19000, claimed);
+  ASSERT_EQ(max_available2 - max_available - 0x3e2000 - 0x19000,
+    al2.get_available());
+  ASSERT_EQ(max_available2 - max_available - 0x3e2000 - 0x19000,
+    al2.debug_get_free());
+
+  claimed = al2.claim_free_to_right(0x407000);
+  ASSERT_EQ(0, claimed);
+
+  claimed = al2.claim_free_to_right(0x430000);
+  ASSERT_EQ(max_available2 - 0x430000, claimed);
+  ASSERT_EQ(0x15000,
+    al2.get_available());
+  ASSERT_EQ(0x15000,
+    al2.debug_get_free());
 }

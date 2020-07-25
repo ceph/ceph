@@ -4,6 +4,8 @@
 #include "Allocator.h"
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
+#include "AvlAllocator.h"
+#include "HybridAllocator.h"
 #include "common/debug.h"
 #include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore
@@ -11,9 +13,12 @@
 class Allocator::SocketHook : public AdminSocketHook {
   Allocator *alloc;
 
+  friend class Allocator;
   std::string name;
 public:
-  explicit SocketHook(Allocator *alloc, const std::string& _name) : alloc(alloc), name(_name)
+  explicit SocketHook(Allocator *alloc,
+                      const std::string& _name) :
+    alloc(alloc), name(_name)
   {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
     if (name.empty()) {
@@ -32,6 +37,11 @@ public:
                                            this,
                                            "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
         ceph_assert(r == 0);
+        r = admin_socket->register_command(("bluestore allocator fragmentation " + name).c_str(),
+          ("bluestore allocator fragmentation " + name).c_str(),
+          this,
+          "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+        ceph_assert(r == 0);
       }
     }
   }
@@ -42,6 +52,8 @@ public:
       int r = admin_socket->unregister_command(("bluestore allocator dump " + name).c_str());
       ceph_assert(r == 0);
       r = admin_socket->unregister_command(("bluestore allocator score " + name).c_str());
+      ceph_assert(r == 0);
+      r = admin_socket->unregister_command(("bluestore allocator fragmentation " + name).c_str());
       ceph_assert(r == 0);
     }
   }
@@ -76,6 +88,13 @@ public:
       f->close_section();
       f->flush(ss);
       delete f;
+    } else if (command == "bluestore allocator fragmentation " + name) {
+      Formatter* f = Formatter::create(format, "json-pretty", "json-pretty");
+      f->open_object_section("fragmentation");
+      f->dump_float("fragmentation_rating", alloc->get_fragmentation());
+      f->close_section();
+      f->flush(ss);
+      delete f;
     } else {
       ss << "Invalid command" << std::endl;
       r = false;
@@ -96,15 +115,24 @@ Allocator::~Allocator()
   delete asok_hook;
 }
 
+const string& Allocator::get_name() const {
+  return asok_hook->name;
+}
 
 Allocator *Allocator::create(CephContext* cct, string type,
                              int64_t size, int64_t block_size, const std::string& name)
 {
   Allocator* alloc = nullptr;
   if (type == "stupid") {
-    alloc = new StupidAllocator(cct, name);
+    alloc = new StupidAllocator(cct, name, block_size);
   } else if (type == "bitmap") {
     alloc = new BitmapAllocator(cct, size, block_size, name);
+  } else if (type == "avl") {
+    return new AvlAllocator(cct, size, block_size, name);
+  } else if (type == "hybrid") {
+    return new HybridAllocator(cct, size, block_size,
+      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+      name);
   }
   if (alloc == nullptr) {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "

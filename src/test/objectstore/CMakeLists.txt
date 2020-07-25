@@ -106,6 +106,20 @@ if(WITH_BLUESTORE)
   add_ceph_unittest(unittest_fastbmap_allocator)
   target_link_libraries(unittest_fastbmap_allocator os global)
 
+  set_target_properties(unittest_fastbmap_allocator PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
+
+  add_executable(unittest_hybrid_allocator
+    hybrid_allocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_hybrid_allocator)
+  target_link_libraries(unittest_hybrid_allocator os global)
+
+  set_target_properties(unittest_hybrid_allocator PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
+
+  # unittest_bluefs
   add_executable(unittest_bluefs
     test_bluefs.cc
     )
