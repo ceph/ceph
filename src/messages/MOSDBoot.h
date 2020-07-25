@@ -38,7 +38,7 @@ private:
     : PaxosServiceMessage{MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION},
       boot_epoch(0), osd_features(0)
   { }
-  MOSDBoot(OSDSuperblock& s, epoch_t e, epoch_t be,
+  MOSDBoot(const OSDSuperblock& s, epoch_t e, epoch_t be,
 	   const entity_addrvec_t& hb_back_addr_ref,
 	   const entity_addrvec_t& hb_front_addr_ref,
            const entity_addrvec_t& cluster_addr_ref,
