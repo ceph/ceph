@@ -149,7 +149,7 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
 
-  if (forward_to_master && !store->svc()->zone->is_meta_master()) {
+  if (forward_to_master) {
     bufferlist in_data;
     ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info);
     if (ret < 0) {
@@ -683,10 +683,20 @@ static int rgw_op_get_bucket_policy_from_attr(RGWRadosStore *store,
   return 0;
 }
 
+bool RGWRadosStore::is_meta_master()
+{
+  return svc()->zone->is_meta_master();
+}
+
 int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 					     bufferlist& in_data,
 					     JSONParser *jp, req_info& info)
 {
+  if (is_meta_master()) {
+    /* We're master, don't forward */
+    return 0;
+  }
+
   if (!svc()->zone->get_master_conn()) {
     ldout(ctx(), 0) << "rest connection is invalid" << dendl;
     return -EINVAL;

@@ -73,6 +73,9 @@ class RGWStore : public DoutPrefixProvider {
 			    req_info& req_info,
 			    std::unique_ptr<RGWBucket>* bucket) = 0;
     virtual RGWBucketList* list_buckets(void) = 0;
+    virtual bool is_meta_master() = 0;
+    virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
+				  bufferlist& in_data, JSONParser *jp, req_info& info) = 0;
 
     virtual void finalize(void)=0;
 
@@ -607,6 +610,9 @@ class RGWRadosStore : public RGWStore {
 			    req_info& req_info,
 			    std::unique_ptr<RGWBucket>* bucket);
     virtual RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
+    virtual bool is_meta_master() override;
+    virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
+				  bufferlist& in_data, JSONParser *jp, req_info& info) override;
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados *getRados(void) { return rados; }
@@ -623,8 +629,6 @@ class RGWRadosStore : public RGWStore {
 
     int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx *ioctx);
-    int forward_request_to_master(RGWUser* user, obj_version *objv,
-				  bufferlist& in_data, JSONParser *jp, req_info& info);
 
     // implements DoutPrefixProvider
     std::ostream& gen_prefix(std::ostream& out) const { return out << "RGWRadosStore "; }

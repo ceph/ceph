@@ -1165,11 +1165,9 @@ void RGWPutBucketTags::execute() {
   if (op_ret < 0) 
     return;
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -1192,13 +1190,11 @@ int RGWDeleteBucketTags::verify_permission()
 
 void RGWDeleteBucketTags::execute()
 {
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist in_data;
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  bufferlist in_data;
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -1243,12 +1239,10 @@ void RGWPutBucketReplication::execute() {
   if (op_ret < 0) 
     return;
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -1283,13 +1277,11 @@ int RGWDeleteBucketReplication::verify_permission()
 
 void RGWDeleteBucketReplication::execute()
 {
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist in_data;
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  bufferlist in_data;
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -2635,12 +2627,10 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   bool modified = mfa_set_status;
@@ -2713,12 +2703,10 @@ void RGWSetBucketWebsite::execute()
   if (op_ret < 0)
     return;
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -2748,15 +2736,13 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
+  bufferlist in_data;
 
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist in_data;
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
-	                 << "returned err=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
+      << "returned err=" << op_ret << dendl;
+    return;
   }
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
       s->bucket->get_info().has_website = false;
@@ -2931,32 +2917,6 @@ int RGWCreateBucket::verify_permission()
     if ((int)buckets.count() >= s->user->get_max_buckets()) {
       return -ERR_TOO_MANY_BUCKETS;
     }
-  }
-
-  return 0;
-}
-
-int forward_request_to_master(struct req_state *s, obj_version *objv,
-                              rgw::sal::RGWRadosStore *store, bufferlist& in_data,
-                              JSONParser *jp, req_info *forward_info)
-{
-  if (!store->svc()->zone->get_master_conn()) {
-    ldpp_dout(s, 0) << "rest connection is invalid" << dendl;
-    return -EINVAL;
-  }
-  ldpp_dout(s, 0) << "sending request to master zonegroup" << dendl;
-  bufferlist response;
-  string uid_str = s->user->get_id().to_str();
-#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->svc()->zone->get_master_conn()->forward(rgw_user(uid_str), (forward_info ? *forward_info : s->info),
-                                                        objv, MAX_REST_RESPONSE, &in_data, &response);
-  if (ret < 0)
-    return ret;
-
-  ldpp_dout(s, 20) << "response: " << response.c_str() << dendl;
-  if (jp && !jp->parse(response.c_str(), response.length())) {
-    ldpp_dout(s, 0) << "failed parsing response from master zonegroup" << dendl;
-    return -EINVAL;
   }
 
   return 0;
@@ -3403,18 +3363,15 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist in_data;
-    op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				       NULL);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        /* adjust error, we want to return with NoSuchBucket and not
-	 * NoSuchKey */
-        op_ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return;
+  bufferlist in_data;
+  op_ret = store->forward_request_to_master(s->user, &ot.read_version, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      /* adjust error, we want to return with NoSuchBucket and not
+       * NoSuchKey */
+      op_ret = -ERR_NO_SUCH_BUCKET;
     }
+    return;
   }
 
   string prefix, delimiter;
@@ -5378,13 +5335,13 @@ void RGWPutACLs::execute()
   }
 
   // forward bucket acl requests to meta master zone
-  if ((rgw::sal::RGWObject::empty(s->object.get())) && !store->svc()->zone->is_meta_master()) {
+  if ((rgw::sal::RGWObject::empty(s->object.get()))) {
     bufferlist in_data;
     // include acl data unless it was generated from a canned_acl
     if (s->canned_acl.empty()) {
       in_data.append(data);
     }
-    op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
+    op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -5511,12 +5468,10 @@ void RGWPutLC::execute()
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = store->getRados()->get_lc()->set_bucket_config(s->bucket->get_info(), s->bucket_attrs, &new_config);
@@ -5528,13 +5483,11 @@ void RGWPutLC::execute()
 
 void RGWDeleteLC::execute()
 {
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist data;
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  bufferlist data;
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = store->getRados()->get_lc()->remove_bucket_config(s->bucket->get_info(), s->bucket_attrs);
@@ -5575,12 +5528,10 @@ void RGWPutCORS::execute()
   if (op_ret < 0)
     return;
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -5600,13 +5551,11 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist data;
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  bufferlist data;
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -5715,12 +5664,10 @@ void RGWSetRequestPayment::pre_exec()
 void RGWSetRequestPayment::execute()
 {
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = get_params();
@@ -6848,12 +6795,12 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   real_time creation_time;
   obj_version objv, ep_objv, *pobjv = nullptr;
 
-  if (! store->svc()->zone->is_meta_master()) {
+  if (! store->is_meta_master()) {
     JSONParser jp;
     ceph::bufferlist in_data;
     req_info info = s->info;
     forward_req_info(s->cct, info, bucket_name);
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, &jp, &info);
+    op_ret = store->forward_request_to_master(s->user, nullptr, in_data, &jp, info);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -7531,12 +7478,10 @@ void RGWPutBucketPolicy::execute()
     return;
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   try {
@@ -7681,12 +7626,10 @@ void RGWPutBucketObjectLock::execute()
     return;
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
-    if (op_ret < 0) {
-      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -8003,12 +7946,10 @@ void RGWPutBucketPublicAccessBlock::execute()
     return;
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   bufferlist bl;
