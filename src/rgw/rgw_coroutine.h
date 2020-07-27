@@ -186,6 +186,8 @@ struct rgw_spawned_stacks {
 class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
   friend class RGWCoroutinesStack;
 
+  boost::asio::detail::coroutine_ref cref;
+
   struct StatusItem {
     utime_t timestamp;
     std::string status;
@@ -274,8 +276,10 @@ protected:
     return operate(dpp);
   }
 public:
-  RGWCoroutine(CephContext *_cct) : status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
+  RGWCoroutine(CephContext *_cct) : cref(*this), status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
   virtual ~RGWCoroutine() override;
+
+  int cref_value() const { return (int)cref; }
 
   virtual int operate(const DoutPrefixProvider *dpp) = 0;
 

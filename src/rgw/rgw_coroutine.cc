@@ -964,7 +964,7 @@ string RGWCoroutine::to_str() const
 
 ostream& operator<<(ostream& out, const RGWCoroutine& cr)
 {
-  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" << typeid(cr).name();
+  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" << typeid(cr).name() << ":" << cr.cref_value();
   return out;
 }
 
