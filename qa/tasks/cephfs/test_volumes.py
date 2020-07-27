@@ -29,6 +29,9 @@ class TestVolumes(CephFSTestCase):
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
 
+    def _raw_cmd(self, *args):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
+
     def __check_clone_state(self, state, clone, clone_group=None, timo=120):
         check = 0
         args = ["clone", "status", self.volname, clone]
@@ -225,6 +228,7 @@ class TestVolumes(CephFSTestCase):
         self.vol_created = False
         self._enable_multi_fs()
         self._create_or_reuse_test_volume()
+        self.config_set('mon', 'mon_allow_pool_delete', True)
 
     def tearDown(self):
         if self.vol_created:
@@ -309,6 +313,52 @@ class TestVolumes(CephFSTestCase):
                                        "The volume {0} not removed.".format(self.volname))
         else:
             raise RuntimeError("expected the 'fs volume rm' command to fail.")
+
+    def test_volume_rm_arbitrary_pool_removal(self):
+        """
+        That the arbitrary pool added to the volume out of band is removed
+        successfully on volume removal.
+        """
+        new_pool = "new_pool"
+        # add arbitrary data pool
+        self.fs.add_data_pool(new_pool)
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+        #check if fs is gone
+        volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
+        volnames = [volume['name'] for volume in volumes]
+        self.assertNotIn(self.volname, volnames)
+
+        #check if osd pools are gone
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json-pretty"))
+        for pool in pools:
+            self.assertNotIn(self.volname, pool["application_metadata"].keys())
+
+    def test_volume_rm_when_mon_delete_pool_false(self):
+        """
+        That the volume can only be removed when mon_allowd_pool_delete is set
+        to true and verify that the pools are removed after volume deletion.
+        """
+        self.config_set('mon', 'mon_allow_pool_delete', False)
+        try:
+            self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM,
+                             "expected the 'fs volume rm' command to fail with EPERM, "
+                             "but it failed with {0}".format(ce.exitstatus))
+        self.config_set('mon', 'mon_allow_pool_delete', True)
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+        #check if fs is gone
+        volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
+        volnames = [volume['name'] for volume in volumes]
+        self.assertNotIn(self.volname, volnames,
+                         "volume {0} exists after removal".format(self.volname))
+        #check if pools are gone
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json-pretty"))
+        for pool in pools:
+            self.assertNotIn(self.volname, pool["application_metadata"].keys(),
+                             "pool {0} exists after volume removal".format(pool["pool_name"]))
 
     ### basic subvolume operations
 

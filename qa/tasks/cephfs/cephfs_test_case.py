@@ -170,8 +170,6 @@ class CephFSTestCase(CephTestCase):
         self.configs_set = set()
 
     def tearDown(self):
-        super(CephFSTestCase, self).tearDown()
-
         self.mds_cluster.clear_firewall()
         for m in self.mounts:
             m.teardown()
@@ -181,6 +179,8 @@ class CephFSTestCase(CephTestCase):
 
         for subsys, key in self.configs_set:
             self.mds_cluster.clear_ceph_conf(subsys, key)
+
+        return super(CephFSTestCase, self).tearDown()
 
     def set_conf(self, subsys, key, value):
         self.configs_set.add((subsys, key))
