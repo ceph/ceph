@@ -22,7 +22,8 @@ import subprocess
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, RGWSpec, ServiceSpec, PlacementSpec, assert_valid_host
+    NFSServiceSpec, RGWSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
+    ServiceSpecValidationError
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult
@@ -190,6 +191,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'desc': 'raise a health warning if the host check fails',
         },
         {
+            'name': 'err_on_spec_validate',
+            'type': 'bool',
+            'default': True,
+            'desc': 'raise a health warning if the service spec validation fails',
+        },
+        {
             'name': 'log_to_cluster',
             'type': 'bool',
             'default': True,
@@ -279,6 +286,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
+            self.err_on_spec_validate = True
             self.allow_ptrace = False
             self.prometheus_alerts_path = ''
             self.migration_current = None
@@ -468,6 +476,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 }
         self.set_health_checks(self.health_checks)
 
+    def _check_for_spec_errors(self):
+        self.log.debug('_check_for_spec_errors')
+
+        if 'CEPHADM_SPEC_VALIDATE' in self.health_checks:
+            del self.health_checks['CEPHADM_SPEC_VALIDATE']
+
+        if not self.err_on_spec_validate:
+            return
+
+        # TODO: add the below as a func on the spec_store ??
+        spec_errors = []
+        for service_name, spec in self.spec_store.specs.items():
+            try:
+                spec.validate()
+            except ServiceSpecValidationError as e:
+                spec_errors.append(f'ServiceSpec {service_name} is not valid: {e}')
+
+        if self.err_on_spec_validate and spec_errors:
+            self.health_checks['CEPHADM_SPEC_VALIDATE'] = {
+                'severity': 'error',
+                'summary': '%d service spec(s) are not valid' % (
+                    len(spec_errors)),
+                'count': len(spec_errors),
+                'detail': spec_errors,
+            }
+        self.set_health_checks(self.health_checks)
+
     def _serve_sleep(self):
         sleep_interval = 600
         self.log.debug('Sleeping for %d seconds', sleep_interval)
@@ -491,6 +526,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 self._refresh_hosts_and_daemons()
 
                 self._check_for_strays()
+                self._check_for_spec_errors()
 
                 self._update_paused_health()
 
