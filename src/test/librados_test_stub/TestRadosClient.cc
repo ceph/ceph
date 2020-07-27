@@ -227,8 +227,8 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
       str << "]}";
       outbl->append(str.str());
       return 0;
-    } else if ((*j_it)->get_data() == "osd blacklist") {
-      auto op_it = parser.find("blacklistop");
+    } else if ((*j_it)->get_data() == "osd blocklist") {
+      auto op_it = parser.find("blocklistop");
       if (!op_it.end() && (*op_it)->get_data() == "add") {
         uint32_t expire = 0;
         auto expire_it = parser.find("expire");
@@ -237,7 +237,7 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
         }
 
         auto addr_it = parser.find("addr");
-        return blacklist_add((*addr_it)->get_data(), expire);
+        return blocklist_add((*addr_it)->get_data(), expire);
       }
     }
   }
