@@ -54,6 +54,7 @@ releases:
 
   mimic:
     target_eol: 2020-06-01
+    actual_eol: 2020-07-22
     releases:
       - version: 13.2.10
         released: 2020-04-23
