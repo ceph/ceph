@@ -158,6 +158,7 @@ public:
   }
 
   ImageCtx::~ImageCtx() {
+    ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);
     ceph_assert(object_map == NULL);
