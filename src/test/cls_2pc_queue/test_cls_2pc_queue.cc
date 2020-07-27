@@ -534,7 +534,7 @@ TEST_F(TestCls2PCQueue, ReserveAbort)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, Cleanup)
+TEST_F(TestCls2PCQueue, ManualCleanup)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 128*1024*1024;
@@ -548,7 +548,7 @@ TEST_F(TestCls2PCQueue, Cleanup)
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   // anything older than 100ms is cosidered stale
-  ceph::real_time stale_time = ceph::real_clock::now() + std::chrono::milliseconds(100);
+  ceph::coarse_real_time stale_time = ceph::coarse_real_clock::now() + std::chrono::milliseconds(100);
 
   std::vector<std::thread> reservers(max_workers);
   for (auto& r : reservers) {
@@ -606,6 +606,61 @@ TEST_F(TestCls2PCQueue, Cleanup)
   cls_2pc_reservations reservations;
   ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
   ASSERT_EQ(reservations.size(), 0);
+}
+
+TEST_F(TestCls2PCQueue, Cleanup)
+{
+  const std::string queue_name = __PRETTY_FUNCTION__;
+  const auto max_size = 128*1024*1024;
+  const auto number_of_ops = 15U;
+  const auto number_of_elements = 23U;
+  const auto max_workers = 10U;
+  const auto size_to_reserve = 512U;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_2pc_queue_init(op, queue_name, max_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  // anything older than 100ms is cosidered stale
+  ceph::coarse_real_time stale_time = ceph::coarse_real_clock::now() + std::chrono::milliseconds(100);
+
+  std::vector<std::thread> reservers(max_workers);
+  for (auto& r : reservers) {
+    r = std::thread([this, &queue_name] {
+      librados::ObjectWriteOperation op;
+  	  for (auto i = 0U; i < number_of_ops; ++i) {
+        cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
+        ASSERT_EQ(cls_2pc_queue_reserve(ioctx, queue_name, size_to_reserve, number_of_elements, res_id), 0);
+        ASSERT_NE(res_id, cls_2pc_reservation::NO_ID);
+        // wait for 10ms between each reservation to make sure at least some are stale
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    });
+  }
+
+  std::for_each(reservers.begin(), reservers.end(), [](auto& r) { r.join(); });
+
+  cls_2pc_reservations all_reservations;
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, all_reservations));
+  ASSERT_EQ(all_reservations.size(), number_of_ops*max_workers);
+  
+  cls_2pc_queue_expire_reservations(op, stale_time);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  
+  cls_2pc_reservations good_reservations;
+  ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, good_reservations));
+
+  for (const auto& r : all_reservations) {
+    if (good_reservations.find(r.first) == good_reservations.end()) {
+      // not in the "good" list
+      ASSERT_GT(stale_time.time_since_epoch().count(), 
+          r.second.timestamp.time_since_epoch().count());
+    }
+  }
+  for (const auto& r : good_reservations) {
+   ASSERT_LT(stale_time.time_since_epoch().count(), 
+       r.second.timestamp.time_since_epoch().count());
+  }
 }
 
 TEST_F(TestCls2PCQueue, MultiProducer)

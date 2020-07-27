@@ -81,6 +81,24 @@ struct cls_2pc_queue_abort_op {
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_abort_op)
 
+struct cls_2pc_queue_expire_op {
+  // any reservation older than this time should expire
+  ceph::coarse_real_time stale_time;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(stale_time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(stale_time, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_2pc_queue_expire_op)
+
 struct cls_2pc_queue_reservations_ret {
   cls_2pc_reservations reservations; // reservation list (keyed by id)
 
