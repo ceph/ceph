@@ -1,6 +1,9 @@
+import datetime
 import time
 import fnmatch
 from contextlib import contextmanager
+
+from cephadm.module import CEPH_DATEFMT
 
 try:
     from typing import Any
@@ -34,15 +37,30 @@ def mon_command(*args, **kwargs):
     return 0, '', ''
 
 @contextmanager
-def with_cephadm_module(module_options):
+def with_cephadm_module(module_options=None, store=None):
+    """
+    :param module_options: Set opts as if they were set before module.__init__ is called
+    :param store: Set the store before module.__init__ is called
+    """
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
             mock.patch("cephadm.module.CephadmOrchestrator.remote"),\
             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
             mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command):
 
         m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
-        for k, v in module_options.items():
-            m._ceph_set_module_option('cephadm', k, v)
+        if module_options is not None:
+            for k, v in module_options.items():
+                m._ceph_set_module_option('cephadm', k, v)
+        if store is None:
+            store = {}
+        if '_ceph_get/mon_map' not in store:
+            store['_ceph_get/mon_map'] = {
+                'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                'fsid': 'foobar',
+            }
+        for k, v in store.items():
+            m._ceph_set_store(k, v)
+
         m.__init__('cephadm', 0, 0)
         m._cluster_fsid = "fsid"
         yield m
