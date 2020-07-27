@@ -70,37 +70,6 @@ extern void get_str_vec(const std::string& str,
 
 std::vector<std::string> get_str_vec(const std::string& str,
                                      const char *delims = ";,= \t");
-/**
- * Split **str** into a set of strings, using the ";,= \t" delimiters and output the result in **str_set**.
- * 
- * @param [in] str String to split and save as Set
- * @param [out] str_set Set modified containing str after it has been split
-**/
-extern void get_str_set(const std::string& str,
-			std::set<std::string>& str_set);
-
-/**
- * Split **str** into a set of strings, using the **delims** delimiters and output the result in **str_set**.
- * 
- * @param [in] str String to split and save as Set
- * @param [in] delims characters used to split **str**
- * @param [out] str_set Set modified containing str after it has been split
-**/
-template<class Compare = std::less<std::string> >
-void get_str_set(const std::string& str,
-                 const char *delims,
-                 std::set<std::string, Compare>& str_set)
-{
-  str_set.clear();
-  for_each_substr(str, delims, [&str_set] (auto token) {
-                  str_set.emplace(token.begin(), token.end());
-                  });
-}
-
-std::set<std::string> get_str_set(const std::string& str,
-                                  const char *delims = ";,= \t");
-
-
 
 /**
  * Return a String containing the vector **v** joined with **sep**
