@@ -30,6 +30,7 @@ import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+import { OsdFlagsIndivModalComponent } from '../osd-flags-indiv-modal/osd-flags-indiv-modal.component';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
 import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
 import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
@@ -57,6 +58,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   safeToDestroyBodyTpl: TemplateRef<any>;
   @ViewChild('deleteOsdExtraTpl')
   deleteOsdExtraTpl: TemplateRef<any>;
+  @ViewChild('flagsTpl', { static: true })
+  flagsTpl: TemplateRef<any>;
 
   permissions: Permissions;
   tableActions: CdTableAction[];
@@ -67,6 +70,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   selection = new CdTableSelection();
   osds: any[] = [];
+  disabledFlags: string[] = [
+    'sortbitwise',
+    'purged_snapdirs',
+    'recovery_deletes',
+    'pglog_hardlimit'
+  ];
+  indivFlagNames: string[] = ['noup', 'nodown', 'noin', 'noout'];
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
@@ -114,6 +124,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'update',
         icon: Icons.edit,
         click: () => this.editAction()
+      },
+      {
+        name: this.actionLabels.FLAGS,
+        permission: 'update',
+        icon: Icons.flag,
+        click: () => this.configureFlagsIndivAction(),
+        disable: () => !this.hasOsdSelected
       },
       {
         name: this.actionLabels.SCRUB,
@@ -290,6 +307,11 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
+      {
+        prop: 'state',
+        name: $localize`Flags`,
+        cellTemplate: this.flagsTpl
+      },
       { prop: 'stats.usage', name: $localize`Usage`, cellTemplate: this.osdUsageTpl },
       {
         prop: 'stats_history.out_bytes',
@@ -371,13 +393,16 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   getOsdList() {
-    this.osdService.getList().subscribe((data: any[]) => {
-      this.osds = data.map((osd) => {
+    const observables = [this.osdService.getList(), this.osdService.getFlags()];
+    observableForkJoin(observables).subscribe((resp: [any[], string[]]) => {
+      this.osds = resp[0].map((osd) => {
         osd.collectedStates = OsdListComponent.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);
         osd.stats.usage = osd.stats.stat_bytes_used / osd.stats.stat_bytes;
         osd.cdIsBinary = true;
+        osd.cdIndivFlags = osd.state.filter((f: string) => this.indivFlagNames.includes(f));
+        osd.cdClusterFlags = resp[1].filter((f: string) => !this.disabledFlags.includes(f));
         return osd;
       });
     });
@@ -425,6 +450,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   configureFlagsAction() {
     this.bsModalRef = this.modalService.show(OsdFlagsModalComponent);
+  }
+
+  configureFlagsIndivAction() {
+    const initialState = {
+      selected: this.getSelectedOsds()
+    };
+    this.bsModalRef = this.modalService.show(OsdFlagsIndivModalComponent, initialState);
   }
 
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
