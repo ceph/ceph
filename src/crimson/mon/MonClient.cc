@@ -957,7 +957,19 @@ seastar::future<> Client::reopen_session(int rank)
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
 #warning fixme
-    auto peer = monmap.get_addrs(rank).front();
+    auto peer = [&] {
+      auto& mon_addrs = monmap.get_addrs(rank);
+      if (msgr.get_myaddr().is_legacy()) {
+        return mon_addrs.legacy_addr();
+      } else {
+        return mon_addrs.msgr2_addr();
+      }
+    }();
+    if (peer == entity_addr_t{}) {
+      // crimson msgr only uses the first bound addr
+      logger().warn("mon.{} does not have an addr compatible with me", rank);
+      return seastar::now();
+    }
     logger().info("connecting to mon.{}", rank);
     return seastar::futurize_invoke(
         [peer, this] () -> seastar::future<Connection::AuthResult> {
