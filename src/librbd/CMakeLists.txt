@@ -8,6 +8,7 @@ add_library(rbd_types STATIC
 set(librbd_internal_srcs
   AsyncObjectThrottle.cc
   AsyncRequest.cc
+  ConfigWatcher.cc
   DeepCopyRequest.cc
   ExclusiveLock.cc
   ImageCtx.cc
