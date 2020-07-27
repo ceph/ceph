@@ -386,9 +386,14 @@ public:
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
       std::lock_guard lg(cct->_feature_lock);
-      get_str_set(
-	conf->enable_experimental_unrecoverable_data_corrupting_features,
-	cct->_experimental_features);
+
+      cct->_experimental_features.clear();
+      auto add_experimental_feature = [this] (auto feature) {
+        cct->_experimental_features.emplace(std::string{feature});
+      };
+      for_each_substr(conf->enable_experimental_unrecoverable_data_corrupting_features,
+          ";,= \t", add_experimental_feature);
+
       if (getenv("CEPH_DEV") == NULL) {
         if (!cct->_experimental_features.empty()) {
           if (cct->_experimental_features.count("*")) {
