@@ -1,0 +1,52 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container class="modal-title"
+                i18n>Individual OSD Flags</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="osdFlagsForm"
+          #formDir="ngForm"
+          [formGroup]="osdFlagsForm"
+          novalidate>
+      <div class="modal-body osd-modal">
+        <div class="custom-control custom-checkbox"
+             *ngFor="let flag of flags; let last = last">
+          <input class="custom-control-input"
+                 type="checkbox"
+                 [checked]="flag.value"
+                 [indeterminate]="flag.indeterminate"
+                 (change)="changeValue(flag)"
+                 [name]="flag.code"
+                 [id]="flag.code">
+          <label class="custom-control-label"
+                 [for]="flag.code"
+                 ng-class="['tc_' + key]">
+            <strong>{{ flag.name }}</strong>
+            <span class="badge badge-hdd ml-2"
+                  [title]="clusterWideTooltip"
+                  *ngIf="flag.clusterWide"
+                  i18n>Cluster-wide</span>
+            <br>
+            <span class="form-text text-muted">{{ flag.description }}</span>
+          </label>
+          <hr class="m-1"
+              *ngIf="!last">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button"
+                class="btn btn-light"
+                (click)="resetSelection()"
+                i18n>Restore previous selection</button>
+        <cd-submit-button *ngIf="permissions.osd.update"
+                          (submitAction)="submitAction()"
+                          [form]="osdFlagsForm"
+                          i18n>Submit</cd-submit-button>
+        <cd-back-button [back]="activeModal.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

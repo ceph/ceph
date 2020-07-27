@@ -38,6 +38,14 @@
                     [used]="row.stats.stat_bytes_used">
       </cd-usage-bar>
     </ng-template>
+
+    <ng-template #flagsTpl
+                 let-row="row">
+      <span *ngFor="let flag of row.cdClusterFlags;"
+            class="badge badge-hdd mr-1">{{ flag }}</span>
+      <span *ngFor="let flag of row.cdIndivFlags;"
+            class="badge badge-info mr-1">{{ flag }}</span>
+    </ng-template>
   </tab>
   <tab i18n-heading
        *ngIf="permissions.grafana.read"
