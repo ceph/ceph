@@ -59,8 +59,6 @@ Status
 Show current orchestrator mode and high-level status (whether the module able
 to talk to it)
 
-Also show any in-progress actions.
-
 Host Management
 ===============
 
