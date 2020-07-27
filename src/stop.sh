@@ -161,7 +161,7 @@ if [ $stop_all -eq 1 ]; then
         do_killcephadm
     fi
 
-    for p in ceph-mon ceph-mds $ceph_osd ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
+    for p in $ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
         for try in 0 1 1 1 1 ; do
             if ! pkill -u $MYUID $p ; then
                 break
