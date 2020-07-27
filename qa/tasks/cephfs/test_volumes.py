@@ -322,7 +322,6 @@ class TestVolumes(CephFSTestCase):
         new_pool = "new_pool"
         # add arbitrary data pool
         self.fs.add_data_pool(new_pool)
-        vol_status = json.loads(self._fs_cmd("status", self.volname, "--format=json-pretty"))
         self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
         #check if fs is gone
@@ -331,9 +330,9 @@ class TestVolumes(CephFSTestCase):
         self.assertNotIn(self.volname, volnames)
 
         #check if osd pools are gone
-        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "--format=json-pretty"))
-        for pool in vol_status["pools"]:
-            self.assertNotIn(pool["name"], pools)
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json-pretty"))
+        for pool in pools:
+            self.assertNotIn(self.volname, pool["application_metadata"].keys())
 
     def test_volume_rm_when_mon_delete_pool_false(self):
         """
@@ -347,7 +346,6 @@ class TestVolumes(CephFSTestCase):
             self.assertEqual(ce.exitstatus, errno.EPERM,
                              "expected the 'fs volume rm' command to fail with EPERM, "
                              "but it failed with {0}".format(ce.exitstatus))
-        vol_status = json.loads(self._fs_cmd("status", self.volname, "--format=json-pretty"))
         self.config_set('mon', 'mon_allow_pool_delete', True)
         self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
@@ -357,10 +355,10 @@ class TestVolumes(CephFSTestCase):
         self.assertNotIn(self.volname, volnames,
                          "volume {0} exists after removal".format(self.volname))
         #check if pools are gone
-        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "--format=json-pretty"))
-        for pool in vol_status["pools"]:
-            self.assertNotIn(pool["name"], pools,
-                             "pool {0} exists after volume removal".format(pool["name"]))
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json-pretty"))
+        for pool in pools:
+            self.assertNotIn(self.volname, pool["application_metadata"].keys(),
+                             "pool {0} exists after volume removal".format(pool["pool_name"]))
 
     ### basic subvolume operations
 
