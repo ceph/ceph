@@ -3093,9 +3093,12 @@ void BlueFS::flush_bdev()
 {
   // NOTE: this is safe to call without a lock.
   dout(20) << __func__ << dendl;
-  for (auto p : bdev) {
-    if (p)
-      p->flush();
+  for (unsigned i = 0; i < MAX_BDEV; i++) {
+    // alloc space from BDEV_SLOW is unexpected.
+    // So most cases we don't alloc from BDEV_SLOW and so avoiding flush not-used device.
+    if (bdev[i] && ((i != BDEV_SLOW) || (block_all[i].size() - alloc[i]->get_free()))) {
+      bdev[i]->flush();
+    }
   }
 }
 
