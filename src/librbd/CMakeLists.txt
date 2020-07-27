@@ -9,6 +9,7 @@ set(librbd_internal_srcs
   AsioEngine.cc
   AsyncObjectThrottle.cc
   AsyncRequest.cc
+  ConfigWatcher.cc
   DeepCopyRequest.cc
   ExclusiveLock.cc
   ImageCtx.cc
