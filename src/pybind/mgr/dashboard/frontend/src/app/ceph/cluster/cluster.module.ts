@@ -33,6 +33,7 @@ import { OsdCreationPreviewModalComponent } from './osd/osd-creation-preview-mod
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdDevicesSelectionGroupsComponent } from './osd/osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { OsdDevicesSelectionModalComponent } from './osd/osd-devices-selection-modal/osd-devices-selection-modal.component';
+import { OsdFlagsIndivModalComponent } from './osd/osd-flags-indiv-modal/osd-flags-indiv-modal.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
 import { OsdFormComponent } from './osd/osd-form/osd-form.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
@@ -106,7 +107,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     ServiceDaemonListComponent,
     TelemetryComponent,
     PrometheusTabsComponent,
-    ServiceFormComponent
+    ServiceFormComponent,
+    OsdFlagsIndivModalComponent
   ]
 })
 export class ClusterModule {}
