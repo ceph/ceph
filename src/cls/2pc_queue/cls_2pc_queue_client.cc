@@ -198,3 +198,11 @@ void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& e
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in);
 }
 
+void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op, ceph::coarse_real_time stale_time) {
+  bufferlist in;
+  cls_2pc_queue_expire_op expire_op;
+  expire_op.stale_time = stale_time;
+  encode(expire_op, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_EXPIRE_RESERVATIONS, in);
+}
+
