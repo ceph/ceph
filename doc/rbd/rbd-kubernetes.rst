@@ -207,9 +207,9 @@ provision a `PersistentVolume`, which would be backed by a Ceph block image.
 An optional `volumeMode` can be included to select between a mounted file system
 (default) or raw block device-based volume.
 
-Using `ceph-csi`, specifying `Filesystem` for `volumeMode` can support both
-`ReadWriteOnce` and `ReadOnlyMany` `accessMode` claims, and specifying `Block`
-for `volumeMode` can support `ReadWriteOnce`, `ReadWriteMany`, and
+Using `ceph-csi`, specifying `Filesystem` for `volumeMode` can support all
+`ReadWriteOnce`, `ReadOnlyMany`, and `ReadWriteMany` `accessMode` claims, and
+specifying `Block` for `volumeMode` can support only `ReadWriteOnce`, and
 `ReadOnlyMany` `accessMode` claims.
 
 For example, to create a block-based `PersistentVolumeClaim` that utilizes
