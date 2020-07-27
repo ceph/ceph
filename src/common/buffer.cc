@@ -461,6 +461,7 @@ static ceph::spinlock debug_lock;
 
     [[gnu::noinline]] static ceph::unique_leakable_ptr<buffer::raw>
     create(unsigned len,
+	   [[maybe_unused]] unsigned align,
            int mempool = mempool::mempool_buffer_anon) {
       const std::uint32_t rawlen = round_up_to(sizeof(raw_tls),
                                                alignof(raw_tls));
@@ -1522,6 +1523,7 @@ static ceph::spinlock debug_lock;
 
   buffer::ptr buffer::list::always_empty_bptr;
 
+  template <class RawT>
   buffer::ptr_node& buffer::list::refill_append_space(const unsigned len)
   {
     // make a new buffer.  fill out a complete page, factoring in the
@@ -1529,13 +1531,8 @@ static ceph::spinlock debug_lock;
     size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
     size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
       sizeof(raw_combined);
-#if 0
     auto new_back = \
-      ptr_node::create(raw_combined::create(alen, 0, get_mempool()));
-#else
-    auto new_back = \
-      ptr_node::create(raw_tls::create(alen, get_mempool()));
-#endif
+      ptr_node::create(RawT::create(alen, 0, get_mempool()));
     new_back->set_length(0);   // unused, so far.
     _carriage = new_back.get();
     _buffers.push_back(*new_back.release());
@@ -1543,6 +1540,7 @@ static ceph::spinlock debug_lock;
     return _buffers.back();
   }
 
+  template <class RawT>
   void buffer::list::append(const char *data, unsigned len)
   {
     _len += len;
@@ -1565,9 +1563,19 @@ static ceph::spinlock debug_lock;
 
     const unsigned second_round = len - first_round;
     if (second_round) {
-      auto& new_back = refill_append_space(second_round);
+      auto& new_back = refill_append_space<RawT>(second_round);
       new_back.append(data + first_round, second_round);
     }
+  }
+
+  void buffer::list::append(const char *data, unsigned len)
+  {
+    return append<raw_combined>(data, len);
+  }
+
+  void buffer::list::append_tls(const char *data, unsigned len)
+  {
+    return append<raw_tls>(data, len);
   }
 
   buffer::list::reserve_t buffer::list::obtain_contiguous_space(
@@ -1648,6 +1656,7 @@ static ceph::spinlock debug_lock;
     }
   }
 
+  template <class RawT>
   buffer::list::contiguous_filler buffer::list::append_hole(const unsigned len)
   {
     _len += len;
@@ -1655,7 +1664,7 @@ static ceph::spinlock debug_lock;
     if (unlikely(get_append_buffer_unused_tail_length() < len)) {
       // make a new append_buffer.  fill out a complete page, factoring in
       // the raw_combined overhead.
-      auto& new_back = refill_append_space(len);
+      auto& new_back = refill_append_space<RawT>(len);
       new_back.set_length(len);
       return { new_back.c_str() };
     } else if (unlikely(_carriage != &_buffers.back())) {
@@ -1666,6 +1675,16 @@ static ceph::spinlock debug_lock;
     }
     _carriage->set_length(_carriage->length() + len);
     return { _carriage->end_c_str() - len };
+  }
+
+  buffer::list::contiguous_filler buffer::list::append_hole(const unsigned len)
+  {
+    return append_hole<raw_combined>(len);
+  }
+
+  buffer::list::contiguous_filler buffer::list::append_hole_tls(const unsigned len)
+  {
+    return append_hole<raw_tls>(len);
   }
 
   void buffer::list::prepend_zero(unsigned len)
@@ -1695,7 +1714,7 @@ static ceph::spinlock debug_lock;
 
     const unsigned second_round = len - first_round;
     if (second_round) {
-      auto& new_back = refill_append_space(second_round);
+      auto& new_back = refill_append_space<raw_combined>(second_round);
       new_back.set_length(second_round);
       new_back.zero(false);
     }

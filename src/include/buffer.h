@@ -906,6 +906,7 @@ struct error_code;
     // This is useful for e.g. get_append_buffer_unused_tail_length() as
     // it allows to avoid conditionals on hot paths.
     static ptr always_empty_bptr;
+    template <class RawT>
     ptr_node& refill_append_space(const unsigned len);
 
   public:
@@ -1110,7 +1111,10 @@ struct error_code;
     }
 
     void append(char c);
+    template <class RawT>
     void append(const char *data, unsigned len);
+    void append(const char *data, unsigned len);
+    void append_tls(const char *data, unsigned len);
     void append(std::string s) {
       append(s.data(), s.length());
     }
@@ -1133,7 +1137,10 @@ struct error_code;
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
+    template <class RawT>
     contiguous_filler append_hole(unsigned len);
+    contiguous_filler append_hole(unsigned len);
+    contiguous_filler append_hole_tls(unsigned len);
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
 

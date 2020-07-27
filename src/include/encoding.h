@@ -71,7 +71,7 @@ namespace ceph {
 template<class T>
 inline void encode_raw(const T& t, bufferlist& bl)
 {
-  bl.append((char*)&t, sizeof(t));
+  bl.append_tls((char*)&t, sizeof(t));
 }
 template<class T>
 inline void decode_raw(T& t, bufferlist::const_iterator &p)
@@ -185,7 +185,7 @@ inline void encode(std::string_view s, bufferlist& bl, uint64_t features=0)
   __u32 len = s.length();
   encode(len, bl);
   if (len)
-    bl.append(s.data(), len);
+    bl.append_tls(s.data(), len);
 }
 inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
 {
@@ -201,7 +201,7 @@ inline void decode(std::string& s, bufferlist::const_iterator& p)
 
 inline void encode_nohead(std::string_view s, bufferlist& bl)
 {
-  bl.append(s.data(), s.length());
+  bl.append_tls(s.data(), s.length());
 }
 inline void encode_nohead(const std::string& s, bufferlist& bl)
 {
@@ -675,7 +675,7 @@ inline std::enable_if_t<!traits::supported>
 {
   using counter_encode_t = ceph_le32;
   unsigned n = 0;
-  auto filler = bl.append_hole(sizeof(counter_encode_t));
+  auto filler = bl.append_hole_tls(sizeof(counter_encode_t));
   for (const auto& item : ls) {
     // we count on our own because of buggy std::list::size() implementation
     // which doesn't follow the O(1) complexity constraint C++11 has brought.
@@ -1306,7 +1306,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   __u8 struct_v = v;                                         \
   __u8 struct_compat = compat;		                     \
   ceph_le32 struct_len;				             \
-  auto filler = (bl).append_hole(sizeof(struct_v) +	     \
+  auto filler = (bl).append_hole_tls(sizeof(struct_v) +	     \
     sizeof(struct_compat) + sizeof(struct_len));	     \
   const auto starting_bl_len = (bl).length();		     \
   using ::ceph::encode;					     \
