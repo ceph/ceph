@@ -31,35 +31,44 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
     ~RGWCORSConfiguration_SWIFT() {}
     int create_update(const char *allow_origins, const char *allow_headers, 
                   const char *expose_headers, const char *max_age) {
-      set<string> o, h, oc;
+      set<string> o, h;
       list<string> e;
       unsigned long a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
-      string ao = allow_origins;
-      get_str_set(ao, oc);
-      if (oc.empty())
+      int nr_invalid_names = 0;
+      auto add_host = [&nr_invalid_names, &o] (auto host) {
+        if (validate_name_string(host) == 0) {
+          o.emplace(std::string{host});
+        } else {
+          nr_invalid_names++;
+        }
+      };
+      for_each_substr(allow_origins, ";,= \t", add_host);
+      if (o.empty() || nr_invalid_names > 0) {
         return -EINVAL;
-      for(set<string>::iterator it = oc.begin(); it != oc.end(); ++it) {
-        string host = *it;
-        if (validate_name_string(host) != 0)
-          return -EINVAL;
-        o.insert(o.end(), host);
       }
+
       if (allow_headers) {
-        string ah = allow_headers;
-        get_str_set(ah, h);
-        for(set<string>::iterator it = h.begin();
-            it != h.end(); ++it) {
-          string s = (*it);
-          if (validate_name_string(s) != 0)
-            return -EINVAL;
+        int nr_invalid_headers = 0;
+        auto add_header = [&nr_invalid_headers, &h] (auto allow_header) {
+          if (validate_name_string(allow_header) == 0) {
+            h.emplace(std::string{allow_header});
+          } else {
+            nr_invalid_headers++;
+          }
+        };
+        for_each_substr(allow_headers, ";,= \t", add_header);
+        if (h.empty() || nr_invalid_headers > 0) {
+          return -EINVAL;
         }
       }
 
       if (expose_headers) {
-        string eh = expose_headers;
-        get_str_list(eh, e);
+        for_each_substr(expose_headers, ";,= \t",
+            [&e] (auto expose_header) {
+              e.emplace_back(std::string(expose_header));
+            });
       }
       if (max_age) {
         char *end = NULL;
