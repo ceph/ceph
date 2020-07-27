@@ -20,9 +20,13 @@ if 'UNITTEST' in os.environ:
 
     class M(object):
         def _ceph_get_store(self, k):
+            if not hasattr(self, '_store'):
+                self._store = {}
             return self._store.get(k, None)
 
         def _ceph_set_store(self, k, v):
+            if not hasattr(self, '_store'):
+                self._store = {}
             if v is None:
                 if k in self._store:
                     del self._store[k]
@@ -30,6 +34,8 @@ if 'UNITTEST' in os.environ:
                 self._store[k] = v
 
         def _ceph_get_store_prefix(self, prefix):
+            if not hasattr(self, '_store'):
+                self._store = {}
             return {
                 k: v for k, v in self._store.items()
                 if k.startswith(prefix)
@@ -56,7 +62,9 @@ if 'UNITTEST' in os.environ:
 
 
         def __init__(self, *args):
-            self._store = {}
+            if not hasattr(self, '_store'):
+                self._store = {}
+
 
             if self.__class__.__name__ not in M_classes:
                 # call those only once. 
