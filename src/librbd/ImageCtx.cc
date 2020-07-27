@@ -724,6 +724,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
                                 bool thread_safe) {
     ldout(cct, 20) << __func__ << dendl;
 
+    std::unique_lock image_locker(image_lock);
+
     // reset settings back to global defaults
     for (auto& key : config_overrides) {
       std::string value;
@@ -761,6 +763,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
         }
       }
     }
+
+    image_locker.unlock();
 
 #define ASSIGN_OPTION(param, type)              \
     param = config.get_val<type>("rbd_"#param)
