@@ -33,17 +33,24 @@ def match_glob(val, pat):
 def mon_command(*args, **kwargs):
     return 0, '', ''
 
-
-@pytest.yield_fixture()
-def cephadm_module():
+@contextmanager
+def with_cephadm_module(module_options):
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
             mock.patch("cephadm.module.CephadmOrchestrator.remote"),\
             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
             mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command):
 
         m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
+        for k, v in module_options.items():
+            m._ceph_set_module_option('cephadm', k, v)
         m.__init__('cephadm', 0, 0)
         m._cluster_fsid = "fsid"
+        yield m
+
+
+@pytest.yield_fixture()
+def cephadm_module():
+    with with_cephadm_module({}) as m:
         yield m
 
 
