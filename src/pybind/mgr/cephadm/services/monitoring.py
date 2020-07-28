@@ -8,6 +8,7 @@ from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 
 logger = logging.getLogger(__name__)
 
+
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
@@ -72,6 +73,7 @@ class GrafanaService(CephadmService):
             'dashboard set-grafana-api-url',
             service_url
         )
+
 
 class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
@@ -231,6 +233,7 @@ class PrometheusService(CephadmService):
             'dashboard set-prometheus-api-host',
             service_url
         )
+
 
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'

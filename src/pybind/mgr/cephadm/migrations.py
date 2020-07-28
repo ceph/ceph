@@ -46,7 +46,9 @@ class Migrations:
     def verify_no_migration(self):
         if self.is_migration_ongoing():
             # this is raised in module.serve()
-            raise OrchestratorError("cephadm migration still ongoing. Please wait, until the migration is complete.")
+            raise OrchestratorError(
+                "cephadm migration still ongoing. Please wait, until the migration is complete."
+            )
 
     def migrate(self):
         if self.mgr.migration_current == 0:
@@ -69,7 +71,6 @@ class Migrations:
         3. now, we're converting the spec to explicit placement, thus reverting (1.)
         I think this is ok.
         """
-
         def interesting_specs() -> Iterator[ServiceSpec]:
             for s in self.mgr.spec_store.specs.values():
                 if s.unmanaged:
@@ -90,7 +91,8 @@ class Migrations:
                 get_daemons_func=self.mgr.cache.get_daemons_by_service
             ).place()
 
-            existing_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+            existing_daemons = self.mgr.cache.get_daemons_by_service(
+                spec.service_name())
 
             # We have to migrate, only if the new scheduler would remove daemons
             if len(placements) >= len(existing_daemons):
@@ -102,15 +104,14 @@ class Migrations:
                 for d in existing_daemons
             ]
 
-            new_placement = PlacementSpec(
-                hosts=new_hosts,
-                count=spec.placement.count
-            )
+            new_placement = PlacementSpec(hosts=new_hosts,
+                                          count=spec.placement.count)
 
             new_spec = ServiceSpec.from_json(spec.to_json())
             new_spec.placement = new_placement
 
-            logger.info(f"Migrating {spec.one_line_str()} to explicit placement")
+            logger.info(
+                f"Migrating {spec.one_line_str()} to explicit placement")
 
             self.mgr.spec_store.save(new_spec)
 
@@ -119,7 +120,8 @@ class Migrations:
             return True  # nothing to do. shortcut
 
         if not self.mgr.cache.daemon_cache_filled():
-            logger.info("Unable to migrate yet. Daemon Cache still incomplete.")
+            logger.info(
+                "Unable to migrate yet. Daemon Cache still incomplete.")
             return False
 
         for spec in specs:

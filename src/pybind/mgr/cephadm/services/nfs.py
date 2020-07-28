@@ -147,8 +147,7 @@ class NFSGanesha(object):
 
         if ret != 0:
             raise OrchestratorError(
-                    'Unable to create keyring %s: %s %s' \
-                            % (entity, ret, err))
+                'Unable to create keyring %s: %s %s' % (entity, ret, err))
         return keyring
 
     def update_keyring_caps(self, entity: Optional[str] = None) -> None:
@@ -157,7 +156,7 @@ class NFSGanesha(object):
 
         osd_caps='allow rw pool=%s' % (self.spec.pool)
         if self.spec.namespace:
-            osd_caps='%s namespace=%s' % (osd_caps, self.spec.namespace)
+            osd_caps = '%s namespace=%s' % (osd_caps, self.spec.namespace)
 
         logger.info('Updating keyring caps: %s' % entity)
         ret, out, err = self.mgr.mon_command({
@@ -169,8 +168,7 @@ class NFSGanesha(object):
 
         if ret != 0:
             raise OrchestratorError(
-                    'Unable to update keyring caps %s: %s %s' \
-                            % (entity, ret, err))
+                'Unable to update keyring caps %s: %s %s' % (entity, ret, err))
 
     def create_rados_config_obj(self, clobber: Optional[bool] = False) -> None:
         obj = self.spec.rados_config_name()
@@ -202,13 +200,13 @@ class NFSGanesha(object):
         return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
     def get_cephadm_config(self) -> Dict[str, Any]:
-        config = {'pool' : self.spec.pool} # type: Dict
+        config = {'pool': self.spec.pool} # type: Dict
         if self.spec.namespace:
             config['namespace'] = self.spec.namespace
         config['userid'] = self.get_rados_user()
         config['extra_args'] = ['-N', 'NIV_EVENT']
         config['files'] = {
-            'ganesha.conf' : self.get_ganesha_conf(),
+            'ganesha.conf': self.get_ganesha_conf(),
         }
         logger.debug('Generated cephadm config-json: %s' % config)
         return config

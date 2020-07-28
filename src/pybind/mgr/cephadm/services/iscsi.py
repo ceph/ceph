@@ -2,10 +2,9 @@ import json
 import logging
 from typing import List, cast
 
-from mgr_module import MonCommandFailed
 from ceph.deployment.service_spec import IscsiServiceSpec
 
-from orchestrator import DaemonDescription, OrchestratorError
+from orchestrator import DaemonDescription
 from .cephadmservice import CephadmService, CephadmDaemonSpec
 from .. import utils
 
@@ -71,7 +70,6 @@ class IscsiService(CephadmService):
         daemon_spec.extra_config = {'iscsi-gateway.cfg': igw_conf}
 
         return self.mgr._create_daemon(daemon_spec)
-
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         def get_set_cmd_dicts(out: str) -> List[dict]:

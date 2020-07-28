@@ -334,7 +334,8 @@ class RemoveUtil(object):
         when criteria is met.
         """
         logger.debug(
-            f"{len(self.to_remove_osds)} OSDs are scheduled for removal: {list(self.to_remove_osds)}")
+            f"{len(self.to_remove_osds)} OSDs are scheduled for removal: {list(self.to_remove_osds)}"
+        )
         self._update_osd_removal_status()
         remove_osds: set = self.to_remove_osds.copy()
         for osd in remove_osds:

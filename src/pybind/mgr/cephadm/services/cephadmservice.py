@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
+from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Tuple
 
 from mgr_module import MonCommandFailed
 
@@ -52,7 +52,6 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         self.extra_args: List[str] = extra_args or []
         self.extra_config: Dict[str, Any] = extra_config or {}
 
-
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -90,12 +89,10 @@ class CephadmService(metaclass=ABCMeta):
             keyring=daemon_spec.keyring,
             extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
 
-
         if daemon_spec.extra_config:
             cephadm_config.update({'files': daemon_spec.extra_config})
 
         return cephadm_config, []
-
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
@@ -189,8 +186,6 @@ class CephadmService(metaclass=ABCMeta):
             except MonCommandFailed as e:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
-
-
     def ok_to_stop(self, daemon_ids: List[str]) -> bool:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
 
@@ -214,6 +209,7 @@ class CephadmService(metaclass=ABCMeta):
         Called before the daemon is removed.
         """
         pass
+
 
 class MonService(CephadmService):
     TYPE = 'mon'
@@ -241,7 +237,8 @@ class MonService(CephadmService):
             elif ':' not in network:
                 extra_config += 'public addr = %s\n' % network
             else:
-                raise OrchestratorError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
+                raise OrchestratorError(
+                    'Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
         else:
             # try to get the public_network from the config
             ret, network, err = self.mgr.check_mon_command({
@@ -251,9 +248,12 @@ class MonService(CephadmService):
             })
             network = network.strip() if network else network
             if not network:
-                raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
+                raise OrchestratorError(
+                    'Must set public_network config option or specify a CIDR network, '
+                    'ceph addrvec, or plain IP')
             if '/' not in network:
-                raise OrchestratorError('public_network is set but does not look like a CIDR network: \'%s\'' % network)
+                raise OrchestratorError(
+                    'public_network is set but does not look like a CIDR network: \'%s\'' % network)
             extra_config += 'public network = %s\n' % network
 
         daemon_spec.extra_config={'config': extra_config}
@@ -278,9 +278,11 @@ class MonService(CephadmService):
         new_mons = [m for m in mons if m != mon_id]
         new_quorum = [m for m in j['quorum_names'] if m != mon_id]
         if len(new_quorum) > len(new_mons) / 2:
-            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' %
+                        (mon_id, new_quorum, new_mons))
             return
-        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
+        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' %
+                                (mon_id, new_quorum, new_mons))
 
 
     def pre_remove(self, daemon_id: str) -> None:

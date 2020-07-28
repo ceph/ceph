@@ -101,7 +101,7 @@ class Inventory:
         self.mgr.set_store('inventory', json.dumps(self._inventory))
 
 
-class SpecStore():
+class SpecStore:
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr = mgr
@@ -162,7 +162,8 @@ class SpecStore():
             service_name, specs))
         return specs
 
-class HostCache():
+
+class HostCache:
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr: CephadmOrchestrator = mgr
@@ -299,9 +300,9 @@ class HostCache():
             'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
-            j['last_daemon_update'] = self.last_daemon_update[host].strftime(DATEFMT) # type: ignore
+            j['last_daemon_update'] = self.last_daemon_update[host].strftime(DATEFMT)  # type: ignore
         if host in self.last_device_update:
-            j['last_device_update'] = self.last_device_update[host].strftime(DATEFMT) # type: ignore
+            j['last_device_update'] = self.last_device_update[host].strftime(DATEFMT)  # type: ignore
         for name, dd in self.daemons[host].items():
             j['daemons'][name] = dd.to_json()  # type: ignore
         for d in self.devices[host]:
@@ -481,7 +482,7 @@ class HostCache():
                    for h in self.get_hosts())
 
 
-class EventStore():
+class EventStore:
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr: CephadmOrchestrator = mgr

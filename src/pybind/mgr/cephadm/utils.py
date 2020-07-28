@@ -1,6 +1,6 @@
 import logging
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List
+from typing import Callable, TypeVar, List
 
 from orchestrator import OrchestratorError
 
@@ -21,14 +21,15 @@ def name_to_config_section(name: str) -> str:
     else:
         return 'mon'
 
+
 def name_to_auth_entity(daemon_type,  # type: str
                         daemon_id,    # type: str
-                        host = ""     # type  Optional[str] = ""
+                        host=''       # type  Optional[str] = ""
                         ):
     """
     Map from daemon names/host to ceph entity names (as seen in config)
     """
-    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
+    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'iscsi']:
         return 'client.' + daemon_type + "." + daemon_id
     elif daemon_type == 'crash':
         if host == "":
@@ -71,6 +72,5 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
 
         assert CephadmOrchestrator.instance is not None
         return CephadmOrchestrator.instance._worker_pool.map(do_work, vals)
-
 
     return forall_hosts_wrapper

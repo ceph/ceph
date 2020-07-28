@@ -91,6 +91,7 @@ class CephadmCompletion(orchestrator.Completion[T]):
     def evaluate(self):
         self.finalize(None)
 
+
 def trivial_completion(f: Callable[..., T]) -> Callable[..., CephadmCompletion[T]]:
     """
     Decorator to make CephadmCompletion methods return
@@ -328,7 +329,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if h not in self.inventory:
                 self.cache.rm_host(h)
 
-
         # in-memory only.
         self.events = EventStore(self)
         self.offline_hosts: Set[str] = set()
@@ -480,9 +480,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         self.log.debug("serve starting")
         while self.run:
-
             try:
-
                 # refresh daemons
                 self.log.debug('refreshing hosts and daemons')
                 self._refresh_hosts_and_daemons()
@@ -505,7 +503,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
                     if self.upgrade.continue_upgrade():
                         continue
-
             except OrchestratorError as e:
                 if e.event_subject:
                     self.events.add(OrchestratorEvent(
@@ -692,7 +689,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
 
-
     @staticmethod
     def can_run():
         if remoto is not None:
@@ -855,7 +851,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         host = self.cache.get_hosts()[0]
         r = self._check_host(host)
         if r is not None:
-            #connection failed reset user
+            # connection failed reset user
             self.set_store('ssh_user', current_user)
             self._reconfig_ssh()
             return -errno.EINVAL, '', 'ssh connection %s@%s failed' % (user, host)
@@ -994,8 +990,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if not executable_path:
             raise RuntimeError("Executable '{}' not found on host '{}'".format(
                 executable, conn.hostname))
-        self.log.debug("Found executable '{}' at path '{}'".format(executable,
-            executable_path))
+        self.log.debug("Found executable '{}' at path '{}'".format(
+            executable, executable_path))
         return executable_path
 
     @contextmanager
@@ -1018,7 +1014,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there: {str(e)}"
                 raise execnet.gateway_bootstrap.HostNotFound(msg)
 
-            yield (conn, connr)
+            yield conn, connr
 
         except execnet.gateway_bootstrap.HostNotFound as e:
             # this is a misleading exception as it seems to be thrown for
@@ -1112,9 +1108,9 @@ you may want to run:
                             host, remotes.PYTHONS, remotes.PATH))
                 try:
                     out, err, code = remoto.process.check(
-                    conn,
-                    [python, '-u'],
-                    stdin=script.encode('utf-8'))
+                        conn,
+                        [python, '-u'],
+                        stdin=script.encode('utf-8'))
                 except RuntimeError as e:
                     self._reset_con(host)
                     if error_ok:
@@ -1144,7 +1140,6 @@ you may want to run:
                     'cephadm exited with an error code: %d, stderr:%s' % (
                         code, '\n'.join(err)))
             return out, err, code
-
 
     def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
         return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
@@ -1573,7 +1568,7 @@ you may want to run:
                 out, err, code = self._run_cephadm(
                     daemon_spec.daemon_type, name, 'unit',
                     ['--name', name, a])
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(daemon_spec.host)
         return "{} {} from host '{}'".format(action, name, daemon_spec.host)
@@ -1626,6 +1621,7 @@ you may want to run:
         Return the storage inventory of hosts matching the given filter.
 
         :param host_filter: host filter
+        :param refresh:
 
         TODO:
           - add filtering by label
@@ -1749,11 +1745,13 @@ you may want to run:
         # Is any host still loading previews
         pending_hosts = {h for h in self.cache.loading_osdspec_preview if h in matching_hosts}
         if pending_hosts:
-            # Report 'pending' when any of the matching hosts is still loading previews (flag is True)
+            # Report 'pending' when any of the matching hosts is still loading
+            # previews (flag is True)
             return {'n/a': [{'error': True,
                              'message': 'Preview data is being generated.. '
                                         'Please re-run this command in a bit.'}]}
-        # drop all keys that are not in search_hosts and only select reports that match the requested osdspecs
+        # drop all keys that are not in search_hosts and only select reports that
+        # match the requested osdspecs
         previews_for_specs = {}
         for host, raw_reports in self.cache.osdspec_previews.items():
             if host not in matching_hosts:
@@ -1807,14 +1805,11 @@ you may want to run:
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
                        redeploy=False,
                        ) -> str:
-
-
         with set_exception_subject('service', orchestrator.DaemonDescription(
                 daemon_type=daemon_spec.daemon_type,
                 daemon_id=daemon_spec.daemon_id,
                 hostname=daemon_spec.host,
         ).service_id(), overwrite=True):
-
             start_time = datetime.datetime.utcnow()
             cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(daemon_spec)
 
@@ -1886,8 +1881,6 @@ you may want to run:
                 daemon_id=daemon_id,
                 hostname=host,
         ).service_id(), overwrite=True):
-
-
             self.cephadm_services[daemon_type].pre_remove(daemon_id)
 
             args = ['--name', name, '--force']
@@ -2127,7 +2120,8 @@ you may want to run:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
                                              forcename=name)
-            daemon_spec = self.cephadm_services[daemon_type].make_daemon_spec(host, daemon_id, network, spec)
+            daemon_spec = self.cephadm_services[daemon_type].make_daemon_spec(
+                host, daemon_id, network, spec)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
             args.append(daemon_spec)
