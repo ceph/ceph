@@ -1046,12 +1046,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             user = self.ssh_user if self.mode == 'root' else 'cephadm'
             msg = f'''Failed to connect to {host} ({addr}).
-Check that the host is reachable and accepts connections using the cephadm SSH key
+Please make sure that the host is reachable and accepts connections using the cephadm SSH key
 
-you may want to run:
+To add the cephadm SSH key to the host:
+> ceph cephadm get-pub-key > ~/ceph.pub
+> ssh-copy-id -f -i ~/ceph.pub {user}@{host}
+
+To check that the host is reachable:
 > ceph cephadm get-ssh-config > ssh_config
-> ceph config-key get mgr/cephadm/ssh_identity_key > key
-> ssh -F ssh_config -i key {user}@{host}'''
+> ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
+> ssh -F ssh_config -i ~/cephadm_private_key {user}@{host}'''
             raise OrchestratorError(msg) from e
         except Exception as ex:
             self.log.exception(ex)
