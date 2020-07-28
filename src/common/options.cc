@@ -7586,6 +7586,12 @@ static std::vector<Option> get_rbd_options() {
     .set_default(60)
     .set_min(0)
     .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
+
+    Option("rbd_config_pool_override_update_timestamp", Option::TYPE_UINT,
+           Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("timestamp of last update to pool-level config overrides"),
+
   });
 }
 
