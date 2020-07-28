@@ -1173,6 +1173,9 @@ private:
   int _posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want);
 
   mds_rank_t _get_random_up_mds() const;
+  mds_rank_t hash_into_mds_rank(inodeno_t ino);
+  Inode* get_ephemeral_dist_root(Inode *in);
+  mds_rank_t _get_ephemeral_dist_mds(Inode *in);
 
   int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
   int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);

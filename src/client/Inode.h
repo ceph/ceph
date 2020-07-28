@@ -155,6 +155,8 @@ struct Inode {
   frag_info_t dirstat;
   nest_info_t rstat;
 
+  bool export_ephemeral_distributed_pin = false;
+
   // special stuff
   version_t version;           // auth only
   version_t xattr_version;

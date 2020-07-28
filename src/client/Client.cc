@@ -871,6 +871,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->btime = st->btime;
     in->snap_btime = st->snap_btime;
   }
+  in->export_ephemeral_distributed_pin = st->export_ephemeral_distributed_pin;
 
   if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
       !(issued & CEPH_CAP_LINK_EXCL)) {
@@ -1439,6 +1440,16 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 
   in = req->inode();
   de = req->dentry();
+
+  // choose ephemeral dist mds
+  if (in) {
+    mds = _get_ephemeral_dist_mds(in);
+    if(mds >= 0) {
+       ldout(cct, 10) << __func__ << " _get_ephemeral_dist_mds." << mds << dendl;
+      goto out;
+    }
+  }
+
   if (in) {
     ldout(cct, 20) << __func__ << " starting with req->inode " << *in << dendl;
     if (req->path.depth()) {
@@ -14743,6 +14754,61 @@ mds_rank_t Client::_get_random_up_mds() const
   return *p;
 }
 
+mds_rank_t Client::hash_into_mds_rank(inodeno_t ino)
+{
+  std::set<mds_rank_t> up;
+  mdsmap->get_up_mds_set(up);
+  if (up.empty())
+    return MDS_RANK_NONE;
+  const mds_rank_t max_mds = up.size();
+  uint64_t hash = rjhash64(ino);
+  int64_t b = -1, j = 0;
+  while (j < max_mds) {
+    b = j;
+    hash = hash*2862933555777941757ULL + 1;
+    j = (b + 1) * (double(1LL << 31) / double((hash >> 33) + 1));
+  }
+  // verify bounds before returning
+  auto result = mds_rank_t(b);
+  ceph_assert(result >= 0 && result < max_mds);
+  return result;
+}
+
+Inode *Client::get_ephemeral_dist_root(Inode *in)
+{
+  Inode *pin_in = 0;
+  Inode *child_in = in;
+  Inode *parent_in = in;
+  while (child_in && !(child_in->dentries.empty())) {
+    parent_in = child_in->get_first_parent()->dir->parent_inode;
+    if (parent_in) {
+      if (parent_in->export_ephemeral_distributed_pin) {
+        pin_in = child_in;
+	break;
+      }
+      child_in = parent_in;
+    }
+    else{
+      break;
+    }
+  }
+  out:
+  ldout(cct, 10) << __func__ << " pin_in: " << pin_in << dendl;
+  return pin_in;
+}
+
+mds_rank_t Client::_get_ephemeral_dist_mds(Inode *in)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  mds_rank_t mds = MDS_RANK_NONE;
+  Inode *pin_in = get_ephemeral_dist_root(in);
+  if(pin_in){
+    mds = hash_into_mds_rank(pin_in->ino);
+  }
+  ldout(cct, 10) << __func__ << " mds. " << mds << dendl;
+  return mds;
+}
 
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
 				   boost::asio::io_context& ictx)

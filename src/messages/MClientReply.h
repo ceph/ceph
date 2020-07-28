@@ -135,6 +135,7 @@ struct InodeStat {
   quota_info_t quota;
 
   mds_rank_t dir_pin;
+  bool export_ephemeral_distributed_pin;
 
  public:
   InodeStat() {}
@@ -190,6 +191,7 @@ struct InodeStat {
       } else {
         dir_pin = -ENODATA;
       }
+      decode(export_ephemeral_distributed_pin, p);
       if (struct_v >= 3) {
         decode(snap_btime, p);
       } // else remains zero
@@ -256,6 +258,7 @@ struct InodeStat {
         btime = utime_t();
         change_attr = 0;
       }
+      decode(export_ephemeral_distributed_pin, p);
     }
   }
   
