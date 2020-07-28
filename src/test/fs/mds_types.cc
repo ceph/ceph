@@ -111,8 +111,8 @@ TEST(inode_backtrace_t, compare_equal)
   
   foo.ino = 1234;
   foo.pool = 12;
-  foo.old_pools.insert(10);
-  foo.old_pools.insert(5);
+  foo.old_pools.push_back(10);
+  foo.old_pools.push_back(5);
 
   inode_backpointer_t foop;
   foop.dirino = 3;
@@ -147,12 +147,12 @@ TEST(inode_backtrace_t, compare_newer)
 
   foo.ino = 1234;
   foo.pool = 12;
-  foo.old_pools.insert(10);
-  foo.old_pools.insert(5);
+  foo.old_pools.push_back(10);
+  foo.old_pools.push_back(5);
 
   bar.ino = 1234;
   bar.pool = 12;
-  bar.old_pools.insert(10);
+  bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
   foop.dirino = 3;
@@ -211,12 +211,12 @@ TEST(inode_backtrace_t, compare_divergent)
 
   foo.ino = 1234;
   foo.pool = 12;
-  foo.old_pools.insert(10);
-  foo.old_pools.insert(5);
+  foo.old_pools.push_back(10);
+  foo.old_pools.push_back(5);
 
   bar.ino = 1234;
   bar.pool = 12;
-  bar.old_pools.insert(10);
+  bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
   foop.dirino = 3;
