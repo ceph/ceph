@@ -1685,6 +1685,8 @@ void MDSRank::validate_sessions()
   // Mitigate bugs like: http://tracker.ceph.com/issues/16842
   for (const auto &i : sessionmap.get_sessions()) {
     Session *session = i.second;
+    ceph_assert(session->info.prealloc_inos == session->free_prealloc_inos);
+
     interval_set<inodeno_t> badones;
     if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
       clog->error() << "client " << *session

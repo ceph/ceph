@@ -78,9 +78,8 @@ void SessionMap::dump()
     dout(10) << p->first << " " << p->second
 	     << " state " << p->second->get_state_name()
 	     << " completed " << p->second->info.completed_requests
-	     << " prealloc_inos " << p->second->info.prealloc_inos
+	     << " free_prealloc_inos " << p->second->free_prealloc_inos
 	     << " delegated_inos " << p->second->delegated_inos
-	     << " used_inos " << p->second->info.used_inos
 	     << dendl;
 }
 
@@ -598,6 +597,16 @@ void Session::dump(Formatter *f, bool cap_dump) const
   f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
   f->dump_object("session_cache_liveness", session_cache_liveness);
   f->dump_object("cap_acquisition", cap_acquisition);
+
+  f->open_array_section("delegated_inos");
+  for (const auto& [start, len] : delegated_inos) {
+    f->open_object_section("ino_range");
+    f->dump_stream("start") << start;
+    f->dump_unsigned("length", len);
+    f->close_section();
+  }
+  f->close_section();
+
   info.dump(f);
 }
 
@@ -636,9 +645,9 @@ void SessionMap::wipe_ino_prealloc()
        p != session_map.end(); 
        ++p) {
     p->second->pending_prealloc_inos.clear();
+    p->second->free_prealloc_inos.clear();
     p->second->delegated_inos.clear();
     p->second->info.prealloc_inos.clear();
-    p->second->info.used_inos.clear();
   }
   projected = ++version;
 }
@@ -982,6 +991,8 @@ void Session::_update_human_name()
 void Session::decode(bufferlist::const_iterator &p)
 {
   info.decode(p);
+
+  free_prealloc_inos = info.prealloc_inos;
 
   _update_human_name();
 }
