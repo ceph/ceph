@@ -11,20 +11,27 @@
 #include "mds/mdstypes.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
+#include "MetaRequestRef.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
+#include "common/RefCountedObj.h"
 
+class Client;
 class Dentry;
 class dir_result_t;
 
-struct MetaRequest {
+struct MetaRequest : public RefCountedObject {
 private:
   InodeRef _inode, _old_inode, _other_inode;
   Dentry *_dentry = NULL;     //associated with path
   Dentry *_old_dentry = NULL; //associated with path2
   int abort_rc = 0;
 public:
+  ceph::mutex request_lock = ceph::make_mutex("MetaRequest::request_lock");
+
+  Client *client;
+
   uint64_t tid = 0;
   utime_t  op_stamp;
   ceph_mds_request_head head;
@@ -40,7 +47,7 @@ public:
   vector<MClientRequest::Release> cap_releases;
 
   int regetattr_mask = 0;          // getattr mask if i need to re-stat after a traceless reply
- 
+
   utime_t  sent_stamp;
   mds_rank_t mds = -1;             // who i am asking
   mds_rank_t resend_mds = -1;      // someone wants you to (re)send the request here
@@ -48,8 +55,7 @@ public:
   __u32    sent_on_mseq = 0;       // mseq at last submission of this request
   int      num_fwd = 0;            // # of times i've been forwarded
   int      retry_attempt = 0;
-  std::atomic<uint64_t> ref = { 1 };
-  
+
   ceph::cref_t<MClientReply> reply = NULL;  // the reply
   bool kick = false;
   bool success = false;
@@ -72,9 +78,9 @@ public:
   InodeRef target;
   UserPerm perms;
 
-  explicit MetaRequest(int op) :
-    item(this), unsafe_item(this), unsafe_dir_item(this),
-    unsafe_target_item(this) {
+  explicit MetaRequest(Client *c, int op) :
+    client(c), item(this), unsafe_item(this),
+    unsafe_dir_item(this), unsafe_target_item(this) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
@@ -138,17 +144,6 @@ public:
   Dentry *dentry();
   void set_old_dentry(Dentry *d);
   Dentry *old_dentry();
-
-  MetaRequest* get() {
-    ref++;
-    return this;
-  }
-
-  /// psuedo-private put method; use Client::put_request()
-  bool _put() {
-    int v = --ref;
-    return v == 0;
-  }
 
   // normal fields
   void set_tid(ceph_tid_t t) { tid = t; }
