@@ -1618,7 +1618,7 @@ class OrchestratorEvent:
     """
     INFO = 'INFO'
     ERROR = 'ERROR'
-    regex_v1 = re.compile(r'^([^ ]+) ([^:]+):([^ ]+) \[([^\]]+)\] "(.*)"$')
+    regex_v1 = re.compile(r'^([^ ]+) ([^:]+):([^ ]+) \[([^\]]+)\] "((?:.|\n)*)"$', re.MULTILINE)
 
     def __init__(self, created: Union[str, datetime.datetime], kind, subject, level, message):
         if isinstance(created, str):
@@ -1647,7 +1647,6 @@ class OrchestratorEvent:
         created = self.created.strftime(DATEFMT)
         return f'{created} {self.kind_subject()} [{self.level}] "{self.message}"'
 
-
     @classmethod
     @handle_type_error
     def from_json(cls, data) -> "OrchestratorEvent":
@@ -1662,6 +1661,13 @@ class OrchestratorEvent:
         if match:
             return cls(*match.groups())
         raise ValueError(f'Unable to match: "{data}"')
+
+    def __eq__(self, other):
+        if not isinstance(other, OrchestratorEvent):
+            return False
+
+        return self.created == other.created and self.kind == other.kind \
+            and self.subject == other.subject and self.message == other.message
 
 
 def _mk_orch_methods(cls):
