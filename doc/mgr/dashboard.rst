@@ -402,71 +402,104 @@ separate application that provides machine metrics.
   <https://prometheus.io/docs/operating/security/>` for more detailed
   information.
 
-Grafana and Prometheus are likely going to be bundled and installed by some
-orchestration tools along Ceph in the near future, but currently, you will have
-to install and configure both manually. After you have installed Prometheus and
-Grafana on your preferred hosts, proceed with the following steps.
+Installation and Configuration using cephadm
+""""""""""""""""""""""""""""""""""""""""""""
 
-1. Enable the Ceph Exporter which comes as Ceph Manager module by running::
+Grafana and Prometheus can be installed using :ref:`cephadm`. They will
+automatically be configured by `cephadm`. Please see
+:ref:`mgr-cephadm-monitoring` documentation for more details on how to use
+cephadm for installing and configuring Prometheus and Grafana.
 
-    $ ceph mgr module enable prometheus
+Manual Installation and Configuration
+"""""""""""""""""""""""""""""""""""""
 
-More details can be found in the documentation of the :ref:`mgr-prometheus`.
+The following process describes how to configure Grafana and Prometheus
+manually. After you have installed Prometheus, Grafana and the Node exporter
+on your preferred hosts, proceed with the following steps.
 
-2. Add the corresponding scrape configuration to Prometheus. This may look
-   like::
+#.  Enable the Ceph Exporter which comes as Ceph Manager module by running::
 
-    global:
-      scrape_interval: 5s
+      $ ceph mgr module enable prometheus
 
-    scrape_configs:
-      - job_name: 'prometheus'
-        static_configs:
-          - targets: ['localhost:9090']
-      - job_name: 'ceph'
-        static_configs:
-          - targets: ['localhost:9283']
-      - job_name: 'node-exporter'
-        static_configs:
-          - targets: ['localhost:9100']
+    More details can be found in the documentation of the :ref:`mgr-prometheus`.
 
-3. Add Prometheus as data source to Grafana
+#.  Add the corresponding scrape configuration to Prometheus. This may look
+    like::
 
-4. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
+      global:
+        scrape_interval: 5s
 
-    grafana-cli plugins install vonage-status-panel
-    grafana-cli plugins install grafana-piechart-panel
+      scrape_configs:
+        - job_name: 'prometheus'
+          static_configs:
+            - targets: ['localhost:9090']
+        - job_name: 'ceph'
+          static_configs:
+            - targets: ['localhost:9283']
+        - job_name: 'node-exporter'
+          static_configs:
+            - targets: ['localhost:9100']
 
-5. Add the Dashboards to Grafana:
+    .. note::
 
-  Dashboards can be added to Grafana by importing dashboard jsons.
-  Following command can be used for downloading json files::
+      Please note that in the aforementioned example, Prometheus is configured
+      to scrape data from itself (port 9090), the Ceph manager module
+      `prometheus` (port 9283), which exports Ceph internal data and the Node
+      exporter (port 9100), which provides metrics of a machine.
 
-    wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+      Depending on your configuration, you may need to change the hostname in
+      this configuration or add additional configuration entries for the Node
+      exporter. It is unlikely that you will need to change the provided ports.
 
-  You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
-  master/monitoring/grafana/dashboards>`_ .
+      Moreover, you don't *need* to have more than one target for Ceph specific
+      data, provided by the `prometheus` mgr module. But it is recommended to
+      configure Prometheus to scrape Ceph specific data from all existing Ceph
+      managers. This enables a built-in high availability mechanism, where
+      services run on a manager will be restarted automatically on a second
+      manager instance if one Ceph Manager goes down.
 
-  For Example, for ceph-cluster overview you can use::
+#.  Add Prometheus as data source to Grafana `using the Grafana Web UI
+    <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
 
-    wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+#.  Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
-6. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
+      grafana-cli plugins install vonage-status-panel
+      grafana-cli plugins install grafana-piechart-panel
 
-    [auth.anonymous]
-    enabled = true
-    org_name = Main Org.
-    org_role = Viewer
+#.  Add the Dashboards to Grafana:
 
-  In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
-  ``allow_embedding`` has been introduced. This setting needs to be explicitly
-  set to ``true`` for the Grafana integration in Ceph Dashboard to work, as its
-  default is ``false``.
+    Dashboards can be added to Grafana by importing dashboard JSON files.
+    Use the following command to download the JSON files::
 
-  ::
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
 
-    [security]
-    allow_embedding = true
+    You can find all the dashboard JSON files `here <https://github.com/ceph/ceph/tree/
+    master/monitoring/grafana/dashboards>`_ .
+
+    For Example, for ceph-cluster overview you can use::
+
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+
+#.  Configure Grafana in ``/etc/grafana/grafana.ini`` to enable anonymous mode::
+
+      [auth.anonymous]
+      enabled = true
+      org_name = Main Org.
+      org_role = Viewer
+
+    In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
+    ``allow_embedding`` has been introduced. This setting needs to be explicitly
+    set to ``true`` for the Grafana integration in Ceph Dashboard to work, as its
+    default is ``false``.
+
+    ::
+
+      [security]
+      allow_embedding = true
+
+
+Configuring Dashboard
+"""""""""""""""""""""
 
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Dashboard will use to access Grafana.
@@ -1237,7 +1270,7 @@ Ceph Dashboard Logs
 ^^^^^^^^^^^^^^^^^^^
 
 Dashboard Debug Flag
-''''''''''''''''''''
+""""""""""""""""""""
 
 With this flag enabled, traceback of errors are included in backend responses.
 
@@ -1251,7 +1284,7 @@ To enable it via the CLI, run the following command::
 
 
 Setting Logging Level of Dashboard Module
-'''''''''''''''''''''''''''''''''''''''''
+"""""""""""""""""""""""""""""""""""""""""
 
 Setting the logging level to debug makes the log more verbose and helpful for
 debugging.
