@@ -108,6 +108,13 @@ int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
   }
 
   std::unique_lock l{m_pool->file_lock};
+  if (exclusive) {
+    TestMemCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, {});
+    if (file != NULL && file->exists) {
+      return -EEXIST;
+    }
+  }
+
   get_file(oid, true, CEPH_NOSNAP, snapc);
   return 0;
 }
