@@ -17,6 +17,4 @@ tasks:
       - ceph-mgr-rook
       - ceph-mgr-cephadm
       - cephadm
-      - ceph-immutable-object-cache
-      - ceph-base
     extra_packages: ['librados2']
