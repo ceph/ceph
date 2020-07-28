@@ -403,49 +403,49 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ceph_pg_total)",
+          "expr": "sum(ceph_pg_total{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "sum(ceph_pg_active)",
+          "expr": "sum(ceph_pg_active{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Active",
           "refId": "B"
         },
         {
-          "expr": "sum(ceph_pg_total - ceph_pg_active)",
+          "expr": "sum(ceph_pg_total{instance=~\"$instance\"} - ceph_pg_active{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Inactive",
           "refId": "G"
         },
         {
-          "expr": "sum(ceph_pg_undersized)",
+          "expr": "sum(ceph_pg_undersized{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Undersized",
           "refId": "F"
         },
         {
-          "expr": "sum(ceph_pg_degraded)",
+          "expr": "sum(ceph_pg_degraded{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Degraded",
           "refId": "C"
         },
         {
-          "expr": "sum(ceph_pg_inconsistent)",
+          "expr": "sum(ceph_pg_inconsistent{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Inconsistent",
           "refId": "D"
         },
         {
-          "expr": "sum(ceph_pg_down)",
+          "expr": "sum(ceph_pg_down{instance=~\"$instance\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Down",
