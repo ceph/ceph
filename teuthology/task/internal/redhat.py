@@ -4,6 +4,8 @@ Internal tasks  for redhat downstream builds
 import contextlib
 import logging
 import requests
+import yaml
+import os
 from tempfile import NamedTemporaryFile
 from teuthology.config import config as teuthconfig
 from teuthology.parallel import parallel
@@ -19,10 +21,11 @@ def setup_stage_cdn(ctx, config):
     """
     Configure internal stage cdn
     """
-    rhbuild = ctx.config.get('redhat').get('rhbuild')
-    if not rhbuild:
-        raise ConfigError("Provide rhbuild attribute")
-    teuthconfig.rhbuild = str(rhbuild)
+    suite_path = ctx.config.get('suite_path')
+    if not suite_path:
+        raise ConfigError("suite_path missing")
+    teuthconfig.suite_path = suite_path
+
     with parallel() as p:
         for remote in ctx.cluster.remotes.keys():
             if remote.os.name == 'rhel':
@@ -101,23 +104,18 @@ def setup_additional_repo(ctx, config):
 
 
 def _enable_rhel_repos(remote):
-    rhel_7_rpms = ['rhel-7-server-rpms',
-                   'rhel-7-server-optional-rpms',
-                   'rhel-7-server-extras-rpms']
 
-    rhel_8_rpms = ['rhel-8-for-x86_64-appstream-rpms',
-                   'rhel-8-for-x86_64-baseos-rpms',
-                   'ansible-2.8-for-rhel-8-x86_64-rpms']
+    # Look for rh specific repos in <suite_path>/rh/downstream.yaml
+    ds_yaml = os.path.join(
+        teuthconfig.suite_path,
+        'rh',
+        'downstream.yaml',
+    )
 
-    if teuthconfig.rhbuild.startswith("3"):
-        rhel_7_rpms.append('rhel-7-server-ansible-2.6-rpms')
-    elif teuthconfig.rhbuild.startswith("4"):
-        rhel_7_rpms.append('rhel-7-server-ansible-2.8-rpms')
+    rhel_repos = yaml.safe_load(open(ds_yaml))
+    repos_to_subscribe = rhel_repos.get('rhel_repos').get(remote.os.version[0])
 
-    repos_to_subscribe = {'7': rhel_7_rpms,
-                          '8': rhel_8_rpms}
-
-    for repo in repos_to_subscribe.get(remote.os.version[0]):
+    for repo in repos_to_subscribe:
         remote.run(args=['sudo', 'subscription-manager',
                          'repos', '--enable={r}'.format(r=repo)])
 
