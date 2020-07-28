@@ -99,6 +99,12 @@ void RGWObjManifestRule::dump(Formatter *f) const
   encode_json("override_prefix", override_prefix, f);
 }
 
+void RGWObjTier::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_object("tier_placement", tier_placement);
+}
+
 void rgw_bucket_placement::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
@@ -144,6 +150,11 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("rules", rules, f);
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
+  ::encode_json("tier_type", tier_type, f);
+  
+  if (tier_type == "cloud") {
+    ::encode_json("tier_config", tier_config, f);
+  }
 
   // nullptr being passed into iterators since there
   // is no cct and we aren't doing anything with these
