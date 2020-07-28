@@ -811,21 +811,25 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
 	   << " " << (open ? "open":"close") << " " << pv
 	   << " inos_to_free " << inos_to_free << " inotablev " << piv
 	   << " inos_to_purge " << inos_to_purge << dendl;
-  
-  if (inos_to_purge.size()){
-    ceph_assert(ls);
-    session->info.prealloc_inos.subtract(inos_to_purge);
-    ls->purging_inodes.insert(inos_to_purge);
-    mdcache->purge_inodes(inos_to_purge, ls);
-  }
-  
-  if (piv) {
-    ceph_assert(session->is_closing() || session->is_killing() ||
-	   session->is_opening()); // re-open closing session
-    session->info.prealloc_inos.subtract(inos_to_free);
+
+  if (!open) {
+    if (inos_to_purge.size()){
+      ceph_assert(ls);
+      session->info.prealloc_inos.subtract(inos_to_purge);
+      ls->purging_inodes.insert(inos_to_purge);
+      mdcache->purge_inodes(inos_to_purge, ls);
+    }
+
+    if (inos_to_free.size()) {
+      ceph_assert(piv);
+      ceph_assert(session->is_closing() || session->is_killing() ||
+	  session->is_opening()); // re-open closing session
+      session->info.prealloc_inos.subtract(inos_to_free);
+      mds->inotable->apply_release_ids(inos_to_free);
+      ceph_assert(mds->inotable->get_version() == piv);
+    }
+    session->free_prealloc_inos = session->info.prealloc_inos;
     session->delegated_inos.clear();
-    mds->inotable->apply_release_ids(inos_to_free);
-    ceph_assert(mds->inotable->get_version() == piv);
   }
 
   mds->sessionmap.mark_dirty(session);
@@ -3251,8 +3255,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(useino))) {
     mds->sessionmap.mark_projected(mdr->session);
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
-	     << " (" << mdr->session->info.prealloc_inos
-	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
+	     << " (" << mdr->session->info.prealloc_inos.size() << " left)"
 	     << dendl;
   } else {
     mdr->alloc_ino = 
@@ -3363,13 +3366,14 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   if (mdr->prealloc_inos.size()) {
     ceph_assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+    session->free_prealloc_inos.insert(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.mark_dirty(session, !mdr->used_prealloc_ino);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
     ceph_assert(session);
-    session->info.used_inos.erase(mdr->used_prealloc_ino);
+    session->info.prealloc_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.mark_dirty(session);
   }
 }
