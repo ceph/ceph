@@ -209,6 +209,32 @@ ssize_t ImageRequestWQ<I>::writesame(uint64_t off, uint64_t len,
 }
 
 template <typename I>
+ssize_t ImageRequestWQ<I>::write_zeroes(uint64_t off, uint64_t len,
+                                        int zero_flags, int op_flags) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
+                 << "len = " << len << dendl;
+
+  m_image_ctx.snap_lock.get_read();
+  int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
+  m_image_ctx.snap_lock.put_read();
+  if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  C_SaferCond ctx;
+  auto aio_comp = io::AioCompletion::create(&ctx);
+  aio_write_zeroes(aio_comp, off, len, zero_flags, op_flags, false);
+
+  r = ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return len;
+}
+
+template <typename I>
 ssize_t ImageRequestWQ<I>::compare_and_write(uint64_t off, uint64_t len,
                                              bufferlist &&cmp_bl,
                                              bufferlist &&bl,
@@ -443,6 +469,55 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     c->start_op();
     ImageRequest<I>::aio_writesame(&m_image_ctx, c, {{off, len}}, std::move(bl),
 				   op_flags, trace);
+    finish_in_flight_io();
+  }
+  trace.event("finish");
+}
+
+
+template <typename I>
+void ImageRequestWQ<I>::aio_write_zeroes(io::AioCompletion *aio_comp,
+                                         uint64_t off, uint64_t len,
+                                         int zero_flags, int op_flags,
+                                         bool native_async) {
+  auto cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
+  ZTracer::Trace trace;
+  if (m_image_ctx.blkin_trace_all) {
+    trace.init("io: write_zeroes", &m_image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  aio_comp->init_time(util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_DISCARD);
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
+                 << "completion=" << aio_comp << ", off=" << off << ", "
+                 << "len=" << len << dendl;
+
+  if (native_async && m_image_ctx.event_socket.is_valid()) {
+    aio_comp->set_event_notify(true);
+  }
+
+  // validate the supported flags
+  if (zero_flags != 0U) {
+    aio_comp->fail(-EINVAL);
+    return;
+  }
+
+  if (!start_in_flight_io(aio_comp)) {
+    return;
+  }
+
+  // enable partial discard (zeroing) of objects
+  uint32_t discard_granularity_bytes = 0;
+
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
+    queue(ImageDispatchSpec<I>::create_discard_request(
+      m_image_ctx, aio_comp, off, len, discard_granularity_bytes, trace));
+  } else {
+    aio_comp->start_op();
+    ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, {{off, len}},
+                                 discard_granularity_bytes, trace);
     finish_in_flight_io();
   }
   trace.event("finish");
