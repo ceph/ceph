@@ -5,6 +5,7 @@ from functools import total_ordering
 from ceph_volume import sys_info, process
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
+from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 
 report_template = """
@@ -63,6 +64,7 @@ class Device(object):
         'path',
         'sys_api',
         'device_id',
+        'lsm_data',
     ]
     pretty_report_sys_fields = [
         'human_readable_size',
@@ -90,6 +92,7 @@ class Device(object):
         self._exists = None
         self._is_lvm_member = None
         self._parse()
+        self.lsm_data = self.fetch_lsm()
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
         self.available_raw, self.rejected_reasons_raw = self._check_raw_reject_reasons()
@@ -98,6 +101,26 @@ class Device(object):
                                          self.rejected_reasons_raw))
 
         self.device_id = self._get_device_id()
+
+    def fetch_lsm(self):
+        '''
+        Attempt to fetch libstoragemgmt (LSM) metadata, and return to the caller
+        as a dict. An empty dict is passed back to the caller if the target path
+        is not a block device, or lsm is unavailable on the host. Otherwise the
+        json returned will provide LSM attributes, and any associated errors that
+        lsm encountered when probing the device.
+        '''
+        devName = self.path.split('/')[-1]
+        if not os.path.exists('/sys/block/{}'.format(devName)):
+            return dict()
+
+        lsm_disk = LSMDisk(self.path)
+        if not lsm_disk.lsm_available:
+            return dict()
+
+        lsm_json = lsm_disk.json_report()
+        
+        return lsm_json
 
     def __lt__(self, other):
         '''
