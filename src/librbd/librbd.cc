@@ -127,7 +127,7 @@ struct C_AioCompletion : public Context {
   }
 
   void finish(int r) override {
-    ldout(cct, 20) << "C_AioComplete::finish: r=" << r << dendl;
+    ldout(cct, 20) << "C_AioCompletion::finish: r=" << r << dendl;
     if (r < 0) {
       aio_comp->fail(r);
     } else {
@@ -145,7 +145,7 @@ struct C_OpenComplete : public C_AioCompletion {
       ictx(ictx), ictxp(ictxp) {
   }
   void finish(int r) override {
-    ldout(ictx->cct, 20) << "C_OpenComplete::finish: r=" << r << dendl;
+    ldout(cct, 20) << "C_OpenComplete::finish: r=" << r << dendl;
     if (r < 0) {
       *ictxp = nullptr;
     } else {
@@ -168,7 +168,6 @@ struct C_OpenAfterCloseComplete : public Context {
   void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenAfterCloseComplete::finish: r=" << r
 			 << dendl;
-    delete reinterpret_cast<librbd::ImageCtx*>(*ictxp);
     *ictxp = nullptr;
 
     ictx->state->open(0, new C_OpenComplete(ictx, comp, ictxp));

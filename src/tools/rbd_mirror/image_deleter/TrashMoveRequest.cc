@@ -183,7 +183,6 @@ void TrashMoveRequest<I>::handle_open_image(int r) {
 
   if (r < 0) {
     derr << "failed to open image: " << cpp_strerror(r) << dendl;
-    m_image_ctx->destroy();
     m_image_ctx = nullptr;
     finish(r);
     return;
@@ -355,7 +354,6 @@ template <typename I>
 void TrashMoveRequest<I>::handle_close_image(int r) {
   dout(10) << "r=" << r << dendl;
 
-  m_image_ctx->destroy();
   m_image_ctx = nullptr;
 
   if (r < 0) {

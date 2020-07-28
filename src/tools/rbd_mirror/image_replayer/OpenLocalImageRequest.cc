@@ -149,7 +149,6 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
       derr << ": failed to open image '" << m_local_image_id << "': "
            << cpp_strerror(r) << dendl;
     }
-    (*m_local_image_ctx)->destroy();
     *m_local_image_ctx = nullptr;
     finish(r);
     return;

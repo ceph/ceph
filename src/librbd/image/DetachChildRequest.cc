@@ -184,7 +184,6 @@ void DetachChildRequest<I>::handle_clone_v2_open_parent(int r) {
   if (r < 0) {
     ldout(cct, 5) << "failed to open parent for read/write: "
                   << cpp_strerror(r) << dendl;
-    m_parent_image_ctx->destroy();
     m_parent_image_ctx = nullptr;
     finish(0);
     return;
@@ -339,7 +338,6 @@ void DetachChildRequest<I>::handle_clone_v2_close_parent(int r) {
                   << dendl;
   }
 
-  m_parent_image_ctx->destroy();
   m_parent_image_ctx = nullptr;
   finish(0);
 }

@@ -7,8 +7,6 @@
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/Utils.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "osdc/Striper.h"
 
