@@ -565,9 +565,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             spec = service.spec
             spec.unmanaged = unmanaged_flag
             specs.append(spec)
-        completion = self.apply(cast(List[GenericSpec], specs))
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
+        apply_completion = self.apply(cast(List[GenericSpec], specs))
+        self._orchestrator_wait([apply_completion])
+        raise_if_exception(apply_completion)
         if specs:
             return HandleCommandResult(stdout=f"Changed <unmanaged> flag to <{unmanaged_flag}> for "
                                               f"{[spec.service_name() for spec in specs]}")
@@ -1181,10 +1181,10 @@ Usage:
         raise_if_exception(completion)
         out = completion.result_str()
         if dry_run:
-            completion = self.plan([spec])
-            self._orchestrator_wait([completion])
-            raise_if_exception(completion)
-            data = completion.result
+            completion_plan = self.plan([spec])
+            self._orchestrator_wait([completion_plan])
+            raise_if_exception(completion_plan)
+            data = completion_plan.result
             if format == 'plain':
                 out = preview_table_services(data)
             else:
@@ -1233,10 +1233,10 @@ Usage:
         raise_if_exception(completion)
         out = completion.result_str()
         if dry_run:
-            completion = self.plan([spec])
-            self._orchestrator_wait([completion])
-            raise_if_exception(completion)
-            data = completion.result
+            completion_plan = self.plan([spec])
+            self._orchestrator_wait([completion_plan])
+            raise_if_exception(completion_plan)
+            data = completion_plan.result
             if format == 'plain':
                 out = preview_table_services(data)
             else:
@@ -1279,10 +1279,10 @@ Usage:
         raise_if_exception(completion)
         out = completion.result_str()
         if dry_run:
-            completion = self.plan([spec])
-            self._orchestrator_wait([completion])
-            raise_if_exception(completion)
-            data = completion.result
+            completion_plan = self.plan([spec])
+            self._orchestrator_wait([completion_plan])
+            raise_if_exception(completion_plan)
+            data = completion_plan.result
             if format == 'plain':
                 out = preview_table_services(data)
             else:
@@ -1329,10 +1329,10 @@ Usage:
         raise_if_exception(completion)
         out = completion.result_str()
         if dry_run:
-            completion = self.plan([spec])
-            self._orchestrator_wait([completion])
-            raise_if_exception(completion)
-            data = completion.result
+            completion_plan = self.plan([spec])
+            self._orchestrator_wait([completion_plan])
+            raise_if_exception(completion_plan)
+            data = completion_plan.result
             if format == 'plain':
                 out = preview_table_services(data)
             else:
