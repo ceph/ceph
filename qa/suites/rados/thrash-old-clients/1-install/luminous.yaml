@@ -18,3 +18,7 @@ tasks:
       - ceph-mgr-cephadm
       - cephadm
     extra_packages: ['librados2']
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:
