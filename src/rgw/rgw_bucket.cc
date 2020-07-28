@@ -334,86 +334,6 @@ int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucke
   return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
 }
 
-/* xxx dang */
-static int rgw_remove_bucket(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, bool delete_children, optional_yield y)
-{
-  int ret;
-  map<RGWObjCategory, RGWStorageStats> stats;
-  std::vector<rgw_bucket_dir_entry> objs;
-  map<string, bool> common_prefixes;
-  RGWBucketInfo info;
-
-  string bucket_ver, master_ver;
-
-  ret = store->getRados()->get_bucket_info(store->svc(), bucket.tenant, bucket.name, info, NULL, null_yield);
-  if (ret < 0)
-    return ret;
-
-  ret = store->getRados()->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
-  if (ret < 0)
-    return ret;
-
-  RGWRados::Bucket target(store->getRados(), info);
-  RGWRados::Bucket::List list_op(&target);
-  CephContext *cct = store->ctx();
-
-  list_op.params.list_versions = true;
-  list_op.params.allow_unordered = true;
-
-  bool is_truncated = false;
-  do {
-    objs.clear();
-
-    ret = list_op.list_objects(listing_max_entries, &objs, &common_prefixes,
-			       &is_truncated, null_yield);
-    if (ret < 0)
-      return ret;
-
-    if (!objs.empty() && !delete_children) {
-      lderr(store->ctx()) << "ERROR: could not remove non-empty bucket " << bucket.name << dendl;
-      return -ENOTEMPTY;
-    }
-
-    for (const auto& obj : objs) {
-      rgw_obj_key key(obj.key);
-      ret = rgw_remove_object(store, info, bucket, key);
-      if (ret < 0 && ret != -ENOENT) {
-        return ret;
-      }
-    }
-  } while(is_truncated);
-
-  string prefix, delimiter;
-
-  ret = abort_bucket_multiparts(store, cct, info, prefix, delimiter);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
-  if ( ret < 0) {
-     dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
-  }
-
-  RGWObjVersionTracker objv_tracker;
-
-  // if we deleted children above we will force delete, as any that
-  // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, objv_tracker, null_yield, !delete_children);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: could not remove bucket " <<
-      bucket.name << dendl;
-    return ret;
-  }
-
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, bucket, null_yield, false);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
-  }
-
-  return ret;
-}
-
 static int aio_wait(librados::AioCompletion *handle)
 {
   librados::AioCompletion *c = (librados::AioCompletion *)handle;
@@ -849,32 +769,6 @@ int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg)
     return r;
   }
   return r;
-}
-
-int RGWBucket::remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc,
-                      bool keep_index_consistent, std::string *err_msg)
-{
-  bool delete_children = op_state.will_delete_children();
-  rgw_bucket bucket = op_state.get_bucket();
-  int ret;
-
-  if (bypass_gc) {
-    if (delete_children) {
-      ret = rgw_remove_bucket_bypass_gc(store, bucket, op_state.get_max_aio(), keep_index_consistent, y);
-    } else {
-      set_err_msg(err_msg, "purge objects should be set for gc to be bypassed");
-      return -EINVAL;
-    }
-  } else {
-    ret = rgw_remove_bucket(store, bucket, delete_children, y);
-  }
-
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to remove bucket" + cpp_strerror(-ret));
-    return ret;
-  }
-
-  return 0;
 }
 
 int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg)
@@ -1361,19 +1255,22 @@ int RGWBucketAdminOp::check_index(rgw::sal::RGWRadosStore *store, RGWBucketAdmin
 }
 
 int RGWBucketAdminOp::remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                                    optional_yield y, bool bypass_gc, bool keep_index_consistent)
+				    optional_yield y, bool bypass_gc, bool keep_index_consistent)
 {
-  RGWBucket bucket;
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(op_state.get_user_id());
 
-  int ret = bucket.init(store, op_state, y);
+  int ret = store->get_bucket(user.get(), user->get_tenant(), op_state.get_bucket_name(),
+			      &bucket);
   if (ret < 0)
     return ret;
 
-  std::string err_msg;
-  ret = bucket.remove(op_state, y, bypass_gc, keep_index_consistent, &err_msg);
-  if (!err_msg.empty()) {
-    lderr(store->ctx()) << "ERROR: " << err_msg << dendl;
-  }
+  if (bypass_gc)
+    ret = rgw_remove_bucket_bypass_gc(store, bucket->get_key(), op_state.get_max_aio(), keep_index_consistent, y);
+  else
+    ret = bucket->remove_bucket(op_state.will_delete_children(), string(), string(),
+				false, nullptr, y);
+
   return ret;
 }
 
