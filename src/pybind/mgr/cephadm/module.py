@@ -230,6 +230,24 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'default': False,
             'desc': 'Manage and own /etc/ceph/ceph.conf on the hosts.',
         },
+        {
+            'name': 'registry_url',
+            'type': 'str',
+            'default': None,
+            'desc': 'Custom repository url'
+        },
+        {
+            'name': 'registry_username',
+            'type': 'str',
+            'default': None,
+            'desc': 'Custom repository username'
+        },
+        {
+            'name': 'registry_password',
+            'type': 'str',
+            'default': None,
+            'desc': 'Custom repository password'
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -265,6 +283,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.migration_current = None
             self.config_dashboard = True
             self.manage_etc_ceph_ceph_conf = True
+            self.registry_url: Optional[str] = None
+            self.registry_username: Optional[str] = None
+            self.registry_password: Optional[str] = None
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -362,6 +383,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _kick_serve_loop(self):
         self.log.debug('_kick_serve_loop')
         self.event.set()
+
+    # function responsible for logging single host into custom registry
+    def _registry_login(self, host, url, username, password):
+        self.log.debug(f"Attempting to log host {host} into custom registry @ {url}")
+        # want to pass info over stdin rather than through normal list of args
+        args_str = ("{\"url\": \"" + url + "\", \"username\": \"" + username + "\", "
+                    " \"password\": \"" + password + "\"}")
+        out, err, code = self._run_cephadm(
+            host, 'mon', 'registry-login',
+            ['--registry-json', '-'], stdin=args_str, error_ok=True)
+        if code:
+            return f"Host {host} failed to login to {url} as {username} with given password"
+        return
+
 
     def _check_host(self, host):
         if host not in self.inventory:
@@ -832,6 +867,50 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, msg, ''
 
     @orchestrator._cli_read_command(
+        'cephadm registry-login',
+        "name=url,type=CephString,req=false "
+        "name=username,type=CephString,req=false "
+        "name=password,type=CephString,req=false",
+        'Set custom registry login info by providing url, username and password or json file with login info (-i <file>)')
+    def registry_login(self, url=None, username=None, password=None, inbuf=None):
+        # if password not given in command line, get it through file input
+        if not (url and username and password) and (inbuf is None or len(inbuf) == 0):
+            return -errno.EINVAL, "", ("Invalid arguments. Please provide arguments <url> <username> <password> "
+                                        "or -i <login credentials json file>")
+        elif not (url and username and password):
+            login_info = json.loads(inbuf)
+            if "url" in login_info and "username" in login_info and "password" in login_info:
+                url = login_info["url"]
+                username = login_info["username"]
+                password = login_info["password"]
+            else:
+                return -errno.EINVAL, "", ("json provided for custom registry login did not include all necessary fields. "
+                                "Please setup json file as\n"
+                                "{\n"
+                                  " \"url\": \"REGISTRY_URL\",\n"
+                                  " \"username\": \"REGISTRY_USERNAME\",\n"
+                                  " \"password\": \"REGISTRY_PASSWORD\"\n"
+                                "}\n")
+        # verify login info works by attempting login on random host
+        host = None
+        for host_name in self.inventory.keys():
+            host = host_name
+            break
+        if not host:
+            raise OrchestratorError('no hosts defined')
+        r = self._registry_login(host, url, username, password)
+        if r is not None:
+            return 1, '', r
+        # if logins succeeded, store info
+        self.log.debug("Host logins successful. Storing login info.")
+        self.set_module_option('registry_url', url)
+        self.set_module_option('registry_username', username)
+        self.set_module_option('registry_password', password)
+        # distribute new login info to all hosts
+        self.cache.distribute_new_registry_login_info()
+        return 0, "registry login scheduled", ''
+
+    @orchestrator._cli_read_command(
         'cephadm check-host',
         'name=host,type=CephString '
         'name=addr,type=CephString,req=false',
@@ -1176,6 +1255,13 @@ you may want to run:
                 r = self._refresh_host_daemons(host)
                 if r:
                     failures.append(r)
+
+            if self.cache.host_needs_registry_login(host) and self.registry_url:
+                self.log.debug(f"Logging `{host}` into custom registry")
+                r = self._registry_login(host, self.registry_url, self.registry_username, self.registry_password)
+                if r:
+                    bad_hosts.append(r)
+
             if self.cache.host_needs_device_refresh(host):
                 self.log.debug('refreshing %s devices' % host)
                 r = self._refresh_host_devices(host)
@@ -1748,6 +1834,9 @@ you may want to run:
             if self.allow_ptrace:
                 daemon_spec.extra_args.append('--allow-ptrace')
 
+            if self.cache.host_needs_registry_login(daemon_spec.host) and self.registry_url:
+                self._registry_login(daemon_spec.host, self.registry_url, self.registry_username, self.registry_password)
+
             self.log.info('%s daemon %s on %s' % (
                 'Reconfiguring' if reconfig else 'Deploying',
                 daemon_spec.name(), daemon_spec.host))
@@ -2266,6 +2355,8 @@ you may want to run:
             break
         if not host:
             raise OrchestratorError('no hosts defined')
+        if self.cache.host_needs_registry_login(host) and self.registry_url:
+            self._registry_login(host, self.registry_url, self.registry_username, self.registry_password)
         out, err, code = self._run_cephadm(
             host, '', 'pull', [],
             image=image_name,
