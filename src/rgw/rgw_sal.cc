@@ -294,7 +294,7 @@ int RGWRadosBucket::check_empty(optional_yield y)
 
 int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
 {
-    return store->getRados()->check_quota(owner->get_user(), get_bi(),
+    return store->getRados()->check_quota(owner->get_user(), get_key(),
 					  user_quota, bucket_quota, obj_size, check_size_only);
 }
 
@@ -380,7 +380,7 @@ int RGWObject::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
 
 int RGWRadosObject::get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh)
 {
-  rgw_obj obj(bucket.get_bi(), key.name);
+  rgw_obj obj(bucket.get_key(), key.name);
 
   return store->getRados()->get_obj_state(rctx, bucket.get_info(), obj, state, follow_olh, y);
 }
@@ -811,7 +811,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
     }
   } else {
 
-    ret = getRados()->create_bucket(u.get_info(), bucket->get_bi(),
+    ret = getRados()->create_bucket(u.get_info(), bucket->get_key(),
 				    zid, placement_rule, swift_ver_location,
 				    pquota_info, attrs,
 				    info, pobjv, &ep_objv, creation_time,

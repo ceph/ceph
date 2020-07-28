@@ -197,7 +197,6 @@ class RGWBucket {
     ceph::real_time& get_modification_time() { return mtime; }
     obj_version& get_version() { return bucket_version; }
     void set_version(obj_version &ver) { bucket_version = ver; }
-    std::string get_key() { return info.bucket.get_key(); }
     bool versioned() { return info.versioned(); }
     bool versioning_enabled() { return info.versioning_enabled(); }
 
@@ -209,7 +208,7 @@ class RGWBucket {
     virtual std::unique_ptr<RGWBucket> clone() = 0;
 
     /* dang - This is temporary, until the API is completed */
-    rgw_bucket& get_bi() { return info.bucket; }
+    rgw_bucket& get_key() { return info.bucket; }
     RGWBucketInfo& get_info() { return info; }
 
     friend inline ostream& operator<<(ostream& out, const RGWBucket& b) {
@@ -377,7 +376,7 @@ class RGWObject {
     void set_obj_size(uint64_t s) { obj_size = s; }
     virtual void set_name(const string& n) { key = n; }
     virtual void set_key(const rgw_obj_key& k) { key = k; }
-    virtual rgw_obj get_obj(void) const { return rgw_obj(bucket->get_bi(), key); }
+    virtual rgw_obj get_obj(void) const { return rgw_obj(bucket->get_key(), key); }
     virtual void gen_rand_obj_instance_name() = 0;
 
     /* dang - This is temporary, until the API is completed */
