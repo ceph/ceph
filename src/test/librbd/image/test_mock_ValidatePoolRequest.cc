@@ -39,6 +39,7 @@ public:
 
   void SetUp() override {
     TestMockFixture::SetUp();
+    m_ioctx.remove(RBD_INFO);
     ASSERT_EQ(0, open_image(m_image_name, &image_ctx));
   }
 
