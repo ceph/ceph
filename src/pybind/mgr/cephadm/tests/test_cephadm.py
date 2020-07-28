@@ -34,8 +34,7 @@ TODOs:
 
 
 def assert_rm_service(cephadm, srv_name):
-    assert wait(cephadm, cephadm.remove_service(srv_name)) == [
-        f'Removed service {srv_name}']
+    assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
     cephadm._apply_all_services()
 
 
