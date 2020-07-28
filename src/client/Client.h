@@ -36,6 +36,7 @@
 #include "msg/MessageRef.h"
 #include "msg/Messenger.h"
 #include "osdc/ObjectCacher.h"
+#include "MetaRequestRef.h"
 
 #include "RWRef.h"
 #include "InodeRef.h"
@@ -241,6 +242,7 @@ public:
   friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
+  friend void intrusive_ptr_release(MetaRequest *request);
   template <typename T> friend struct RWRefState;
   template <typename T> friend class RWRef;
 
@@ -883,11 +885,13 @@ protected:
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
-  int make_request(MetaRequest *req, const UserPerm& perms,
+  int make_request(MetaRequestRef &req, const UserPerm& perms,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
+  void _put_request(MetaRequest *request);
+  void delay_put_requests(bool wakeup=false);
   void put_request(MetaRequest *request);
-  void unregister_request(MetaRequest *request);
+  void unregister_request(MetaRequestRef &request);
 
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
 			 const MConstRef<MClientReply>& reply,
@@ -1222,7 +1226,7 @@ private:
   static const VXattr _file_vxattrs[];
   static const VXattr _common_vxattrs[];
 
-
+  MetaRequestRef create_request(int op);
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
@@ -1479,6 +1483,8 @@ private:
   ceph_tid_t last_tid = 0;
   ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
   map<ceph_tid_t, MetaRequest*> mds_requests;
+  ceph::spinlock delay_r_lock;
+  std::list<MetaRequest*> delay_r_release;
 
   // cap flushing
   ceph_tid_t last_flush_tid = 1;
