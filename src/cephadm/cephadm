@@ -129,7 +129,7 @@ class Monitoring(object):
 
     components = {
         "prometheus": {
-            "image": "prom/prometheus:latest",
+            "image": "docker.io/prom/prometheus:v2.18.1",
             "cpus": '2',
             "memory": '4GB',
             "args": [
@@ -142,7 +142,7 @@ class Monitoring(object):
             ],
         },
         "node-exporter": {
-            "image": "prom/node-exporter",
+            "image": "docker.io/prom/node-exporter:v0.18.1",
             "cpus": "1",
             "memory": "1GB",
             "args": [
@@ -150,7 +150,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "ceph/ceph-grafana:latest",
+            "image": "docker.io/ceph/ceph-grafana:6.6.2",
             "cpus": "2",
             "memory": "4GB",
             "args": [],
@@ -162,7 +162,7 @@ class Monitoring(object):
             ],
         },
         "alertmanager": {
-            "image": "prom/alertmanager",
+            "image": "docker.io/prom/alertmanager:v0.20.0",
             "cpus": "2",
             "memory": "2GB",
             "args": [],
