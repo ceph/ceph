@@ -1591,13 +1591,14 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
 	  if (!session->info.prealloc_inos.empty()) {
-	    inodeno_t i = session->take_ino(used_preallocated_ino);
-	    ceph_assert(i == used_preallocated_ino);
-	    session->info.used_inos.clear();
+	    inodeno_t ino = session->take_ino(used_preallocated_ino);
+	    session->info.prealloc_inos.erase(ino);
+	    ceph_assert(ino == used_preallocated_ino);
 	  }
           mds->sessionmap.replay_dirty_session(session);
 	}
 	if (!preallocated_inos.empty()) {
+	  session->free_prealloc_inos.insert(preallocated_inos);
 	  session->info.prealloc_inos.insert(preallocated_inos);
           mds->sessionmap.replay_dirty_session(session);
 	}
