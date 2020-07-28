@@ -662,3 +662,49 @@ class TestCephadm(object):
 
             cephadm_module.notify('mon_map', mock.MagicMock())
             assert cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
+        
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_registry_login(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        def check_registry_credentials(url, username, password):
+            assert cephadm_module.get_module_option('registry_url') == url
+            assert cephadm_module.get_module_option('registry_username') == username
+            assert cephadm_module.get_module_option('registry_password') == password
+
+        _run_cephadm.return_value = '{}', '', 0
+        with with_host(cephadm_module, 'test'):
+            # test successful login with valid args
+            code, out, err = cephadm_module.registry_login('test-url', 'test-user', 'test-password')
+            assert out == 'registry login scheduled'
+            assert err == ''
+            check_registry_credentials('test-url', 'test-user', 'test-password')
+            
+            # test bad login attempt with invalid args
+            code, out, err = cephadm_module.registry_login('bad-args')
+            assert err == ("Invalid arguments. Please provide arguments <url> <username> <password> "
+                            "or -i <login credentials json file>")
+            check_registry_credentials('test-url', 'test-user', 'test-password')
+            
+            # test bad login using invalid json file
+            code, out, err = cephadm_module.registry_login(None, None, None, '{"bad-json": "bad-json"}')
+            assert err == ("json provided for custom registry login did not include all necessary fields. "
+                            "Please setup json file as\n"
+                            "{\n"
+                              " \"url\": \"REGISTRY_URL\",\n"
+                              " \"username\": \"REGISTRY_USERNAME\",\n"
+                              " \"password\": \"REGISTRY_PASSWORD\"\n"
+                            "}\n")
+            check_registry_credentials('test-url', 'test-user', 'test-password')
+            
+            # test  good login using valid json file
+            good_json = ("{\"url\": \"" + "json-url" + "\", \"username\": \"" + "json-user" + "\", "
+                        " \"password\": \"" + "json-pass" + "\"}")
+            code, out, err = cephadm_module.registry_login(None, None, None, good_json)
+            assert out == 'registry login scheduled'
+            assert err == ''
+            check_registry_credentials('json-url', 'json-user', 'json-pass')
+            
+            # test bad login where args are valid but login command fails
+            _run_cephadm.return_value = '{}', 'error', 1
+            code, out, err = cephadm_module.registry_login('fail-url', 'fail-user', 'fail-password')
+            assert err == 'Host test failed to login to fail-url as fail-user with given password'
+            check_registry_credentials('json-url', 'json-user', 'json-pass')

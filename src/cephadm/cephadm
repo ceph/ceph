@@ -2563,6 +2563,9 @@ def command_bootstrap():
     cp.write(cpf)
     config = cpf.getvalue()
 
+    if args.registry_json or args.registry_url:
+        command_registry_login()
+
     if not args.skip_pull:
         _pull_image(args.image)
 
@@ -2875,6 +2878,11 @@ def command_bootstrap():
                 logger.info('Deploying %s service with default placement...' % t)
                 cli(['orch', 'apply', t])
 
+    if args.registry_url and args.registry_username and args.registry_password:
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_url', args.registry_url])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', args.registry_username])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password])
+
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
@@ -2945,6 +2953,43 @@ def command_bootstrap():
                 '\thttps://docs.ceph.com/docs/master/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
     return 0
+
+##################################
+
+def command_registry_login():
+    if args.registry_json:
+        logger.info("Pulling custom registry login info from %s." % args.registry_json)
+        d = get_parm(args.registry_json)
+        if d.get('url') and d.get('username') and d.get('password'):
+            args.registry_url = d.get('url')
+            args.registry_username = d.get('username')
+            args.registry_password = d.get('password')
+            registry_login(args.registry_url, args.registry_username, args.registry_password)
+        else:
+            raise Error("json provided for custom registry login did not include all necessary fields. "
+                            "Please setup json file as\n"
+                            "{\n"
+                              " \"url\": \"REGISTRY_URL\",\n"
+                              " \"username\": \"REGISTRY_USERNAME\",\n"
+                              " \"password\": \"REGISTRY_PASSWORD\"\n"
+                            "}\n")
+    elif args.registry_url and args.registry_username and args.registry_password:
+        registry_login(args.registry_url, args.registry_username, args.registry_password)
+    else:
+        raise Error("Invalid custom registry arguments received. To login to a custom registry include "
+                        "--registry-url, --registry-username and --registry-password "
+                        "options or --registry-json option")
+    return 0
+
+def registry_login(url, username, password):
+    logger.info("Logging into custom registry.")
+    try:
+        out, _, _ = call_throws([container_path, 'login',
+                                   '-u', username,
+                                   '-p', password,
+                                   url])
+    except:
+        raise Error("Failed to login to custom registry @ %s as %s with given password" % (args.registry_url, args.registry_username))
 
 ##################################
 
@@ -4902,6 +4947,19 @@ def _get_parser():
         metavar='CEPH_SOURCE_FOLDER',
         help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
 
+    parser_bootstrap.add_argument(
+        '--registry-url',
+        help='url for custom registry')
+    parser_bootstrap.add_argument(
+        '--registry-username',
+        help='username for custom registry')
+    parser_bootstrap.add_argument(
+        '--registry-password',
+        help='password for custom registry')
+    parser_bootstrap.add_argument(
+        '--registry-json',
+        help='json file with custom registry login info (URL, Username, Password)')
+
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
     parser_deploy.set_defaults(func=command_deploy)
@@ -4991,6 +5049,25 @@ def _get_parser():
         'packages', nargs='*',
         default=['cephadm'],
         help='packages')
+
+    parser_registry_login = subparsers.add_parser(
+        'registry-login', help='log host into authenticated registry')
+    parser_registry_login.set_defaults(func=command_registry_login)
+    parser_registry_login.add_argument(
+        '--registry-url',
+        help='url for custom registry')
+    parser_registry_login.add_argument(
+        '--registry-username',
+        help='username for custom registry')
+    parser_registry_login.add_argument(
+        '--registry-password',
+        help='password for custom registry')
+    parser_registry_login.add_argument(
+        '--registry-json',
+        help='json file with custom registry login info (URL, Username, Password)')
+    parser_registry_login.add_argument(
+        '--fsid',
+        help='cluster FSID')
 
     return parser
 

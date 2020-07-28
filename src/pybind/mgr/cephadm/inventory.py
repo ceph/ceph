@@ -179,6 +179,7 @@ class HostCache():
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
         self.loading_osdspec_preview = set()  # type: Set[str]
         self.etc_ceph_ceph_conf_refresh_queue: Set[str] = set()
+        self.registry_login_queue: Set[str] = set()
 
     def load(self):
         # type: () -> None
@@ -221,6 +222,7 @@ class HostCache():
                     self.last_host_check[host] = datetime.datetime.strptime(
                         j['last_host_check'], DATEFMT)
                 self.etc_ceph_ceph_conf_refresh_queue.add(host)
+                self.registry_login_queue.add(host)
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
                     '%d devices, %d networks' % (
@@ -266,6 +268,7 @@ class HostCache():
         self.device_refresh_queue.append(host)
         self.osdspec_previews_refresh_queue.append(host)
         self.etc_ceph_ceph_conf_refresh_queue.add(host)
+        self.registry_login_queue.add(host)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
@@ -283,6 +286,9 @@ class HostCache():
 
     def distribute_new_etc_ceph_ceph_conf(self):
         self.etc_ceph_ceph_conf_refresh_queue = set(self.mgr.inventory.keys())
+    
+    def distribute_new_registry_login_info(self):
+        self.registry_login_queue = set(self.mgr.inventory.keys())
 
     def save_host(self, host):
         # type: (str) -> None
@@ -439,6 +445,14 @@ class HostCache():
         if host in self.etc_ceph_ceph_conf_refresh_queue:
             # We're read-only here.
             # self.etc_ceph_ceph_conf_refresh_queue.remove(host)
+            return True
+        return False
+    
+    def host_needs_registry_login(self, host):
+        if host in self.mgr.offline_hosts:
+            return False
+        if host in self.registry_login_queue:
+            self.registry_login_queue.remove(host)
             return True
         return False
 

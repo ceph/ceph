@@ -164,3 +164,51 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
                     "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffg",
                     "1:2:3:4:5:6:7:8:9", "fd00::1::1", "[fg::1]"):
             assert not cd.is_ipv6(bad)
+    
+    @mock.patch('cephadm.call_throws')
+    @mock.patch('cephadm.get_parm')
+    def test_registry_login(self, get_parm, call_throws):
+
+        # test normal valid login with url, username and password specified
+        call_throws.return_value = '', '', 0
+        args = cd._parse_args(['registry-login', '--registry-url', 'sample-url', '--registry-username', 'sample-user', '--registry-password', 'sample-pass'])
+        cd.args = args
+        retval = cd.command_registry_login()
+        assert retval == 0
+
+        # test bad login attempt with invalid arguments given
+        args = cd._parse_args(['registry-login', '--registry-url', 'bad-args-url'])
+        cd.args = args
+        with pytest.raises(Exception) as e:
+            assert cd.command_registry_login()
+        assert str(e.value) == ('Invalid custom registry arguments received. To login to a custom registry include '
+                                '--registry-url, --registry-username and --registry-password options or --registry-json option')
+
+        # test normal valid login with json file
+        get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
+        args = cd._parse_args(['registry-login', '--registry-json', 'sample-json'])
+        cd.args = args
+        retval = cd.command_registry_login()
+        assert retval == 0
+
+        # test bad login attempt with bad json file
+        get_parm.return_value = {"bad-json": "bad-json"}
+        args = cd._parse_args(['registry-login', '--registry-json', 'sample-json'])
+        cd.args = args
+        with pytest.raises(Exception) as e:
+            assert cd.command_registry_login()
+        assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
+                        "Please setup json file as\n"
+                        "{\n"
+                          " \"url\": \"REGISTRY_URL\",\n"
+                          " \"username\": \"REGISTRY_USERNAME\",\n"
+                          " \"password\": \"REGISTRY_PASSWORD\"\n"
+                        "}\n")
+
+        # test login attempt with valid arguments where login command fails    
+        call_throws.side_effect = Exception
+        args = cd._parse_args(['registry-login', '--registry-url', 'sample-url', '--registry-username', 'sample-user', '--registry-password', 'sample-pass'])
+        cd.args = args
+        with pytest.raises(Exception) as e:
+            cd.command_registry_login()
+        assert str(e.value) == "Failed to login to custom registry @ sample-url as sample-user with given password"
