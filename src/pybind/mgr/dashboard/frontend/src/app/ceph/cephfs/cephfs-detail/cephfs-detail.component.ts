@@ -58,8 +58,8 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
         { prop: 'activity', name: $localize`Activity`, cellTemplate: this.activityTmpl },
         { prop: 'dns', name: $localize`Dentries`, pipe: this.dimless },
         { prop: 'inos', name: $localize`Inodes`, pipe: this.dimless },
-        { prop: 'dirs', name: this.i18n('Dirs')},
-        { prop: 'caps', name: this.i18n('Caps')}
+        { prop: 'dirs', name: $localize`Dirs`},
+        { prop: 'caps', name: $localize`Caps`}
       ],
       pools: [
         { prop: 'pool', name: $localize`Pool` },
