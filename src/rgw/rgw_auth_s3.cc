@@ -4,21 +4,16 @@
 #include <algorithm>
 #include <map>
 #include <iterator>
-#include <string>
-#include <string_view>
 #include <vector>
 
 #include "common/armor.h"
 #include "common/utf8.h"
-#include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
-#include "rgw_common.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_crypt_sanitize.h"
 
 #include <boost/container/small_vector.hpp>
-#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/trim_all.hpp>
 
 #define dout_context g_ceph_context

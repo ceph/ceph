@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <array>
 #include <string.h>
-#include <string_view>
 
 #include "common/ceph_crypto.h"
 #include "common/split.h"
@@ -23,13 +22,11 @@
 
 #include <liboath/oath.h>
 
-#include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
-#include "rgw_policy_s3.h"
 #include "rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
