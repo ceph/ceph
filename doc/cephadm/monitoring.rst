@@ -1,3 +1,5 @@
+.. _mgr-cephadm-monitoring:
+
 Monitoring Stack with Cephadm
 =============================
 
@@ -13,7 +15,7 @@ metrics on cluster utilization and performance.  Ceph users have three options:
    Ceph is running in Kubernetes with Rook).
 #. Skip the monitoring stack completely.  Some Ceph dashboard graphs will
    not be available.
-
+   
 The monitoring stack consists of `Prometheus <https://prometheus.io/>`_,
 Prometheus exporters (:ref:`mgr-prometheus`, `Node exporter
 <https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus Alert
@@ -35,6 +37,9 @@ Manager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
   Please see `Prometheus' Security model
   <https://prometheus.io/docs/operating/security/>` for more detailed
   information.
+
+Deploying monitoring with cephadm
+---------------------------------
 
 By default, bootstrap will deploy a basic monitoring stack.  If you
 did not do this (by passing ``--skip-monitoring-stack``, or if you
