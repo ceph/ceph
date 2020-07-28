@@ -903,10 +903,6 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
   }
   vector<unsigned> ranks;
   for (auto [name, info] : monmap.mon_info) {
-    // TODO: #msgr-v2
-    if (info.public_addrs.legacy_addr().is_blank_ip()) {
-      continue;
-    }
     if (info.priority == min_priority) {
       ranks.push_back(monmap.get_rank(name));
     }
