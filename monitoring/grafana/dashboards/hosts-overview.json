@@ -574,7 +574,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "topk(10,( 1 - (\n    avg by(instance) \n      (irate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or\n       irate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]))\n    )\n  )\n)",
+          "expr": "topk(10,100 * ( 1 - (\n    avg by(instance) \n      (irate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or\n       irate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]))\n    )\n  )\n)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
