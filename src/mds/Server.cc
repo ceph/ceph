@@ -811,6 +811,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   if (NULL != ls) {
     dout(10)  << "_session_logged seq : " << ls->seq << dendl;
     if (purge_inos.size()){
+      session->info.prealloc_inos.subtract(purge_inos);
       ls->purge_inodes.insert(purge_inos);
       mdcache->purge_inodes(purge_inos, ls);
     }
