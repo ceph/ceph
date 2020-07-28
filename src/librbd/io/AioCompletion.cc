@@ -115,10 +115,6 @@ void AioCompletion::complete() {
     image_dispatcher_ctx->complete(rval);
   }
 
-  // note: possible for image to be closed after op marked finished
-  if (async_op.started()) {
-    async_op.finish_op();
-  }
   tracepoint(librbd, aio_complete_exit);
 }
 
@@ -283,8 +279,15 @@ void AioCompletion::complete_event_socket() {
 void AioCompletion::notify_callbacks_complete() {
   state = AIO_STATE_COMPLETE;
 
-  std::unique_lock<std::mutex> locker(lock);
-  cond.notify_all();
+  {
+    std::unique_lock<std::mutex> locker(lock);
+    cond.notify_all();
+  }
+
+  // note: possible for image to be closed after op marked finished
+  if (async_op.started()) {
+    async_op.finish_op();
+  }
 }
 
 } // namespace io
