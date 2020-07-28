@@ -959,10 +959,11 @@ seastar::future<> Client::reopen_session(int rank)
 #warning fixme
     auto peer = [&] {
       auto& mon_addrs = monmap.get_addrs(rank);
-      if (msgr.get_myaddr().is_legacy()) {
-        return mon_addrs.legacy_addr();
-      } else {
+      if (msgr.get_myaddr().is_any() ||
+          msgr.get_myaddr().is_msgr2()) {
         return mon_addrs.msgr2_addr();
+      } else {
+        return mon_addrs.legacy_addr();
       }
     }();
     if (peer == entity_addr_t{}) {

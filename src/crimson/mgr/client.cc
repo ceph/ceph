@@ -105,10 +105,11 @@ seastar::future<> Client::reconnect()
   return seastar::sleep(a_while).then([this] {
     auto peer = [&] {
       auto& mgr_addrs = mgrmap.get_active_addrs();
-      if (msgr.get_myaddr().is_legacy()) {
-        return mgr_addrs.legacy_addr();
-      } else {
+      if (msgr.get_myaddr().is_any() ||
+          msgr.get_myaddr().is_msgr2()) {
         return mgr_addrs.msgr2_addr();
+      } else {
+        return mgr_addrs.legacy_addr();
       }
     }();
     if (peer == entity_addr_t{}) {
