@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    mon_bind_addrvec: false
     mon_bind_msgr2: false
     log-whitelist:
       - \(MON_DOWN\)
