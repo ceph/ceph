@@ -2041,7 +2041,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       vector<rgw_bucket> bucket_names;
       for (auto iter = m.begin(); iter != m.end(); ++iter) {
 	auto& bucket = iter->second;
-        bucket_names.push_back(bucket->get_bi());
+        bucket_names.push_back(bucket->get_key());
 
         marker = iter->first;
       }

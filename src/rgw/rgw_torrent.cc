@@ -248,7 +248,7 @@ int seed::save_torrent_file()
 {
   int op_ret = 0;
   string key = RGW_OBJ_TORRENT;
-  rgw_obj obj(s->bucket->get_bi(), s->object->get_name());
+  rgw_obj obj(s->bucket->get_key(), s->object->get_name());
 
   rgw_raw_obj raw_obj;
   store->getRados()->obj_to_raw(s->bucket->get_info().placement_rule, obj, &raw_obj);

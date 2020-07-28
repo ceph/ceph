@@ -440,7 +440,7 @@ static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *
   bufferlist header;
 
   rgw_obj meta_obj;
-  meta_obj.init_ns(s->bucket->get_bi(), meta_oid, mp_ns);
+  meta_obj.init_ns(s->bucket->get_key(), meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
 
   return get_multipart_info(store, s, meta_obj, policy, attrs, upload_info);
@@ -612,7 +612,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     s->bucket_attrs = s->bucket->get_attrs().attrs;
     ret = read_bucket_policy(store, s, s->bucket->get_info(),
 			     s->bucket->get_attrs().attrs,
-			     s->bucket_acl.get(), s->bucket->get_bi());
+			     s->bucket_acl.get(), s->bucket->get_key());
     acct_acl_user = {
       s->bucket->get_info().owner,
       s->bucket_acl->get_owner().get_display_name(),
@@ -756,7 +756,7 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
       s->object->set_prefetch_data(s->obj_ctx);
     }
     ret = read_obj_policy(store, s, s->bucket->get_info(), s->bucket_attrs,
-			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket->get_bi(),
+			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket->get_key(),
                           s->object->get_key());
   }
 
@@ -1298,7 +1298,7 @@ void RGWDeleteBucketReplication::execute()
     int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
                                                           &s->bucket_attrs);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket->get_key() << ") returned ret=" << ret << dendl;
+      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
     }
 
@@ -1696,7 +1696,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
         len_count += end_ofs - start_ofs;
 
         if (cb) {
-          r = cb(bucket->get_bi(), ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
+          r = cb(bucket->get_key(), ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
 		 cb_param, false /* swift_slo */);
           if (r < 0) {
             return r;
@@ -1857,7 +1857,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
       return r;
     }
     bucket_acl = &_bucket_acl;
-    r = read_bucket_policy(store, s, ubucket->get_info(), bucket_attrs, bucket_acl, ubucket->get_bi());
+    r = read_bucket_policy(store, s, ubucket->get_info(), bucket_attrs, bucket_acl, ubucket->get_key());
     if (r < 0) {
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
@@ -2005,7 +2005,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
       }
     } else {
-      bucket = s->bucket->get_bi();
+      bucket = s->bucket->get_key();
       bucket_acl = s->bucket_acl.get();
       bucket_policy = s->iam_policy.get_ptr();
     }
@@ -2780,7 +2780,7 @@ void RGWStatBucket::execute()
     return;
   }
 
-  op_ret = store->get_bucket(s->user, s->bucket->get_bi(), &bucket);
+  op_ret = store->get_bucket(s->user, s->bucket->get_key(), &bucket);
   if (op_ret) {
     return;
   }
@@ -3238,11 +3238,11 @@ void RGWCreateBucket::execute()
     }
   }
 
-  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_bi(),
+  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_key(),
                                           s->bucket->get_creation_time(), s->yield, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_bi(), s->yield);
+    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_key(), s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -4594,12 +4594,12 @@ int RGWDeleteObj::verify_permission()
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
       auto r = eval_user_policies(s->iam_user_policies, s->env, boost::none,
-                                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_bi(), s->object->get_name()));
+                                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
       if (r == Effect::Deny) {
         bypass_perm = false;
       } else if (r == Effect::Pass && s->iam_policy) {
         r = s->iam_policy->eval(s->env, *s->auth.identity, rgw::IAM::s3BypassGovernanceRetention,
-                                     ARN(s->bucket->get_bi(), s->object->get_name()));
+                                     ARN(s->bucket->get_key(), s->object->get_name()));
         if (r == Effect::Deny) {
           bypass_perm = false;
         }
@@ -4610,7 +4610,7 @@ int RGWDeleteObj::verify_permission()
                                               s->object->get_instance().empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
-                                              ARN(s->bucket->get_bi(), s->object->get_name()));
+                                              ARN(s->bucket->get_key(), s->object->get_name()));
     if (usr_policy_res == Effect::Deny) {
       return -EACCES;
     }
@@ -4621,7 +4621,7 @@ int RGWDeleteObj::verify_permission()
 				 s->object->get_instance().empty() ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
-				 ARN(s->bucket->get_bi(), s->object->get_name()));
+				 ARN(s->bucket->get_key(), s->object->get_name()));
     }
     if (r == Effect::Allow)
       return 0;
@@ -4886,7 +4886,7 @@ int RGWCopyObj::verify_permission()
 
     /* check source object permissions */
     op_ret = read_obj_policy(store, s, src_bucket->get_info(), src_bucket->get_attrs().attrs, &src_acl, &src_placement.storage_class,
-			     src_policy, src_bucket->get_bi(), src_object->get_key());
+			     src_policy, src_bucket->get_key(), src_object->get_key());
     if (op_ret < 0) {
       return op_ret;
     }
@@ -4954,7 +4954,7 @@ int RGWCopyObj::verify_permission()
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(store, s, dest_bucket->get_info(),
 			      dest_bucket->get_attrs().attrs,
-                              &dest_bucket_policy, dest_bucket->get_bi());
+                              &dest_bucket_policy, dest_bucket->get_key());
   if (op_ret < 0) {
     return op_ret;
   }
@@ -5760,7 +5760,7 @@ void RGWInitMultipart::execute()
     RGWMPObj mp(s->object->get_name(), upload_id);
     tmp_obj_name = mp.get_meta();
 
-    obj.init_ns(s->bucket->get_bi(), tmp_obj_name, mp_ns);
+    obj.init_ns(s->bucket->get_key(), tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
     obj.set_in_extra_data(true);
     obj.index_hash_source = s->object->get_name();
@@ -5907,7 +5907,7 @@ void RGWCompleteMultipart::execute()
 
   iter = parts->parts.begin();
 
-  meta_obj.init_ns(s->bucket->get_bi(), meta_oid, mp_ns);
+  meta_obj.init_ns(s->bucket->get_key(), meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
   meta_obj.index_hash_source = s->object->get_name();
 
@@ -5991,7 +5991,7 @@ void RGWCompleteMultipart::execute()
       /* update manifest for part */
       string oid = mp.get_part(obj_iter->second.num);
       rgw_obj src_obj;
-      src_obj.init_ns(s->bucket->get_bi(), oid, mp_ns);
+      src_obj.init_ns(s->bucket->get_key(), oid, mp_ns);
 
       if (obj_part.manifest.empty()) {
         ldpp_dout(this, 0) << "ERROR: empty manifest for object part: obj="
@@ -6060,7 +6060,7 @@ void RGWCompleteMultipart::execute()
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  target_obj.init(s->bucket->get_bi(), s->object->get_name());
+  target_obj.init(s->bucket->get_key(), s->object->get_name());
   if (versioned_object) {
     if (!version_id.empty()) {
       target_obj.key.set_instance(version_id);
@@ -6307,7 +6307,7 @@ int RGWDeleteMultiObj::verify_permission()
                                               s->object->get_instance().empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
-                                              ARN(s->bucket->get_bi()));
+                                              ARN(s->bucket->get_key()));
     if (usr_policy_res == Effect::Deny) {
       return -EACCES;
     }
@@ -6318,7 +6318,7 @@ int RGWDeleteMultiObj::verify_permission()
 				 s->object->get_instance().empty() ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
-				 ARN(s->bucket->get_bi()));
+				 ARN(s->bucket->get_key()));
     }
     if (r == Effect::Allow)
       return 0;

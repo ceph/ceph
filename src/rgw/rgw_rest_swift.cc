@@ -858,7 +858,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
     }
     bucket = bucket_info.bucket;
   } else {
-    bucket = s->bucket->get_bi();
+    bucket = s->bucket->get_key();
   }
 
   /* fetch the stored size of the seg (or error if not valid) */

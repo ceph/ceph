@@ -2663,7 +2663,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   if (!multipart_upload_id.empty()) {
     RGWMPObj mp(s->object->get_name(), multipart_upload_id);
     rgw_obj obj;
-    obj.init_ns(s->bucket->get_bi(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
+    obj.init_ns(s->bucket->get_key(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
     obj.set_in_extra_data(true);
     map<string, bufferlist> xattrs;
     res = get_obj_attrs(store, s, obj, xattrs);
@@ -4949,7 +4949,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
     subdir_name.pop_back();
   }
 
-  rgw_obj obj(s->bucket->get_bi(), subdir_name);
+  rgw_obj obj(s->bucket->get_key(), subdir_name);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   obj_ctx.set_atomic(obj);
