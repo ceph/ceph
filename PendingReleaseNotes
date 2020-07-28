@@ -8,3 +8,7 @@
   results on the cluster, which could fill a nearly-full cluster.
   They have been replaced by a tool, currently considered
   experimental, ``rgw-orphan-list``.
+
+* Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
+  scheduled scrubs of the type disabled will be aborted. All user initiated
+  scrubs are NOT interrupted.
