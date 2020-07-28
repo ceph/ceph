@@ -56,9 +56,9 @@ GetLockerRequest<librbd::MockTestImageCtx> *GetLockerRequest<librbd::MockTestIma
 // template definitions
 #include "librbd/managed_lock/BreakRequest.cc"
 
-MATCHER(IsBlacklistCommand, "") {
+MATCHER(IsBlocklistCommand, "") {
   return (arg.size() == 1 &&
-          arg[0].find("\"blacklistop\": \"add\"") != std::string::npos);
+          arg[0].find("\"blocklistop\": \"add\"") != std::string::npos);
 }
 
 namespace librbd {
