@@ -1638,6 +1638,15 @@ you may want to run:
             self.cache.osdspec_previews_refresh_queue.append(host)
 
     @trivial_completion
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]):
+        """
+        Deprecated. Please use `apply()` instead.
+
+        Keeping this around to be compapatible to mgr/dashboard
+        """
+        return [self._apply(spec) for spec in specs]
+
+    @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
         return self.osd_service.create_from_spec(drive_group)
 
