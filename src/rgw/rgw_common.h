@@ -1983,6 +1983,8 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
     return "rgw.shadow";
   case RGWObjCategory::MultiMeta:
     return "rgw.multimeta";
+  case RGWObjCategory::CloudTiered:
+    return "rgw.cloudtiered";
   }
 
   return "unknown";

@@ -18,6 +18,7 @@
 #include "rgw_common.h"
 #include "rgw_compression_types.h"
 #include "rgw_sal.h"
+#include "rgw_zone.h"
 
 class RGWSI_Zone;
 struct RGWZoneGroup;
@@ -147,6 +148,30 @@ struct RGWObjManifestRule {
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
+struct RGWObjTier {
+    string name;
+    RGWZoneGroupPlacementTier tier_placement;
+    /* XXX: Add multipart upload details */
+
+    RGWObjTier(): name("none") {}
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(2, 2, bl);
+      encode(name, bl);
+      encode(tier_placement, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+      decode(name, bl);
+      decode(tier_placement, bl);
+      DECODE_FINISH(bl);
+    }
+    void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWObjTier)
+
 class RGWObjManifest {
 protected:
   bool explicit_objs{false}; /* really old manifest? */
@@ -165,6 +190,9 @@ protected:
   std::map<uint64_t, RGWObjManifestRule> rules;
 
   std::string tail_instance; /* tail object's instance */
+
+  string tier_type;
+  RGWObjTier tier_config;
 
   void convert_to_explicit(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
   int append_explicit(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
@@ -187,6 +215,8 @@ public:
     tail_placement = rhs.tail_placement;
     rules = rhs.rules;
     tail_instance = rhs.tail_instance;
+    tier_type = rhs.tier_type;
+    tier_config = rhs.tier_config;
     return *this;
   }
 
@@ -218,7 +248,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 6, bl);
+    ENCODE_START(8, 6, bl);
     encode(obj_size, bl);
     encode(objs, bl);
     encode(explicit_objs, bl);
@@ -239,6 +269,8 @@ public:
     }
     encode(head_placement_rule, bl);
     encode(tail_placement.placement_rule, bl);
+    encode(tier_type, bl);
+    encode(tier_config, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -309,6 +341,11 @@ public:
     if (struct_v >= 7) {
       decode(head_placement_rule, bl);
       decode(tail_placement.placement_rule, bl);
+    }
+
+    if (struct_v >= 8) {
+      decode(tier_type, bl);
+      decode(tier_config, bl);
     }
 
     DECODE_FINISH(bl);
@@ -407,6 +444,36 @@ public:
 
   uint64_t get_max_head_size() const {
     return max_head_size;
+  }
+
+  string get_tier_type() {
+      return tier_type;
+  }
+
+  void set_tier_type(string value) {
+      /* Only "cloud" tier-type is supported for now */
+      if (value == "cloud") {
+        tier_type = value;
+      } else {
+        tier_type = "none";
+      }
+  }
+
+  void set_tier_config(RGWObjTier t) {
+      /* Set only if tier_type set to "cloud" */
+      if (tier_type != "cloud")
+        return;
+
+      tier_config.name = t.name;
+      tier_config.tier_placement = t.tier_placement;
+  }
+
+  void get_tier_config(RGWObjTier* t) {
+      if (tier_type != "cloud")
+        return;
+
+      t->name = tier_config.name;
+      t->tier_placement = tier_config.tier_placement;
   }
 
   class obj_iterator {
