@@ -362,22 +362,26 @@ class C_MDS_session_finish : public ServerLogContext {
   uint64_t state_seq;
   bool open;
   version_t cmapv;
-  interval_set<inodeno_t> inos;
+  interval_set<inodeno_t> inos_to_free;
   version_t inotablev;
-  interval_set<inodeno_t> purge_inos;
+  interval_set<inodeno_t> inos_to_purge;
   LogSegment *ls = nullptr;
   Context *fin;
 public:
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = nullptr) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv,
-		       interval_set<inodeno_t> _purge_inos, LogSegment *_ls, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), purge_inos(std::move(_purge_inos)), ls(_ls), fin(fin_){}
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
+		       const interval_set<inodeno_t>& to_free, version_t iv, Context *fin_ = nullptr) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv),
+    inos_to_free(to_free), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
+		       const interval_set<inodeno_t>& to_free, version_t iv,
+		       const interval_set<inodeno_t>& to_purge, LogSegment *_ls, Context *fin_ = nullptr) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv),
+    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge), ls(_ls), fin(fin_) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev, purge_inos, ls);
+    server->_session_logged(session, state_seq, open, cmapv, inos_to_free, inotablev, inos_to_purge, ls);
     if (fin) {
       fin->complete(r);
     }
@@ -799,30 +803,28 @@ void Server::finish_flush_session(Session *session, version_t seq)
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
-			     const interval_set<inodeno_t>& inos, version_t piv,
-			     const interval_set<inodeno_t>& purge_inos, LogSegment *ls)
+			     const interval_set<inodeno_t>& inos_to_free, version_t piv,
+			     const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls)
 {
   dout(10) << "_session_logged " << session->info.inst
 	   << " state_seq " << state_seq
-	   << " " << (open ? "open":"close")
-	   << " " << pv
-	   << " purge_inos : " << purge_inos << dendl;
+	   << " " << (open ? "open":"close") << " " << pv
+	   << " inos_to_free " << inos_to_free << " inotablev " << piv
+	   << " inos_to_purge " << inos_to_purge << dendl;
   
-  if (NULL != ls) {
-    dout(10)  << "_session_logged seq : " << ls->seq << dendl;
-    if (purge_inos.size()){
-      session->info.prealloc_inos.subtract(purge_inos);
-      ls->purge_inodes.insert(purge_inos);
-      mdcache->purge_inodes(purge_inos, ls);
-    }
+  if (inos_to_purge.size()){
+    ceph_assert(ls);
+    session->info.prealloc_inos.subtract(inos_to_purge);
+    ls->purging_inodes.insert(inos_to_purge);
+    mdcache->purge_inodes(inos_to_purge, ls);
   }
   
   if (piv) {
     ceph_assert(session->is_closing() || session->is_killing() ||
 	   session->is_opening()); // re-open closing session
-    session->info.prealloc_inos.subtract(inos);
+    session->info.prealloc_inos.subtract(inos_to_free);
     session->delegated_inos.clear();
-    mds->inotable->apply_release_ids(inos);
+    mds->inotable->apply_release_ids(inos_to_free);
     ceph_assert(mds->inotable->get_version() == piv);
   }
 

@@ -26,10 +26,10 @@ class ESession : public LogEvent {
   bool open;    // open or close
   version_t cmapv{0};  // client map version
 
-  interval_set<inodeno_t> inos;
+  interval_set<inodeno_t> inos_to_free;
   version_t inotablev{0};
 
-  interval_set<inodeno_t> purge_inos;
+  interval_set<inodeno_t> inos_to_purge;
   
   // Client metadata stored during open
   client_metadata_t client_metadata;
@@ -42,11 +42,10 @@ class ESession : public LogEvent {
     client_inst(inst), open(o), cmapv(v), inotablev(0),
     client_metadata(cm) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-	   interval_set<inodeno_t> i, version_t iv,
-	   interval_set<inodeno_t> _purge_inos) :
-    LogEvent(EVENT_SESSION),
-    client_inst(inst), open(o), cmapv(v), inos(std::move(i)), inotablev(iv),
-    purge_inos(std::move(_purge_inos)) {}
+	   const interval_set<inodeno_t>& to_free, version_t iv,
+	   const interval_set<inodeno_t>& to_purge) :
+    LogEvent(EVENT_SESSION), client_inst(inst), open(o), cmapv(v),
+    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge) {}
 
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
@@ -58,8 +57,9 @@ class ESession : public LogEvent {
       out << "ESession " << client_inst << " open cmapv " << cmapv;
     else
       out << "ESession " << client_inst << " close cmapv " << cmapv;
-    if (inos.size())
-      out << " (" << inos.size() << " inos, v" << inotablev << ")";
+    if (inos_to_free.size() || inos_to_purge.size())
+      out << " (" << inos_to_free.size() << " to free, v" << inotablev
+	  << ", " << inos_to_purge.size() << " to purge)";
   }
   
   void update_segment() override;
