@@ -1304,6 +1304,11 @@ mds_debug_scatterstat = true
 mds_verify_scatter = true
 EOF
     fi
+    if [ "$cephadm" -gt 0 ]; then
+        debug echo Setting mon public_network ...
+        public_network=$(ip route list | grep -w "$IP" | awk '{print $1}')
+        ceph_adm config set mon public_network $public_network
+    fi
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
