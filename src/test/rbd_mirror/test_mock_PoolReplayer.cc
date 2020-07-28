@@ -332,7 +332,7 @@ public:
 
     EXPECT_CALL(*io_ctx_impl,
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;
                         })),
@@ -346,7 +346,7 @@ public:
 
     EXPECT_CALL(*io_ctx_impl,
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                                           *bl = out_bl;
                                         })),
@@ -356,7 +356,7 @@ public:
   void expect_mirror_mode_get(librados::MockTestMemIoCtxImpl *io_ctx_impl) {
     EXPECT_CALL(*io_ctx_impl,
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
-                     _, _, _))
+                     _, _, _, _))
       .WillRepeatedly(DoAll(WithArg<5>(Invoke([](bufferlist *bl) {
                 encode(cls::rbd::MIRROR_MODE_POOL, *bl);
               })),

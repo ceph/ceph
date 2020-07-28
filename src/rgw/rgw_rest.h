@@ -639,6 +639,7 @@ public:
   }
 
   virtual RGWHandler_REST* get_handler(
+    rgw::sal::RGWRadosStore *store,
     struct req_state* const s,
     const rgw::auth::StrategyRegistry& auth_registry,
     const std::string& frontend_prefix

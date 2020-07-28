@@ -1,4 +1,3 @@
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -7,8 +6,6 @@ import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 export class RbdSnapshotActionsModel {
-  i18n: I18n;
-
   create: CdTableAction;
   rename: CdTableAction;
   protect: CdTableAction;
@@ -19,9 +16,7 @@ export class RbdSnapshotActionsModel {
   deleteSnap: CdTableAction;
   ordering: CdTableAction[];
 
-  constructor(i18n: I18n, actionLabels: ActionLabelsI18n, featuresName: string[]) {
-    this.i18n = i18n;
-
+  constructor(actionLabels: ActionLabelsI18n, featuresName: string[]) {
     this.create = {
       permission: 'create',
       icon: Icons.add,
@@ -94,7 +89,7 @@ export class RbdSnapshotActionsModel {
 
   getCloneDisableDesc(featuresName: string[]): string | undefined {
     if (!featuresName?.includes('layering')) {
-      return this.i18n('Parent image must support Layering');
+      return $localize`Parent image must support Layering`;
     }
 
     return undefined;

@@ -117,7 +117,6 @@ private:
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string path;
   uint64_t used_bytes = 0;
-  uuid_d osd_fsid;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
   seastar::gate transaction_gate;

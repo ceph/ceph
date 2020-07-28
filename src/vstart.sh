@@ -971,6 +971,12 @@ EOF
 
     if [ "$cephadm" -eq 1 ]; then
         debug echo Enabling cephadm orchestrator
+	if [ "$new" -eq 1 ]; then
+		digest=$(curl -s \
+		https://registry.hub.docker.com/v2/repositories/ceph/daemon-base/tags/latest-master-devel \
+		| jq -r '.images[].digest')
+		ceph_adm config set global container_image "docker.io/ceph/daemon-base@$digest"
+	fi
         ceph_adm config-key set mgr/cephadm/ssh_identity_key -i ~/.ssh/id_rsa
         ceph_adm config-key set mgr/cephadm/ssh_identity_pub -i ~/.ssh/id_rsa.pub
         ceph_adm mgr module enable cephadm
@@ -1094,8 +1100,6 @@ start_ganesha() {
 
         MDCACHE {
            Dir_Chunk = 0;
-           NParts = 1;
-           Cache_Size = 1;
         }
 
         NFSv4 {
@@ -1188,7 +1192,7 @@ fi
 [ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
 [ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
 if [ $inc_osd_num -eq 0 ]; then
-    $SUDO rm -rf $CEPH_OUT_DIR/*
+    $SUDO find "$CEPH_OUT_DIR" -type f -delete
 fi
 [ -d gmon ] && $SUDO rm -rf gmon/*
 

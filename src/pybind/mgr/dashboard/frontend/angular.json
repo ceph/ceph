@@ -28,6 +28,12 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "allowedCommonJsDependencies": [
+              "chart.js",
+              "core-js",
+              "file-saver",
+              "lodash"
+            ],
             "i18nLocale": "en",
             "aot": true,
             "i18nMissingTranslation": "ignore",
@@ -54,9 +60,7 @@
               "node_modules/ngx-toastr/toastr.css",
               "src/styles.scss"
             ],
-            "scripts": [
-              "node_modules/chart.js/dist/Chart.bundle.js"
-            ],
+            "scripts": ["node_modules/chart.js/dist/Chart.bundle.js"],
             "stylePreprocessorOptions": {
               "includePaths": [
                 "src"

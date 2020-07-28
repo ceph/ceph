@@ -7,7 +7,6 @@ try:
     from typing import Optional, List, Dict, Any
 except ImportError:
     pass
-import six
 
 
 class DeviceSelection(object):
@@ -143,7 +142,7 @@ class DriveGroupSpec(ServiceSpec):
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size", "unmanaged"
+        "journal_size", "unmanaged", "filter_logic", "preview_only"
     ]
 
     def __init__(self,
@@ -165,11 +164,14 @@ class DriveGroupSpec(ServiceSpec):
                  journal_size=None,  # type: Optional[int]
                  service_type=None,  # type: Optional[str]
                  unmanaged=False,  # type: bool
+                 filter_logic='AND',  # type: str
+                 preview_only=False,  # type: bool
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
-                                             unmanaged=unmanaged)
+                                             unmanaged=unmanaged,
+                                             preview_only=preview_only)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -215,6 +217,13 @@ class DriveGroupSpec(ServiceSpec):
         #: See :ref:`orchestrator-osd-replace`
         self.osd_id_claims = osd_id_claims or dict()
 
+        #: The logic gate we use to match disks with filters.
+        #: defaults to 'AND'
+        self.filter_logic = filter_logic.upper()
+
+        #: If this should be treated as a 'preview' spec
+        self.preview_only = preview_only
+
     @classmethod
     def _from_json_impl(cls, json_drive_group):
         # type: (dict) -> DriveGroupSpec
@@ -257,7 +266,7 @@ class DriveGroupSpec(ServiceSpec):
 
         for key in ('block_wal_size', 'block_db_size', 'journal_size'):
             if key in json_drive_group:
-                if isinstance(json_drive_group[key], six.string_types):
+                if isinstance(json_drive_group[key], str):
                     from ceph.deployment.drive_selection import SizeMatcher
                     json_drive_group[key] = SizeMatcher.str_to_byte(json_drive_group[key])
 
@@ -277,7 +286,7 @@ class DriveGroupSpec(ServiceSpec):
         if not self.service_id:
             raise DriveGroupValidationError('service_id is required')
 
-        if not isinstance(self.placement.host_pattern, six.string_types) and \
+        if not isinstance(self.placement.host_pattern, str) and \
                 self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
 
@@ -288,13 +297,17 @@ class DriveGroupSpec(ServiceSpec):
             if s.all:
                 raise DriveGroupValidationError("`all` is only allowed for data_devices")
 
-        if self.objectstore not in ('filestore', 'bluestore'):
-            raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
+        if self.objectstore not in ('bluestore'):
+            raise DriveGroupValidationError(f"{self.objectstore} is not supported. Must be "
+                                            f"one of ('bluestore')")
 
         if self.block_wal_size is not None and type(self.block_wal_size) != int:
             raise DriveGroupValidationError('block_wal_size must be of type int')
         if self.block_db_size is not None and type(self.block_db_size) != int:
             raise DriveGroupValidationError('block_db_size must be of type int')
+
+        if self.filter_logic not in ['AND', 'OR']:
+            raise DriveGroupValidationError('filter_logic must be either <AND> or <OR>')
 
     def __repr__(self):
         keys = [

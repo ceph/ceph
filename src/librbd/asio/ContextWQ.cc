@@ -4,18 +4,31 @@
 #include "librbd/asio/ContextWQ.h"
 #include "include/Context.h"
 #include "common/Cond.h"
-#include <boost/asio/bind_executor.hpp>
-#include <boost/asio/post.hpp>
+#include "common/dout.h"
+
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::asio::ContextWQ: " \
+                           << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace asio {
 
-ContextWQ::ContextWQ(boost::asio::io_context& io_context)
-  : m_io_context(io_context), m_strand(io_context),
+ContextWQ::ContextWQ(CephContext* cct, boost::asio::io_context& io_context)
+  : m_cct(cct), m_io_context(io_context),
+    m_strand(std::make_unique<boost::asio::io_context::strand>(io_context)),
     m_queued_ops(0) {
+  ldout(m_cct, 20) << dendl;
+}
+
+ContextWQ::~ContextWQ() {
+  ldout(m_cct, 20) << dendl;
+  drain();
+  m_strand.reset();
 }
 
 void ContextWQ::drain() {
+  ldout(m_cct, 20) << dendl;
   C_SaferCond ctx;
   drain_handler(&ctx);
   ctx.wait();
@@ -29,23 +42,7 @@ void ContextWQ::drain_handler(Context* ctx) {
 
   // new items might be queued while we are trying to drain, so we
   // might need to post the handler multiple times
-  boost::asio::post(m_io_context, boost::asio::bind_executor(
-    m_strand, [this, ctx]() { drain_handler(ctx); }));
-}
-
-void ContextWQ::queue(Context *ctx, int r) {
-  ++m_queued_ops;
-
-  // ensure all legacy ContextWQ users are dispatched sequentially for backwards
-  // compatibility (i.e. might not be concurrent thread-safe)
-  boost::asio::post(m_io_context, boost::asio::bind_executor(
-    m_strand,
-    [this, ctx, r]() {
-      ctx->complete(r);
-
-      ceph_assert(m_queued_ops > 0);
-      --m_queued_ops;
-    }));
+  boost::asio::post(*m_strand, [this, ctx]() { drain_handler(ctx); });
 }
 
 } // namespace asio

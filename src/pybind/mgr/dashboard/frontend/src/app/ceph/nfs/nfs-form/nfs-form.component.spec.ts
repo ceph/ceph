@@ -9,7 +9,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -39,7 +39,6 @@ describe('NfsFormComponent', () => {
           provide: ActivatedRoute,
           useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
         },
-        i18nProviders,
         SummaryService,
         CephReleaseNamePipe
       ]

@@ -7,11 +7,7 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
@@ -36,8 +32,7 @@ describe('SilenceListComponent', () => {
       HttpClientTestingModule,
       NgbNavModule
     ],
-    declarations: [SilenceListComponent, PrometheusTabsComponent],
-    providers: [i18nProviders]
+    declarations: [SilenceListComponent, PrometheusTabsComponent]
   });
 
   beforeEach(() => {

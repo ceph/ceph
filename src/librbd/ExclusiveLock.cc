@@ -31,7 +31,7 @@ using ML = ManagedLock<I>;
 template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
   : RefCountedObject(image_ctx.cct),
-    ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
+    ML<I>(image_ctx.md_ctx, *image_ctx.asio_engine, image_ctx.header_oid,
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
           image_ctx.config.template get_val<bool>("rbd_blacklist_on_break_lock"),
           image_ctx.config.template get_val<uint64_t>("rbd_blacklist_expire_seconds")),

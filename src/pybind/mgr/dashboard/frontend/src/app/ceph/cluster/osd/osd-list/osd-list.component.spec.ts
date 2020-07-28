@@ -10,11 +10,7 @@ import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -103,12 +99,10 @@ describe('OsdListComponent', () => {
       CoreModule,
       RouterTestingModule
     ],
-    declarations: [],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
-      ModalService,
-      i18nProviders
+      ModalService
     ]
   });
 

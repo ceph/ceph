@@ -104,11 +104,24 @@ It displays export block for a cluster based on pseudo root name (binding).
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================
 
-.. code:: bash
+1) Using cephadm
 
-    $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
+    .. code:: bash
 
-NFS: It denotes the number of NFS-Ganesha clusters to be created.
+        $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d --cephadm
+
+    It can deploy only single ganesha daemon with vstart on default ganesha port.
+
+2) Using test orchestrator
+
+    .. code:: bash
+
+       $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
+
+    It can deploy multiple ganesha daemons on random port. But this requires
+    ganesha packages to be installed.
+
+NFS: It is the number of NFS-Ganesha clusters to be created.
 
 Mount
 =====

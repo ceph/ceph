@@ -188,10 +188,13 @@ class OSDSupport(MgrModule):
         self.run = False
         self.event.set()
 
+    def get_osds_in_cluster(self) -> List[str]:
+        osd_map = self.get_osdmap()
+        return [x.get('osd') for x in osd_map.dump().get('osds', [])]
+
     def osds_not_in_cluster(self, osd_ids: List[int]) -> Set[int]:
         self.log.info(f"Checking if provided osds <{osd_ids}> exist in the cluster")
-        osd_map = self.get_osdmap()
-        cluster_osds = [x.get('osd') for x in osd_map.dump().get('osds', [])]
+        cluster_osds = self.get_osds_in_cluster()
         not_in_cluster = set()
         for osd_id in osd_ids:
             if int(osd_id) not in cluster_osds:
@@ -235,7 +238,7 @@ class OSDSupport(MgrModule):
             osd_df = self.osd_df()
         osd_nodes = osd_df.get('nodes', [])
         for osd_node in osd_nodes:
-            if osd_node.get('id', None) == int(osd_id):
+            if osd_node.get('id') == int(osd_id):
                 return osd_node.get('pgs', -1)
         return -1
 
@@ -243,8 +246,9 @@ class OSDSupport(MgrModule):
         osd_df = self.osd_df()
         osd_nodes = osd_df.get('nodes', [])
         for osd_node in osd_nodes:
-            if osd_node.get('id', None) == int(osd_id):
-                return float(osd_node.get('crush_weight'))
+            if osd_node.get('id') == int(osd_id):
+                if 'crush_weight' in osd_node:
+                    return float(osd_node.get('crush_weight'))
         return -1.0
 
     def reweight_osd(self, osd_id: int, weight: float = 0.0) -> bool:

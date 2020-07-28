@@ -228,7 +228,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(::journal::Journaler::header_oid(mock_image_ctx.id),
-                     _, StrEq("journal"), StrEq("client_list"), _, _, _))
+                     _, StrEq("journal"), StrEq("client_list"), _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
                       Return(r)));
   }
@@ -243,7 +243,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(::journal::Journaler::header_oid(mock_image_ctx.id),
                      _, StrEq("journal"), StrEq("client_unregister"),
-                     ContentsEqual(bl), _, _))
+                     ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 

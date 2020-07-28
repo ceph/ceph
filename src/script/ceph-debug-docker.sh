@@ -13,6 +13,7 @@
 set -e
 
 CACHE=""
+FLAVOR="default"
 
 function run {
     printf "%s\n" "$*"
@@ -20,7 +21,7 @@ function run {
 }
 
 function main {
-    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,no-cache' -- "$@")
+    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,no-cache,flavor:' -- "$@")
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -31,6 +32,10 @@ function main {
             --no-cache)
                 CACHE="--no-cache"
                 shift
+                ;;
+            --flavor)
+                FLAVOR=$2
+                shift 2
                 ;;
             --)
                 shift
@@ -57,10 +62,10 @@ function main {
     printf "branch: %s\nsha1: %s\n" "$branch" "$sha"
 
     if [ -z "$2" ]; then
-        printf "specify the build environment [default \"centos:7\"]: "
+        printf "specify the build environment [default \"centos:8\"]: "
         read env
         if [ -z "$env" ]; then
-            env=centos:7
+            env=centos:8
         fi
     else
         env="$2"
@@ -79,6 +84,7 @@ function main {
 
     T=$(mktemp -d)
     pushd "$T"
+    repo_url="https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/flavors/${FLAVOR}/repo"
     if grep ubuntu <<<"$env" > /dev/null 2>&1; then
         # Docker makes it impossible to access anything outside the CWD : /
         cp -- /ceph/shaman/cephdev.asc .
@@ -90,22 +96,32 @@ RUN apt-get update --yes --quiet && \
     apt-get install --yes --quiet screen gdb software-properties-common apt-transport-https curl
 COPY cephdev.asc cephdev.asc
 RUN apt-key add cephdev.asc && \
-    curl -L https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/repo | tee /etc/apt/sources.list.d/ceph_dev.list && \
+    curl -L $repo_url | tee /etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
 EOF
         time run docker build $CACHE --tag "$tag" .
     else # try RHEL flavor
+        case "$env" in
+            centos:7)
+                python_bindings="python36-rados python36-cephfs"
+                ceph_debuginfo="ceph-debuginfo"
+                ;;
+            centos:8)
+                python_bindings="python3-rados python3-cephfs"
+                ceph_debuginfo="ceph-base-debuginfo"
+                ;;
+        esac
         time run docker build $CACHE --tag "$tag" - <<EOF
 FROM ${env}
 
 WORKDIR /root
 RUN yum update -y && \
-    yum install -y screen epel-release wget psmisc ca-certificates gdb
-RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/centos/7/repo && \
+    yum install -y tmux epel-release wget psmisc ca-certificates gdb
+RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
     yum clean all && \
     yum upgrade -y && \
-    yum install -y ceph ceph-debuginfo ceph-fuse python34-rados python34-cephfs
+    yum install -y ceph ${ceph_debuginfo} ceph-fuse ${python_bindings}
 EOF
     fi
     popd

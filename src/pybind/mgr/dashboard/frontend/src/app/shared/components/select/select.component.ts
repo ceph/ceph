@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
 import { FormControl, ValidatorFn } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -22,7 +21,7 @@ export class SelectComponent implements OnInit, OnChanges {
   @Input()
   options: Array<SelectOption> = [];
   @Input()
-  messages = new SelectMessages({}, this.i18n);
+  messages = new SelectMessages({});
   @Input()
   selectionLimit: number;
   @Input()
@@ -38,8 +37,6 @@ export class SelectComponent implements OnInit, OnChanges {
   Object = Object;
   filteredOptions: Array<SelectOption> = [];
   icons = Icons;
-
-  constructor(private i18n: I18n) {}
 
   ngOnInit() {
     this.initFilter();

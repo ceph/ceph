@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "common/WorkQueue.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
@@ -233,11 +234,11 @@ private:
 
 class QuiesceWatchers {
 public:
-  explicit QuiesceWatchers(CephContext *cct)
+  explicit QuiesceWatchers(CephContext *cct, asio::ContextWQ* work_queue)
     : m_cct(cct),
+      m_work_queue(work_queue),
       m_lock(ceph::make_mutex(util::unique_lock_name(
         "librbd::QuiesceWatchers::m_lock", this))) {
-    ImageCtx::get_work_queue(m_cct, &m_work_queue);
   }
 
   ~QuiesceWatchers() {
@@ -423,7 +424,8 @@ ImageState<I>::ImageState(I *image_ctx)
     m_lock(ceph::make_mutex(util::unique_lock_name("librbd::ImageState::m_lock", this))),
     m_last_refresh(0), m_refresh_seq(0),
     m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)),
-    m_quiesce_watchers(new QuiesceWatchers(image_ctx->cct)) {
+    m_quiesce_watchers(new QuiesceWatchers(
+      image_ctx->cct, image_ctx->asio_engine->get_work_queue())) {
 }
 
 template <typename I>

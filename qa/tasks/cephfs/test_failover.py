@@ -3,7 +3,6 @@ import signal
 import logging
 import operator
 from random import randint
-from six.moves import range
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError

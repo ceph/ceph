@@ -2514,6 +2514,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("flush FileStore journal contents during clean OSD shutdown"),
 
+    Option("osd_compact_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("compact OSD's object store's OMAP on start"),
+
     Option("osd_os_flags", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("flags to skip filestore omap or journal initialization"),
@@ -4039,6 +4043,17 @@ std::vector<Option> get_global_options() {
       .set_default(true)
       .set_description("Enables checks for allocations consistency during log replay"),
 
+    Option("bluefs_replay_recovery", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Attempt to read bluefs log so large that it became unreadable.")
+    .set_long_description("If BlueFS log grows to extreme sizes (200GB+) it is likely that it becames unreadable. "
+			  "This options enables heuristics that scans devices for missing data. "
+			  "DO NOT ENABLE BY DEFAULT"),
+
+    Option("bluefs_replay_recovery_disable_compact", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)
@@ -4708,7 +4723,7 @@ std::vector<Option> get_global_options() {
       .set_default(0)
       .set_description("Space reserved at DB device and not allowed for 'use some extra' policy usage. Overrides 'bluestore_volume_selection_reserved_factor' setting and introduces straightforward limit."),
 
-    Option("bluestore_ioring", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("bdev_ioring", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Enables Linux io_uring API instead of libaio"),
 
@@ -5414,7 +5429,13 @@ std::vector<Option> get_global_options() {
 
     Option("crimson_osd_scheduler_concurrency", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("The maximum number concurrent IO operations, 0 for unlimited")
+    .set_description("The maximum number concurrent IO operations, 0 for unlimited"),
+
+    // ----------------------------
+    // blk specific options
+    Option("bdev_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("Explicitly set the device type to select the driver if it's needed")
+    .set_enum_allowed({"aio", "spdk", "pmem", "hm_smr"})
 
   });
 }
@@ -7360,6 +7381,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("validate new image names for RBD compatibility"),
 
+    Option("rbd_invalidate_object_map_on_timeout", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("true if object map should be invalidated when load or update timeout"),
+
     Option("rbd_auto_exclusive_lock_until_manual_request", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("automatically acquire/release exclusive lock until it is explicitly requested"),
@@ -7743,7 +7768,7 @@ static std::vector<Option> get_rbd_mirror_options() {
 static std::vector<Option> get_immutable_object_cache_options() {
   return std::vector<Option>({
     Option("immutable_object_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/tmp")
+    .set_default("/tmp/ceph_immutable_object_cache")
     .set_description("immutable object cache data dir"),
 
     Option("immutable_object_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -8560,6 +8585,18 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description("pass default_permisions to FUSE on mount")
     .set_flag(Option::FLAG_STARTUP),
+
+    Option("fuse_splice_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("enable splice read to reduce the memory copies"),
+
+    Option("fuse_splice_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("enable splice write to reduce the memory copies"),
+
+    Option("fuse_splice_move", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("enable splice move to reduce the memory copies"),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

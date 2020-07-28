@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { SharedModule } from '../../../shared/shared.module';
@@ -14,8 +14,7 @@ describe('NfsFormClientComponent', () => {
 
   configureTestBed({
     declarations: [NfsFormClientComponent],
-    imports: [ReactiveFormsModule, SharedModule, HttpClientTestingModule],
-    providers: i18nProviders
+    imports: [ReactiveFormsModule, SharedModule, HttpClientTestingModule]
   });
 
   beforeEach(() => {

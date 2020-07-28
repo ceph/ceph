@@ -201,7 +201,8 @@ public:
     encode(image_id, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get_image_id"), _, _, _))
+                exec(RBD_MIRRORING, _, StrEq("rbd"),
+                     StrEq("mirror_image_get_image_id"), _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;
                                         })),
@@ -272,14 +273,14 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"),
-                     StrEq("mirror_image_set"), ContentsEqual(bl), _, _))
+                     StrEq("mirror_image_set"), ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 
   void expect_mirror_image_remove(librados::IoCtx &ioctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ioctx),
-                exec(StrEq("rbd_mirroring"), _, StrEq("rbd"), StrEq("mirror_image_remove"),
-                     _, _, _))
+                exec(StrEq("rbd_mirroring"), _, StrEq("rbd"),
+                     StrEq("mirror_image_remove"), _, _, _, _))
       .WillOnce(Return(r));
   }
 

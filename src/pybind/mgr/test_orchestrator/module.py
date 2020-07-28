@@ -14,8 +14,6 @@ try:
 except ImportError:
     pass  # type checking
 
-import six
-
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from mgr_module import CLICommand, HandleCommandResult
@@ -365,11 +363,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             raise orchestrator.NoOrchestrator()
         if host == 'raise_import_error':
             raise ImportError("test_orchestrator not enabled")
-        assert isinstance(host, six.string_types)
+        assert isinstance(host, str)
 
     @deferred_write("remove_host")
     def remove_host(self, host):
-        assert isinstance(host, six.string_types)
+        assert isinstance(host, str)
 
     @deferred_write("apply_mgr")
     def apply_mgr(self, spec):

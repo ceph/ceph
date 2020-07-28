@@ -25,6 +25,7 @@ CephFS    Patrick Donnelly batrick
 Dashboard Lenz Grimmer     LenzGr
 MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
+Docs      Zac Dover        zdover23
 ========= ================ =============
 
 The Ceph-specific acronyms in the table are explained in
@@ -242,4 +243,4 @@ Guidance for use of cluster log
 -------------------------------
 
 If your patches emit messages to the Ceph cluster log, please consult
-this guidance: :doc:`/dev/logging`.
+this: :doc:`/dev/logging`.

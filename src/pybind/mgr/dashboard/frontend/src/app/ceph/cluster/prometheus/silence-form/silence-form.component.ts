@@ -2,7 +2,6 @@ import { Component } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import * as moment from 'moment';
 
@@ -46,23 +45,23 @@ export class SilenceFormComponent {
   id: string;
 
   action: string;
-  resource = this.i18n('silence');
+  resource = $localize`silence`;
 
   matchers: AlertmanagerSilenceMatcher[] = [];
   matcherMatch: AlertmanagerSilenceMatcherMatch = undefined;
   matcherConfig = [
     {
-      tooltip: this.i18n('Attribute name'),
+      tooltip: $localize`Attribute name`,
       icon: this.icons.paragraph,
       attribute: 'name'
     },
     {
-      tooltip: this.i18n('Value'),
+      tooltip: $localize`Value`,
       icon: this.icons.terminal,
       attribute: 'value'
     },
     {
-      tooltip: this.i18n('Regular expression'),
+      tooltip: $localize`Regular expression`,
       icon: this.icons.magic,
       attribute: 'isRegex'
     }
@@ -71,7 +70,6 @@ export class SilenceFormComponent {
   datetimeFormat = 'YYYY-MM-DD HH:mm';
 
   constructor(
-    private i18n: I18n,
     private router: Router,
     private authStorageService: AuthStorageService,
     private formBuilder: CdFormBuilder,
@@ -206,9 +204,7 @@ export class SilenceFormComponent {
         this.rules = [];
         this.notificationService.show(
           NotificationType.info,
-          this.i18n(
-            'Please add your Prometheus host to the dashboard configuration and refresh the page'
-          ),
+          $localize`Please add your Prometheus host to the dashboard configuration and refresh the page`,
           undefined,
           undefined,
           'Prometheus'

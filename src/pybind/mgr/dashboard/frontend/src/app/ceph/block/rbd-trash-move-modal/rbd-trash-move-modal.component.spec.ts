@@ -7,7 +7,7 @@ import { NgbActiveModal, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import * as moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
@@ -27,7 +27,7 @@ describe('RbdTrashMoveModalComponent', () => {
       NgbPopoverModule
     ],
     declarations: [RbdTrashMoveModalComponent],
-    providers: [NgbActiveModal, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

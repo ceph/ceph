@@ -42,7 +42,7 @@ struct C_RBD_Readahead : public Context {
   uint64_t length;
 
   bufferlist read_data;
-  io::ExtentMap extent_map;
+  io::Extents extent_map;
 
   C_RBD_Readahead(I *ictx, uint64_t object_no, uint64_t offset, uint64_t length)
     : ictx(ictx), object_no(object_no), offset(offset), length(length) {

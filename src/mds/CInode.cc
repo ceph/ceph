@@ -5388,7 +5388,7 @@ void CInode::set_ephemeral_rand(bool yes)
   }
 }
 
-void CInode::maybe_ephemeral_rand(bool fresh)
+void CInode::maybe_ephemeral_rand(bool fresh, double threshold)
 {
   if (!mdcache->get_export_ephemeral_random_config()) {
     dout(15) << __func__ << " config false: cannot ephemeral random pin " << *this << dendl;
@@ -5410,7 +5410,13 @@ void CInode::maybe_ephemeral_rand(bool fresh)
     return;
   }
 
-  double threshold = get_ephemeral_rand();
+  /* not precomputed? */
+  if (threshold < 0.0) {
+    threshold = get_ephemeral_rand();
+  }
+  if (threshold <= 0.0) {
+    return;
+  }
   double n = ceph::util::generate_random_number(0.0, 1.0);
 
   dout(15) << __func__ << " rand " << n << " <?= " << threshold

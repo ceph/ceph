@@ -5,9 +5,8 @@
   ],
   "supportFile": "cypress/support/index.ts",
   "video": false,
-  "defaultCommandTimeout": 20000,
+  "defaultCommandTimeout": 120000,
   "viewportHeight": 1080,
   "viewportWidth": 1920,
-  "pluginsFile": false,
   "projectId": "k7ab29"
 }

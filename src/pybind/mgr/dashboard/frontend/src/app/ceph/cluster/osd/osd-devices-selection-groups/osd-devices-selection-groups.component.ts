@@ -1,6 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { Icons } from '../../../../shared/enum/icons.enum';
@@ -42,12 +41,12 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
 
   addButtonTooltip: String;
   tooltips = {
-    noAvailDevices: this.i18n('No available devices'),
-    addPrimaryFirst: this.i18n('Please add primary devices first'),
-    addByFilters: this.i18n('Add devices by using filters')
+    noAvailDevices: $localize`No available devices`,
+    addPrimaryFirst: $localize`Please add primary devices first`,
+    addByFilters: $localize`Add devices by using filters`
   };
 
-  constructor(private modalService: ModalService, private i18n: I18n) {}
+  constructor(private modalService: ModalService) {}
 
   ngOnInit() {
     this.updateAddButtonTooltip();

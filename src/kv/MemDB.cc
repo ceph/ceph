@@ -147,7 +147,7 @@ int MemDB::_init(bool create)
   int r;
   dout(1) << __func__ << dendl;
   if (create) {
-    r = ::mkdir(m_db_path.c_str(), 0700);
+    r = compat_mkdir(m_db_path.c_str(), 0700);
     if (r < 0) {
       r = -errno;
       if (r != -EEXIST) {

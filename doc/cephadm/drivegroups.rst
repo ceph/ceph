@@ -40,9 +40,26 @@ This will go out on all the matching hosts and deploy these OSDs.
 
 Since we want to have more complex setups, there are more filters than just the 'all' filter.
 
+Also, there is a `--dry-run` flag that can be passed to the `apply osd` command, which gives you a synopsis
+of the proposed layout.
+
+Example::
+
+  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+
+
 
 Filters
 =======
+
+.. note::
+   Filters are applied using a `AND` gate by default. This essentially means that a drive needs to fulfill all filter
+   criteria in order to get selected.
+   If you wish to change this behavior you can adjust this behavior by setting
+
+    `filter_logic: OR`  # valid arguments are `AND`, `OR`
+
+   in the OSD Specification.
 
 You can assign disks to certain groups by their attributes using filters.
 

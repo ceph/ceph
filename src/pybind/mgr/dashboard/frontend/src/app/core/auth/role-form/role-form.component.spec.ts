@@ -8,7 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
 import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
@@ -41,8 +41,7 @@ describe('RoleFormComponent', () => {
         ToastrModule.forRoot(),
         SharedModule
       ],
-      declarations: [RoleFormComponent, FakeComponent],
-      providers: i18nProviders
+      declarations: [RoleFormComponent, FakeComponent]
     },
     [LoadingPanelComponent]
   );

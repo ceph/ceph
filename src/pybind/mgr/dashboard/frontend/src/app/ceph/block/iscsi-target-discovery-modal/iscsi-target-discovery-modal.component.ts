@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
@@ -29,8 +28,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
     private authStorageService: AuthStorageService,
     public activeModal: NgbActiveModal,
     private iscsiService: IscsiService,
-    private notificationService: NotificationService,
-    private i18n: I18n
+    private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().iscsi;
   }
@@ -111,7 +109,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Updated discovery authentication')
+          $localize`Updated discovery authentication`
         );
         this.activeModal.close();
       },

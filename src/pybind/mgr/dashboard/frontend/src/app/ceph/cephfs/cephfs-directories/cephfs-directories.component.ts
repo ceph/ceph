@@ -2,7 +2,6 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 import { Validators } from '@angular/forms';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import {
   ITreeOptions,
   TreeComponent,
@@ -110,7 +109,6 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     private modalService: ModalService,
     private cephfsService: CephfsService,
     private cdDatePipe: CdDatePipe,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
     private dimlessBinaryPipe: DimlessBinaryPipe
@@ -141,18 +139,18 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       columns: [
         {
           prop: 'row.name',
-          name: this.i18n('Name'),
+          name: $localize`Name`,
           flexGrow: 1
         },
         {
           prop: 'row.value',
-          name: this.i18n('Value'),
+          name: $localize`Value`,
           sortable: false,
           flexGrow: 1
         },
         {
           prop: 'row.originPath',
-          name: this.i18n('Origin'),
+          name: $localize`Origin`,
           sortable: false,
           cellTemplate: this.originTmpl,
           flexGrow: 1
@@ -195,18 +193,18 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       columns: [
         {
           prop: 'name',
-          name: this.i18n('Name'),
+          name: $localize`Name`,
           flexGrow: 1
         },
         {
           prop: 'path',
-          name: this.i18n('Path'),
+          name: $localize`Path`,
           isHidden: true,
           flexGrow: 2
         },
         {
           prop: 'created',
-          name: this.i18n('Created'),
+          name: $localize`Created`,
           flexGrow: 1,
           pipe: this.cdDatePipe
         }
@@ -352,7 +350,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     }
     return {
       row: {
-        name: quotaKey === 'max_bytes' ? this.i18n('Max size') : this.i18n('Max files'),
+        name: quotaKey === 'max_bytes' ? $localize`Max size` : $localize`Max files`,
         value: valueConvertFn(value),
         originPath: value ? dir.path : ''
       },
@@ -422,26 +420,23 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         path
       ),
       message: nextMax.value
-        ? this.i18n('The inherited {{quotaValue}} is the maximum value to be used.', {
-            quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
-          })
+        ? $localize`The inherited ${this.getQuotaValueFromPathMsg(
+            nextMax.value,
+            nextMax.path
+          )} is the maximum value to be used.`
         : undefined,
       fields: [this.getQuotaFormField(selection.row.name, key, value, nextMax.value)],
-      submitButtonText: this.i18n('Save'),
+      submitButtonText: $localize`Save`,
       onSubmit: (values: CephfsQuotas) => this.updateQuota(values)
     });
   }
 
   private getModalQuotaTitle(action: string, path: string): string {
-    return this.i18n(`{{action}} CephFS {{quotaName}} quota for '{{path}}'`, {
-      action,
-      quotaName: this.getQuotaName(),
-      path
-    });
+    return $localize`${action} CephFS ${this.getQuotaName()} quota for '${path}'`;
   }
 
   private getQuotaName(): string {
-    return this.isBytesQuotaSelected() ? this.i18n('size') : this.i18n('files');
+    return this.isBytesQuotaSelected() ? $localize`size` : $localize`files`;
   }
 
   private isBytesQuotaSelected(): boolean {
@@ -449,11 +444,9 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   private getQuotaValueFromPathMsg(value: number, path: string): string {
-    return this.i18n(`{{quotaName}} quota {{value}} from '{{path}}'`, {
-      value: this.isBytesQuotaSelected() ? this.dimlessBinaryPipe.transform(value) : value,
-      quotaName: this.getQuotaName(),
-      path
-    });
+    value = this.isBytesQuotaSelected() ? this.dimlessBinaryPipe.transform(value) : value;
+
+    return $localize`${this.getQuotaName()} quota ${value} from '${path}'`;
   }
 
   private getQuotaFormField(
@@ -477,8 +470,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     };
     if (!isBinary) {
       field.errors = {
-        min: this.i18n(`Value has to be at least {{value}} or more`, { value: 0 }),
-        max: this.i18n(`Value has to be at most {{value}} or less`, { value: maxValue })
+        min: $localize`Value has to be at least 0 or more`,
+        max: $localize`Value has to be at most ${maxValue} or less`
       };
     }
     return field;
@@ -492,7 +485,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         ? this.actionLabels.SET
         : values[key] === 0
         ? this.actionLabels.UNSET
-        : this.i18n('Updated');
+        : $localize`Updated`;
     this.cephfsService.updateQuota(this.id, path, values).subscribe(() => {
       if (onSuccess) {
         onSuccess();
@@ -512,23 +505,21 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     const nextMax = selection.nextTreeMaximum;
     const dirValue = selection.dirValue;
 
+    const quotaValue = this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path);
+    const conclusion =
+      nextMax.value > 0
+        ? nextMax.value > dirValue
+          ? $localize`in order to inherit ${quotaValue}`
+          : $localize`which isn't used because of the inheritance of ${quotaValue}`
+        : $localize`in order to have no quota on the directory`;
+
     this.modalRef = this.modalService.show(ConfirmationModalComponent, {
       titleText: this.getModalQuotaTitle(this.actionLabels.UNSET, path),
       buttonText: this.actionLabels.UNSET,
-      description: this.i18n(`{{action}} {{quotaValue}} {{conclusion}}.`, {
-        action: this.actionLabels.UNSET,
-        quotaValue: this.getQuotaValueFromPathMsg(dirValue, path),
-        conclusion:
-          nextMax.value > 0
-            ? nextMax.value > dirValue
-              ? this.i18n('in order to inherit {{quotaValue}}', {
-                  quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
-                })
-              : this.i18n(`which isn't used because of the inheritance of {{quotaValue}}`, {
-                  quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
-                })
-            : this.i18n('in order to have no quota on the directory')
-      }),
+      description: $localize`${this.actionLabels.UNSET} ${this.getQuotaValueFromPathMsg(
+        dirValue,
+        path
+      )} ${conclusion}.`,
       onSubmit: () => this.updateQuota({ [key]: 0 }, () => this.modalRef.close())
     });
   }
@@ -537,8 +528,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     // Create a snapshot. Auto-generate a snapshot name by default.
     const path = this.selectedDir.path;
     this.modalService.show(FormModalComponent, {
-      titleText: this.i18n('Create Snapshot'),
-      message: this.i18n('Please enter the name of the snapshot.'),
+      titleText: $localize`Create Snapshot`,
+      message: $localize`Please enter the name of the snapshot.`,
       fields: [
         {
           type: 'text',
@@ -547,15 +538,12 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           required: true
         }
       ],
-      submitButtonText: this.i18n('Create Snapshot'),
+      submitButtonText: $localize`Create Snapshot`,
       onSubmit: (values: CephfsSnapshot) => {
         this.cephfsService.mkSnapshot(this.id, path, values.name).subscribe((name) => {
           this.notificationService.show(
             NotificationType.success,
-            this.i18n(`Created snapshot '{{name}}' for '{{path}}'`, {
-              name: name,
-              path: path
-            })
+            $localize`Created snapshot '${name}' for '${path}'`
           );
           this.forceDirRefresh();
         });
@@ -668,7 +656,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   deleteSnapshotModal() {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.i18n('CephFs Snapshot'),
+      itemDescription: $localize`CephFs Snapshot`,
       itemNames: this.snapshot.selection.selected.map((snapshot: CephfsSnapshot) => snapshot.name),
       submitAction: () => this.deleteSnapshot()
     });
@@ -681,10 +669,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       this.cephfsService.rmSnapshot(this.id, path, name).subscribe(() => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Deleted snapshot '{{name}}' for '{{path}}'`, {
-            name: name,
-            path: path
-          })
+          $localize`Deleted snapshot '${name}' for '${path}'`
         );
       });
     });

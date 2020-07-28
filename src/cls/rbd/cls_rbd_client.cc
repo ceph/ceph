@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
+#include "include/neorados/RADOS.hpp"
 #include "common/bit_vector.hpp"
 
 #include <errno.h>
@@ -841,8 +842,17 @@ int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
   return get_all_features_finish(&it, all_features);
 }
 
-void copyup(librados::ObjectWriteOperation *op, bufferlist data) {
+template <typename O>
+void copyup(O* op, ceph::buffer::list data) {
   op->exec("rbd", "copyup", data);
+}
+
+void copyup(neorados::WriteOp* op, ceph::buffer::list data) {
+  copyup<neorados::WriteOp>(op, data);
+}
+
+void copyup(librados::ObjectWriteOperation *op, bufferlist data) {
+  copyup<librados::ObjectWriteOperation>(op, data);
 }
 
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
@@ -853,13 +863,24 @@ int copyup(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->operate(oid, &op);
 }
 
-void sparse_copyup(librados::ObjectWriteOperation *op,
-                   const std::map<uint64_t, uint64_t> &extent_map,
-                   bufferlist data) {
+template <typename O, typename E>
+void sparse_copyup(O* op, const E& extent_map, ceph::buffer::list data) {
   bufferlist bl;
   encode(extent_map, bl);
   encode(data, bl);
   op->exec("rbd", "sparse_copyup", bl);
+}
+
+void sparse_copyup(neorados::WriteOp* op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   ceph::buffer::list data) {
+  sparse_copyup<neorados::WriteOp>(op, extent_map, data);
+}
+
+void sparse_copyup(librados::ObjectWriteOperation *op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   bufferlist data) {
+  sparse_copyup<librados::ObjectWriteOperation>(op, extent_map, data);
 }
 
 int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
@@ -1732,21 +1753,33 @@ void migration_remove(librados::ObjectWriteOperation *op) {
   op->exec("rbd", "migration_remove", bl);
 }
 
+template <typename O>
+void assert_snapc_seq(O* op, uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state) {
+  bufferlist bl;
+  encode(snapc_seq, bl);
+  encode(state, bl);
+  op->exec("rbd", "assert_snapc_seq", bl);
+}
+
+void assert_snapc_seq(neorados::WriteOp* op,
+                      uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state) {
+  assert_snapc_seq<neorados::WriteOp>(op, snapc_seq, state);
+}
+
+void assert_snapc_seq(librados::ObjectWriteOperation *op,
+                      uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state) {
+  assert_snapc_seq<librados::ObjectWriteOperation>(op, snapc_seq, state);
+}
+
 int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
                      uint64_t snapc_seq,
                      cls::rbd::AssertSnapcSeqState state) {
   librados::ObjectWriteOperation op;
   assert_snapc_seq(&op, snapc_seq, state);
   return ioctx->operate(oid, &op);
-}
-
-void assert_snapc_seq(librados::ObjectWriteOperation *op,
-                      uint64_t snapc_seq,
-                      cls::rbd::AssertSnapcSeqState state) {
-  bufferlist bl;
-  encode(snapc_seq, bl);
-  encode(state, bl);
-  op->exec("rbd", "assert_snapc_seq", bl);
 }
 
 void mirror_uuid_get_start(librados::ObjectReadOperation *op) {

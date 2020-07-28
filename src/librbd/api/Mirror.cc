@@ -8,6 +8,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
@@ -1940,8 +1941,7 @@ int Mirror<I>::image_info_list(
       break;
     }
 
-    asio::ContextWQ *op_work_queue;
-    ImageCtx::get_work_queue(cct, &op_work_queue);
+    AsioEngine asio_engine(io_ctx);
 
     for (auto &it : images) {
       auto &image_id = it.first;
@@ -1956,7 +1956,7 @@ int Mirror<I>::image_info_list(
       // need to call get_info for every image to retrieve promotion state
 
       mirror_image_info_t info;
-      r = image_get_info(io_ctx, op_work_queue, image_id, &info);
+      r = image_get_info(io_ctx, asio_engine.get_work_queue(), image_id, &info);
       if (r >= 0) {
         (*entries)[image_id] = std::make_pair(mode, info);
       }

@@ -64,13 +64,11 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
       ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
-    map<string, rgw::sal::RGWBucket*>& buckets = user_buckets.get_buckets();
-    for (map<string, rgw::sal::RGWBucket*>::iterator i = buckets.begin();
-         i != buckets.end();
-         ++i) {
+    auto& buckets = user_buckets.get_buckets();
+    for (auto i = buckets.begin(); i != buckets.end(); ++i) {
       marker = i->first;
 
-      rgw::sal::RGWBucket* bucket = i->second;
+      auto& bucket = i->second;
 
       ret = bucket->get_bucket_info(null_yield);
       if (ret < 0) {
@@ -114,11 +112,11 @@ int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_use
       ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
-    std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+    auto& m = buckets.get_buckets();
     for (const auto& i :  m) {
       marker = i.first;
 
-      rgw::sal::RGWBucket* bucket_ent = i.second;
+      auto& bucket_ent = i.second;
       ret = bucket_ent->read_bucket_stats(null_yield);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
@@ -1644,11 +1642,10 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
       return ret;
     }
 
-    map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
-    std::map<std::string, rgw::sal::RGWBucket*>::iterator it;
+    auto& m = buckets.get_buckets();
 
-    for (it = m.begin(); it != m.end(); ++it) {
-      rgw::sal::RGWBucket* bucket = it->second;
+    for (auto it = m.begin(); it != m.end(); ++it) {
+      auto& bucket = it->second;
       marker = it->first;
 
       ret = bucket->get_bucket_info(null_yield);
@@ -1884,15 +1881,15 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
       return ret;
     }
 
-    std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
+    auto& m = buckets.get_buckets();
     if (!m.empty() && !purge_data) {
       set_err_msg(err_msg, "must specify purge data to remove user with buckets");
       return -EEXIST; // change to code that maps to 409: conflict
     }
 
-    std::map<std::string, rgw::sal::RGWBucket*>::iterator it;
-    for (it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(true, y);
+    std::string prefix, delimiter;
+    for (auto it = m.begin(); it != m.end(); ++it) {
+      ret = it->second->remove_bucket(true, prefix, delimiter, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -2039,13 +2036,12 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
         return ret;
       }
 
-      std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
-      std::map<std::string, rgw::sal::RGWBucket*>::iterator iter;
+      auto& m = buckets.get_buckets();
 
       vector<rgw_bucket> bucket_names;
-      for (iter = m.begin(); iter != m.end(); ++iter) {
-	rgw::sal::RGWBucket* obj = iter->second;
-        bucket_names.push_back(obj->get_bi());
+      for (auto iter = m.begin(); iter != m.end(); ++iter) {
+	auto& bucket = iter->second;
+        bucket_names.push_back(bucket->get_bi());
 
         marker = iter->first;
       }

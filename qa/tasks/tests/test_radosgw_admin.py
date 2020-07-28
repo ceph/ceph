@@ -1,8 +1,4 @@
-import six
-if six.PY3:
-    from unittest.mock import Mock
-else:
-    from mock import Mock
+from unittest.mock import Mock
 
 from tasks import radosgw_admin
 

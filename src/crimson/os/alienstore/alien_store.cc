@@ -119,10 +119,10 @@ seastar::future<> AlienStore::umount()
   });
 }
 
-seastar::future<> AlienStore::mkfs(uuid_d new_osd_fsid)
+seastar::future<> AlienStore::mkfs(uuid_d osd_fsid)
 {
   logger().debug("{}", __func__);
-  osd_fsid = new_osd_fsid;
+  store->set_fsid(osd_fsid);
   return tp->submit([this] {
     return store->mkfs();
   }).then([] (int r) {
@@ -405,7 +405,7 @@ AlienStore::read_meta(const std::string& key)
 uuid_d AlienStore::get_fsid() const
 {
   logger().debug("{}", __func__);
-  return osd_fsid;
+  return store->get_fsid();
 }
 
 seastar::future<store_statfs_t> AlienStore::stat() const

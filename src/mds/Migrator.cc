@@ -1035,7 +1035,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   }
   ceph_assert(it->second.state == EXPORT_LOCKING);
 
-  if (mdr->more()->slave_error || dir->is_frozen() || dir->is_freezing()) {
+  if (mdr->more()->peer_error || dir->is_frozen() || dir->is_freezing()) {
     dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
     export_try_cancel(dir);
     return;

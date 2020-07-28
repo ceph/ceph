@@ -5,10 +5,11 @@ import base64
 import logging
 import time
 
+from urllib import parse
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.twofactor.totp import TOTP
 from cryptography.hazmat.primitives.hashes import SHA1
-from six.moves.urllib import parse
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 
@@ -509,6 +510,11 @@ class RgwUserTest(RgwTestCase):
         self.assertStatus(200)
         self.assertGreaterEqual(len(data), 1)
         self.assertIn('admin', data)
+
+    def test_get_emails(self):
+        data = self._get('/api/rgw/user/get_emails')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
 
     def test_create_get_update_delete(self):
         # Create a new user.

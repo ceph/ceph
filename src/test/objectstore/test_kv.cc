@@ -1262,7 +1262,6 @@ TEST_F(RocksDBResharding, change_reshard) {
     ASSERT_EQ(db->reshard("Evade(2) D(3)", &ctrl), -1002);
   }
   {
-    RocksDBStore::resharding_ctrl ctrl;
     ASSERT_NE(db->open(cout), 0);
     ASSERT_EQ(db->reshard("Ad(1) Evade(5)"), 0);
   }

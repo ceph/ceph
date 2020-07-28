@@ -48,7 +48,7 @@ void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_sta
     s->content_disp.override = "attachment; filename=\"" + fenc + "\"";
   } else {
     std::string fenc;
-    url_encode(s->object.name, fenc);
+    url_encode(s->object->get_name(), fenc);
     s->content_disp.fallback = "attachment; filename=\"" + fenc + "\"";
   }
 
@@ -74,7 +74,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   const string& bucket_name = s->init_state.url_bucket;
 
   /* TempURL requires that bucket and object names are specified. */
-  if (bucket_name.empty() || s->object.empty()) {
+  if (bucket_name.empty() || s->object->empty()) {
     throw -EPERM;
   }
 
@@ -351,7 +351,7 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
   /* Need to try each combination of keys, allowed path and methods. */
   PrefixableSignatureHelper sig_helper {
     s->decoded_uri,
-    s->object.name,
+    s->object->get_name(),
     temp_url_prefix
   };
 

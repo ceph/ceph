@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Se
 import orchestrator
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec
-from orchestrator import OrchestratorError, HostSpec
+from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -107,6 +107,7 @@ class SpecStore():
         self.mgr = mgr
         self.specs = {} # type: Dict[str, ServiceSpec]
         self.spec_created = {} # type: Dict[str, datetime.datetime]
+        self.spec_preview = {} # type: Dict[str, ServiceSpec]
 
     def load(self):
         # type: () -> None
@@ -127,6 +128,9 @@ class SpecStore():
 
     def save(self, spec):
         # type: (ServiceSpec) -> None
+        if spec.preview_only:
+            self.spec_preview[spec.service_name()] = spec
+            return None
         self.specs[spec.service_name()] = spec
         self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
         self.mgr.set_store(
@@ -136,6 +140,7 @@ class SpecStore():
                 'created': self.spec_created[spec.service_name()].strftime(DATEFMT),
             }, sort_keys=True),
         )
+        self.mgr.events.for_service(spec, OrchestratorEvent.INFO, 'service was created')
 
     def rm(self, service_name):
         # type: (str) -> bool
@@ -174,6 +179,7 @@ class HostCache():
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
         self.loading_osdspec_preview = set()  # type: Set[str]
         self.etc_ceph_ceph_conf_refresh_queue: Set[str] = set()
+        self.registry_login_queue: Set[str] = set()
 
     def load(self):
         # type: () -> None
@@ -216,6 +222,7 @@ class HostCache():
                     self.last_host_check[host] = datetime.datetime.strptime(
                         j['last_host_check'], DATEFMT)
                 self.etc_ceph_ceph_conf_refresh_queue.add(host)
+                self.registry_login_queue.add(host)
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
                     '%d devices, %d networks' % (
@@ -261,6 +268,7 @@ class HostCache():
         self.device_refresh_queue.append(host)
         self.osdspec_previews_refresh_queue.append(host)
         self.etc_ceph_ceph_conf_refresh_queue.add(host)
+        self.registry_login_queue.add(host)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
@@ -278,6 +286,9 @@ class HostCache():
 
     def distribute_new_etc_ceph_ceph_conf(self):
         self.etc_ceph_ceph_conf_refresh_queue = set(self.mgr.inventory.keys())
+    
+    def distribute_new_registry_login_info(self):
+        self.registry_login_queue = set(self.mgr.inventory.keys())
 
     def save_host(self, host):
         # type: (str) -> None
@@ -344,16 +355,16 @@ class HostCache():
         return r
 
     def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
-        for host, dm in self.daemons.items():
+        def alter(host, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
+            dd = copy(dd_orig)
             if host in self.mgr.offline_hosts:
-                def set_offline(dd: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
-                    ret = copy(dd)
-                    ret.status = -1
-                    ret.status_desc = 'host is offline'
-                    return ret
-                yield host, {name: set_offline(d) for name, d in dm.items()}
-            else:
-                yield host, dm
+                dd.status = -1
+                dd.status_desc = 'host is offline'
+            dd.events = self.mgr.events.get_for_daemon(dd.name())
+            return dd
+
+        for host, dm in self.daemons.items():
+            yield host, {name: alter(host, d) for name, d in dm.items()}
 
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
@@ -436,6 +447,14 @@ class HostCache():
             # self.etc_ceph_ceph_conf_refresh_queue.remove(host)
             return True
         return False
+    
+    def host_needs_registry_login(self, host):
+        if host in self.mgr.offline_hosts:
+            return False
+        if host in self.registry_login_queue:
+            self.registry_login_queue.remove(host)
+            return True
+        return False
 
     def remove_host_needs_new_etc_ceph_ceph_conf(self, host):
         self.etc_ceph_ceph_conf_refresh_queue.remove(host)
@@ -460,3 +479,56 @@ class HostCache():
         """
         return all((h in self.last_daemon_update or h in self.mgr.offline_hosts)
                    for h in self.get_hosts())
+
+
+class EventStore():
+    def __init__(self, mgr):
+        # type: (CephadmOrchestrator) -> None
+        self.mgr: CephadmOrchestrator = mgr
+        self.events = {} # type: Dict[str, List[OrchestratorEvent]]
+
+    def add(self, event: OrchestratorEvent) -> None:
+
+        if event.kind_subject() not in self.events:
+            self.events[event.kind_subject()] = [event]
+
+        for e in self.events[event.kind_subject()]:
+            if e.message == event.message:
+                return
+
+        self.events[event.kind_subject()].append(event)
+
+        # limit to five events for now.
+        self.events[event.kind_subject()] = self.events[event.kind_subject()][-5:]
+
+    def for_service(self, spec: ServiceSpec, level, message) -> None:
+        e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', spec.service_name(), level, message)
+        self.add(e)
+
+    def for_daemon(self, daemon_name, level, message):
+        e = OrchestratorEvent(datetime.datetime.utcnow(), 'daemon', daemon_name, level, message)
+        self.add(e)
+
+    def cleanup(self) -> None:
+        # Needs to be properly done, in case events are persistently stored.
+
+        unknowns: List[str] = []
+        daemons = self.mgr.cache.get_daemon_names()
+        specs = self.mgr.spec_store.specs.keys()
+        for k_s, v in self.events.items():
+            kind, subject = k_s.split(':')
+            if kind == 'service':
+                if subject not in specs:
+                    unknowns.append(k_s)
+            elif kind == 'daemon':
+                if subject not in daemons:
+                    unknowns.append(k_s)
+
+        for k_s in unknowns:
+            del self.events[k_s]
+
+    def get_for_service(self, name):
+        return self.events.get('service:' + name, [])
+
+    def get_for_daemon(self, name):
+        return self.events.get('daemon:' + name, [])

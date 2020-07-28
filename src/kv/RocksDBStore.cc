@@ -320,7 +320,7 @@ int RocksDBStore::create_db_dir()
     unique_ptr<rocksdb::Directory> dir;
     env->NewDirectory(path, &dir);
   } else {
-    int r = ::mkdir(path.c_str(), 0755);
+    int r = compat_mkdir(path.c_str(), 0755);
     if (r < 0)
       r = -errno;
     if (r < 0 && r != -EEXIST) {
@@ -603,7 +603,6 @@ bool RocksDBStore::parse_sharding_def(const std::string_view text_def_in,
       column_def = column_def.substr(0, eqpos);
     }
 
-    std::string_view shards_def;
     size_t bpos = column_def.find('(');
     if (bpos != std::string_view::npos) {
       name = column_def.substr(0, bpos);

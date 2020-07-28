@@ -1,8 +1,6 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { AuthService } from '../../../shared/api/auth.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -19,7 +17,6 @@ import { UserPasswordFormComponent } from '../user-password-form/user-password-f
 })
 export class LoginPasswordFormComponent extends UserPasswordFormComponent {
   constructor(
-    public i18n: I18n,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
     public userService: UserService,
@@ -30,7 +27,6 @@ export class LoginPasswordFormComponent extends UserPasswordFormComponent {
     public authService: AuthService
   ) {
     super(
-      i18n,
       actionLabels,
       notificationService,
       userService,

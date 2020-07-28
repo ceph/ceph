@@ -332,7 +332,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([out_bl, r](bufferlist* out) {
                              *out = out_bl;
                              return r;

@@ -2,8 +2,6 @@
 
 from __future__ import absolute_import
 
-import six
-
 from .helper import DashboardTestCase, JObj, JList
 
 
@@ -101,9 +99,9 @@ class ECPTest(DashboardTestCase):
     def test_ecp_info(self):
         self._get('/ui-api/erasure_code_profile/info')
         self.assertSchemaBody(JObj({
-            'names': JList(six.string_types),
-            'plugins': JList(six.string_types),
-            'directory': six.string_types,
+            'names': JList(str),
+            'plugins': JList(str),
+            'directory': str,
             'nodes': JList(JObj({}, allow_unknown=True))
         }))
 

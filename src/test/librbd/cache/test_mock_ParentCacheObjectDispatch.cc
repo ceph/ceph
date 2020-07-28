@@ -54,7 +54,7 @@ using ::testing::Return;
 using ::testing::WithArg;
 using ::testing::WithArgs;
 
-class TestMockParentImageCache : public TestMockFixture {
+class TestMockParentCacheObjectDispatch : public TestMockFixture {
 public :
   typedef cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx> MockParentImageCache;
 
@@ -142,7 +142,7 @@ public :
   }
 };
 
-TEST_F(TestMockParentImageCache, test_initialization_success) {
+TEST_F(TestMockParentCacheObjectDispatch, test_initialization_success) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
@@ -161,7 +161,6 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
     ASSERT_EQ(reg, true);
   });
   expect_cache_register(*mock_parent_image_cache, ctx, 0);
-  expect_cache_session_state(*mock_parent_image_cache, true);
   expect_io_object_dispatcher_register_state(*mock_parent_image_cache, 0);
   expect_cache_close(*mock_parent_image_cache, 0);
   expect_cache_stop(*mock_parent_image_cache, 0);
@@ -171,7 +170,6 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
 
   ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
-  ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
 
@@ -181,7 +179,7 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
   delete mock_parent_image_cache;
 }
 
-TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
+TEST_F(TestMockParentCacheObjectDispatch, test_initialization_fail_at_connect) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
@@ -206,7 +204,6 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
   // initialization fails.
   ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
-  ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), false);
 
   mock_parent_image_cache->get_cache_client()->close();
@@ -216,7 +213,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
 
 }
 
-TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
+TEST_F(TestMockParentCacheObjectDispatch, test_initialization_fail_at_register) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
@@ -235,7 +232,6 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
     ASSERT_EQ(reg, false);
   });
   expect_cache_register(*mock_parent_image_cache, ctx, -1);
-  expect_cache_session_state(*mock_parent_image_cache, true);
   expect_io_object_dispatcher_register_state(*mock_parent_image_cache, 0);
   expect_cache_close(*mock_parent_image_cache, 0);
   expect_cache_stop(*mock_parent_image_cache, 0);
@@ -245,7 +241,6 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
 
   ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
-  ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
 
@@ -255,7 +250,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
   delete mock_parent_image_cache;
 }
 
-TEST_F(TestMockParentImageCache, test_disble_interface) {
+TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
@@ -295,7 +290,7 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
 
 }
 
-TEST_F(TestMockParentImageCache, test_read) {
+TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
@@ -314,7 +309,6 @@ TEST_F(TestMockParentImageCache, test_read) {
     ASSERT_EQ(reg, true);
   });
   expect_cache_register(*mock_parent_image_cache, ctx, 0);
-  expect_cache_session_state(*mock_parent_image_cache, true);
   expect_io_object_dispatcher_register_state(*mock_parent_image_cache, 0);
   expect_cache_close(*mock_parent_image_cache, 0);
   expect_cache_stop(*mock_parent_image_cache, 0);
@@ -324,7 +318,6 @@ TEST_F(TestMockParentImageCache, test_read) {
 
   ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
-  ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
 
@@ -332,7 +325,7 @@ TEST_F(TestMockParentImageCache, test_read) {
   Context* on_finish = &cond;
 
   auto& expect = EXPECT_CALL(*(mock_parent_image_cache->get_cache_client()), is_session_work());
-  expect.WillOnce(Return(true)).WillOnce(Return(true));
+  expect.WillOnce(Return(true));
 
   expect_cache_lookup_object(*mock_parent_image_cache, on_finish);
 

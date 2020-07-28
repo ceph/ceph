@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "NamespaceReplayer.h"
-#include <boost/bind.hpp>
 #include "common/Formatter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -386,7 +385,7 @@ void NamespaceReplayer<I>::init_instance_watcher() {
   ceph_assert(!m_instance_watcher);
 
   m_instance_watcher.reset(InstanceWatcher<I>::create(
-      m_local_io_ctx, m_threads->work_queue, m_instance_replayer.get(),
+      m_local_io_ctx, *m_threads->asio_engine, m_instance_replayer.get(),
       m_image_sync_throttler));
   auto ctx = create_context_callback<NamespaceReplayer<I>,
       &NamespaceReplayer<I>::handle_init_instance_watcher>(this);

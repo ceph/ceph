@@ -6,13 +6,8 @@ import time
 import logging
 import errno
 
-try:
-    from itertools import izip_longest as zip_longest  # type: ignore
-except ImportError:
-    from itertools import zip_longest
 from itertools import combinations
-from six import StringIO
-from six.moves import range
+from io import StringIO
 
 import boto
 import boto.s3.connection

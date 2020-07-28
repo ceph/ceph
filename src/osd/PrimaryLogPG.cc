@@ -2137,15 +2137,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   if (!is_primary()) {
     if (!recovery_state.can_serve_replica_read(oid)) {
-      dout(20) << __func__ << ": oid " << oid
-	       << " unstable write on replica, bouncing to primary."
+      dout(20) << __func__
+               << ": unstable write on replica, bouncing to primary "
 	       << *m << dendl;
       osd->reply_op_error(op, -EAGAIN);
       return;
-    } else {
-      dout(20) << __func__ << ": serving replica read on oid" << oid
-	       << dendl;
     }
+    dout(20) << __func__ << ": serving replica read on oid " << oid
+             << dendl;
   }
 
   int r = find_object_context(
@@ -2587,11 +2586,12 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 	}
       }();
       bufferlist in;
-      if (fp_oid != tgt_soid.oid) {
+      if (fp_oid != tgt_soid.oid && !obc->ssc->snapset.clones.size()) {
+	// TODO: don't retain reference to dirty extents
 	// decrement old chunk's reference count
 	ObjectOperation dec_op;
 	cls_cas_chunk_put_ref_op put_call;
-	put_call.source = soid;
+	put_call.source = soid.get_head();
 	::encode(put_call, in);
 	dec_op.call("cas", "chunk_put_ref", in);
 	// we don't care dec_op's completion. scrub for dedup will fix this.
@@ -2606,7 +2606,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       {
 	bufferlist t;
 	cls_cas_chunk_create_or_get_ref_op get_call;
-	get_call.source = soid;
+	get_call.source = soid.get_head();
 	get_call.data = chunk_data;
 	::encode(get_call, t);
 	obj_op.call("cas", "chunk_create_or_get_ref", t);
@@ -3457,24 +3457,102 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
-void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
-                                     SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset)
+void PrimaryLogPG::dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs)
+{
+  for (auto p = refs.begin(); p != refs.end(); ++p) {
+    int dec_ref_count = p->second;
+    ceph_assert(dec_ref_count < 0);
+    while (dec_ref_count < 0) {
+      dout(10) << __func__ << ": decrement reference on offset oid: " << p->first << dendl;
+      refcount_manifest(obc->obs.oi.soid, p->first, 
+			refcount_t::DECREMENT_REF, NULL);
+      dec_ref_count++;
+    }
+  }
+}
+
+
+void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx)
+{
+  ceph_assert(oi.has_manifest());
+  ceph_assert(ctx->obc->ssc);
+
+  if (oi.manifest.is_chunked()) {
+    const SnapSet& snapset = ctx->obc->ssc->snapset;
+
+    auto get_context = [this, &oi, &snapset](auto iter)
+      -> ObjectContextRef {
+      hobject_t cid = oi.soid;
+      cid.snap = (iter == snapset.clones.end()) ? snapid_t(CEPH_NOSNAP) : *iter;
+      ObjectContextRef obc = get_object_context(cid, false, NULL);
+      ceph_assert(obc);
+      ceph_assert(obc->obs.oi.has_manifest());
+      ceph_assert(obc->obs.oi.manifest.is_chunked());
+      return obc;
+    };
+    ObjectContextRef obc_l, obc_g;
+
+    // check adjacent clones
+    auto s = std::find(snapset.clones.begin(), snapset.clones.end(), oi.soid.snap);
+
+    // We *must* find the clone iff it's not head,
+    // let s == snapset.clones.end() mean head
+    ceph_assert((s == snapset.clones.end()) == oi.soid.is_head()); 
+
+    if (s != snapset.clones.begin()) {
+      obc_l = get_context(s - 1);
+    }
+
+    if (s != snapset.clones.end()) {
+      obc_g = get_context(s + 1);
+    }
+
+    object_ref_delta_t refs;
+    oi.manifest.calc_refs_to_drop_on_removal(
+      obc_l ? &(obc_l->obs.oi.manifest) : nullptr,
+      obc_g ? &(obc_g->obs.oi.manifest) : nullptr,
+      refs);
+
+    if (!refs.is_empty()) {
+      hobject_t soid = ctx->obc->obs.oi.soid;
+      ctx->register_on_commit(
+	[soid, this, refs](){
+	  ObjectContextRef obc = get_object_context(soid, false, NULL);
+	  ceph_assert(obc);
+	  dec_refcount(obc, refs);
+	});
+    }
+  } else if (oi.manifest.is_redirect()) {
+    ceph_assert(oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE);
+    ctx->register_on_commit(
+      [oi, this](){
+	refcount_manifest(oi.soid, oi.manifest.redirect_target, 
+			  refcount_t::DECREMENT_REF, NULL);
+      });
+  } else {
+    ceph_abort_msg("unrecognized manifest type");
+  }
+}
+
+void PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type, 
+				     RefCountCallback* cb)
 {
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
                    CEPH_OSD_FLAG_RWORDERED;                      
 
-  dout(10) << __func__ << " Start refcount for " << soid << dendl;
+  dout(10) << __func__ << " Start refcount from " << src_soid 
+	   << " to " << tgt_soid << dendl;
     
   ObjectOperation obj_op;
   bufferlist in;
-  if (get) {             
+  if (type == refcount_t::INCREMENT_REF) {             
     cls_cas_chunk_get_ref_op call;
-    call.source = obc->obs.oi.soid;
+    call.source = src_soid.get_head();
     ::encode(call, in);                             
     obj_op.call("cas", "chunk_get_ref", in);
-  } else {                    
+  } else if (type == refcount_t::DECREMENT_REF) {                    
     cls_cas_chunk_put_ref_op call;
-    call.source = obc->obs.oi.soid;
+    call.source = src_soid.get_head();
     ::encode(call, in);          
     obj_op.call("cas", "chunk_put_ref", in);
   }                                                     
@@ -3482,17 +3560,20 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
   Context *c = nullptr;
   if (cb) {
     C_SetManifestRefCountDone *fin =
-      new C_SetManifestRefCountDone(cb, obc->obs.oi.soid);
+      new C_SetManifestRefCountDone(cb, src_soid);
     c = new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard()));
   }
 
+  object_locator_t oloc(tgt_soid);
+  ObjectContextRef src_obc = get_object_context(src_soid, false, NULL);
+  ceph_assert(src_obc);
   auto tid = osd->objecter->mutate(
-    soid.oid, oloc, obj_op, snapc,
-    ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+    tgt_soid.oid, oloc, obj_op, SnapContext(),
+    ceph::real_clock::from_ceph_timespec(src_obc->obs.oi.mtime),
     flags, c);
   if (cb) {
-    manifest_ops[obc->obs.oi.soid] = std::make_shared<ManifestOp>(cb, tid);
-    obc->start_block();
+    manifest_ops[src_soid] = std::make_shared<ManifestOp>(cb, tid);
+    src_obc->start_block();
   }
 }  
 
@@ -4197,6 +4278,8 @@ void PrimaryLogPG::do_scan(
       // take care to preserve ordering!
       bi.clear_objects();
       decode_noclear(bi.objects, p);
+      dout(10) << __func__ << " bi.begin=" << bi.begin << " bi.end=" << bi.end
+               << " bi.objects.size()=" << bi.objects.size() << dendl;
 
       if (waiting_on_backfill.erase(from)) {
 	if (waiting_on_backfill.empty()) {
@@ -4449,8 +4532,10 @@ int PrimaryLogPG::trim_object(
     ctx->delta_stats.num_object_clones--;
     if (coi.is_cache_pinned())
       ctx->delta_stats.num_objects_pinned--;
-    if (coi.has_manifest())
+    if (coi.has_manifest()) {
+      dec_all_refcount_manifest(coi, ctx.get());
       ctx->delta_stats.num_objects_manifest--;
+    }
     obc->obs.exists = false;
 
     snapset.clones.erase(p);
@@ -4549,8 +4634,10 @@ int PrimaryLogPG::trim_object(
     if (oi.is_cache_pinned()) {
       ctx->delta_stats.num_objects_pinned--;
     }
-    if (coi.has_manifest())
+    if (oi.has_manifest()) {
       ctx->delta_stats.num_objects_manifest--;
+      dec_all_refcount_manifest(oi, ctx.get());
+    }
     head_obc->obs.exists = false;
     head_obc->obs.oi = object_info_t(head_oid);
     t->remove(head_oid);
@@ -6637,27 +6724,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       result = 0;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
       {
-	if (oi.has_manifest()) {
-	  if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE) && oi.manifest.is_redirect()) {
-	    ctx->register_on_commit(
-	      [oi, ctx, this](){
-	      object_locator_t target_oloc(oi.manifest.redirect_target);
-	      refcount_manifest(ctx->obc, target_oloc, oi.manifest.redirect_target, 
-				SnapContext(), false, NULL, 0);
-	    });
-	  } else if (oi.manifest.is_chunked()) {
-	    ctx->register_on_commit(
-	      [oi, ctx, this](){
-	      for (auto p : oi.manifest.chunk_map) {
-		if (p.second.has_reference()) {
-		  object_locator_t target_oloc(p.second.oid);
-		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
-				    SnapContext(), false, NULL, p.first);
-		}
-	      }
-	    });
-	  } 
-	} 
 	result = _delete_oid(ctx, false, ctx->ignore_cache);
       }
       break;
@@ -6847,8 +6913,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
 	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
-	  refcount_manifest(ctx->obc, target_oloc, target, SnapContext(),
-			    true, fin, 0);
+	  refcount_manifest(ctx->obc->obs.oi.soid, target, 
+			    refcount_t::INCREMENT_REF, fin);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -6918,6 +6984,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EOPNOTSUPP;
 	  break;
 	}
+	if (ctx->snapc.snaps.size() || 
+	    (ctx->obc->ssc && ctx->obc->ssc->snapset.clones.size()) ) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
 
 	object_locator_t tgt_oloc;
 	uint64_t src_offset, src_length, tgt_offset;
@@ -6972,8 +7043,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
 	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
-	  refcount_manifest(ctx->obc, tgt_oloc, target, SnapContext(),
-			    true, fin, src_offset);
+	  refcount_manifest(ctx->obc->obs.oi.soid, target, 
+			    refcount_t::INCREMENT_REF, fin);
 	  result = -EINPROGRESS;
 	} else {
 	  if (op_finisher) {
@@ -6985,7 +7056,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  chunk_info.set_flag(chunk_info_t::FLAG_MISSING);
 	  chunk_info.oid = target;
 	  chunk_info.offset = tgt_offset;
-	  chunk_info.length= src_length;
+	  chunk_info.length = src_length;
 	  oi.manifest.chunk_map[src_offset] = chunk_info;
 	  if (!oi.has_manifest() && !oi.manifest.is_chunked()) 
 	    ctx->delta_stats.num_objects_manifest++;
@@ -7037,15 +7108,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	  if (obs.oi.manifest.is_chunked()) {
 	    src_hoid = obs.oi.soid;
-	    cb = new PromoteManifestCallback(ctx->obc, this, ctx);
 	  } else if (obs.oi.manifest.is_redirect()) {
 	    object_locator_t src_oloc(obs.oi.manifest.redirect_target);
 	    my_oloc = src_oloc;
 	    src_hoid = obs.oi.manifest.redirect_target;
-	    cb = new PromoteManifestCallback(ctx->obc, this, ctx);
 	  } else {
 	    ceph_abort_msg("unrecognized manifest type");
 	  }
+	  cb = new PromoteManifestCallback(ctx->obc, this, ctx);
           ctx->op_finishers[ctx->current_osd_subop_num].reset(
             new PromoteFinisher(cb));
 	  unsigned flags = CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
@@ -7130,29 +7200,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
-	if (oi.manifest.is_redirect()) {
-	  if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE)) {
-	    ctx->register_on_commit(
-	      [oi, ctx, this](){
-	      object_locator_t target_oloc(oi.manifest.redirect_target);
-	      refcount_manifest(ctx->obc, target_oloc, oi.manifest.redirect_target, 
-				SnapContext(), false, NULL, 0);
-	    });
-	  }
-	} else if (oi.manifest.is_chunked()) {
-	    ctx->register_on_commit(
-	      [oi, ctx, this](){
-	      for (auto p : oi.manifest.chunk_map) {
-		if (p.second.flags & chunk_info_t::FLAG_HAS_REFERENCE) {
-		  object_locator_t target_oloc(p.second.oid);
-		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
-				    SnapContext(), false, NULL, p.first);
-		}
-	      }
-	    });
-	} else {
-	  ceph_abort_msg("unrecognized manifest type");
-	}
+	dec_all_refcount_manifest(oi, ctx);
 
 	oi.clear_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest = object_manifest_t();
@@ -7931,6 +7979,11 @@ inline int PrimaryLogPG::_delete_oid(
   }
   oi.watchers.clear();
 
+  if (oi.has_manifest()) {
+    ctx->delta_stats.num_objects_manifest--;
+    dec_all_refcount_manifest(oi, ctx);
+  }
+
   if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
@@ -7951,9 +8004,6 @@ inline int PrimaryLogPG::_delete_oid(
   }
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
-  }
-  if (oi.has_manifest()) {
-    ctx->delta_stats.num_objects_manifest--;
   }
   obs.exists = false;
   return 0;
@@ -8205,6 +8255,20 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       if (pool.info.is_erasure())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
+      if (ctx->obc->obs.oi.has_manifest()) {
+	if ((ctx->obc->obs.oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE) && 
+	    ctx->obc->obs.oi.manifest.is_redirect()) {
+	  snap_oi->set_flag(object_info_t::FLAG_MANIFEST);
+	  snap_oi->manifest.type = object_manifest_t::TYPE_REDIRECT;
+	  snap_oi->manifest.redirect_target = ctx->obc->obs.oi.manifest.redirect_target;
+	} else if (ctx->obc->obs.oi.manifest.is_chunked()) {
+	  snap_oi->set_flag(object_info_t::FLAG_MANIFEST);
+	  snap_oi->manifest.type = object_manifest_t::TYPE_CHUNKED;
+	  snap_oi->manifest.chunk_map = ctx->obc->obs.oi.manifest.chunk_map;
+	} else {
+	  ceph_abort_msg("unrecognized manifest type");
+	}
+      }
       bool got = ctx->lock_manager.get_write_greedy(
 	coid,
 	ctx->clone_obc,
@@ -9135,10 +9199,6 @@ void PrimaryLogPG::_copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint
     ObjectOperation op;
     op.dup(sub_cop->chunk_ops);
 
-    dout(20) << __func__ << " tgt_oid: " << soid.oid << " tgt_offset: " 
-	    << manifest->chunk_map[iter->first].offset
-	    << " length: " << length << " pool id: " << oloc.pool << dendl;
-
     if (cop->results.user_version) {
       op.assert_version(cop->results.user_version);
     } else {
@@ -9161,6 +9221,12 @@ void PrimaryLogPG::_copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint
       sub_cop->results.user_version ? NULL : &sub_cop->results.user_version);
     fin->tid = tid;
     sub_cop->objecter_tid = tid;
+
+    dout(20) << __func__ << " tgt_oid: " << soid.oid << " tgt_offset: " 
+	    << manifest->chunk_map[iter->first].offset
+	    << " length: " << length << " pool id: " << oloc.pool 
+	    << " tid: " << tid << dendl;
+
     if (last_offset < iter->first) {
       break;
     }
@@ -13207,9 +13273,6 @@ uint64_t PrimaryLogPG::recover_backfill(
     }
   }
 
-  hobject_t backfill_pos =
-    std::min(backfill_info.begin, earliest_peer_backfill());
-
   for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
        ++i) {
@@ -13246,6 +13309,8 @@ uint64_t PrimaryLogPG::recover_backfill(
 
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
+  hobject_t backfill_pos =
+    std::min(backfill_info.begin, earliest_peer_backfill());
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
   for (set<hobject_t>::iterator i = backfills_in_flight.begin();
        i != backfills_in_flight.end();
@@ -13264,6 +13329,9 @@ uint64_t PrimaryLogPG::recover_backfill(
        pending_backfill_updates.erase(i++)) {
     dout(20) << " pending_backfill_update " << i->first << dendl;
     ceph_assert(i->first > new_last_backfill);
+    // carried from a previous round – if we are here, then we had to
+    // be requeued (by e.g. on_global_recover()) and those operations
+    // are done.
     recovery_state.update_complete_backfill_object_stats(
       i->first,
       i->second);

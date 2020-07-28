@@ -3,7 +3,6 @@ import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 
@@ -66,7 +65,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   editing = false;
   isReplicated = false;
   isErasure = false;
-  data = new PoolFormData(this.i18n);
+  data = new PoolFormData();
   externalPgChange = false;
   current: Record<string, any> = {
     rules: []
@@ -96,13 +95,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     private crushRuleService: CrushRuleService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = this.i18n('pool');
+    this.resource = $localize`pool`;
     this.authenticate();
     this.createForm();
   }
@@ -632,7 +630,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       getTabs: () => this.ecpInfoTabs,
       tabPosition: 'used-by-pools',
       nameAttribute: 'name',
-      itemDescription: this.i18n('erasure code profile'),
+      itemDescription: $localize`erasure code profile`,
       reloadFn: () => this.reloadECPs(),
       deleteFn: (name) => this.ecpService.delete(name),
       taskName: 'ecp/delete'
@@ -720,7 +718,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       getTabs: () => this.crushInfoTabs,
       tabPosition: 'used-by-pools',
       nameAttribute: 'rule_name',
-      itemDescription: this.i18n('crush rule'),
+      itemDescription: $localize`crush rule`,
       reloadFn: () => this.reloadCrushRules(),
       deleteFn: (name) => this.crushRuleService.delete(name),
       taskName: 'crushRule/delete'

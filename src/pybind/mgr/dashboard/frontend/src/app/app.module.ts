@@ -1,20 +1,12 @@
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
-import {
-  ErrorHandler,
-  LOCALE_ID,
-  NgModule,
-  TRANSLATIONS,
-  TRANSLATIONS_FORMAT
-} from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { JwtModule } from '@auth0/angular-jwt';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 
-import { environment } from '../environments/environment';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
@@ -59,21 +51,7 @@ export function jwtTokenGetter() {
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
-    },
-    {
-      provide: TRANSLATIONS,
-      useFactory: (locale: string) => {
-        locale = locale || environment.default_lang;
-        try {
-          return require(`raw-loader!locale/messages.${locale}.xlf`).default;
-        } catch (error) {
-          return [];
-        }
-      },
-      deps: [LOCALE_ID]
-    },
-    { provide: TRANSLATIONS_FORMAT, useValue: 'xlf' },
-    I18n
+    }
   ],
   bootstrap: [AppComponent]
 })

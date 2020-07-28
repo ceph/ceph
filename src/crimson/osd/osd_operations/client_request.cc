@@ -131,8 +131,7 @@ seastar::future<> ClientRequest::process_op(
     const hobject_t& soid = m->get_hobj();
     if (pg.is_unreadable_object(soid, &ver)) {
       auto [op, fut] = osd.get_shard_services().start_operation<UrgentRecovery>(
-			  soid, ver, pgref, osd.get_shard_services(), m->get_min_epoch(),
-			  crimson::osd::scheduler::scheduler_class_t::immediate);
+			  soid, ver, pgref, osd.get_shard_services(), m->get_min_epoch());
       return std::move(fut);
     }
     return seastar::now();

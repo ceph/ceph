@@ -1,7 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import * as moment from 'moment';
 
@@ -62,7 +61,6 @@ export class RbdTrashListComponent implements OnInit {
     private cdDatePipe: CdDatePipe,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
@@ -84,34 +82,34 @@ export class RbdTrashListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('ID'),
+        name: $localize`ID`,
         prop: 'id',
         flexGrow: 1,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Namespace'),
+        name: $localize`Namespace`,
         prop: 'namespace',
         flexGrow: 1
       },
       {
-        name: this.i18n('Status'),
+        name: $localize`Status`,
         prop: 'deferment_end_time',
         flexGrow: 1,
         cellTemplate: this.expiresTpl
       },
       {
-        name: this.i18n('Deleted At'),
+        name: $localize`Deleted At`,
         prop: 'deletion_time',
         flexGrow: 1,
         pipe: this.cdDatePipe

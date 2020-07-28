@@ -5,8 +5,8 @@ import hmac
 import hashlib
 import base64
 import xmltodict
-from six.moves import http_client
-from six.moves.urllib import parse as urlparse
+from http import client as http_client
+from urllib import parse as urlparse
 from time import gmtime, strftime
 from .multisite import Zone
 import boto3

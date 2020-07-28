@@ -22,8 +22,6 @@
 #include "Interceptor.h"
 #endif
 
-#define CRIMSON_MSGR2_SUPPORTED_FEATURES	(0ull)
-
 using namespace ceph::msgr::v2;
 using crimson::common::local_conf;
 
@@ -56,15 +54,15 @@ seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_ms);
 }
 
-void abort_in_fault() {
+[[noreturn]] void abort_in_fault() {
   throw std::system_error(make_error_code(crimson::net::error::negotiation_failure));
 }
 
-void abort_protocol() {
+[[noreturn]] void abort_protocol() {
   throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
+[[noreturn]] void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
   proto.close(dispatch_reset);
   abort_protocol();
 }
@@ -150,8 +148,7 @@ ProtocolV2::ProtocolV2(ChainedDispatchersRef& dispatcher,
                        SocketMessenger& messenger)
   : Protocol(proto_t::v2, dispatcher, conn),
     messenger{messenger},
-    protocol_timer{conn},
-    tx_frame_asm(&session_stream_handlers, false)
+    protocol_timer{conn}
 {}
 
 ProtocolV2::~ProtocolV2() {}
@@ -249,137 +246,78 @@ seastar::future<> ProtocolV2::write_flush(bufferlist&& buf)
 
 size_t ProtocolV2::get_current_msg_size() const
 {
-  ceph_assert(!rx_segments_desc.empty());
+  ceph_assert(rx_frame_asm.get_num_segments() > 0);
   size_t sum = 0;
   // we don't include SegmentIndex::Msg::HEADER.
-  for (__u8 idx = 1; idx < rx_segments_desc.size(); idx++) {
-    sum += rx_segments_desc[idx].length;
+  for (size_t idx = 1; idx < rx_frame_asm.get_num_segments(); idx++) {
+    sum += rx_frame_asm.get_segment_logical_len(idx);
   }
   return sum;
 }
 
 seastar::future<Tag> ProtocolV2::read_main_preamble()
 {
-  return read_exactly(sizeof(preamble_block_t))
+  rx_preamble.clear();
+  return read_exactly(rx_frame_asm.get_preamble_onwire_len())
     .then([this] (auto bl) {
-      if (session_stream_handlers.rx) {
-        session_stream_handlers.rx->reset_rx_handler();
-        /*
-        bl = session_stream_handlers.rx->authenticated_decrypt_update(
-            std::move(bl), segment_t::DEFAULT_ALIGNMENT);
-        */
-      }
-
-      // I expect ceph_le32 will make the endian conversion for me. Passing
-      // everything through ::Decode is unnecessary.
-      const auto& main_preamble = \
-        *reinterpret_cast<const preamble_block_t*>(bl.get());
-      logger().trace("{} RECV({}) main preamble: tag={}, num_segments={}, crc={}",
-                     conn, bl.size(), (int)main_preamble.tag,
-                     (int)main_preamble.num_segments, main_preamble.crc);
-
-      // verify preamble's CRC before any further processing
-      const auto rx_crc = ceph_crc32c(0,
-        reinterpret_cast<const unsigned char*>(&main_preamble),
-        sizeof(main_preamble) - sizeof(main_preamble.crc));
-      if (rx_crc != main_preamble.crc) {
-        logger().warn("{} crc mismatch for main preamble rx_crc={} tx_crc={}",
-                      conn, rx_crc, main_preamble.crc);
-        abort_in_fault();
-      }
-
-      // currently we do support between 1 and MAX_NUM_SEGMENTS segments
-      if (main_preamble.num_segments < 1 ||
-          main_preamble.num_segments > MAX_NUM_SEGMENTS) {
-        logger().warn("{} unsupported num_segments={}",
-                      conn, main_preamble.num_segments);
-        abort_in_fault();
-      }
-      if (main_preamble.num_segments > MAX_NUM_SEGMENTS) {
-        logger().warn("{} num_segments too much: {}",
-                      conn, main_preamble.num_segments);
-        abort_in_fault();
-      }
-
-      rx_segments_desc.clear();
       rx_segments_data.clear();
-
-      for (std::uint8_t idx = 0; idx < main_preamble.num_segments; idx++) {
-        logger().trace("{} GOT frame segment: len={} align={}",
-                       conn, main_preamble.segments[idx].length,
-                       main_preamble.segments[idx].alignment);
-        rx_segments_desc.emplace_back(main_preamble.segments[idx]);
+      try {
+        rx_preamble.append(buffer::create(std::move(bl)));
+        const Tag tag = rx_frame_asm.disassemble_preamble(rx_preamble);
+        INTERCEPT_FRAME(tag, bp_type_t::READ);
+        return tag;
+      } catch (FrameError& e) {
+        logger().warn("{} read_main_preamble: {}", conn, e.what());
+        abort_in_fault();
       }
-
-      INTERCEPT_FRAME(main_preamble.tag, bp_type_t::READ);
-      return static_cast<Tag>(main_preamble.tag);
     });
 }
 
 seastar::future<> ProtocolV2::read_frame_payload()
 {
-  ceph_assert(!rx_segments_desc.empty());
   ceph_assert(rx_segments_data.empty());
 
   return seastar::do_until(
-    [this] { return rx_segments_desc.size() == rx_segments_data.size(); },
+    [this] { return rx_frame_asm.get_num_segments() == rx_segments_data.size(); },
     [this] {
-      // description of current segment to read
-      const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
       // TODO: create aligned and contiguous buffer from socket
-      if (cur_rx_desc.alignment != segment_t::DEFAULT_ALIGNMENT) {
+      const size_t seg_idx = rx_segments_data.size();
+      if (uint16_t alignment = rx_frame_asm.get_segment_align(seg_idx);
+	  alignment != segment_t::DEFAULT_ALIGNMENT) {
         logger().trace("{} cannot allocate {} aligned buffer at segment desc index {}",
-                       conn, cur_rx_desc.alignment, rx_segments_data.size());
+                       conn, alignment, rx_segments_data.size());
       }
+      uint32_t onwire_len = rx_frame_asm.get_segment_onwire_len(seg_idx);
       // TODO: create aligned and contiguous buffer from socket
-      return read_exactly(cur_rx_desc.length)
-      .then([this] (auto tmp_bl) {
+      return read_exactly(onwire_len).then([this] (auto tmp_bl) {
         logger().trace("{} RECV({}) frame segment[{}]",
                        conn, tmp_bl.size(), rx_segments_data.size());
-        bufferlist data;
-        data.append(buffer::create(std::move(tmp_bl)));
-        if (session_stream_handlers.rx) {
-          // TODO
-          ceph_assert(false);
-        }
-        rx_segments_data.emplace_back(std::move(data));
+        bufferlist segment;
+        segment.append(buffer::create(std::move(tmp_bl)));
+        rx_segments_data.emplace_back(std::move(segment));
       });
     }
   ).then([this] {
-    // TODO: get_epilogue_size()
-    ceph_assert(!session_stream_handlers.rx);
-    return read_exactly(sizeof(epilogue_crc_rev0_block_t));
+    return read_exactly(rx_frame_asm.get_epilogue_onwire_len());
   }).then([this] (auto bl) {
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
-
-    __u8 late_flags;
-    if (session_stream_handlers.rx) {
-      // TODO
-      ceph_assert(false);
-    } else {
-      auto& epilogue = *reinterpret_cast<const epilogue_crc_rev0_block_t*>(bl.get());
-      for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
-        const __u32 expected_crc = epilogue.crc_values[idx];
-        const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
-        if (expected_crc != calculated_crc) {
-          logger().warn("{} message integrity check failed at index {}:"
-                        " expected_crc={} calculated_crc={}",
-                        conn, (unsigned int)idx, expected_crc, calculated_crc);
-          abort_in_fault();
-        } else {
-          logger().trace("{} message integrity check success at index {}: crc={}",
-                         conn, (unsigned int)idx, expected_crc);
-        }
-      }
-      late_flags = epilogue.late_flags;
+    bool ok = false;
+    try {
+      rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
+      bufferlist rx_epilogue;
+      rx_epilogue.append(buffer::create(std::move(bl)));
+      ok = rx_frame_asm.disassemble_remaining_segments(rx_segments_data.data(), rx_epilogue);
+    } catch (FrameError& e) {
+      logger().error("read_frame_payload: {} {}", conn, e.what());
+      abort_in_fault();
+    } catch (ceph::crypto::onwire::MsgAuthError&) {
+      logger().error("read_frame_payload: {} bad auth tag", conn);
+      abort_in_fault();
     }
-    logger().trace("{} GOT frame epilogue: late_flags={}",
-                   conn, (unsigned)late_flags);
-
     // we do have a mechanism that allows transmitter to start sending message
     // and abort after putting entire data field on wire. This will be used by
     // the kernel client to avoid unnecessary buffering.
-    if (late_flags & FRAME_LATE_FLAG_ABORTED) {
+    if (!ok) {
       // TODO
       ceph_assert(false);
     }
@@ -457,7 +395,7 @@ ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
-  encode((uint64_t)CRIMSON_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
+  encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
   encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
 
   bufferlist bl;
@@ -468,7 +406,7 @@ ProtocolV2::banner_exchange(bool is_connect)
   logger().debug("{} SEND({}) banner: len_payload={}, supported={}, "
                  "required={}, banner=\"{}\"",
                  conn, bl.length(), len_payload,
-                 CRIMSON_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
+                 CEPH_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
                  CEPH_BANNER_V2_PREFIX);
   INTERCEPT_CUSTOM(custom_bp_t::BANNER_WRITE, bp_type_t::WRITE);
   return write_flush(std::move(bl)).then([this] {
@@ -523,7 +461,7 @@ ProtocolV2::banner_exchange(bool is_connect)
                      peer_supported_features, peer_required_features);
 
       // Check feature bit compatibility
-      uint64_t supported_features = CRIMSON_MSGR2_SUPPORTED_FEATURES;
+      uint64_t supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
       uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
       if ((required_features & peer_supported_features) != required_features) {
         logger().error("{} peer does not support all required features"
@@ -541,6 +479,9 @@ ProtocolV2::banner_exchange(bool is_connect)
       if (this->peer_required_features == 0) {
         this->connection_features = msgr2_required;
       }
+      const bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+      tx_frame_asm.set_is_rev1(is_rev1);
+      rx_frame_asm.set_is_rev1(is_rev1);
 
       auto hello = HelloFrame::Encode(messenger.get_mytype(),
                                       conn.target_addr);
@@ -628,9 +569,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
             abort_in_fault();
           }
           auth_meta->con_mode = auth_done.con_mode();
-          // TODO
-          ceph_assert(!auth_meta->is_mode_secure());
-          session_stream_handlers = { nullptr, nullptr };
+          session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
+              nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), false);
           return finish_auth();
         });
       default: {
@@ -1026,9 +966,8 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
                    ceph_con_mode_name(auth_meta->con_mode), reply.length());
     return write_frame(auth_done).then([this] {
       ceph_assert(auth_meta);
-      // TODO
-      ceph_assert(!auth_meta->is_mode_secure());
-      session_stream_handlers = { nullptr, nullptr };
+      session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
+          nullptr, *auth_meta, tx_frame_asm.get_is_rev1(), true);
       return finish_auth();
     });
    }
@@ -1124,6 +1063,8 @@ ProtocolV2::reuse_connection(
                                     client_cookie,
                                     conn.get_peer_name(),
                                     connection_features,
+                                    tx_frame_asm.get_is_rev1(),
+                                    rx_frame_asm.get_is_rev1(),
                                     conn_seq,
                                     msg_seq);
 #ifdef UNIT_TESTS_BUILT
@@ -1743,6 +1684,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                                    uint64_t new_client_cookie,
                                    entity_name_t new_peer_name,
                                    uint64_t new_conn_features,
+                                   bool tx_is_rev1,
+                                   bool rx_is_rev1,
                                    uint64_t new_connect_seq,
                                    uint64_t new_msg_seq)
 {
@@ -1759,6 +1702,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                   new_socket = std::move(new_socket),
                   new_auth_meta = std::move(new_auth_meta),
                   new_rxtx = std::move(new_rxtx),
+                  tx_is_rev1, rx_is_rev1,
                   new_client_cookie, new_peer_name,
                   new_conn_features, new_peer_global_seq,
                   new_connect_seq, new_msg_seq] () mutable {
@@ -1773,6 +1717,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
              new_socket = std::move(new_socket),
              new_auth_meta = std::move(new_auth_meta),
              new_rxtx = std::move(new_rxtx),
+             tx_is_rev1, rx_is_rev1,
              new_client_cookie, new_peer_name,
              new_conn_features, new_peer_global_seq,
              new_connect_seq, new_msg_seq] () mutable {
@@ -1808,6 +1753,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
           conn.set_peer_id(new_peer_name.num());
         }
         connection_features = new_conn_features;
+        tx_frame_asm.set_is_rev1(tx_is_rev1);
+        rx_frame_asm.set_is_rev1(rx_is_rev1);
         return send_server_ident();
       }
     }).then([this, reconnect] {

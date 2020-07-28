@@ -155,9 +155,6 @@ private:
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
 
-  epoch_t up_thru_wanted = 0;
-  seastar::future<> _send_alive();
-
   // OSDMapService methods
   epoch_t get_up_epoch() const final {
     return up_epoch;

@@ -8,7 +8,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -16,6 +16,8 @@
 #define dout_subsys ceph_subsys_rbd
 
 namespace librbd {
+
+using namespace boost::placeholders;
 
 using namespace watcher;
 

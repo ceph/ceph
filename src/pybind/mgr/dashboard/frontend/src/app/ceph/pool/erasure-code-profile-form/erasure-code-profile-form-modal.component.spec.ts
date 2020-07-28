@@ -12,7 +12,6 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   Mocks
 } from '../../../../testing/unit-test-helper';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
@@ -37,7 +36,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
-    providers: [ErasureCodeProfileService, NgbActiveModal, i18nProviders]
+    providers: [ErasureCodeProfileService, NgbActiveModal]
   });
 
   beforeEach(() => {

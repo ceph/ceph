@@ -291,15 +291,15 @@ public:
 
   void expect_remove_mirror_image(librados::IoCtx &ioctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ioctx),
-                exec(StrEq("rbd_mirroring"), _, StrEq("rbd"), StrEq("mirror_image_remove"),
-                     _, _, _))
+                exec(StrEq("rbd_mirroring"), _, StrEq("rbd"),
+                     StrEq("mirror_image_remove"), _, _, _, _))
       .WillOnce(Return(r));
   }
 
   void expect_dir_remove_image(librados::IoCtx &ioctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ioctx),
                 exec(RBD_DIRECTORY, _, StrEq("rbd"), StrEq("dir_remove_image"),
-                     _, _, _))
+                     _, _, _, _))
       .WillOnce(Return(r));
   }
 

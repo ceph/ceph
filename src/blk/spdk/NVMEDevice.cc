@@ -555,6 +555,12 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
     }
   }
 
+  struct spdk_pci_addr pci_addr;
+  int rc = spdk_pci_addr_parse(&pci_addr, trid.traddr);
+  if (rc < 0) {
+    derr << __func__ << " invalid transport address: " << trid.traddr << dendl;
+    return -ENOENT;
+  }
   auto coremask_arg = g_conf().get_val<std::string>("bluestore_spdk_coremask");
   int m_core_arg = find_first_bitset(coremask_arg);
   // at least one core is needed for using spdk
@@ -569,8 +575,9 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
 
   if (!dpdk_thread.joinable()) {
     dpdk_thread = std::thread(
-      [this, coremask_arg, m_core_arg, mem_size_arg]() {
-        static struct spdk_env_opts opts;
+      [this, coremask_arg, m_core_arg, mem_size_arg, pci_addr]() {
+        struct spdk_env_opts opts;
+        struct spdk_pci_addr addr = pci_addr;
         int r;
 
         spdk_env_opts_init(&opts);
@@ -578,6 +585,8 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
         opts.core_mask = coremask_arg.c_str();
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
+        opts.pci_whitelist = &addr;
+        opts.num_pci_addr = 1;
         spdk_env_init(&opts);
         spdk_unaffinitize_thread();
 
@@ -687,6 +696,20 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   :   BlockDevice(cct, cb, cbpriv),
       driver(nullptr)
 {
+}
+
+bool NVMEDevice::support(const std::string& path)
+{
+  char buf[PATH_MAX + 1];
+  int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
+  if (r >= 0) {
+    buf[r] = '\0';
+    char *bname = ::basename(buf);
+    if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 int NVMEDevice::open(const string& p)

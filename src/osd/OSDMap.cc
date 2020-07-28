@@ -144,7 +144,7 @@ void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
   }
   ENCODE_START(v, 1, bl);
   encode(down_stamp, bl);
-  __u32 lp = laggy_probability * 0xfffffffful;
+  __u32 lp = laggy_probability * float(0xfffffffful);
   encode(lp, bl);
   encode(laggy_interval, bl);
   encode(features, bl);
@@ -2800,7 +2800,7 @@ void OSDMap::encode_client_old(ceph::buffer::list& bl) const
   // for encode(pg_temp, bl);
   n = pg_temp->size();
   encode(n, bl);
-  for (const auto pg : *pg_temp) {
+  for (const auto& pg : *pg_temp) {
     old_pg_t opg = pg.first.get_old_pg();
     encode(opg, bl);
     encode(pg.second, bl);
@@ -3819,7 +3819,7 @@ void OSDMap::print(ostream& out) const
     out << "pg_upmap_items " << p.first << " " << p.second << "\n";
   }
 
-  for (const auto pg : *pg_temp)
+  for (const auto& pg : *pg_temp)
     out << "pg_temp " << pg.first << " " << pg.second << "\n";
 
   for (const auto pg : *primary_temp)
@@ -6081,7 +6081,6 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   switch (pool->get_type()) {
   case pg_pool_t::TYPE_REPLICATED:
     return pool->get_size();
-    break;
   case pg_pool_t::TYPE_ERASURE:
   {
     auto& ecp =

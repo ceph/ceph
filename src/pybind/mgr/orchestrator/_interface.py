@@ -15,6 +15,7 @@ import time
 import uuid
 
 from collections import namedtuple, OrderedDict
+from contextlib import contextmanager
 from functools import wraps
 
 import yaml
@@ -46,6 +47,10 @@ class OrchestratorError(Exception):
 
     It's not intended for programming errors or orchestrator internal errors.
     """
+    def __init__(self, msg, event_kind_subject: Optional[Tuple[str, str]]=None):
+        super(Exception, self).__init__(msg)
+        # See OrchestratorEvent.subject
+        self.event_subject = event_kind_subject
 
 
 class NoOrchestrator(OrchestratorError):
@@ -60,6 +65,16 @@ class OrchestratorValidationError(OrchestratorError):
     """
     Raised when an orchestrator doesn't support a specific feature.
     """
+
+
+@contextmanager
+def set_exception_subject(kind, subject, overwrite=False):
+    try:
+        yield
+    except OrchestratorError as e:
+        if overwrite or hasattr(e, 'event_subject'):
+            e.event_subject = (kind, subject)
+        raise
 
 
 def handle_exception(prefix, cmd_args, desc, perm, func):
@@ -895,6 +910,12 @@ class Orchestrator(object):
             completion = completion.then(next)
         return completion
 
+    def plan(self, spec: List["GenericSpec"]):
+        """
+        Plan (Dry-run, Preview) a List of Specs.
+        """
+        raise NotImplementedError()
+
     def remove_daemons(self, names):
         # type: (List[str]) -> Completion
         """
@@ -1222,7 +1243,9 @@ class DaemonDescription(object):
                  started=None,
                  last_configured=None,
                  osdspec_affinity=None,
-                 last_deployed=None):
+                 last_deployed=None,
+                 events: Optional[List['OrchestratorEvent']]=None):
+
         # Host is at the same granularity as InventoryHost
         self.hostname: str = hostname
 
@@ -1261,6 +1284,8 @@ class DaemonDescription(object):
 
         # Affinity to a certain OSDSpec
         self.osdspec_affinity = osdspec_affinity  # type: Optional[str]
+
+        self.events: List[OrchestratorEvent] = events or []
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -1308,13 +1333,13 @@ class DaemonDescription(object):
             # daemon_id == "service_id"
             return self.daemon_id
 
-        if self.daemon_type in ['mds', 'nfs', 'iscsi', 'rgw']:
+        if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
             return _match()
 
         return self.daemon_id
 
     def service_name(self):
-        if self.daemon_type in ['rgw', 'mds', 'nfs', 'iscsi']:
+        if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
             return f'{self.daemon_type}.{self.service_id()}'
         return self.daemon_type
 
@@ -1339,6 +1364,9 @@ class DaemonDescription(object):
             if getattr(self, k):
                 out[k] = getattr(self, k).strftime(DATEFMT)
 
+        if self.events:
+            out['events'] = [e.to_json() for e in self.events]
+
         empty = [k for k, v in out.items() if v is None]
         for e in empty:
             del out[e]
@@ -1348,11 +1376,13 @@ class DaemonDescription(object):
     @handle_type_error
     def from_json(cls, data):
         c = data.copy()
+        event_strs = c.pop('events', [])
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
             if k in c:
                 c[k] = datetime.datetime.strptime(c[k], DATEFMT)
-        return cls(**c)
+        events = [OrchestratorEvent.from_json(e) for e in event_strs]
+        return cls(events=events, **c)
 
     def __copy__(self):
         # feel free to change this:
@@ -1387,7 +1417,8 @@ class ServiceDescription(object):
                  last_refresh=None,
                  created=None,
                  size=0,
-                 running=0):
+                 running=0,
+                 events: Optional[List['OrchestratorEvent']]=None):
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
@@ -1414,6 +1445,8 @@ class ServiceDescription(object):
 
         self.spec: ServiceSpec = spec
 
+        self.events: List[OrchestratorEvent] = events or []
+
     def service_type(self):
         return self.spec.service_type
 
@@ -1430,13 +1463,15 @@ class ServiceDescription(object):
             'size': self.size,
             'running': self.running,
             'last_refresh': self.last_refresh,
-            'created': self.created
+            'created': self.created,
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
                 status[k] = getattr(self, k).strftime(DATEFMT)
         status = {k: v for (k, v) in status.items() if v is not None}
         out['status'] = status
+        if self.events:
+            out['events'] = [e.to_json() for e in self.events]
         return out
 
     @classmethod
@@ -1444,13 +1479,15 @@ class ServiceDescription(object):
     def from_json(cls, data: dict):
         c = data.copy()
         status = c.pop('status', {})
+        event_strs = c.pop('events', [])
         spec = ServiceSpec.from_json(c)
 
         c_status = status.copy()
         for k in ['last_refresh', 'created']:
             if k in c_status:
                 c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
-        return cls(spec=spec, **c_status)
+        events = [OrchestratorEvent.from_json(e) for e in event_strs]
+        return cls(spec=spec, events=events, **c_status)
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription'):
@@ -1556,6 +1593,60 @@ class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev', 'path'])):
        See ``ceph osd metadata | jq '.[].device_ids'``
     """
     __slots__ = ()
+
+
+class OrchestratorEvent:
+    """
+    Similar to K8s Events.
+
+    Some form of "important" log message attached to something.
+    """
+    INFO = 'INFO'
+    ERROR = 'ERROR'
+    regex_v1 = re.compile(r'^([^ ]+) ([^:]+):([^ ]+) \[([^\]]+)\] "(.*)"$')
+
+    def __init__(self, created: Union[str, datetime.datetime], kind, subject, level, message):
+        if isinstance(created, str):
+            created = datetime.datetime.strptime(created, DATEFMT)
+        self.created: datetime.datetime = created
+
+        assert kind in "service daemon".split()
+        self.kind: str = kind
+
+        # service name, or daemon danem or something
+        self.subject: str = subject
+
+        # Events are not meant for debugging. debugs should end in the log.
+        assert level in "INFO ERROR".split()
+        self.level = level
+
+        self.message: str = message
+
+    __slots__ = ('created', 'kind', 'subject', 'level', 'message')
+
+    def kind_subject(self) -> str:
+        return f'{self.kind}:{self.subject}'
+
+    def to_json(self) -> str:
+        # Make a long list of events readable.
+        created = self.created.strftime(DATEFMT)
+        return f'{created} {self.kind_subject()} [{self.level}] "{self.message}"'
+
+
+    @classmethod
+    @handle_type_error
+    def from_json(cls, data) -> "OrchestratorEvent":
+        """
+        >>> OrchestratorEvent.from_json('''2020-06-10T10:20:25.691255 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on host 'ubuntu'"''').to_json()
+        '2020-06-10T10:20:25.691255 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on host \\'ubuntu\\'"'
+
+        :param data:
+        :return:
+        """
+        match = cls.regex_v1.match(data)
+        if match:
+            return cls(*match.groups())
+        raise ValueError(f'Unable to match: "{data}"')
 
 
 def _mk_orch_methods(cls):

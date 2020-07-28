@@ -5,8 +5,9 @@
 #define CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
 
 #include "librbd/io/ObjectDispatchInterface.h"
-#include "tools/immutable_object_cache/CacheClient.h"
+#include "common/ceph_mutex.h"
 #include "librbd/cache/TypeTraits.h"
+#include "tools/immutable_object_cache/CacheClient.h"
 #include "tools/immutable_object_cache/Types.h"
 
 namespace librbd {
@@ -42,7 +43,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      io::ExtentMap* extent_map, int* object_dispatch_flags,
+      io::Extents* extent_map, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
@@ -104,10 +105,6 @@ public:
       uint64_t journal_tid, uint64_t new_journal_tid) {
   }
 
-  bool get_state() {
-    return m_initialized;
-  }
-
   ImageCtxT* get_image_ctx() {
     return m_image_ctx;
   }
@@ -127,12 +124,13 @@ private:
          io::DispatchResult* dispatch_result,
          Context* on_dispatched);
   int handle_register_client(bool reg);
-  int create_cache_session(Context* on_finish, bool is_reconnect);
+  void create_cache_session(Context* on_finish, bool is_reconnect);
 
   ImageCtxT* m_image_ctx;
-  CacheClient *m_cache_client;
-  bool m_initialized;
-  std::atomic<bool> m_connecting;
+
+  ceph::mutex m_lock;
+  CacheClient *m_cache_client = nullptr;
+  bool m_connecting = false;
 };
 
 } // namespace cache
