@@ -291,6 +291,24 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
   return vals->size();
 }
 
+int cls_cxx_map_get_vals(cls_method_context_t hctx,
+                         const std::set<std::string> &keys,
+			 std::map<std::string, ceph::bufferlist> *vals)
+{
+  OSDOp op{CEPH_OSD_OP_OMAPGETVALSBYKEYS};
+  encode(keys, op.indata);
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*vals, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 {
   OSDOp op{CEPH_OSD_OP_OMAPGETHEADER};
