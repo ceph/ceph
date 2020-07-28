@@ -174,7 +174,6 @@ public:
       .WillOnce(Invoke([this, r](Context* ctx) {
                   image_ctx->op_work_queue->queue(ctx, r);
                 }));
-    EXPECT_CALL(mock_image_ctx, destroy());
   }
 
   void expect_snap_remove(MockImageCtx &mock_image_ctx,
@@ -373,7 +372,6 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotOpenParentError) {
                       {234, {cls::rbd::TrashSnapshotNamespace{}},
                        "snap1", 123, {}, 0}, 0);
   expect_open(mock_image_ctx, -EPERM);
-  EXPECT_CALL(mock_image_ctx, destroy());
 
   C_SaferCond ctx;
   auto req = MockDetachChildRequest::create(mock_image_ctx, &ctx);

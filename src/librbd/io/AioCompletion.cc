@@ -63,41 +63,38 @@ void AioCompletion::finalize() {
 
 void AioCompletion::complete() {
   ceph_assert(ictx != nullptr);
-  CephContext *cct = ictx->cct;
 
   ssize_t r = rval;
-  tracepoint(librbd, aio_complete_enter, this, r);
-  if (ictx->perfcounter != nullptr) {
-    ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
-    switch (aio_type) {
-    case AIO_TYPE_GENERIC:
-    case AIO_TYPE_OPEN:
-    case AIO_TYPE_CLOSE:
-      break;
-    case AIO_TYPE_READ:
-      ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
-    case AIO_TYPE_WRITE:
-      ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
-    case AIO_TYPE_DISCARD:
-      ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
-    case AIO_TYPE_FLUSH:
-      ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
-    case AIO_TYPE_WRITESAME:
-      ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
-    case AIO_TYPE_COMPARE_AND_WRITE:
-      ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
-    default:
-      lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
-      break;
-    }
-  }
-
-  if ((aio_type == AIO_TYPE_CLOSE) ||
-      (aio_type == AIO_TYPE_OPEN && r < 0)) {
-    // must destroy ImageCtx prior to invoking callback
-    delete ictx;
+  if ((aio_type == AIO_TYPE_CLOSE) || (aio_type == AIO_TYPE_OPEN && r < 0)) {
     ictx = nullptr;
     external_callback = false;
+  } else {
+    CephContext *cct = ictx->cct;
+
+    tracepoint(librbd, aio_complete_enter, this, r);
+    if (ictx->perfcounter != nullptr) {
+      ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
+      switch (aio_type) {
+      case AIO_TYPE_GENERIC:
+      case AIO_TYPE_OPEN:
+        break;
+      case AIO_TYPE_READ:
+        ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
+      case AIO_TYPE_WRITE:
+        ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
+      case AIO_TYPE_DISCARD:
+        ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
+      case AIO_TYPE_FLUSH:
+        ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
+      case AIO_TYPE_WRITESAME:
+        ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
+      case AIO_TYPE_COMPARE_AND_WRITE:
+        ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
+      default:
+        lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
+        break;
+      }
+    }
   }
 
   state = AIO_STATE_CALLBACK;
@@ -182,17 +179,29 @@ void AioCompletion::unblock(CephContext* cct) {
 void AioCompletion::fail(int r)
 {
   ceph_assert(ictx != nullptr);
-  CephContext *cct = ictx->cct;
-  lderr(cct) << cpp_strerror(r) << dendl;
+  ceph_assert(r < 0);
+
+  bool queue_required = true;
+  if (aio_type == AIO_TYPE_CLOSE || aio_type == AIO_TYPE_OPEN) {
+    // executing from a safe context and the ImageCtx has been destructed
+    queue_required = false;
+  } else {
+    CephContext *cct = ictx->cct;
+    lderr(cct) << cpp_strerror(r) << dendl;
+  }
 
   ceph_assert(!was_armed);
   was_armed = true;
 
-  error_rval = r;
+  rval = r;
 
   uint32_t previous_pending_count = pending_count.load();
   if (previous_pending_count == 0) {
-    queue_complete();
+    if (queue_required) {
+      queue_complete();
+    } else {
+      complete();
+    }
   }
 }
 
