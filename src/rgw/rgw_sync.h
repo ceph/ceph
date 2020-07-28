@@ -340,16 +340,23 @@ public:
 template <class T, class K>
 class RGWSyncShardMarkerTrack {
   struct marker_entry {
+    uint64_t tracker_pos;
     T marker;
     uint64_t pos;
     real_time timestamp;
 
     marker_entry() : pos(0) {}
-    marker_entry(const T& _marker, uint64_t _p, const real_time& _ts) : marker(_marker), pos(_p), timestamp(_ts) {}
+    marker_entry(uint64_t _tracker_pos,
+                 const T& _marker,
+                 uint64_t _p, const
+                 real_time& _ts) : tracker_pos(_tracker_pos),
+                                   marker(_marker),
+                                   pos(_p),
+                                   timestamp(_ts) {}
   };
 
-  typename std::map<T, uint64_t> keys;
-  typename std::map<uint64_t, marker_entry> pending;
+  typename std::map<T, typename std::list<marker_entry>::iterator> keys;
+  typename std::list<marker_entry> pending;
 
   std::map<uint64_t, marker_entry> finish_markers;
   uint64_t max_keys{0};
@@ -379,17 +386,14 @@ public:
       return false;
     }
     auto i = ++max_keys;
-    keys[marker] = i;
-    pending[i] = marker_entry(marker, index_pos, timestamp);
+    pending.push_back(marker_entry(i, marker, index_pos, timestamp));
+    keys[marker] = std::prev(pending.end());
     return true;
   }
 
   void try_update_high_marker(const T& marker, int index_pos, const real_time& timestamp) {
-    auto iter = keys.find(marker);
-    if (iter == keys.end()) {
-      return;
-    }
-    finish_markers[iter->second] = marker_entry(marker, index_pos, timestamp);
+    auto i = ++max_keys;
+    finish_markers[i] = marker_entry(i, marker, index_pos, timestamp);
   }
 
   RGWCoroutine *finish(const DoutPrefixProvider *dpp, const T& marker) {
@@ -404,19 +408,18 @@ public:
     if (kiter == keys.end()) {
       return nullptr;
     }
-    auto& k = kiter->second;
+    auto& marker_iter = kiter->second;
 
-    typename std::map<uint64_t, marker_entry>::iterator iter = pending.begin();
+    auto iter = pending.begin();
 
-    bool is_first = (marker == iter->second.marker);
+    bool is_first = (marker_iter == iter);
 
-    auto marker_iter = pending.find(k);
     if (marker_iter == pending.end()) {
       /* see pending.empty() comment */
       return nullptr;
     }
 
-    finish_markers[k] = marker_iter->second;
+    finish_markers[marker_iter->tracker_pos] = *marker_iter;
 
     pending.erase(marker_iter);
     keys.erase(kiter);
@@ -442,7 +445,7 @@ public:
     if (pending.empty()) {
       i = finish_markers.end();
     } else {
-      i = finish_markers.lower_bound(pending.begin()->first);
+      i = finish_markers.lower_bound(pending.begin()->tracker_pos);
     }
     if (i == finish_markers.begin()) {
       return NULL;
