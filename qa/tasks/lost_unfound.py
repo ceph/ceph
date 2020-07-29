@@ -142,6 +142,9 @@ def task(ctx, config):
             m = manager.list_pg_unfound(pg['pgid'])
             #log.info('%s' % m)
             assert m['num_unfound'] == pg['stat_sum']['num_objects_unfound']
+            assert m['available_might_have_unfound'] == True
+            assert m['might_have_unfound'][0]['osd'] == "1"
+            assert m['might_have_unfound'][0]['status'] == "osd is down"
             num_unfound=0
             for o in m['objects']:
                 if len(o['locations']) == 0:
