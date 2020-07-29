@@ -13,20 +13,10 @@
 #include "common/buffer_seastar.h"
 #include "auth/KeyRing.h"
 #include "include/denc.h"
+#include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
 
 namespace crimson::auth {
-
-seastar::future<seastar::temporary_buffer<char>> read_file(const std::string& path)
-{
-  return seastar::open_file_dma(path, seastar::open_flags::ro).then([] (seastar::file f) {
-    return f.size().then([f = std::move(f)](size_t s) {
-      return seastar::do_with(seastar::make_file_input_stream(f), [s](seastar::input_stream<char>& in) {
-        return in.read_exactly(s);
-      });
-    });
-  });
-}
 
 seastar::future<KeyRing*> load_from_keyring(KeyRing* keyring)
 {

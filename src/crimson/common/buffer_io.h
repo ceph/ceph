@@ -16,4 +16,6 @@ namespace crimson {
                                   seastar::file_permissions::user_write |
                                   seastar::file_permissions::group_read |
                                   seastar::file_permissions::others_read));
+  seastar::future<seastar::temporary_buffer<char>>
+  read_file(const seastar::sstring fn);
 }
