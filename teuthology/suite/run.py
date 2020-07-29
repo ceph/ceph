@@ -32,6 +32,7 @@ class Run(object):
     __slots__ = (
         'args', 'name', 'base_config', 'suite_repo_path', 'base_yaml_paths',
         'base_args', 'package_versions', 'kernel_dict', 'config_input',
+        'timestamp', 'user',
     )
 
     def __init__(self, args):
@@ -39,6 +40,11 @@ class Run(object):
         args must be a config.YamlConfig object
         """
         self.args = args
+        # We assume timestamp is a datetime.datetime object
+        self.timestamp = self.args.timestamp or \
+            datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+        self.user = self.args.user or pwd.getpwuid(os.getuid()).pw_name
+
         self.name = self.make_run_name()
 
         if self.args.ceph_repo:
@@ -60,16 +66,15 @@ class Run(object):
         Generate a run name. A run name looks like:
             teuthology-2014-06-23_19:00:37-rados-dumpling-testing-basic-plana
         """
-        user = self.args.user or pwd.getpwuid(os.getuid()).pw_name
-        # We assume timestamp is a datetime.datetime object
-        timestamp = self.args.timestamp or \
-            datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-
         worker = util.get_worker(self.args.machine_type)
         return '-'.join(
             [
-                user, str(timestamp), self.args.suite, self.args.ceph_branch,
-                self.args.kernel_branch or '-', self.args.kernel_flavor, worker
+                self.user,
+                str(self.timestamp),
+                self.args.suite,
+                self.args.ceph_branch,
+                self.args.kernel_branch or '-',
+                self.args.kernel_flavor, worker
             ]
         ).replace('/', ':')
 
@@ -309,6 +314,8 @@ class Run(object):
         conf_dict.update(self.kernel_dict)
         job_config = JobConfig.from_dict(conf_dict)
         job_config.name = self.name
+        job_config.user = self.user
+        job_config.timestamp = self.timestamp
         job_config.priority = self.args.priority
         if self.args.email:
             job_config.email = self.args.email
@@ -331,6 +338,8 @@ class Run(object):
             base_args.append('-v')
         if self.args.owner:
             base_args.extend(['--owner', self.args.owner])
+        if self.args.queue_backend:
+            base_args.extend(['--queue-backend', self.args.queue_backend])
         return base_args
 
 
@@ -498,7 +507,11 @@ class Run(object):
         Schedule the suite-run. Returns the number of jobs scheduled.
         """
         name = self.name
-        arch = util.get_arch(self.base_config.machine_type)
+        if self.args.arch:
+            arch = self.args.arch
+            log.debug("Using '%s' as an arch" % arch)
+        else:
+            arch = util.get_arch(self.base_config.machine_type)
         suite_name = self.base_config.suite
         suite_path = os.path.normpath(os.path.join(
             self.suite_repo_path,
