@@ -70,6 +70,8 @@ if 'UNITTEST' in os.environ:
                 self._store = {}
             return self._store.get(f'_ceph_get/{data_name}', mock.MagicMock())
 
+        def _ceph_send_command(self, ev, *args):
+            ev.complete(0, '', '')
 
         def __init__(self, *args):
             if not hasattr(self, '_store'):
