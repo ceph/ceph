@@ -8,7 +8,7 @@
 
 #include "include/buffer_fwd.h"
 
-namespace ceph::buffer {
+namespace crimson {
   seastar::future<> write_file(ceph::buffer::list&& bl,
                                seastar::sstring fn,
                                seastar::file_permissions= // 0644
