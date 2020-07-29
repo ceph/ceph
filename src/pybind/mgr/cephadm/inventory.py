@@ -554,8 +554,8 @@ class EventStore():
         for k_s in unknowns:
             del self.events[k_s]
 
-    def get_for_service(self, name):
+    def get_for_service(self, name) -> List[OrchestratorEvent]:
         return self.events.get('service:' + name, [])
 
-    def get_for_daemon(self, name):
+    def get_for_daemon(self, name) -> List[OrchestratorEvent]:
         return self.events.get('daemon:' + name, [])
