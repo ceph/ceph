@@ -9,7 +9,7 @@
 
 #include "include/buffer.h"
 
-namespace ceph::buffer {
+namespace crimson {
 
 seastar::future<> write_file(ceph::buffer::list&& bl,
                              seastar::sstring fn,
