@@ -396,8 +396,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
     }
   }
 
-  std::vector <std::string> my_sections;
-  _get_my_sections(values, my_sections);
+  std::vector<std::string> my_sections = get_my_sections(values);
   for (const auto &i : schema) {
     const auto &opt = i.second;
     std::string val;
@@ -1316,20 +1315,12 @@ void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
  * looking. The lowest priority section is the one we look in only if all
  * others had nothing.  This should always be the global section.
  */
-void md_config_t::get_my_sections(const ConfigValues& values,
-				  std::vector <std::string> &sections) const
+std::vector <std::string>
+md_config_t::get_my_sections(const ConfigValues& values) const
 {
-  _get_my_sections(values, sections);
-}
-
-void md_config_t::_get_my_sections(const ConfigValues& values,
-				   std::vector <std::string> &sections) const
-{
-  sections.push_back(values.name.to_str());
-
-  sections.push_back(values.name.get_type_name().data());
-
-  sections.push_back("global");
+  return {values.name.to_str(),
+	  values.name.get_type_name().data(),
+	  "global"};
 }
 
 // Return a list of all sections
