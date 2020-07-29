@@ -6769,76 +6769,6 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
   std::unique_ptr<rgw::sal::RGWBucket> bucket;
-  RGWBucketInfo binfo;
-  op_ret = store->get_bucket(s->user, s->bucket_tenant, bucket_name, &bucket);
-  if (op_ret < 0 && op_ret != -ENOENT) {
-    return op_ret;
-  }
-  const bool bucket_exists = (op_ret != -ENOENT);
-
-  if (bucket_exists) {
-    RGWAccessControlPolicy old_policy(s->cct);
-    binfo = bucket->get_info();
-    int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, binfo,
-                                               bucket->get_attrs().attrs, &old_policy);
-    if (r >= 0)  {
-      if (old_policy.get_owner().get_id().compare(s->user->get_user()) != 0) {
-        op_ret = -EEXIST;
-        return op_ret;
-      }
-    }
-  }
-
-  RGWBucketInfo master_info;
-  rgw_bucket *pmaster_bucket = nullptr;
-  uint32_t *pmaster_num_shards = nullptr;
-  real_time creation_time;
-  obj_version objv, ep_objv, *pobjv = nullptr;
-
-  if (! store->is_meta_master()) {
-    JSONParser jp;
-    ceph::bufferlist in_data;
-    req_info info = s->info;
-    forward_req_info(s->cct, info, bucket_name);
-    op_ret = store->forward_request_to_master(s->user, nullptr, in_data, &jp, info);
-    if (op_ret < 0) {
-      return op_ret;
-    }
-
-    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
-    JSONDecoder::decode_json("object_ver", objv, &jp);
-    JSONDecoder::decode_json("bucket_info", master_info, &jp);
-
-    ldpp_dout(this, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
-    ldpp_dout(this, 20) << "got creation_time="<< master_info.creation_time << dendl;
-
-    pmaster_bucket= &master_info.bucket;
-    creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
-    pobjv = &objv;
-  } else {
-    pmaster_bucket = nullptr;
-    pmaster_num_shards = nullptr;
-  }
-
-  rgw_placement_rule placement_rule(binfo.placement_rule, s->info.storage_class);
-
-  if (bucket_exists) {
-    rgw_placement_rule selected_placement_rule;
-    rgw_bucket new_bucket;
-    new_bucket.tenant = s->bucket_tenant;
-    new_bucket.name = s->bucket_name;
-    op_ret = store->svc()->zone->select_bucket_placement(s->user->get_info(),
-                                            store->svc()->zone->get_zonegroup().get_id(),
-                                            placement_rule,
-                                            &selected_placement_rule,
-                                            nullptr);
-    if (selected_placement_rule != binfo.placement_rule) {
-      op_ret = -EEXIST;
-      ldpp_dout(this, 20) << "non-coherent placement rule" << dendl;
-      return op_ret;
-    }
-  }
 
   /* Create metadata: ACLs. */
   std::map<std::string, ceph::bufferlist> attrs;
@@ -6848,22 +6778,27 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   policy.encode(aclbl);
   attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
 
+  obj_version objv, ep_objv;
+  bool bucket_exists;
   RGWQuotaInfo quota_info;
-  const RGWQuotaInfo * pquota_info = nullptr;
-
+  const RGWQuotaInfo* pquota_info = nullptr;
+  RGWBucketInfo out_info;
+  string swift_ver_location;
   rgw_bucket new_bucket;
+  req_info info = s->info;
   new_bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   new_bucket.name = bucket_name;
+  rgw_placement_rule placement_rule;
+  placement_rule.storage_class = s->info.storage_class;
+  forward_req_info(s->cct, info, bucket_name);
 
-
-  RGWBucketInfo out_info;
-  op_ret = store->getRados()->create_bucket(s->user->get_info(),
-                                new_bucket,
+  op_ret = store->create_bucket(*s->user, new_bucket,
                                 store->svc()->zone->get_zonegroup().get_id(),
-                                placement_rule, binfo.swift_ver_location,
+                                placement_rule, swift_ver_location,
                                 pquota_info, attrs,
-                                out_info, pobjv, &ep_objv, creation_time,
-                                pmaster_bucket, pmaster_num_shards, true);
+                                out_info, ep_objv,
+                                true, false, &bucket_exists,
+				info, &bucket);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret

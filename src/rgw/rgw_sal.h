@@ -61,8 +61,8 @@ class RGWStore : public DoutPrefixProvider {
     virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) = 0;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const string& zonegroup_id,
-                            const rgw_placement_rule& placement_rule,
-                            const string& swift_ver_location,
+                            rgw_placement_rule& placement_rule,
+                            string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
@@ -597,8 +597,8 @@ class RGWRadosStore : public RGWStore {
     virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) override;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const string& zonegroup_id,
-                            const rgw_placement_rule& placement_rule,
-                            const string& swift_ver_location,
+                            rgw_placement_rule& placement_rule,
+                            string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,

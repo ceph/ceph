@@ -723,8 +723,8 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 
 int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 const string& zonegroup_id,
-				 const rgw_placement_rule& placement_rule,
-				 const string& swift_ver_location,
+				 rgw_placement_rule& placement_rule,
+				 string& swift_ver_location,
 				 const RGWQuotaInfo * pquota_info,
 				 map<std::string, bufferlist>& attrs,
 				 RGWBucketInfo& info,
@@ -752,6 +752,10 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (ret != -ENOENT) {
     *existed = true;
+    if (swift_ver_location.empty()) {
+      swift_ver_location = bucket->get_info().swift_ver_location;
+    }
+    placement_rule.inherit_from(bucket->get_info().placement_rule);
     int r = rgw_op_get_bucket_policy_from_attr(this, u, bucket->get_attrs().attrs,
 					       &old_policy);
     if (r >= 0)  {
