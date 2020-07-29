@@ -3,7 +3,7 @@ import logging
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
 
-from mgr_module import MonCommandFailed
+from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from orchestrator import OrchestratorError, DaemonDescription
@@ -191,23 +191,28 @@ class CephadmService(metaclass=ABCMeta):
 
 
 
-    def ok_to_stop(self, daemon_ids: List[str]) -> bool:
+    def ok_to_stop(self, daemon_ids: List[str]) -> HandleCommandResult:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+        out = f'It is presumed safe to stop {names}'
+        err = f'It is NOT safe to stop {names}'
 
         if self.TYPE not in ['mon', 'osd', 'mds']:
-            logger.info('Upgrade: It is presumed safe to stop %s' % names)
-            return True
+            logger.info(out)
+            return HandleCommandResult(0, out, None)
 
-        ret, out, err = self.mgr.mon_command({
+        r = HandleCommandResult(*self.mgr.mon_command({
             'prefix': f'{self.TYPE} ok-to-stop',
             'ids': daemon_ids,
-        })
+        }))
 
-        if ret:
-            logger.info(f'It is NOT safe to stop {names}: {err}')
-            return False
+        if r.retval:
+            err = f'{err}: {r.stderr}' if r.stderr else err
+            logger.error(err)
+            return HandleCommandResult(r.retval, r.stdout, err)
 
-        return True
+        out = f'{out}: {r.stdout}' if r.stdout else out
+        logger.info(out)
+        return HandleCommandResult(r.retval, out, r.stderr)
 
     def pre_remove(self, daemon_id: str) -> None:
         """
