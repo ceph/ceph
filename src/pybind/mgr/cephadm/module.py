@@ -1592,7 +1592,7 @@ you may want to run:
         for a in actions[action]:
             try:
                 out, err, code = self._run_cephadm(
-                    daemon_spec.daemon_type, name, 'unit',
+                    host, name, 'unit',
                     ['--name', name, a])
             except Exception:
                 self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
