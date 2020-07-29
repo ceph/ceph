@@ -33,9 +33,6 @@ def match_glob(val, pat):
         assert pat in val
 
 
-def mon_command(*args, **kwargs):
-    return 0, '', ''
-
 @contextmanager
 def with_cephadm_module(module_options=None, store=None):
     """
@@ -43,11 +40,9 @@ def with_cephadm_module(module_options=None, store=None):
     :param store: Set the store before module.__init__ is called
     """
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
-             mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
-             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
-             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
-             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
-             mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command):
+            mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.remote"):
 
         m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
         if module_options is not None:
