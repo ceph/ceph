@@ -756,7 +756,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
     });
   if (r <= 0) {
     // error or done synchronously
-    if (unlikely(pre_auth.enabled) && r >= 0) {
+    if (unlikely(pre_auth.enabled) && r == 0) {
       pre_auth.rxbuf.append(*next.node);
       ceph_assert(!cct->_conf->ms_die_on_bug ||
 		  pre_auth.rxbuf.length() < 1000000);
