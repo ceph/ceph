@@ -140,7 +140,7 @@ class CherryPyConfig(object):
                 'application/javascript',
             ],
             'tools.json_in.on': True,
-            'tools.json_in.force': False,
+            'tools.json_in.force': True,
             'tools.plugin_hooks_filter_request.on': True,
         }
 
