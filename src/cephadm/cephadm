@@ -741,8 +741,8 @@ class FileLock(object):
         #   https://stackoverflow.com/questions/17708885/flock-removing-locked-file-without-race-condition
         fd = self._lock_file_fd
         self._lock_file_fd = None
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
+        fcntl.flock(fd, fcntl.LOCK_UN)  # type: ignore
+        os.close(fd)  # type: ignore
         return None
 
 
@@ -1121,7 +1121,7 @@ def infer_fsid(func):
             logger.debug('Using specified fsid: %s' % args.fsid)
             return func()
 
-        fsids = set()
+        fsids_set = set()
         daemon_list = list_daemons(detail=False)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
@@ -1129,11 +1129,11 @@ def infer_fsid(func):
                 continue
             elif 'name' not in args or not args.name:
                 # args.name not specified
-                fsids.add(daemon['fsid'])
+                fsids_set.add(daemon['fsid'])
             elif daemon['name'] == args.name:
                 # args.name is a match
-                fsids.add(daemon['fsid'])
-        fsids = sorted(fsids)
+                fsids_set.add(daemon['fsid'])
+        fsids = sorted(fsids_set)
 
         if not fsids:
             # some commands do not always require an fsid
@@ -1309,7 +1309,7 @@ def make_var_run(fsid, uid, gid):
 
 
 def copy_tree(src, dst, uid=None, gid=None):
-    # type: (List[str], str, int, int) -> None
+    # type: (List[str], str, Optional[int], Optional[int]) -> None
     """
     Copy a directory tree from src to dst
     """
@@ -1334,7 +1334,7 @@ def copy_tree(src, dst, uid=None, gid=None):
 
 
 def copy_files(src, dst, uid=None, gid=None):
-    # type: (List[str], str, int, int) -> None
+    # type: (List[str], str, Optional[int], Optional[int]) -> None
     """
     Copy a files from src to dst
     """
@@ -1354,7 +1354,7 @@ def copy_files(src, dst, uid=None, gid=None):
 
 
 def move_files(src, dst, uid=None, gid=None):
-    # type: (List[str], str, int, int) -> None
+    # type: (List[str], str, Optional[int], Optional[int]) -> None
     """
     Move files from src to dst
     """
@@ -1495,7 +1495,7 @@ def check_units(units, enabler=None):
 
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
-    # type: (str, str) -> Optional[str]
+    # type: (str, Optional[str]) -> Optional[str]
     config_file = '/etc/ceph/%s.conf' % cluster
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
@@ -1508,7 +1508,7 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
 
 
 def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id, legacy_dir=None):
-    # type: (str, str, Union[int, str], str) -> Optional[str]
+    # type: (str, str, Union[int, str], Optional[str]) -> Optional[str]
     fsid = None
     if daemon_type == 'osd':
         try:
