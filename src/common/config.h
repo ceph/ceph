@@ -317,6 +317,11 @@ public:  // for global_init
   bool finalize_reexpand_meta(ConfigValues& values,
 			      const ConfigTracker& tracker);
 private:
+  std::list<std::string> get_conffile_paths(const ConfigValues& values,
+					    const char *conf_files,
+					    std::ostream *warnings,
+					    int flags) const;
+
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
 public:
