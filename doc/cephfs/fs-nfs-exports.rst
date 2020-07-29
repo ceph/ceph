@@ -63,6 +63,25 @@ Show NFS Ganesha Cluster Information
 
 This displays ip and port of deployed cluster.
 
+Set Customized Ganesha Configuration
+====================================
+
+.. code:: bash
+
+    $ ceph nfs cluster config set <clusterid> -i <config_file>
+
+With this the nfs cluster will use the specified config and it will have
+precedence over default config blocks.
+
+Reset Ganesha Configuration
+===========================
+
+.. code:: bash
+
+    $ ceph nfs cluster config reset <clusterid>
+
+This removes the user defined configuration.
+
 Create CephFS Export
 ====================
 
