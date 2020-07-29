@@ -317,10 +317,6 @@ public:  // for global_init
   bool finalize_reexpand_meta(ConfigValues& values,
 			      const ConfigTracker& tracker);
 private:
-
-  /// expand all metavariables in config structure.
-  void expand_all_meta();
-
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
 public:
