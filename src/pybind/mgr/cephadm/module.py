@@ -514,13 +514,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
             except OrchestratorError as e:
                 if e.event_subject:
-                    self.events.add(OrchestratorEvent(
-                        datetime.datetime.utcnow(),
-                        e.event_subject[0],
-                        e.event_subject[1],
-                        "ERROR",
-                        str(e)
-                    ))
+                    self.events.from_orch_error(e)
 
             self._serve_sleep()
         self.log.debug("serve exit")
@@ -2125,12 +2119,19 @@ you may want to run:
                 self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
                 reconfig = True
             if reconfig:
-                self._create_daemon(
-                    CephadmDaemonSpec(
-                        host=dd.hostname,
-                        daemon_id=dd.daemon_id,
-                        daemon_type=dd.daemon_type),
-                    reconfig=True)
+                try:
+                    self._create_daemon(
+                        CephadmDaemonSpec(
+                            host=dd.hostname,
+                            daemon_id=dd.daemon_id,
+                            daemon_type=dd.daemon_type),
+                        reconfig=True)
+                except OrchestratorError as e:
+                    self.events.from_orch_error(e)
+                    # continue...
+                except Exception as e:
+                    self.events.for_daemon_from_exception(dd.name(), e)
+                    # continue...
 
         # do daemon post actions
         for daemon_type, daemon_descs in daemons_post.items():
