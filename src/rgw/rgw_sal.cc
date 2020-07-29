@@ -559,6 +559,7 @@ int RGWRadosObject::RadosReadOp::prepare(optional_yield y)
 
   source->set_key(parent_op.state.obj.key);
   source->set_obj_size(obj_size);
+  result.head_obj = parent_op.state.head_obj;
 
   return ret;
 }

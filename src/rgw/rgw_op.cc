@@ -7216,20 +7216,20 @@ void RGWGetObjLayout::pre_exec()
 
 void RGWGetObjLayout::execute()
 {
-  RGWRados::Object target(store->getRados(),
-                          s->bucket->get_info(),
-                          *static_cast<RGWObjectCtx *>(s->obj_ctx),
-                          s->object->get_obj());
-  RGWRados::Object::Read stat_op(&target);
+  /* Make sure bucket is correct */
+  s->object->set_bucket(s->bucket.get());
 
-  op_ret = stat_op.prepare(s->yield);
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> stat_op(s->object->get_read_op(s->obj_ctx));
+
+
+  op_ret = stat_op->prepare(s->yield);
   if (op_ret < 0) {
     return;
   }
 
-  head_obj = stat_op.state.head_obj;
+  head_obj = stat_op->result.head_obj;
 
-  op_ret = target.get_manifest(&manifest, s->yield);
+  op_ret = stat_op->get_manifest(&manifest, s->yield);
 }
 
 
