@@ -400,7 +400,7 @@ Operations
 
 :Type: String
 :Valid Choices: prio, wpq, mclock_opclass, mclock_client
-:Default: ``prio``
+:Default: ``wpq``
 
 
 ``osd op queue cut off``
