@@ -350,57 +350,31 @@ int md_config_t::parse_config_files(ConfigValues& values,
   if (safe_to_start_threads)
     return -ENOSYS;
 
-  if (!values.cluster.size() && !conf_files_str) {
+  if (values.cluster.empty() && !conf_files_str) {
     /*
      * set the cluster name to 'ceph' when neither cluster name nor
      * configuration file are specified.
      */
     values.cluster = "ceph";
   }
-
-  if (!conf_files_str) {
-    const char *c = getenv("CEPH_CONF");
-    if (c) {
-      conf_files_str = c;
-    }
-    else {
-      if (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)
-	return 0;
-      conf_files_str = CEPH_CONF_FILE_DEFAULT;
-    }
-  }
-
-  std::list<std::string> conf_files;
-  get_str_list(conf_files_str, conf_files);
-  auto p = conf_files.begin();
-  while (p != conf_files.end()) {
-    string &s = *p;
-    if (s.find("$data_dir") != string::npos &&
-	data_dir_option.empty()) {
-      // useless $data_dir item, skip
-      p = conf_files.erase(p);
-    } else {
-      early_expand_meta(values, s, warnings);
-      ++p;
-    }
-  }
-
   // open new conf
-  list<string>::const_iterator c;
-  for (c = conf_files.begin(); c != conf_files.end(); ++c) {
-    cf.clear();
-    string fn = *c;
+  string conffile;
+  for (auto& fn : get_conffile_paths(values, conf_files_str, warnings, flags)) {
     ostringstream oss;
     int ret = cf.parse_file(fn.c_str(), &oss);
-    parse_error = oss.str();
     if (ret == 0) {
+      parse_error.clear();
+      conffile = fn;
       break;
+    } else {
+      parse_error = oss.str();
+      if (ret != -ENOENT) {
+	return ret;
+      }
     }
-    if (ret != -ENOENT)
-      return ret;
   }
   // it must have been all ENOENTs, that's the only way we got here
-  if (c == conf_files.end())
+  if (conffile.empty())
     return -ENOENT;
 
   if (values.cluster.size() == 0) {
@@ -408,9 +382,9 @@ int md_config_t::parse_config_files(ConfigValues& values,
      * If cluster name is not set yet, use the prefix of the
      * basename of configuration file as cluster name.
      */
-    auto start = c->rfind('/') + 1;
-    auto end = c->find(".conf", start);
-    if (end == c->npos) {
+    auto start = conffile.rfind('/') + 1;
+    auto end = conffile.find(".conf", start);
+    if (end == conffile.npos) {
         /*
          * If the configuration file does not follow $cluster.conf
          * convention, we do the last try and assign the cluster to
@@ -418,7 +392,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
          */
         values.cluster = "ceph";
     } else {
-      values.cluster = c->substr(start, end - start);
+      values.cluster = conffile.substr(start, end - start);
     }
   }
 
@@ -465,6 +439,39 @@ int md_config_t::parse_config_files(ConfigValues& values,
   update_legacy_vals(values);
 
   return 0;
+}
+
+std::list<std::string>
+md_config_t::get_conffile_paths(const ConfigValues& values,
+				const char *conf_files_str,
+				std::ostream *warnings,
+				int flags) const
+{
+  if (!conf_files_str) {
+    const char *c = getenv("CEPH_CONF");
+    if (c) {
+      conf_files_str = c;
+    } else {
+      if (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)
+	return {};
+      conf_files_str = CEPH_CONF_FILE_DEFAULT;
+    }
+  }
+
+  std::list<std::string> paths;
+  get_str_list(conf_files_str, paths);
+  for (auto i = paths.begin(); i != paths.end(); ) {
+    string& path = *i;
+    if (path.find("$data_dir") != path.npos &&
+	data_dir_option.empty()) {
+      // useless $data_dir item, skip
+      i = paths.erase(i);
+    } else {
+      early_expand_meta(values, path, warnings);
+      ++i;
+    }
+  }
+  return paths;
 }
 
 void md_config_t::parse_env(unsigned entity_type,
