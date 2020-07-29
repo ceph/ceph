@@ -292,7 +292,7 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
 int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {
   c->get();
   Context *ctx = new LambdaContext(std::bind(
-    &TestRadosClient::finish_aio_completion, this, c, _1));
+    &TestRadosClient::finish_aio_completion, this, c, std::placeholders::_1));
   get_watch_notify()->aio_flush(this, ctx);
   return 0;
 }
