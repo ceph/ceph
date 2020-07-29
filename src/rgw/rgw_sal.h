@@ -293,11 +293,18 @@ class RGWObject {
         rgw_obj *target_obj{nullptr}; // XXX dang remove?
       } params;
 
+      struct Result {
+        rgw_raw_obj head_obj;
+
+        Result() : head_obj() {}
+      } result;
+
       virtual ~ReadOp() = default;
 
       virtual int prepare(optional_yield y) = 0;
       virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) = 0;
       virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) = 0;
+      virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) = 0;
     };
 
     RGWObject()
@@ -445,6 +452,7 @@ class RGWRadosObject : public RGWObject {
       virtual int prepare(optional_yield y) override;
       virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) override;
       virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) override;
+      virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) override;
     };
 
     RGWRadosObject() = default;
