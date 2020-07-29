@@ -4,14 +4,28 @@ from __future__ import absolute_import
 from cherrypy import NotFound
 
 from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, \
-    UiApiController
+    UiApiController, EndpointDoc
 from ..security import Scope
 from ..services.ceph_service import CephService
 from .. import mgr
 
 
+LIST_SCHEMA = {
+    "rule_id": (int, 'Rule ID'),
+    "rule_name": (str, 'Rule Name'),
+    "ruleset": (int, 'RuleSet related to the rule'),
+    "type": (int, 'Type of Rule'),
+    "min_size": (int, 'Minimum size of Rule'),
+    "max_size": (int, 'Maximum size of Rule'),
+    'steps': ([{str}], 'Steps included in the rule')
+}
+
+
 @ApiController('/crush_rule', Scope.POOL)
+@ControllerDoc("Crush Rule Management API", "CrushRule")
 class CrushRule(RESTController):
+    @EndpointDoc("List Crush Rule Configuration",
+                 responses={200: LIST_SCHEMA})
     def list(self):
         return mgr.get('osd_map_crush')['rules']
 

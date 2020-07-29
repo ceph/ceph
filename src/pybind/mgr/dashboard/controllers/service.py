@@ -2,8 +2,8 @@ from typing import List, Optional, Dict
 import cherrypy
 
 from ceph.deployment.service_spec import ServiceSpec
-from . import ApiController, RESTController, Task, Endpoint, ReadPermission
-from . import CreatePermission, DeletePermission
+from . import ApiController, ControllerDoc, RESTController, Task, Endpoint, ReadPermission, \
+    CreatePermission, DeletePermission
 from .orchestrator import raise_if_no_orchestrator
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -16,6 +16,7 @@ def service_task(name, metadata, wait_for=2.0):
 
 
 @ApiController('/service', Scope.HOSTS)
+@ControllerDoc("Service Management API", "Service")
 class Service(RESTController):
 
     @Endpoint()

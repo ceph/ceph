@@ -5,7 +5,7 @@ import os.path
 import time
 from functools import wraps
 
-from . import ApiController, Endpoint, ReadPermission, UpdatePermission
+from . import ApiController, Endpoint, ReadPermission, UpdatePermission, ControllerDoc, EndpointDoc
 from . import RESTController, Task
 from .. import mgr
 from ..exceptions import DashboardException
@@ -13,6 +13,11 @@ from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient
 from ..tools import TaskManager
+
+STATUS_SCHEMA = {
+    "available": (bool, "Orchestrator status"),
+    "description": (str, "Description")
+}
 
 
 def get_device_osd_map():
@@ -67,10 +72,13 @@ def raise_if_no_orchestrator(method):
 
 
 @ApiController('/orchestrator')
+@ControllerDoc("Orchestrator Management API", "Orchestrator")
 class Orchestrator(RESTController):
 
     @Endpoint()
     @ReadPermission
+    @EndpointDoc("Display Orchestrator Status",
+                 responses={200: STATUS_SCHEMA})
     def status(self):
         return OrchClient.instance().status()
 
@@ -100,6 +108,7 @@ class Orchestrator(RESTController):
 
 
 @ApiController('/orchestrator/inventory', Scope.HOSTS)
+@ControllerDoc("Get Orchestrator Inventory Details", "OrchestratorInventory")
 class OrchestratorInventory(RESTController):
 
     @raise_if_no_orchestrator

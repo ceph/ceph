@@ -4,12 +4,20 @@ from contextlib import contextmanager
 
 import cherrypy
 
-from . import ApiController, RESTController, UiApiController
+from . import ApiController, RESTController, UiApiController, ControllerDoc, EndpointDoc
 from ..settings import Settings as SettingsModule, Options
 from ..security import Scope
 
+SETTINGS_SCHEMA = [{
+    "name": (str, 'Settings Name'),
+    "default": (bool, 'Default Settings'),
+    "type": (str, 'Type of Settings'),
+    "value": (bool, 'Settings Value')
+}]
+
 
 @ApiController('/settings', Scope.CONFIG_OPT)
+@ControllerDoc("Settings Management API", "Settings")
 class Settings(RESTController):
     """
     Enables to manage the settings of the dashboard (not the Ceph cluster).
@@ -37,6 +45,11 @@ class Settings(RESTController):
     def _to_native(setting):
         return setting.upper().replace('-', '_')
 
+    @EndpointDoc("Display Settings Information",
+                 parameters={
+                     'names': (str, 'Name of Settings'),
+                 },
+                 responses={200: SETTINGS_SCHEMA})
     def list(self, names=None):
         """
         Get the list of available options.
