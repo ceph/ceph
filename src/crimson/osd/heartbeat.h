@@ -65,7 +65,7 @@ private:
   seastar::future<> handle_you_died();
 
   /// remove down OSDs
-  /// @return peers not needed in this epoch
+  /// @return peers not added in this epoch
   osds_t remove_down_peers();
   /// add enough reporters for fast failure detection
   void add_reporter_peers(int whoami);
