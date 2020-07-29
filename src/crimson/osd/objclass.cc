@@ -431,6 +431,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   }
 }
 
+uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
+{
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  return ox->get_pool_stripe_width();
+}
+
 ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx)
 {
   // FIXME

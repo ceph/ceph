@@ -190,6 +190,10 @@ public:
   size_t get_processed_rw_ops_num() const {
     return num_read + num_write;
   }
+
+  uint32_t get_pool_stripe_width() const {
+    return pg.get_pool().info.get_stripe_width();
+  }
 };
 
 template <class Context, class MainFunc, class EffectFunc>
