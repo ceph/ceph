@@ -37,4 +37,18 @@ seastar::future<> write_file(ceph::buffer::list&& bl,
   });
 }
 
+seastar::future<seastar::temporary_buffer<char>>
+read_file(const seastar::sstring fn)
+{
+  return seastar::open_file_dma(fn, seastar::open_flags::ro).then(
+    [] (seastar::file f) {
+    return f.size().then([f = std::move(f)](size_t s) {
+      return seastar::do_with(seastar::make_file_input_stream(f),
+			      [s](seastar::input_stream<char>& in) {
+        return in.read_exactly(s);
+      });
+    });
+  });
+}
+
 }
