@@ -59,7 +59,7 @@ import tempfile
 import time
 import errno
 try:
-    from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable
+    from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
 except ImportError:
     pass
 import uuid
@@ -482,6 +482,15 @@ class CephIscsi(object):
             cmd = "if grep -qs {0} /proc/mounts; then " \
                   "umount {0}; fi".format(mount_path)
         return cmd.split()
+
+    def get_tcmu_runner_container(self):
+        # type: () -> CephContainer
+        tcmu_container = get_container(self.fsid, self.daemon_type, self.daemon_id)
+        tcmu_container.entrypoint = "/usr/bin/tcmu-runner"
+        tcmu_container.volume_mounts.pop("/dev/log")
+        tcmu_container.volume_mounts["/dev"] = "/dev:z"
+        tcmu_container.cname = self.get_container_name(desc='tcmu')
+        return tcmu_container
 
 ##################################
 
@@ -1928,6 +1937,20 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         call_throws(['systemctl', 'restart',
                      get_unit_name(fsid, daemon_type, daemon_id)])
 
+def _write_container_cmd_to_bash(file_obj, container, comment=None, background=False):
+    # type: (IO[str], CephContainer, Optional[str], Optional[bool]) -> None
+    if comment:
+        # Sometimes adding a comment, espectially if there are multiple containers in one
+        # unit file, makes it easier to read and grok.
+        file_obj.write('# ' + comment + '\n')
+    # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
+    file_obj.write('! '+ ' '.join(container.rm_cmd()) + '\n')
+    # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
+    if 'podman' in container_path:
+        file_obj.write('! '+ ' '.join(container.rm_cmd(storage=True)) + '\n')
+
+    # container run command
+    file_obj.write(' '.join(container.run_cmd()) + (' &' if background else '') + '\n')
 
 def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True, start=True,
@@ -1967,19 +1990,15 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             f.write(' '.join(prestart.run_cmd()) + '\n')
         elif daemon_type == CephIscsi.daemon_type:
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
+            ceph_iscsi = CephIscsi.init(fsid, daemon_id)
+            tcmu_container = ceph_iscsi.get_tcmu_runner_container()
+            _write_container_cmd_to_bash(f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
 
         if daemon_type in Ceph.daemons:
             install_path = find_program('install')
             f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
 
-        # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
-        f.write('! '+ ' '.join(c.rm_cmd()) + '\n')
-        # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
-        if 'podman' in container_path:
-            f.write('! '+ ' '.join(c.rm_cmd(storage=True)) + '\n')
-
-        # container run command
-        f.write(' '.join(c.run_cmd()) + '\n')
+        _write_container_cmd_to_bash(f, c, '%s.%s' % (daemon_type, str(daemon_id)))
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.run.new',
                   data_dir + '/unit.run')
@@ -2008,6 +2027,10 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             poststop = nfs_ganesha.get_rados_grace_container('remove')
             f.write(' '.join(poststop.run_cmd()) + '\n')
         elif daemon_type == CephIscsi.daemon_type:
+            # make sure we also stop the tcmu container
+            ceph_iscsi = CephIscsi.init(fsid, daemon_id)
+            tcmu_container = ceph_iscsi.get_tcmu_runner_container()
+            f.write('! '+ ' '.join(tcmu_container.stop_cmd()) + '\n')
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.poststop.new',
@@ -2364,6 +2387,14 @@ class CephContainer:
         if storage:
             ret.append('--storage')
         ret.append(self.cname)
+        return ret
+
+    def stop_cmd(self):
+        # type () -> List[str]
+        ret = [
+            str(container_path),
+            'stop', self.cname,
+        ]
         return ret
 
     def run(self, timeout=DEFAULT_TIMEOUT):
