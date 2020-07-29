@@ -5,6 +5,13 @@
 #include <map>
 #include <string>
 #include <memory>
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -320,13 +327,17 @@ int RocksDBStore::create_db_dir()
     unique_ptr<rocksdb::Directory> dir;
     env->NewDirectory(path, &dir);
   } else {
-    int r = compat_mkdir(path.c_str(), 0755);
-    if (r < 0)
-      r = -errno;
-    if (r < 0 && r != -EEXIST) {
-      derr << __func__ << " failed to create " << path << ": " << cpp_strerror(r)
-	   << dendl;
-      return r;
+    if (!fs::exists(path)) {
+      std::error_code ec;
+      if (!fs::create_directory(path, ec)) {
+	derr << __func__ << " failed to create " << path
+	     << ": " << ec.message() << dendl;
+	return -ec.value();
+      }
+      fs::permissions(path,
+		      fs::perms::owner_all |
+		      fs::perms::group_read | fs::perms::group_exec |
+		      fs::perms::others_read | fs::perms::others_exec);
     }
   }
   return 0;
