@@ -38,7 +38,7 @@ struct GetInfoRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static GetInfoRequest* create(librados::IoCtx& io_ctx,
-                                ContextWQ* context_wq,
+                                librbd::asio::ContextWQ* context_wq,
                                 const std::string& image_id,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,
@@ -198,7 +198,8 @@ public:
     encode(image_name, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_DIRECTORY, _, StrEq("rbd"), StrEq("dir_get_name"), _, _, _))
+                exec(RBD_DIRECTORY, _, StrEq("rbd"), StrEq("dir_get_name"), _,
+                     _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;
                                         })),

@@ -1,11 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <errno.h>
 
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/refcount/cls_refcount_ops.h"
 #include "include/rados/librados.hpp"
 
-using namespace librados;
+using std::list;
+using std::string;
 
+using ceph::bufferlist;
 
 void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref)
 {
@@ -50,7 +55,7 @@ int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, 
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -58,4 +63,3 @@ int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, 
 
   return r;
 }
-

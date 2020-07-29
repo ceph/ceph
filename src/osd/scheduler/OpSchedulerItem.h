@@ -40,7 +40,7 @@ class OpSchedulerItem {
 public:
   class OrderLocker {
   public:
-    using Ref = unique_ptr<OrderLocker>;
+    using Ref = std::unique_ptr<OrderLocker>;
     virtual void lock() = 0;
     virtual void unlock() = 0;
     virtual ~OrderLocker() {}
@@ -85,13 +85,13 @@ public:
       return nullptr;
     }
 
-    virtual ostream &print(ostream &rhs) const = 0;
+    virtual std::ostream &print(std::ostream &rhs) const = 0;
 
     virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
     virtual op_scheduler_class get_scheduler_class() const = 0;
 
     virtual ~OpQueueable() {}
-    friend ostream& operator<<(ostream& out, const OpQueueable& q) {
+    friend std::ostream& operator<<(std::ostream& out, const OpQueueable& q) {
       return q.print(out);
     }
 
@@ -169,7 +169,7 @@ public:
     return qitem->get_scheduler_class();
   }
 
-  friend ostream& operator<<(ostream& out, const OpSchedulerItem& item) {
+  friend std::ostream& operator<<(std::ostream& out, const OpSchedulerItem& item) {
      out << "OpSchedulerItem("
 	 << item.get_ordering_token() << " " << *item.qitem
 	 << " prio " << item.get_priority()
@@ -235,7 +235,7 @@ public:
     return op_type_t::client_op;
   }
 
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
   }
 
@@ -263,7 +263,7 @@ public:
   op_type_t get_op_type() const final {
     return op_type_t::peering_event;
   }
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
@@ -291,9 +291,9 @@ public:
   op_type_t get_op_type() const final {
     return op_type_t::bg_snaptrim;
   }
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGSnapTrim(pgid=" << get_pgid()
-	       << "epoch_queued=" << epoch_queued
+	       << " epoch_queued=" << epoch_queued
 	       << ")";
   }
   void run(
@@ -313,7 +313,7 @@ public:
   op_type_t get_op_type() const final {
     return op_type_t::bg_scrub;
   }
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGScrub(pgid=" << get_pgid()
 	       << "epoch_queued=" << epoch_queued
 	       << ")";
@@ -339,10 +339,10 @@ public:
   op_type_t get_op_type() const final {
     return op_type_t::bg_recovery;
   }
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
-	       << "epoch_queued=" << epoch_queued
-	       << "reserved_pushes=" << reserved_pushes
+	       << " epoch_queued=" << epoch_queued
+	       << " reserved_pushes=" << reserved_pushes
 	       << ")";
   }
   uint64_t get_reserved_pushes() const final {
@@ -356,7 +356,7 @@ public:
 };
 
 class PGRecoveryContext : public PGOpQueueable {
-  unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
+  std::unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
   epoch_t epoch;
 public:
   PGRecoveryContext(spg_t pgid,
@@ -366,7 +366,7 @@ public:
   op_type_t get_op_type() const final {
     return op_type_t::bg_recovery;
   }
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryContext(pgid=" << get_pgid()
 	       << " c=" << c.get() << " epoch=" << epoch
 	       << ")";
@@ -389,7 +389,7 @@ public:
   op_type_t get_op_type() const final {
     return op_type_t::bg_pg_delete;
   }
-  ostream &print(ostream &rhs) const final {
+  std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGDelete(" << get_pgid()
 	       << " e" << epoch_queued
 	       << ")";

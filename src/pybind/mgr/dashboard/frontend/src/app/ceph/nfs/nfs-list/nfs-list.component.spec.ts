@@ -1,20 +1,21 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
-import { BehaviorSubject, of } from 'rxjs';
+import { of } from 'rxjs';
 
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { NfsService } from '../../../shared/api/nfs.service';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
+import { Summary } from '../../../shared/models/summary.model';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -28,35 +29,29 @@ describe('NfsListComponent', () => {
   let nfsService: NfsService;
   let httpTesting: HttpTestingController;
 
-  const refresh = (data: object) => {
+  const refresh = (data: Summary) => {
     summaryService['summaryDataSource'].next(data);
   };
 
-  configureTestBed(
-    {
-      declarations: [NfsListComponent, NfsDetailsComponent],
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot(),
-        TabsModule.forRoot()
-      ],
-      providers: [TaskListService, i18nProviders]
-    },
-    true
-  );
+  configureTestBed({
+    declarations: [NfsListComponent, NfsDetailsComponent],
+    imports: [
+      BrowserAnimationsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      NgbNavModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [TaskListService]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    nfsService = TestBed.get(NfsService);
-    httpTesting = TestBed.get(HttpTestingController);
-
-    // this is needed because summaryService isn't being reset after each test.
-    summaryService['summaryDataSource'] = new BehaviorSubject(null);
-    summaryService['summaryData$'] = summaryService['summaryDataSource'].asObservable();
+    summaryService = TestBed.inject(SummaryService);
+    nfsService = TestBed.inject(NfsService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   it('should create', () => {
@@ -68,7 +63,6 @@ describe('NfsListComponent', () => {
       fixture.detectChanges();
       spyOn(nfsService, 'list').and.callThrough();
       httpTesting.expectOne('api/nfs-ganesha/daemon').flush([]);
-      httpTesting.expectOne('api/summary');
     });
 
     afterEach(() => {
@@ -76,7 +70,7 @@ describe('NfsListComponent', () => {
     });
 
     it('should load exports on init', () => {
-      refresh({});
+      refresh(new Summary());
       httpTesting.expectOne('api/nfs-ganesha/export');
       expect(nfsService.list).toHaveBeenCalled();
     });
@@ -133,7 +127,7 @@ describe('NfsListComponent', () => {
       addExport('b');
       addExport('c');
       component.exports = exports;
-      refresh({ executing_tasks: [], finished_tasks: [] });
+      refresh(new Summary());
       spyOn(nfsService, 'list').and.callFake(() => of(exports));
       fixture.detectChanges();
 

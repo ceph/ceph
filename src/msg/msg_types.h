@@ -193,9 +193,9 @@ static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
   ::memcpy(dst, src, copy_size);
   encode(ss, bl);
 #else
-  ceph_sockaddr_storage ss{};
+  ceph_sockaddr_storage ss;
   ::memset(&ss, '\0', sizeof(ss));
-  ::memcpy(&wireaddr, &ss, std::min(sizeof(ss), sizeof(a)));
+  ::memcpy(&ss, &a, std::min(sizeof(ss), sizeof(a)));
   encode(ss, bl);
 #endif
 }
@@ -368,10 +368,8 @@ struct entity_addr_t {
     switch (u.sa.sa_family) {
     case AF_INET:
       return ntohs(u.sin.sin_port);
-      break;
     case AF_INET6:
       return ntohs(u.sin6.sin6_port);
-      break;
     }
     return 0;
   }

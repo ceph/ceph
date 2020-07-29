@@ -3,6 +3,7 @@
 # pylint: disable=too-many-statements,too-many-branches
 from __future__ import absolute_import
 
+import logging
 import math
 from functools import partial
 from datetime import datetime
@@ -20,6 +21,8 @@ from ..services.rbd import RbdConfiguration, RbdService, RbdSnapshotService, \
 from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
+
+logger = logging.getLogger(__name__)
 
 
 # pylint: disable=not-callable
@@ -363,12 +366,14 @@ class RbdTrash(RESTController):
     @DeletePermission
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
-        now = "{}Z".format(datetime.now().isoformat())
+        now = "{}Z".format(datetime.utcnow().isoformat())
         pools = self._trash_list(pool_name)
 
         for pool in pools:
             for image in pool['value']:
                 if image['deferment_end_time'] < now:
+                    logger.info('Removing trash image %s (pool=%s, namespace=%s, name=%s)',
+                                image['id'], pool['pool_name'], image['namespace'], image['name'])
                     rbd_call(pool['pool_name'], image['namespace'],
                              self.rbd_inst.trash_remove, image['id'], 0)
 

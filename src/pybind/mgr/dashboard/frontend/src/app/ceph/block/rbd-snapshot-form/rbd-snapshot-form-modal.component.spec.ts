@@ -3,11 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { ApiModule } from '../../../shared/api/api.module';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -23,12 +22,11 @@ describe('RbdSnapshotFormModalComponent', () => {
       ComponentsModule,
       PipesModule,
       HttpClientTestingModule,
-      ApiModule,
       ToastrModule.forRoot(),
       RouterTestingModule
     ],
     declarations: [RbdSnapshotFormModalComponent],
-    providers: [BsModalRef, BsModalService, AuthStorageService, i18nProviders]
+    providers: [NgbActiveModal, AuthStorageService]
   });
 
   beforeEach(() => {

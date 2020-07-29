@@ -9,6 +9,9 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 
+using std::map;
+using std::set;
+
 void Session::clear_backoffs()
 {
   map<spg_t,map<hobject_t,set<ceph::ref_t<Backoff>>>> ls;

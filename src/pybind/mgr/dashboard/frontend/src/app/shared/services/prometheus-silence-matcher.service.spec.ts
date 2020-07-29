@@ -1,10 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PrometheusHelper
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '../../../testing/unit-test-helper';
 import { PrometheusRule } from '../models/prometheus-alerts';
 import { SharedModule } from '../shared.module';
 import { PrometheusSilenceMatcherService } from './prometheus-silence-matcher.service';
@@ -15,8 +11,7 @@ describe('PrometheusSilenceMatcherService', () => {
   let rules: PrometheusRule[];
 
   configureTestBed({
-    imports: [SharedModule],
-    providers: [i18nProviders]
+    imports: [SharedModule]
   });
 
   const addMatcher = (name: string, value: any) => ({
@@ -27,7 +22,7 @@ describe('PrometheusSilenceMatcherService', () => {
 
   beforeEach(() => {
     prometheus = new PrometheusHelper();
-    service = TestBed.get(PrometheusSilenceMatcherService);
+    service = TestBed.inject(PrometheusSilenceMatcherService);
     rules = [
       prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
       prometheus.createRule('alert1', 'someSeverity', []),

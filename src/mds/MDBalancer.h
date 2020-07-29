@@ -49,6 +49,8 @@ public:
    */
   void tick();
 
+  void handle_export_pins(void);
+
   void subtract_export(CDir *ex);
   void add_import(CDir *im);
   void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);
@@ -58,6 +60,9 @@ public:
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
+  bool is_fragment_pending(dirfrag_t df) {
+    return split_pending.count(df) || merge_pending.count(df);
+  }
 
   /**
    * Based on size and configuration, decide whether to issue a queue_split
@@ -82,8 +87,6 @@ private:
   //MDSMap is up to date
   void prep_rebalance(int beat);
   int mantle_prep_rebalance();
-
-  void handle_export_pins(void);
 
   mds_load_t get_load();
   int localize_balancer();

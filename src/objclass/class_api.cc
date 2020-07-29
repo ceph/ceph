@@ -92,12 +92,14 @@ void cls_unregister_filter(cls_filter_handle_t handle)
   filter->unregister();
 }
 
-int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
+int cls_cxx_read(cls_method_context_t hctx, int ofs, int len,
+		 ceph::buffer::list *outbl)
 {
   return cls_cxx_read2(hctx, ofs, len, outbl, 0);
 }
 
-int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
+int cls_cxx_write(cls_method_context_t hctx, int ofs, int len,
+		  ceph::buffer::list *inbl)
 {
   return cls_cxx_write2(hctx, ofs, len, inbl, 0);
 }
@@ -133,7 +135,7 @@ int cls_gen_rand_base64(char *dest, int size) /* size should be the required str
   return 0;
 }
 
-void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
+void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s)
 {
   if (!s)
     return;

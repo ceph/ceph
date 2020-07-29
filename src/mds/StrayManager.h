@@ -103,7 +103,7 @@ protected:
   friend class StrayManagerContext;
 
   friend class C_StraysFetched;
-  friend class C_OpenSnapParents;
+  friend class C_RetryEnqueue;
   friend class C_PurgeStrayLogged;
   friend class C_TruncateStrayLogged;
   friend class C_IO_PurgeStrayPurged;

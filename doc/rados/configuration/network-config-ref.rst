@@ -112,7 +112,7 @@ Each Ceph OSD Daemon on a Ceph Node may use up to four ports:
 #. One for sending data to other OSDs.
 #. Two for heartbeating on each interface.
 
-.. ditaa:: 
+.. ditaa::
               /---------------\
               |      OSD      |
               |           +---+----------------+-----------+

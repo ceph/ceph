@@ -26,7 +26,7 @@ extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
-extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
+extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
 extraopts += -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=/lib/systemd/system
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -63,6 +63,7 @@ override_dh_auto_install:
 	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
 	install -D -m 600 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
 	install -D -m 600 sudoers.d/cephadm $(DESTDIR)/etc/sudoers.d/cephadm
+	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/libexec/rbd-nbd/rbd-nbd_quiesce
 
 	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
 

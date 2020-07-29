@@ -65,10 +65,9 @@ aspects of your Ceph cluster:
 * **Overall cluster health**: Display overall cluster status, performance
   and capacity metrics.
 * **Embedded Grafana Dashboards**: Ceph Dashboard is capable of embedding
-  `Grafana <https://grafana.com>`_ dashboards in many locations, to display
-  additional information and performance metrics gathered by the
-  :ref:`mgr-prometheus`. See :ref:`dashboard-grafana` for details on how to
-  configure this functionality.
+  `Grafana`_ dashboards in many locations, to display additional information
+  and performance metrics gathered by the :ref:`mgr-prometheus`. See
+  :ref:`dashboard-grafana` for details on how to configure this functionality.
 * **Cluster logs**: Display the latest updates to the cluster's event and
   audit log files. Log entries can be filtered by priority, date or keyword.
 * **Hosts**: Display a list of all hosts associated to the cluster, which
@@ -378,71 +377,129 @@ The available iSCSI gateways must be defined using the following commands::
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Grafana and Prometheus are likely going to be bundled and installed by some
-orchestration tools along Ceph in the near future, but currently, you will have
-to install and configure both manually. After you have installed Prometheus and
-Grafana on your preferred hosts, proceed with the following steps.
+`Grafana`_ requires data from `Prometheus <https://prometheus.io/>`_. Although
+Grafana can use other data sources, the Grafana dashboards we provide contain
+queries that are specific to Prometheus. Our Grafana dashboards therefore
+require Prometheus as the data source. The Ceph :ref:`mgr-prometheus` also only
+exports its data in the Prometheus' common format. The Grafana dashboards rely
+on metric names from the Prometheus module and `Node exporter
+<https://prometheus.io/docs/guides/node-exporter/>`_. The Node exporter is a
+separate application that provides machine metrics.
 
-1. Enable the Ceph Exporter which comes as Ceph Manager module by running::
+.. note::
 
-    $ ceph mgr module enable prometheus
+  Prometheus' security model presumes that untrusted users have access to the
+  Prometheus HTTP endpoint and logs. Untrusted users have access to all the
+  (meta)data Prometheus collects that is contained in the database, plus a
+  variety of operational and debugging information.
 
-More details can be found in the documentation of the :ref:`mgr-prometheus`.
+  However, Prometheus' HTTP API is limited to read-only operations.
+  Configurations can *not* be changed using the API and secrets are not
+  exposed. Moreover, Prometheus has some built-in measures to mitigate the
+  impact of denial of service attacks.
 
-2. Add the corresponding scrape configuration to Prometheus. This may look
-   like::
+  Please see `Prometheus' Security model
+  <https://prometheus.io/docs/operating/security/>` for more detailed
+  information.
 
-    global:
-      scrape_interval: 5s
+Installation and Configuration using cephadm
+""""""""""""""""""""""""""""""""""""""""""""
 
-    scrape_configs:
-      - job_name: 'prometheus'
-        static_configs:
-          - targets: ['localhost:9090']
-      - job_name: 'ceph'
-        static_configs:
-          - targets: ['localhost:9283']
-      - job_name: 'node-exporter'
-        static_configs:
-          - targets: ['localhost:9100']
+Grafana and Prometheus can be installed using :ref:`cephadm`. They will
+automatically be configured by `cephadm`. Please see
+:ref:`mgr-cephadm-monitoring` documentation for more details on how to use
+cephadm for installing and configuring Prometheus and Grafana.
 
-3. Add Prometheus as data source to Grafana
+Manual Installation and Configuration
+"""""""""""""""""""""""""""""""""""""
 
-4. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
+The following process describes how to configure Grafana and Prometheus
+manually. After you have installed Prometheus, Grafana and the Node exporter
+on your preferred hosts, proceed with the following steps.
 
-    grafana-cli plugins install vonage-status-panel
-    grafana-cli plugins install grafana-piechart-panel
+#.  Enable the Ceph Exporter which comes as Ceph Manager module by running::
 
-5. Add the Dashboards to Grafana:
+      $ ceph mgr module enable prometheus
 
-  Dashboards can be added to Grafana by importing dashboard jsons.
-  Following command can be used for downloading json files::
+    More details can be found in the documentation of the :ref:`mgr-prometheus`.
 
-    wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+#.  Add the corresponding scrape configuration to Prometheus. This may look
+    like::
 
-  You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
-  master/monitoring/grafana/dashboards>`_ .
+      global:
+        scrape_interval: 5s
 
-  For Example, for ceph-cluster overview you can use::
+      scrape_configs:
+        - job_name: 'prometheus'
+          static_configs:
+            - targets: ['localhost:9090']
+        - job_name: 'ceph'
+          static_configs:
+            - targets: ['localhost:9283']
+        - job_name: 'node-exporter'
+          static_configs:
+            - targets: ['localhost:9100']
 
-    wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+    .. note::
 
-6. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
+      Please note that in the aforementioned example, Prometheus is configured
+      to scrape data from itself (port 9090), the Ceph manager module
+      `prometheus` (port 9283), which exports Ceph internal data and the Node
+      exporter (port 9100), which provides metrics of a machine.
 
-    [auth.anonymous]
-    enabled = true
-    org_name = Main Org.
-    org_role = Viewer
+      Depending on your configuration, you may need to change the hostname in
+      this configuration or add additional configuration entries for the Node
+      exporter. It is unlikely that you will need to change the provided ports.
 
-  In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
-  ``allow_embedding`` has been introduced. This setting needs to be explicitly
-  set to ``true`` for the Grafana integration in Ceph Dashboard to work, as its
-  default is ``false``.
+      Moreover, you don't *need* to have more than one target for Ceph specific
+      data, provided by the `prometheus` mgr module. But it is recommended to
+      configure Prometheus to scrape Ceph specific data from all existing Ceph
+      managers. This enables a built-in high availability mechanism, where
+      services run on a manager will be restarted automatically on a second
+      manager instance if one Ceph Manager goes down.
 
-  ::
+#.  Add Prometheus as data source to Grafana `using the Grafana Web UI
+    <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
 
-    [security]
-    allow_embedding = true
+#.  Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
+
+      grafana-cli plugins install vonage-status-panel
+      grafana-cli plugins install grafana-piechart-panel
+
+#.  Add the Dashboards to Grafana:
+
+    Dashboards can be added to Grafana by importing dashboard JSON files.
+    Use the following command to download the JSON files::
+
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+
+    You can find all the dashboard JSON files `here <https://github.com/ceph/ceph/tree/
+    master/monitoring/grafana/dashboards>`_ .
+
+    For Example, for ceph-cluster overview you can use::
+
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+
+#.  Configure Grafana in ``/etc/grafana/grafana.ini`` to enable anonymous mode::
+
+      [auth.anonymous]
+      enabled = true
+      org_name = Main Org.
+      org_role = Viewer
+
+    In newer versions of Grafana (starting with 6.2.0-beta1) a new setting named
+    ``allow_embedding`` has been introduced. This setting needs to be explicitly
+    set to ``true`` for the Grafana integration in Ceph Dashboard to work, as its
+    default is ``false``.
+
+    ::
+
+      [security]
+      allow_embedding = true
+
+
+Configuring Dashboard
+"""""""""""""""""""""
 
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Dashboard will use to access Grafana.
@@ -1037,6 +1094,13 @@ location is::
 After running the above command, Ceph Dashboard is able to find the NFS-Ganesha
 configuration objects and we can start manage the exports through the Web UI.
 
+.. note::
+
+    A separate pool for the NFS shares should be used. Otherwise it can cause the
+    `known issue <https://tracker.ceph.com/issues/46176>`_ with listing of shares
+    if the NFS objects are stored together with a lot of other objects in a single
+    pool.
+
 
 Support for Multiple NFS-Ganesha Clusters
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1068,5 +1132,172 @@ Plug-ins
 Dashboard Plug-ins extend the functionality of the dashboard in a modular
 and loosely coupled fashion.
 
+.. _Grafana: https://grafana.com/
+
 .. include:: dashboard_plugins/feature_toggles.inc.rst
 .. include:: dashboard_plugins/debug.inc.rst
+
+
+Troubleshooting the Dashboard
+-----------------------------
+
+Locating the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^
+
+If you are unsure of the location of the Ceph Dashboard, run the following command::
+
+    $ ceph mgr services | jq .dashboard
+    "https://host:port"
+
+The command returns the URL where the Ceph Dashboard is located: ``https://<host>:<port>/``
+
+.. note::
+
+    Many Ceph command line tools return results in JSON format. You may have to install
+    the `jq <https://stedolan.github.io/jq>`_ command-line JSON processor utility on
+    your operating system beforehand.
+
+
+Accessing the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^^
+
+If you are unable to access the Ceph Dashboard, run through the following
+commands:
+
+#. Verify the Ceph Dashboard module is enabled::
+
+    $ ceph mgr module ls | jq .enabled_modules
+
+   Ensure the Ceph Dashboard module is listed in the return value of the
+   command. Example snipped output from the command above::
+
+    [
+      "dashboard",
+      "iostat",
+      "restful"
+    ]
+
+#. If it is not listed, activate the module with the following command::
+
+    $ ceph mgr module enable dashboard
+
+#. Check the Ceph Dashboard and/or mgr log file for any errors. The exact
+   location of the log files depends on the Ceph configuration.
+
+   * Check if mgr log messages are written to a file by::
+
+        $ ceph config get mgr log_to_file
+        true
+
+   * Get the location of the log file (it's ``/var/log/ceph/<cluster-name>-<daemon-name>.log``
+     by default)::
+
+        $ ceph config get mgr log_file
+        /var/log/ceph/$cluster-$name.log
+
+#. Ensure the SSL/TSL support is configured properly:
+
+   * Check if the SSL/TSL support is enabled::
+
+       $ ceph config get mgr mgr/dashboard/ssl
+
+   * If the command returns ``true``, verify a certificate exists by::
+
+       $ ceph config-key get mgr/dashboard/crt
+
+     and::
+
+       $ ceph config-key get mgr/dashboard/key
+
+   * If it doesn't, run the following command to generate a self-signed
+     certificate or follow the instructions outlined in
+     :ref:`dashboard-ssl-tls-support`::
+
+       $ ceph dashboard create-self-signed-cert
+
+
+Trouble Logging into the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you are unable to log into the Ceph Dashboard and you receive the following
+error, run through the procedural checks below:
+
+.. image:: ../images/dashboard/invalid-credentials.png
+   :align: center
+
+#. Check that your user credentials are correct. If you are seeing the
+   notification message above when trying to log into the Ceph Dashboard, it
+   is likely you are using the wrong credentials. Double check your username
+   and password, and ensure the caps lock key is not enabled by accident.
+
+#. If your user credentials are correct, but you are experiencing the same
+   error, check that the user account exists::
+
+    $ ceph dashboard ac-user-show <username>
+
+   This command returns your user data. If the user does not exist, it will
+   print::
+
+    $ Error ENOENT: User <username> does not exist
+
+#. Check if the user is enabled::
+
+    $ ceph dashboard ac-user-show <username> | jq .enabled
+    true
+
+   Check if ``enabled`` is set to ``true`` for your user. If not the user is
+   not enabled, run::
+
+    $ ceph dashboard ac-user-enable <username>
+
+Please see :ref:`dashboard-user-role-management` for more information.
+
+
+A Dashboard Feature is Not Working
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When an error occurs on the backend, you will usually receive an error
+notification on the frontend. Run through the following scenarios to debug.
+
+#. Check the Ceph Dashboard/mgr logfile(s) for any errors. These can be
+   identified by searching for keywords, such as *500 Internal Server Error*,
+   followed by ``traceback``. The end of a traceback contains more details about
+   what exact error occurred.
+#. Check your web browser's Javascript Console for any errors.
+
+
+Ceph Dashboard Logs
+^^^^^^^^^^^^^^^^^^^
+
+Dashboard Debug Flag
+""""""""""""""""""""
+
+With this flag enabled, traceback of errors are included in backend responses.
+
+To enable this flag via the Ceph Dashboard, navigate from *Cluster* to *Manager
+modules*. Select *Dashboard module* and click the edit button. Click the
+*debug* checkbox and update.
+
+To enable it via the CLI, run the following command::
+
+    $ ceph dashboard debug enable
+
+
+Setting Logging Level of Dashboard Module
+"""""""""""""""""""""""""""""""""""""""""
+
+Setting the logging level to debug makes the log more verbose and helpful for
+debugging.
+
+#. Increase the logging level of manager daemons::
+
+   $ ceph tell mgr config set debug_mgr 20
+
+#. Adjust the logging level of the Ceph Dashboard module via the Dashboard or
+   CLI:
+
+   * Navigate from *Cluster* to *Manager modules*. Select *Dashboard module*
+     and click the edit button. Modify the ``log_level`` configuration.
+   * To adjust it via the CLI, run the following command::
+
+        $ bin/ceph config set mgr mgr/dashboard/log_level debug

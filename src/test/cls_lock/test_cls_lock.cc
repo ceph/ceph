@@ -33,7 +33,7 @@ using namespace rados::cls::lock;
 void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers,
 	       ClsLockType *assert_type, string *assert_tag)
 {
-  ClsLockType lock_type = LOCK_NONE;
+  ClsLockType lock_type = ClsLockType::NONE;
   string tag;
   lockers.clear();
   ASSERT_EQ(0, get_lock_info(ioctx, oid, name, &lockers, &lock_type, &tag));
@@ -69,8 +69,8 @@ TEST(ClsLock, TestMultiLocking) {
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
-  ClsLockType lock_type_shared = LOCK_SHARED;
-  ClsLockType lock_type_exclusive = LOCK_EXCLUSIVE;
+  ClsLockType lock_type_shared = ClsLockType::SHARED;
+  ClsLockType lock_type_exclusive = ClsLockType::EXCLUSIVE;
 
 
   Rados cluster2;
@@ -357,39 +357,39 @@ TEST(ClsLock, TestSetCookie) {
   string cookie = "cookie";
   string new_cookie = "new cookie";
   librados::ObjectWriteOperation op1;
-  set_cookie(&op1, name, LOCK_SHARED, cookie, tag, new_cookie);
+  set_cookie(&op1, name, ClsLockType::SHARED, cookie, tag, new_cookie);
   ASSERT_EQ(-ENOENT, ioctx.operate(oid, &op1));
 
   librados::ObjectWriteOperation op2;
-  lock(&op2, name, LOCK_SHARED, cookie, tag, "", utime_t{}, 0);
+  lock(&op2, name, ClsLockType::SHARED, cookie, tag, "", utime_t{}, 0);
   ASSERT_EQ(0, ioctx.operate(oid, &op2));
 
   librados::ObjectWriteOperation op3;
-  lock(&op3, name, LOCK_SHARED, "cookie 2", tag, "", utime_t{}, 0);
+  lock(&op3, name, ClsLockType::SHARED, "cookie 2", tag, "", utime_t{}, 0);
   ASSERT_EQ(0, ioctx.operate(oid, &op3));
 
   librados::ObjectWriteOperation op4;
-  set_cookie(&op4, name, LOCK_SHARED, cookie, tag, cookie);
+  set_cookie(&op4, name, ClsLockType::SHARED, cookie, tag, cookie);
   ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op4));
 
   librados::ObjectWriteOperation op5;
-  set_cookie(&op5, name, LOCK_SHARED, cookie, "wrong tag", new_cookie);
+  set_cookie(&op5, name, ClsLockType::SHARED, cookie, "wrong tag", new_cookie);
   ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op5));
 
   librados::ObjectWriteOperation op6;
-  set_cookie(&op6, name, LOCK_SHARED, "wrong cookie", tag, new_cookie);
+  set_cookie(&op6, name, ClsLockType::SHARED, "wrong cookie", tag, new_cookie);
   ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op6));
 
   librados::ObjectWriteOperation op7;
-  set_cookie(&op7, name, LOCK_EXCLUSIVE, cookie, tag, new_cookie);
+  set_cookie(&op7, name, ClsLockType::EXCLUSIVE, cookie, tag, new_cookie);
   ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op7));
 
   librados::ObjectWriteOperation op8;
-  set_cookie(&op8, name, LOCK_SHARED, cookie, tag, "cookie 2");
+  set_cookie(&op8, name, ClsLockType::SHARED, cookie, tag, "cookie 2");
   ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op8));
 
   librados::ObjectWriteOperation op9;
-  set_cookie(&op9, name, LOCK_SHARED, cookie, tag, new_cookie);
+  set_cookie(&op9, name, ClsLockType::SHARED, cookie, tag, new_cookie);
   ASSERT_EQ(0, ioctx.operate(oid, &op9));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));

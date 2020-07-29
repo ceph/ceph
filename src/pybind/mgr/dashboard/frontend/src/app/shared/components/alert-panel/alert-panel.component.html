@@ -1,4 +1,5 @@
-<alert type="{{ bootstrapClass }}">
+<ngb-alert type="{{ bootstrapClass }}"
+           [dismissible]="false">
   <table>
     <ng-container *ngIf="size === 'normal'; else slim">
       <tr>
@@ -33,17 +34,8 @@
       </tr>
     </ng-template>
   </table>
-</alert>
+</ngb-alert>
 
 <ng-template #content>
   <ng-content></ng-content>
 </ng-template>
-
-<div class="button-group text-right"
-     *ngIf="backAction.observers.length > 0">
-  <button class="btn btn-light tc_backButton"
-          type="button"
-          (click)="backAction.emit()"
-          autofocus
-          i18n>Back</button>
-</div>

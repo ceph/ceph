@@ -13,16 +13,16 @@ import * as _ from 'lodash';
 import * as moment from 'moment';
 import { Subscription } from 'rxjs';
 
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskMessageService } from '../../../shared/services/task-message.service';
 import { Icons } from '../../enum/icons.enum';
 import { CdNotification } from '../../models/cd-notification';
+import { ExecutingTask } from '../../models/executing-task';
 import { FinishedTask } from '../../models/finished-task';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { NotificationService } from '../../services/notification.service';
 import { PrometheusAlertService } from '../../services/prometheus-alert.service';
 import { PrometheusNotificationService } from '../../services/prometheus-notification.service';
+import { SummaryService } from '../../services/summary.service';
+import { TaskMessageService } from '../../services/task-message.service';
 
 @Component({
   selector: 'cd-notifications-sidebar',
@@ -39,8 +39,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
   executingTasks: ExecutingTask[] = [];
 
-  private sidebarSubscription: Subscription;
-  private notificationDataSubscription: Subscription;
+  private subs = new Subscription();
 
   icons = Icons;
 
@@ -68,12 +67,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     window.clearInterval(this.interval);
     window.clearTimeout(this.timeout);
-    if (this.sidebarSubscription) {
-      this.sidebarSubscription.unsubscribe();
-    }
-    if (this.notificationDataSubscription) {
-      this.notificationDataSubscription.unsubscribe();
-    }
+    this.subs.unsubscribe();
   }
 
   ngOnInit() {
@@ -91,55 +85,56 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
       });
     }
 
-    this.notificationDataSubscription = this.notificationService.data$.subscribe(
-      (notifications: CdNotification[]) => {
+    this.subs.add(
+      this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
         this.cdRef.detectChanges();
-      }
+      })
     );
 
-    this.sidebarSubscription = this.notificationService.sidebarSubject.subscribe((forceClose) => {
-      if (forceClose) {
-        this.isSidebarOpened = false;
-      } else {
-        this.isSidebarOpened = !this.isSidebarOpened;
-      }
+    this.subs.add(
+      this.notificationService.sidebarSubject.subscribe((forceClose) => {
+        if (forceClose) {
+          this.isSidebarOpened = false;
+        } else {
+          this.isSidebarOpened = !this.isSidebarOpened;
+        }
 
-      window.clearTimeout(this.timeout);
-      this.timeout = window.setTimeout(() => {
-        this.cdRef.detectChanges();
-      }, 0);
-    });
+        window.clearTimeout(this.timeout);
+        this.timeout = window.setTimeout(() => {
+          this.cdRef.detectChanges();
+        }, 0);
+      })
+    );
 
-    this.summaryService.subscribe((data: any) => {
-      if (!data) {
-        return;
-      }
-      this._handleTasks(data.executing_tasks);
+    this.subs.add(
+      this.summaryService.subscribe((summary) => {
+        this._handleTasks(summary.executing_tasks);
 
-      this.mutex.acquire().then((release) => {
-        _.filter(
-          data.finished_tasks,
-          (task: FinishedTask) => !this.last_task || moment(task.end_time).isAfter(this.last_task)
-        ).forEach((task) => {
-          const config = this.notificationService.finishedTaskToNotification(task, task.success);
-          const notification = new CdNotification(config);
-          notification.timestamp = task.end_time;
-          notification.duration = task.duration;
+        this.mutex.acquire().then((release) => {
+          _.filter(
+            summary.finished_tasks,
+            (task: FinishedTask) => !this.last_task || moment(task.end_time).isAfter(this.last_task)
+          ).forEach((task) => {
+            const config = this.notificationService.finishedTaskToNotification(task, task.success);
+            const notification = new CdNotification(config);
+            notification.timestamp = task.end_time;
+            notification.duration = task.duration;
 
-          if (!this.last_task || moment(task.end_time).isAfter(this.last_task)) {
-            this.last_task = task.end_time;
-            window.localStorage.setItem('last_task', this.last_task);
-          }
+            if (!this.last_task || moment(task.end_time).isAfter(this.last_task)) {
+              this.last_task = task.end_time;
+              window.localStorage.setItem('last_task', this.last_task);
+            }
 
-          this.notificationService.save(notification);
+            this.notificationService.save(notification);
+          });
+
+          this.cdRef.detectChanges();
+
+          release();
         });
-
-        this.cdRef.detectChanges();
-
-        release();
-      });
-    });
+      })
+    );
   }
 
   _handleTasks(executingTasks: ExecutingTask[]) {

@@ -1,5 +1,5 @@
 add_executable(crimson-osd
-  chained_dispatchers.cc
+  backfill_state.cc
   ec_backend.cc
   heartbeat.cc
   main.cc
@@ -18,22 +18,35 @@ add_executable(crimson-osd
   osd_operations/peering_event.cc
   osd_operations/pg_advance_map.cc
   osd_operations/replicated_request.cc
+  osd_operations/background_recovery.cc
+  osd_operations/recovery_subrequest.cc
+  pg_recovery.cc
+  recovery_backend.cc
+  replicated_recovery_backend.cc
+  scheduler/scheduler.cc
+  scheduler/mclock_scheduler.cc
   osdmap_gate.cc
   pg_map.cc
   objclass.cc
   ${PROJECT_SOURCE_DIR}/src/objclass/class_api.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGStateUtils.cc
   ${PROJECT_SOURCE_DIR}/src/osd/MissingLoc.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGLog.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
   watch.cc
   )
 target_link_libraries(crimson-osd
-  crimson-common crimson-os crimson fmt::fmt)
+  crimson-common
+  crimson-os
+  crimson
+  fmt::fmt
+  dmclock::dmclock)
 set_target_properties(crimson-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS crimson-osd DESTINATION bin)

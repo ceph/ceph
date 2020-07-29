@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>Discovery Authentication</ng-container>
 
@@ -122,16 +122,14 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submitAction()"
-                            [form]="discoveryForm"
-                            *ngIf="hasPermission"
-                            i18n>Submit</cd-submit-button>
-          <cd-back-button [back]="bsModalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-submit-button (submitAction)="submitAction()"
+                          [form]="discoveryForm"
+                          *ngIf="hasPermission"
+                          i18n>Submit</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

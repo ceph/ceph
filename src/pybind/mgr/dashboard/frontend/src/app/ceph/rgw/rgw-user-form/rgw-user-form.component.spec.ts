@@ -4,12 +4,11 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -33,16 +32,15 @@ describe('RgwUserFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      TooltipModule.forRoot()
-    ],
-    providers: [BsModalService, i18nProviders]
+      NgbTooltipModule
+    ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    rgwUserService = TestBed.get(RgwUserService);
+    rgwUserService = TestBed.inject(RgwUserService);
     formHelper = new FormHelper(component.userForm);
   });
 
@@ -271,8 +269,8 @@ describe('RgwUserFormComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 
@@ -296,7 +294,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Created Object Gateway user ""'
+        `Created Object Gateway user 'null'`
       );
     });
 
@@ -307,7 +305,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway user ""'
+        `Updated Object Gateway user 'null'`
       );
     });
   });

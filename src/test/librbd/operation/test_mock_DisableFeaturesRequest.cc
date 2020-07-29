@@ -7,12 +7,14 @@
 #include "test/librbd/mock/MockJournalPolicy.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/object_map/RemoveRequest.h"
 #include "librbd/operation/DisableFeaturesRequest.h"
 #include "gmock/gmock.h"
@@ -28,6 +30,12 @@ struct MockOperationImageCtx : public MockImageCtx {
 };
 
 } // anonymous namespace
+
+template<>
+struct Journal<MockOperationImageCtx> {
+  static void get_work_queue(CephContext*, MockContextWQ**) {
+  }
+};
 
 namespace image {
 
@@ -86,6 +94,11 @@ class StandardPolicy<MockOperationImageCtx> : public MockJournalPolicy {
 public:
   StandardPolicy(MockOperationImageCtx* image_ctx) {
   }
+};
+
+template <>
+struct TypeTraits<MockOperationImageCtx> {
+  typedef librbd::MockContextWQ ContextWQ;
 };
 
 } // namespace journal
@@ -204,12 +217,12 @@ public:
   }
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes()).Times(1);
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes()).Times(1);
   }
 
   void expect_verify_lock_ownership(MockOperationImageCtx &mock_image_ctx) {

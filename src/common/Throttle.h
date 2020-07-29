@@ -117,9 +117,6 @@ public:
    */
   void reset();
 
-  bool should_wait(int64_t c) const {
-    return _should_wait(c);
-  }
   void reset_max(int64_t m) {
     std::lock_guard l(lock);
     _reset_max(m);
@@ -339,13 +336,15 @@ class TokenBucketThrottle {
 
     uint64_t remain;
     uint64_t max;
+    uint64_t capacity;
+    uint64_t available;
 
     Bucket(CephContext *cct, const std::string &name, uint64_t m)
-      : cct(cct), name(name), remain(m), max(m) {}
+      : cct(cct), name(name), remain(m), max(m), capacity(m), available(m) {}
 
     uint64_t get(uint64_t c);
-    uint64_t put(uint64_t c);
-    void set_max(uint64_t m);
+    uint64_t put(uint64_t tokens, double burst_ratio);
+    void set_max(uint64_t max, uint64_t burst_seconds);
   };
 
   struct Blocker {
@@ -359,8 +358,8 @@ class TokenBucketThrottle {
   CephContext *m_cct;
   const std::string m_name;
   Bucket m_throttle;
-  uint64_t m_avg = 0;
   uint64_t m_burst = 0;
+  uint64_t m_avg = 0;
   SafeTimer *m_timer;
   ceph::mutex *m_timer_lock;
   Context *m_token_ctx = nullptr;
@@ -408,7 +407,7 @@ class TokenBucketThrottle {
 
 public:
   TokenBucketThrottle(CephContext *cct, const std::string &name,
-                      uint64_t capacity, uint64_t avg,
+                      uint64_t burst, uint64_t avg,
                       SafeTimer *timer, ceph::mutex *timer_lock);
 
   ~TokenBucketThrottle();
@@ -417,16 +416,17 @@ public:
     return m_name;
   }
 
-  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
-  void add_blocker(uint64_t c, T *handler, I *item, uint64_t flag) {
-    Context *ctx = new LambdaContext([handler, item, flag](int r) {
-      (handler->*MF)(r, item, flag);
+  template <typename T, typename MF, typename I>
+  void add_blocker(uint64_t c, T&& t, MF&& mf, I&& item, uint64_t flag) {
+    auto ctx = new LambdaContext(
+      [t, mf, item=std::forward<I>(item), flag](int) mutable {
+        (t->*mf)(std::forward<I>(item), flag);
       });
     m_blockers.emplace_back(c, ctx);
   }
 
-  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
-  bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
+  template <typename T, typename MF, typename I>
+  bool get(uint64_t c, T&& t, MF&& mf, I&& item, uint64_t flag) {
     bool wait = false;
     uint64_t got = 0;
     std::lock_guard lock(m_lock);
@@ -444,13 +444,15 @@ public:
       }
     }
 
-    if (wait)
-      add_blocker<T, I, MF>(c - got, handler, item, flag);
+    if (wait) {
+      add_blocker(c - got, std::forward<T>(t), std::forward<MF>(mf),
+                  std::forward<I>(item), flag);
+    }
 
     return wait;
   }
 
-  int set_limit(uint64_t average, uint64_t burst);
+  int set_limit(uint64_t average, uint64_t burst, uint64_t burst_seconds);
   void set_schedule_tick_min(uint64_t tick);
 
 private:

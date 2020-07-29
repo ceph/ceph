@@ -17,11 +17,11 @@ import {
 
 import {
   DatatableComponent,
+  getterForProp,
   SortDirection,
   SortPropDir,
   TableColumnProp
 } from '@swimlane/ngx-datatable';
-import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
 import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
@@ -61,6 +61,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   badgeTpl: TemplateRef<any>;
   @ViewChild('mapTpl', { static: true })
   mapTpl: TemplateRef<any>;
+  @ViewChild('truncateTpl', { static: true })
+  truncateTpl: TemplateRef<any>;
+  @ViewChild('rowDetailsTpl', { static: true })
+  rowDetailsTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -92,11 +96,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Page size to show. Set to 0 to show unlimited number of rows.
   @Input()
   limit? = 10;
+  // Has the row details?
+  @Input()
+  hasDetails = false;
 
   /**
    * Auto reload time in ms - per default every 5s
    * You can set it to 0, undefined or false to disable the auto reload feature in order to
    * trigger 'fetchData' if the reload button is clicked.
+   * You can set it to a negative number to, on top of disabling the auto reload,
+   * prevent triggering fetchData when initializing the table.
    */
   @Input()
   autoReload: any = 5000;
@@ -116,6 +125,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // By default selected item details will be updated on table refresh, if data has changed
   @Input()
   updateSelectionOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
+  // By default expanded item details will be updated on table refresh, if data has changed
+  @Input()
+  updateExpandedOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
 
   @Input()
   autoSave = true;
@@ -155,6 +167,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Output()
   updateSelection = new EventEmitter();
 
+  @Output()
+  setExpandedRow = new EventEmitter();
+
   /**
    * This should be defined if you need access to the applied column filters.
    *
@@ -170,6 +185,17 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   selection = new CdTableSelection();
 
+  /**
+   * Use this variable to access the expanded row
+   */
+  expanded: any = undefined;
+
+  /**
+   * To prevent making changes to the original columns list, that might change
+   * how the table is renderer a second time, we now clone that list into a
+   * local variable and only use the clone.
+   */
+  localColumns: CdTableColumn[];
   tableColumns: CdTableColumn[];
   icons = Icons;
   cellTemplates: {
@@ -217,26 +243,29 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   ngOnInit() {
+    this.localColumns = _.clone(this.columns);
+
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
-    this.table.element.addEventListener('mouseenter', (e) => e.stopPropagation(), true);
+    this.table.element.addEventListener('mouseenter', (e) => e.stopPropagation());
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
-      const exists = _.findIndex(this.columns, ['prop', this.identifier]) !== -1;
+      const exists = _.findIndex(this.localColumns, ['prop', this.identifier]) !== -1;
       // Auto-build the sorting configuration. If the specified identifier doesn't exist,
       // then use the property of the first column.
       this.sorts = this.createSortingDefinition(
-        exists ? this.identifier : this.columns[0].prop + ''
+        exists ? this.identifier : this.localColumns[0].prop + ''
       );
       // If the specified identifier doesn't exist and it is not forced to use it anyway,
       // then use the property of the first column.
       if (!exists && !this.forceIdentifier) {
-        this.identifier = this.columns[0].prop + '';
+        this.identifier = this.localColumns[0].prop + '';
       }
     }
+
     this.initUserConfig();
-    this.columns.forEach((c) => {
+    this.localColumns.forEach((c) => {
       if (c.cellTransformation) {
         c.cellTemplate = this.cellTemplates[c.cellTransformation];
       }
@@ -248,10 +277,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       }
     });
 
+    this.initExpandCollapseColumn(); // If rows have details, add a column to expand or collapse the rows
     this.initCheckboxColumn();
     this.filterHiddenColumns();
     this.initColumnFilters();
     this.updateColumnFilterOptions();
+    // Notify all subscribers to reset their current selection.
+    this.updateSelection.emit(new CdTableSelection());
     // Load the data table content every N ms or at least once.
     // Force showing the loading indicator if there are subscribers to the fetchData
     // event. This is necessary because it has been set to False in useData() when
@@ -267,14 +299,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
           });
         });
       });
-    } else {
+    } else if (!this.autoReload) {
       this.reloadData();
+    } else {
+      this.useData();
     }
   }
 
   initUserConfig() {
     if (this.autoSave) {
-      this.tableName = this._calculateUniqueTableName(this.columns);
+      this.tableName = this._calculateUniqueTableName(this.localColumns);
       this._loadUserConfig();
       this._initUserConfigAutoSave();
     }
@@ -287,7 +321,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.userConfig.columns) {
       this.updateUserColumns();
     } else {
-      this.columns.forEach((c, i) => {
+      this.localColumns.forEach((c, i) => {
         c.isHidden = this.userConfig.columns[i].isHidden;
       });
     }
@@ -321,7 +355,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   _initUserConfigAutoSave() {
-    const source: Observable<any> = Observable.create(this._initUserConfigProxy.bind(this));
+    const source: Observable<any> = new Observable(this._initUserConfigProxy.bind(this));
     this.saveSubscriber = source.subscribe(this._saveUserConfig.bind(this));
   }
 
@@ -340,7 +374,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   updateUserColumns() {
-    this.userConfig.columns = this.columns.map((c) => ({
+    this.userConfig.columns = this.localColumns.map((c) => ({
       prop: c.prop,
       name: c.name,
       isHidden: !!c.isHidden
@@ -352,7 +386,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   initCheckboxColumn() {
     if (this.selectionType === 'multiClick') {
-      this.columns.unshift({
+      this.localColumns.unshift({
         prop: undefined,
         resizeable: false,
         sortable: false,
@@ -365,12 +399,31 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
+  /**
+   * Add a column to expand and collapse the table row if it 'hasDetails'
+   */
+  initExpandCollapseColumn() {
+    if (this.hasDetails) {
+      this.localColumns.unshift({
+        prop: undefined,
+        resizeable: false,
+        sortable: false,
+        draggable: false,
+        isHidden: false,
+        canAutoResize: false,
+        cellClass: 'cd-datatable-expand-collapse',
+        width: 40,
+        cellTemplate: this.rowDetailsTpl
+      });
+    }
+  }
+
   filterHiddenColumns() {
-    this.tableColumns = this.columns.filter((c) => !c.isHidden);
+    this.tableColumns = this.localColumns.filter((c) => !c.isHidden);
   }
 
   initColumnFilters() {
-    let filterableColumns = _.filter(this.columns, { filterable: true });
+    let filterableColumns = _.filter(this.localColumns, { filterable: true });
     filterableColumns = [...filterableColumns, ...this.extraFilterableColumns];
     this.columnFilters = filterableColumns.map((col: CdTableColumn) => {
       return {
@@ -513,6 +566,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.classAdding = this.classAddingTpl;
     this.cellTemplates.badge = this.badgeTpl;
     this.cellTemplates.map = this.mapTpl;
+    this.cellTemplates.truncate = this.truncateTpl;
   }
 
   useCustomClass(value: any): string {
@@ -580,6 +634,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.updateFilter();
     this.reset();
     this.updateSelected();
+    this.updateExpanded();
   }
 
   /**
@@ -619,19 +674,35 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.onSelect(this.selection);
   }
 
+  updateExpanded() {
+    if (_.isUndefined(this.expanded) || this.updateExpandedOnRefresh === 'never') {
+      return;
+    }
+
+    const expandedId = this.expanded[this.identifier];
+    const newExpanded = _.find(this.data, (row) => expandedId === row[this.identifier]);
+
+    if (this.updateExpandedOnRefresh === 'onChange' && _.isEqual(this.expanded, newExpanded)) {
+      return;
+    }
+
+    this.expanded = newExpanded;
+    this.setExpandedRow.emit(newExpanded);
+  }
+
   onSelect($event: any) {
     this.selection.selected = $event['selected'];
     this.updateSelection.emit(_.clone(this.selection));
   }
 
-  toggleColumn($event: any) {
-    const prop: TableColumnProp = $event.target.name;
-    const hide = !$event.target.checked;
+  toggleColumn(column: CdTableColumn) {
+    const prop: TableColumnProp = column.prop;
+    const hide = !column.isHidden;
     if (hide && this.tableColumns.length === 1) {
-      $event.target.checked = true;
+      column.isHidden = true;
       return;
     }
-    _.find(this.columns, (c: CdTableColumn) => c.prop === prop).isHidden = hide;
+    _.find(this.localColumns, (c: CdTableColumn) => c.prop === prop).isHidden = hide;
     this.updateColumns();
   }
 
@@ -675,8 +746,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   updateFilter() {
     let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
 
-    if (this.search.length > 0) {
-      const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
+    if (this.search.length > 0 && rows) {
+      const columns = this.localColumns.filter(
+        (c) => c.cellTransformation !== CellTemplate.sparkline
+      );
       // update the rows
       rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
       // Whenever the filter changes, always go back to the first page
@@ -690,10 +763,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (currentSearch.length === 0 || data.length === 0) {
       return data;
     }
-    const searchTerms: string[] = currentSearch
-      .pop()
-      .replace(/\+/g, ' ')
-      .split(':');
+    const searchTerms: string[] = currentSearch.pop().replace(/\+/g, ' ').split(':');
     const columnsClone = [...columns];
     if (searchTerms.length === 2) {
       columns = columnsClone.filter((c) => c.name.toLowerCase().indexOf(searchTerms[0]) !== -1);
@@ -746,5 +816,19 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         clickable: !_.isUndefined(this.selectionType)
       };
     };
+  }
+
+  toggleExpandRow(row: any, isExpanded: boolean) {
+    if (!isExpanded) {
+      // If current row isn't expanded, collapse others
+      this.expanded = row;
+      this.table.rowDetail.collapseAllRows();
+      this.setExpandedRow.emit(row);
+    } else {
+      // If all rows are closed, emit undefined
+      this.expanded = undefined;
+      this.setExpandedRow.emit(undefined);
+    }
+    this.table.rowDetail.toggleExpandRow(row);
   }
 }

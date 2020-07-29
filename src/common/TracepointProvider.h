@@ -7,7 +7,7 @@
 #include "common/ceph_context.h"
 #include "common/config_obs.h"
 #include "common/ceph_mutex.h"
-#include <dlfcn.h>
+#include "include/dlfcn_compat.h"
 
 class TracepointProvider : public md_config_obs_t {
 public:

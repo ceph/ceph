@@ -7,8 +7,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/type_helpers.h"
-
-class MOSDOp;
+#include "messages/MOSDOp.h"
 
 namespace crimson::osd {
 class PG;
@@ -38,6 +37,9 @@ public:
     OrderedPipelinePhase wait_for_active = {
       "ClientRequest::PGPipeline::wait_for_active"
     };
+    OrderedPipelinePhase recover_missing = {
+      "ClientRequest::PGPipeline::recover_missing"
+    };
     OrderedPipelinePhase get_obc = {
       "ClientRequest::PGPipeline::get_obc"
     };
@@ -59,9 +61,9 @@ public:
 
 private:
   seastar::future<> process_pg_op(
-    PG &pg);
+    Ref<PG> &pg);
   seastar::future<> process_op(
-    PG &pg);
+    Ref<PG> &pg);
   bool is_pg_op() const;
 
   ConnectionPipeline &cp();

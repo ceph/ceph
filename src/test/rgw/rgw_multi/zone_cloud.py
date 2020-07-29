@@ -11,12 +11,8 @@ import datetime
 import re
 
 from nose.tools import eq_ as eq
-try:
-    from itertools import izip_longest as zip_longest  # type: ignore
-except ImportError:
-    from itertools import zip_longest
-
-from six.moves.urllib.parse import urlparse
+from itertools import zip_longest # type: ignore
+from urllib.parse import urlparse
 
 from .multisite import *
 from .tools import *
@@ -61,7 +57,7 @@ def check_object_eq(k1, k2, check_extra = True):
 
 def make_request(conn, method, bucket, key, query_args, headers):
     result = conn.make_request(method, bucket=bucket, key=key, query_args=query_args, headers=headers)
-    if result.status / 100 != 2:
+    if result.status // 100 != 2:
         raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
     return result
 
@@ -129,8 +125,8 @@ class CloudKey:
         self.content_language = k.content_language
 
 
-    def get_contents_as_string(self):
-        r = self.key.get_contents_as_string()
+    def get_contents_as_string(self, encoding=None):
+        r = self.key.get_contents_as_string(encoding=encoding)
 
         # the previous call changed the status of the source object, as it loaded
         # its metadata

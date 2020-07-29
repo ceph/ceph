@@ -152,7 +152,7 @@ class TestStrays(CephFSTestCase):
             os.mkdir(os.path.join(mount_path, subdir))
             for i in range(0, file_multiplier):
                 for size in range(0, {size_range}*size_unit, size_unit):
-                    filename = "{{0}}_{{1}}.bin".format(i, size / size_unit)
+                    filename = "{{0}}_{{1}}.bin".format(i, size // size_unit)
                     with open(os.path.join(mount_path, subdir, filename), 'w') as f:
                         f.write(size * 'x')
         """.format(
@@ -237,7 +237,7 @@ class TestStrays(CephFSTestCase):
         # insanely fast such that the deletions all pass before we have polled the
         # statistics.
         if throttle_type == self.OPS_THROTTLE:
-            if ops_high_water < mds_max_purge_ops / 2:
+            if ops_high_water < mds_max_purge_ops // 2:
                 raise RuntimeError("Ops in flight high water is unexpectedly low ({0} / {1})".format(
                     ops_high_water, mds_max_purge_ops
                 ))
@@ -248,7 +248,7 @@ class TestStrays(CephFSTestCase):
             # particularly large file/directory.
             self.assertLessEqual(ops_high_water, mds_max_purge_ops+64)
         elif throttle_type == self.FILES_THROTTLE:
-            if files_high_water < mds_max_purge_files / 2:
+            if files_high_water < mds_max_purge_files // 2:
                 raise RuntimeError("Files in flight high water is unexpectedly low ({0} / {1})".format(
                     files_high_water, mds_max_purge_files
                 ))
@@ -373,7 +373,7 @@ class TestStrays(CephFSTestCase):
         self.fs.mds_asok(['flush', 'journal'])
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # Unlink file_a
         self.mount_a.run_shell(["rm", "-f", "dir_1/file_a"])
@@ -517,34 +517,16 @@ class TestStrays(CephFSTestCase):
 
         return rank_0_id, rank_1_id
 
-    def _force_migrate(self, to_id, path, watch_ino):
+    def _force_migrate(self, path, rank=1):
         """
         :param to_id: MDS id to move it to
         :param path: Filesystem path (string) to move
         :param watch_ino: Inode number to look for at destination to confirm move
         :return: None
         """
-        self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", path])
-
-        # Poll the MDS cache dump to watch for the export completing
-        migrated = False
-        migrate_timeout = 60
-        migrate_elapsed = 0
-        while not migrated:
-            data = self.fs.mds_asok(["dump", "cache"], to_id)
-            for inode_data in data:
-                if inode_data['ino'] == watch_ino:
-                    log.debug("Found ino in cache: {0}".format(json.dumps(inode_data, indent=2)))
-                    if inode_data['is_auth'] is True:
-                        migrated = True
-                    break
-
-            if not migrated:
-                if migrate_elapsed > migrate_timeout:
-                    raise RuntimeError("Migration hasn't happened after {0}s!".format(migrate_elapsed))
-                else:
-                    migrate_elapsed += 1
-                    time.sleep(1)
+        self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", str(rank), path])
+        rpath = "/"+path
+        self._wait_subtrees([(rpath, rank)], rank=rank, path=rpath)
 
     def _is_stopped(self, rank):
         mds_map = self.fs.get_mds_map()
@@ -565,8 +547,7 @@ class TestStrays(CephFSTestCase):
 
         self.mount_a.create_n_files("delete_me/file", file_count)
 
-        self._force_migrate(rank_1_id, "delete_me",
-                            self.mount_a.path_to_ino("delete_me/file_0"))
+        self._force_migrate("delete_me")
 
         self.mount_a.run_shell(["rm", "-rf", Raw("delete_me/*")])
         self.mount_a.umount_wait()
@@ -610,26 +591,21 @@ class TestStrays(CephFSTestCase):
 
         # Create a non-purgeable stray in a ~mds1 stray directory
         # by doing a hard link and deleting the original file
-        self.mount_a.run_shell(["mkdir", "dir_1", "dir_2"])
-        self.mount_a.run_shell(["touch", "dir_1/original"])
-        self.mount_a.run_shell(["ln", "dir_1/original", "dir_2/linkto"])
+        self.mount_a.run_shell_payload("""
+mkdir dir_1 dir_2
+touch dir_1/original
+ln dir_1/original dir_2/linkto
+""")
 
-        self._force_migrate(rank_1_id, "dir_1",
-                            self.mount_a.path_to_ino("dir_1/original"))
+        self._force_migrate("dir_1")
+        self._force_migrate("dir_2", rank=0)
 
         # empty mds cache. otherwise mds reintegrates stray when unlink finishes
         self.mount_a.umount_wait()
-        self.fs.mds_asok(['flush', 'journal'], rank_0_id)
         self.fs.mds_asok(['flush', 'journal'], rank_1_id)
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
+        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
 
-        active_mds_names = self.fs.get_active_names()
-        rank_0_id = active_mds_names[0]
-        rank_1_id = active_mds_names[1]
-
-        self.mount_a.mount()
-
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
         self.mount_a.umount_wait()
 
@@ -772,7 +748,7 @@ class TestStrays(CephFSTestCase):
         # zero, but there's actually still a stray, so at the very
         # least the StrayManager stats code is slightly off
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # See that the data from the snapshotted revision of the file is still present
         # and correct
@@ -873,8 +849,7 @@ class TestStrays(CephFSTestCase):
         # remount+flush (release client caps)
         self.mount_a.umount_wait()
         self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # Create 50% more files than the current fragment limit
         self.mount_a.run_python(dedent("""
@@ -956,8 +931,7 @@ class TestStrays(CephFSTestCase):
 
         self.mount_a.create_n_files("delete_me/file", file_count)
 
-        self._force_migrate(rank_1_id, "delete_me",
-                            self.mount_a.path_to_ino("delete_me/file_0"))
+        self._force_migrate("delete_me")
 
         begin = datetime.datetime.now()
         self.mount_a.run_shell(["rm", "-rf", Raw("delete_me/*")])
@@ -970,4 +944,3 @@ class TestStrays(CephFSTestCase):
 
         duration = (end - begin).total_seconds()
         self.assertLess(duration, (file_count * tick_period) * 0.25)
-

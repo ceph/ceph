@@ -28,11 +28,11 @@ and your cluster is healthy.
 
 To upgrade (or downgrade) to a specific release::
 
-  # ceph orch upgrade start --version <version>
+  # ceph orch upgrade start --ceph-version <version>
 
 For example, to upgrade to v15.2.1::
 
-  # ceph orch upgrade start --version 15.2.1
+  # ceph orch upgrade start --ceph-version 15.2.1
 
 
 Monitoring the upgrade
@@ -99,7 +99,7 @@ one or more hosts in the cluster.
 You can cancel the existing upgrade and specify a different target version with::
 
   # ceph orch upgrade stop
-  # ceph orch upgrade start --version <version>
+  # ceph orch upgrade start --ceph-version <version>
 
 
 Using customized container images

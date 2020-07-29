@@ -9,7 +9,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/image/RefreshParentRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -108,7 +108,7 @@ void SetSnapRequest<I>::send_block_writes() {
     klass, &klass::handle_block_writes>(this);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  m_image_ctx.io_work_queue->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx);
 }
 
 template <typename I>
@@ -350,7 +350,7 @@ int SetSnapRequest<I>::apply() {
 template <typename I>
 void SetSnapRequest<I>::finalize() {
   if (m_writes_blocked) {
-    m_image_ctx.io_work_queue->unblock_writes();
+    m_image_ctx.io_image_dispatcher->unblock_writes();
     m_writes_blocked = false;
   }
 }

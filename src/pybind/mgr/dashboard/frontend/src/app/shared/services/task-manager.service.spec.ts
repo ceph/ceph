@@ -35,16 +35,13 @@ describe('TaskManagerService', () => {
   let summaryService: any;
   let called: boolean;
 
-  configureTestBed(
-    {
-      providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
-    },
-    true
-  );
+  configureTestBed({
+    providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
+  });
 
   beforeEach(() => {
-    taskManagerService = TestBed.get(TaskManagerService);
-    summaryService = TestBed.get(SummaryService);
+    taskManagerService = TestBed.inject(TaskManagerService);
+    summaryService = TestBed.inject(SummaryService);
     called = false;
     taskManagerService.subscribe('foo', {}, () => (called = true));
   });
@@ -57,6 +54,7 @@ describe('TaskManagerService', () => {
     expect(taskManagerService.subscriptions.length).toBe(1);
     summaryService.refresh();
     tick();
+    taskManagerService.init(summaryService);
     expect(called).toEqual(true);
     expect(taskManagerService.subscriptions).toEqual([]);
   }));

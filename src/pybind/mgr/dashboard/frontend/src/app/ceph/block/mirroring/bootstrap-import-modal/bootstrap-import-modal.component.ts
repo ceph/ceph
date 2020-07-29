@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { concat, forkJoin, Observable, Subscription } from 'rxjs';
 import { last } from 'rxjs/operators';
 
@@ -32,7 +32,7 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -62,11 +62,7 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       this.importBootstrapForm.get('siteName').setValue(response.site_name);
     });
 
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
-      if (!data) {
-        return;
-      }
-
+    this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       const pools = data.content_data.pools;
       this.pools = pools.reduce((acc: any[], pool: Pool) => {
         acc.push({
@@ -178,9 +174,12 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       task: new FinishedTask('rbd/mirroring/bootstrap/import', {}),
       call: apiActionsObs
     });
-    taskObs.subscribe(undefined, finishHandler, () => {
-      finishHandler();
-      this.modalRef.hide();
+    taskObs.subscribe({
+      error: finishHandler,
+      complete: () => {
+        finishHandler();
+        this.activeModal.close();
+      }
     });
   }
 }

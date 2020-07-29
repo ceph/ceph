@@ -7,11 +7,13 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/Operations.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/object_map/CreateRequest.h"
 #include "librbd/operation/EnableFeaturesRequest.h"
 #include "gmock/gmock.h"
@@ -28,6 +30,12 @@ struct MockOperationImageCtx : public MockImageCtx {
 };
 
 } // anonymous namespace
+
+template<>
+struct Journal<MockOperationImageCtx> {
+  static void get_work_queue(CephContext*, MockContextWQ**) {
+  }
+};
 
 namespace image {
 
@@ -84,6 +92,11 @@ public:
 
 CreateRequest<MockOperationImageCtx> *CreateRequest<MockOperationImageCtx>::s_instance = nullptr;
 
+template <>
+struct TypeTraits<MockOperationImageCtx> {
+  typedef librbd::MockContextWQ ContextWQ;
+};
+
 } // namespace journal
 
 namespace mirror {
@@ -96,7 +109,8 @@ public:
 
   static EnableRequest *create(MockOperationImageCtx *image_ctx,
                                cls::rbd::MirrorImageMode mirror_image_mode,
-                               Context *on_finish) {
+                               const std::string& non_primary_global_image_id,
+                               bool image_clean, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -215,12 +229,12 @@ public:
   }
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes()).Times(1);
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes()).Times(1);
   }
 
   void expect_verify_lock_ownership(MockOperationImageCtx &mock_image_ctx) {

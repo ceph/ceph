@@ -392,11 +392,13 @@ public:
   void merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay);
 
   bool should_split() const {
-    return (int)get_frag_size() > g_conf()->mds_bal_split_size;
+    return g_conf()->mds_bal_split_size > 0 &&
+           (int)get_frag_size() > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
   bool should_merge() const {
-    return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
+    return get_frag() != frag_t() &&
+	   (int)get_frag_size() < g_conf()->mds_bal_merge_size;
   }
 
   mds_authority_t authority() const override;
@@ -644,12 +646,8 @@ protected:
       ceph::buffer::list &bl,
       int pos,
       const std::set<snapid_t> *snaps,
+      double rand_threshold,
       bool *force_dirty);
-
-  /**
-   * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
-   */
-  void _go_bad();
 
   /**
    * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)

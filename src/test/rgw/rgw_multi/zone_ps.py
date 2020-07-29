@@ -5,8 +5,8 @@ import hmac
 import hashlib
 import base64
 import xmltodict
-from six.moves import http_client
-from six.moves.urllib import parse as urlparse
+from http import client as http_client
+from urllib import parse as urlparse
 from time import gmtime, strftime
 from .multisite import Zone
 import boto3
@@ -72,7 +72,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     """
     url_params = ''
     if parameters is not None:
-        url_params = urllib.urlencode(parameters)
+        url_params = urlparse.urlencode(parameters)
         # remove 'None' from keys with no values
         url_params = url_params.replace('=None', '')
         url_params = '?' + url_params
@@ -82,9 +82,9 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     string_to_sign = method + '\n\n\n' + string_date + '\n' + resource
     if sign_parameters:
         string_to_sign += url_params
-    signature = base64.b64encode(hmac.new(conn.aws_secret_access_key,
+    signature = base64.b64encode(hmac.new(conn.aws_secret_access_key.encode('utf-8'),
                                           string_to_sign.encode('utf-8'),
-                                          hashlib.sha1).digest())
+                                          hashlib.sha1).digest()).decode('ascii')
     headers = {'Authorization': 'AWS '+conn.aws_access_key_id+':'+signature,
                'Date': string_date,
                'Host': conn.host+':'+str(conn.port)}
@@ -96,7 +96,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     data = response.read()
     status = response.status
     http_conn.close()
-    return data, status
+    return data.decode('utf-8'), status
 
 
 def print_connection_info(conn):
@@ -212,16 +212,16 @@ class PSTopicS3:
     def get_config(self):
         """get topic info"""
         parameters = {'Action': 'GetTopic', 'TopicArn': self.topic_arn}
-        body = urllib.urlencode(parameters)
+        body = urlparse.urlencode(parameters)
         string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
         content_type = 'application/x-www-form-urlencoded; charset=utf-8'
         resource = '/'
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
         log.debug('StringTosign: %s', string_to_sign) 
-        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
-                                     hashlib.sha1).digest())
+                                     hashlib.sha1).digest()).decode('ascii')
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),
@@ -254,16 +254,16 @@ class PSTopicS3:
         """list all topics"""
         # note that boto3 supports list_topics(), however, the result only show ARNs
         parameters = {'Action': 'ListTopics'}
-        body = urllib.urlencode(parameters)
+        body = urlparse.urlencode(parameters)
         string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
         content_type = 'application/x-www-form-urlencoded; charset=utf-8'
         resource = '/'
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
         log.debug('StringTosign: %s', string_to_sign) 
-        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
-                                     hashlib.sha1).digest())
+                                     hashlib.sha1).digest()).decode('ascii')
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),

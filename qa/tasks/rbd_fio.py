@@ -77,7 +77,7 @@ def get_ioengine_package_name(ioengine, remote):
 def run_rbd_map(remote, image, iodepth):
     iodepth = max(iodepth, 128)  # RBD_QUEUE_DEPTH_DEFAULT
     dev = remote.sh(['sudo', 'rbd', 'device', 'map', '-o',
-                     'queue_depth={}'.format(iodepth), image]).rstripg('\n')
+                     'queue_depth={}'.format(iodepth), image]).rstrip('\n')
     teuthology.sudo_write_file(
         remote,
         '/sys/block/{}/queue/nr_requests'.format(os.path.basename(dev)),
@@ -91,7 +91,7 @@ def run_fio(remote, config, rbd_test_dir):
     get the fio from github, generate binary, and use it to run on
     the generated fio config file
     """
-    fio_config=NamedTemporaryFile(prefix='fio_rbd_', dir='/tmp/', delete=False)
+    fio_config=NamedTemporaryFile(mode='w', prefix='fio_rbd_', dir='/tmp/', delete=False)
     fio_config.write('[global]\n')
     if config.get('io-engine'):
         ioengine=config['io-engine']
@@ -157,6 +157,8 @@ def run_fio(remote, config, rbd_test_dir):
                         '--image', rbd_name,
                         '--image-format', '{f}'.format(f=frmt)]
            map(lambda x: create_args.extend(['--image-feature', x]), feature)
+           if config.get('thick-provision'):
+               create_args.append('--thick-provision')
            remote.run(args=create_args)
            remote.run(args=['rbd', 'info', rbd_name])
            if ioengine != 'rbd':

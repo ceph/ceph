@@ -53,7 +53,7 @@
   <div class="is-invalid"
        *ngIf="data.length === selectionLimit">
     <span class="form-text text-muted text-center text-warning"
-          [tooltip]="messages.selectionLimit.tooltip"
+          [ngbTooltip]="messages.selectionLimit.tooltip"
           *ngIf="data.length === selectionLimit">
       {{ messages.selectionLimit.text }}
     </span>
@@ -62,20 +62,17 @@
 
 <a class="select-menu-edit float-left"
    [ngClass]="elemClass"
-   [popover]="popTemplate"
-   placement="bottom"
-   container="body"
-   outsideClick="true"
-   *ngIf="options.length > 0">
+   [ngbPopover]="popTemplate"
+   *ngIf="customBadges || options.length > 0">
   <ng-content></ng-content>
 </a>
 
 <span class="form-text text-muted float-left"
-      *ngIf="data.length === 0 && options.length > 0">
+      *ngIf="data.length === 0 && !(!customBadges && options.length === 0)">
   {{ messages.empty }}
 </span>
 
 <span class="form-text text-muted  float-left"
-      *ngIf="options.length === 0">
+      *ngIf="!customBadges && options.length === 0">
   {{ messages.noOptions }}
 </span>

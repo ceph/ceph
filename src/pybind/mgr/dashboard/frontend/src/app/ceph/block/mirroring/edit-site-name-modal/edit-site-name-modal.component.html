@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n
                 class="modal-title">Edit site name</ng-container>
 
@@ -30,15 +30,13 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="editSiteNameForm"
-                            (submitAction)="update()">Update</cd-submit-button>
-          <cd-back-button [back]="modalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-submit-button i18n
+                          [form]="editSiteNameForm"
+                          (submitAction)="update()">Update</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

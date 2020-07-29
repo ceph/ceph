@@ -20,15 +20,10 @@
 #include "common/ceph_context.h"
 #include "common/errno.h"
 #include "common/debug.h"
-
-#include <dlfcn.h>
+#include "include/dlfcn_compat.h"
 
 #define PLUGIN_PREFIX "libceph_"
-#ifdef __APPLE__
-#define PLUGIN_SUFFIX ".dylib"
-#else
-#define PLUGIN_SUFFIX ".so"
-#endif
+#define PLUGIN_SUFFIX SHARED_LIB_SUFFIX
 #define PLUGIN_INIT_FUNCTION "__ceph_plugin_init"
 #define PLUGIN_VERSION_FUNCTION "__ceph_plugin_version"
 

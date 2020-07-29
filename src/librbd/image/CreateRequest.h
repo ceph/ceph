@@ -13,13 +13,15 @@
 #include "librbd/ImageCtx.h"
 
 class Context;
-class ContextWQ;
 
 using librados::IoCtx;
 
 namespace journal { class Journaler; }
 
 namespace librbd {
+
+namespace asio { struct ContextWQ; }
+
 namespace image {
 
 template <typename ImageCtxT = ImageCtx>
@@ -29,13 +31,14 @@ public:
                                const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
-                               bool skip_mirror_enable,
+                               uint32_t create_flags,
                                cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               ContextWQ *op_work_queue, Context *on_finish) {
+                               asio::ContextWQ *op_work_queue,
+                               Context *on_finish) {
     return new CreateRequest(config, ioctx, image_name, image_id, size,
-                             image_options, skip_mirror_enable,
+                             image_options, create_flags,
                              mirror_image_mode, non_primary_global_image_id,
                              primary_mirror_uuid, op_work_queue, on_finish);
   }
@@ -91,11 +94,11 @@ private:
                 const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
-                bool skip_mirror_enable,
+                uint32_t create_flags,
                 cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
-                ContextWQ *op_work_queue, Context *on_finish);
+                asio::ContextWQ *op_work_queue, Context *on_finish);
 
   const ConfigProxy& m_config;
   IoCtx m_io_ctx;
@@ -112,18 +115,17 @@ private:
   std::string m_journal_pool;
   std::string m_data_pool;
   int64_t m_data_pool_id = -1;
-  bool m_skip_mirror_enable;
+  uint32_t m_create_flags;
   cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
   bool m_negotiate_features = false;
 
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   CephContext *m_cct;
   int m_r_saved = 0;  // used to return actual error after cleanup
-  bool m_force_non_primary;
   file_layout_t m_layout;
   std::string m_id_obj, m_header_obj, m_objmap_name;
 

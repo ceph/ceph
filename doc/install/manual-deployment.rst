@@ -18,6 +18,7 @@ OSD nodes.
 
 
 .. ditaa::
+
            /------------------\         /----------------\
            |    Admin Node    |         |     node1      |
            |                  +-------->+                |
@@ -156,7 +157,7 @@ The procedure is as follows:
 
 #. Create a keyring for your cluster and generate a monitor secret key. ::
 
-	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+	sudo ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
 
 
 #. Generate an administrator keyring, generate a ``client.admin`` user and add

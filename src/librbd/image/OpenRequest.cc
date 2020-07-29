@@ -6,10 +6,10 @@
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/PluginRegistry.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
-#include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -483,6 +483,7 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
       m_image_ctx->data_ctx.close();
     } else {
       m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+      m_image_ctx->rebuild_data_io_context();
     }
   } else {
     data_pool_id = m_image_ctx->md_ctx.get_id();
@@ -519,39 +520,31 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
     return nullptr;
   }
 
-  return send_parent_cache(result);
-}
-
-template <typename I>
-Context* OpenRequest<I>::send_parent_cache(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
-
-  bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
-    "rbd_parent_cache_enabled");
-
-  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
-    return send_init_cache(result);
-  }
-
-  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
-  using klass = OpenRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_parent_cache>(this);
-
-  parent_cache->init(ctx);
+  send_init_plugin_registry();
   return nullptr;
 }
 
 template <typename I>
-Context* OpenRequest<I>::handle_parent_cache(int* result) {
+void OpenRequest<I>::send_init_plugin_registry() {
+  CephContext *cct = m_image_ctx->cct;
+
+  auto plugins = m_image_ctx->config.template get_val<std::string>(
+    "rbd_plugins");
+  ldout(cct, 10) << __func__ << ": plugins=" << plugins << dendl;
+
+  auto ctx = create_context_callback<
+    OpenRequest<I>, &OpenRequest<I>::handle_init_plugin_registry>(this);
+  m_image_ctx->plugin_registry->init(plugins, ctx);
+}
+
+template <typename I>
+Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << "failed to parent cache " << dendl;
-    send_close_image(*result);
-    return nullptr;
+    lderr(cct) << "failed to initialize plugin registry: "
+               << cpp_strerror(*result) << dendl;
   }
 
   return send_init_cache(result);

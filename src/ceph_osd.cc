@@ -53,6 +53,15 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 
+using std::cerr;
+using std::cout;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
 namespace {
 
 TracepointProvider::Traits osd_tracepoint_traits("libosd_tp.so",
@@ -90,6 +99,8 @@ static void usage()
        << "  --convert-filestore\n"
        << "                    run any pending upgrade operations\n"
        << "  --flush-journal   flush all data out of journal\n"
+       << "  --osdspec-affinity\n"
+       << "                    set affinity to an osdspec\n"
        << "  --dump-journal    dump all data of journal\n"
        << "  --mkjournal       initialize a new journal\n"
        << "  --check-wants-journal\n"
@@ -148,6 +159,7 @@ int main(int argc, const char **argv)
   bool get_device_fsid = false;
   string device_path;
   std::string dump_pg_log;
+  std::string osdspec_affinity;
 
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -155,6 +167,8 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--osdspec-affinity", (char*)NULL)) {
+     osdspec_affinity = val;
     } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
       mkjournal = true;
     } else if (ceph_argparse_flag(args, i, "--check-allows-journal", (char*)NULL)) {
@@ -241,7 +255,7 @@ int main(int argc, const char **argv)
 	try {
 	  decode(e, p);
 	}
-	catch (const buffer::error &e) {
+	catch (const ceph::buffer::error &e) {
 	  derr << "failed to decode LogEntry at offset " << pos << dendl;
 	  forker.exit(1);
 	}
@@ -347,6 +361,7 @@ int main(int argc, const char **argv)
 	derr << "created new key in keyring " << keyring_path << dendl;
     }
   }
+
   if (mkfs) {
     common_init_finish(g_ceph_context);
 
@@ -356,7 +371,7 @@ int main(int argc, const char **argv)
     }
 
     int err = OSD::mkfs(g_ceph_context, store, g_conf().get_val<uuid_d>("fsid"),
-                        whoami);
+                        whoami, osdspec_affinity);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
 	   << data_path << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -441,7 +456,6 @@ flushjournal_out:
 	 << dendl;
     forker.exit(0);
   }
-
 
   if (convertfilestore) {
     int err = store->mount();
@@ -568,6 +582,9 @@ flushjournal_out:
     g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
   boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes", message_size));
+  uint64_t message_cap = g_conf().get_val<uint64_t>("osd_client_message_cap");
+  boost::scoped_ptr<Throttle> client_msg_throttler(
+    new Throttle(g_ceph_context, "osd_client_messages", message_cap));
 
   // All feature bits 0 - 34 should be present from dumpling v0.67 forward
   uint64_t osd_required =
@@ -578,7 +595,7 @@ flushjournal_out:
   ms_public->set_default_policy(Messenger::Policy::stateless_registered_server(0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				   client_byte_throttler.get(),
-				   nullptr);
+				   client_msg_throttler.get());
   ms_public->set_policy(entity_name_t::TYPE_MON,
                         Messenger::Policy::lossy_client(osd_required));
   ms_public->set_policy(entity_name_t::TYPE_MGR,
@@ -661,7 +678,10 @@ flushjournal_out:
 
   srand(time(NULL) + getpid());
 
-  MonClient mc(g_ceph_context);
+  ceph::async::io_context_pool poolctx(
+    cct->_conf.get_val<std::uint64_t>("osd_asio_thread_count"));
+
+  MonClient mc(g_ceph_context, poolctx);
   if (mc.build_initial_monmap() < 0)
     return -1;
   global_init_chdir(g_ceph_context);
@@ -682,7 +702,8 @@ flushjournal_out:
 		   ms_objecter,
 		   &mc,
 		   data_path,
-		   journal_path);
+		   journal_path,
+		   poolctx);
 
   int err = osdptr->pre_init();
   if (err < 0) {
@@ -737,6 +758,7 @@ flushjournal_out:
   shutdown_async_signal_handler();
 
   // done
+  poolctx.stop();
   delete osdptr;
   delete ms_public;
   delete ms_hb_front_client;
@@ -747,6 +769,7 @@ flushjournal_out:
   delete ms_objecter;
 
   client_byte_throttler.reset();
+  client_msg_throttler.reset();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

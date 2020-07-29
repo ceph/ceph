@@ -3,13 +3,13 @@
 
 #include "librbd/journal/ObjectDispatch.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

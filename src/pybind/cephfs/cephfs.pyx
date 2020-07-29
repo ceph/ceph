@@ -13,14 +13,7 @@ from collections import namedtuple
 from datetime import datetime
 import errno
 import os
-import sys
 import time
-
-# Are we running Python 2.x
-if sys.version_info[0] < 3:
-    str_type = basestring
-else:
-    str_type = str
 
 AT_NO_ATTR_SYNC = 0x4000
 AT_SYMLINK_NOFOLLOW = 0x100
@@ -40,6 +33,19 @@ CEPH_STATX_SIZE = 0x200
 CEPH_STATX_BLOCKS = 0x400
 CEPH_STATX_BTIME = 0x800
 CEPH_STATX_VERSION = 0x1000
+
+FALLOC_FL_KEEP_SIZE = 0x01
+FALLOC_FL_PUNCH_HOLE = 0x02
+FALLOC_FL_NO_HIDE_STALE = 0x04
+
+CEPH_SETATTR_MODE = 0x1
+CEPH_SETATTR_UID = 0x2
+CEPH_SETATTR_GID = 0x4
+CEPH_SETATTR_MTIME = 0x8
+CEPH_SETATTR_ATIME = 0x10
+CEPH_SETATTR_SIZE  = 0x20
+CEPH_SETATTR_CTIME = 0x40
+CEPH_SETATTR_BTIME = 0x200
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -93,8 +99,14 @@ cdef extern from "time.h":
         time_t      tv_sec
         long int    tv_nsec
 
+cdef extern from "<sys/uio.h>":
+    cdef struct iovec:
+        void *iov_base
+        size_t iov_len
+
 cdef extern from "sys/types.h":
     ctypedef unsigned long mode_t
+    ctypedef unsigned long dev_t
 
 cdef extern from "<utime.h>":
     cdef struct utimbuf:
@@ -106,7 +118,7 @@ cdef extern from "sys/time.h":
         long tv_sec
         long tv_usec
 
-cdef extern from "cephfs/ceph_statx.h":
+cdef extern from "cephfs/ceph_ll_client.h":
     cdef struct statx "ceph_statx":
         uint32_t    stx_mask
         uint32_t    stx_blksize
@@ -156,6 +168,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
 
+    int ceph_setattrx(ceph_mount_info *cmount, const char *relpath, statx *stx, int mask, int flags)
+    int ceph_fsetattrx(ceph_mount_info *cmount, int fd, statx *stx, int mask)
     int ceph_mds_command(ceph_mount_info *cmount, const char *mds_spec, const char **cmd, size_t cmdlen,
                          const char *inbuf, size_t inbuflen, char **outbuf, size_t *outbuflen,
                          char **outs, size_t *outslen)
@@ -166,13 +180,28 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags)
+    int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
+                       const void *value, size_t size, int flags)
+    int ceph_lsetxattr(ceph_mount_info *cmount, const char *path, const char *name,
+                       const void *value, size_t size, int flags)
     int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       void *value, size_t size)
+    int ceph_fgetxattr(ceph_mount_info *cmount, int fd, const char *name,
+                       void *value, size_t size)
+    int ceph_lgetxattr(ceph_mount_info *cmount, const char *path, const char *name,
+                       void *value, size_t size)
     int ceph_removexattr(ceph_mount_info *cmount, const char *path, const char *name)
+    int ceph_fremovexattr(ceph_mount_info *cmount, int fd, const char *name)
+    int ceph_lremovexattr(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_listxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
+    int ceph_flistxattr(ceph_mount_info *cmount, int fd, char *list, size_t size)
+    int ceph_llistxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
+    int ceph_pwritev(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
+    int ceph_preadv(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
+    int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
     int ceph_close(ceph_mount_info *cmount, int fd)
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
@@ -180,16 +209,24 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
     void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
+    int64_t ceph_telldir(ceph_mount_info *cmount, ceph_dir_result *dirp)
+    void ceph_seekdir(ceph_mount_info *cmount, ceph_dir_result *dirp, int64_t offset)
     int ceph_chdir(ceph_mount_info *cmount, const char *path)
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
+    int ceph_lazyio(ceph_mount_info *cmount, int fd, int enable)
+    int ceph_lazyio_propagate(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
+    int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
+    int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
+    int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid)
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
@@ -199,6 +236,18 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_lutimes(ceph_mount_info *cmount, const char *path, timeval times[2])
     int ceph_futimes(ceph_mount_info *cmount, int fd, timeval times[2])
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
+    int ceph_get_file_replication(ceph_mount_info *cmount, int fh)
+    int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
+    int ceph_get_pool_id(ceph_mount_info *cmount, const char *pool_name)
+    int ceph_get_pool_replication(ceph_mount_info *cmount, int pool_id)
+    int ceph_debug_get_fd_caps(ceph_mount_info *cmount, int fd)
+    int ceph_debug_get_file_caps(ceph_mount_info *cmount, const char *path)
+    uint32_t ceph_get_cap_return_timeout(ceph_mount_info *cmount)
+    void ceph_set_uuid(ceph_mount_info *cmount, const char *uuid)
+    void ceph_set_session_timeout(ceph_mount_info *cmount, unsigned timeout)
+    int ceph_get_file_layout(ceph_mount_info *cmount, int fh, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool)
+    int ceph_get_file_pool_name(ceph_mount_info *cmount, int fh, char *buf, size_t buflen)
+    int ceph_get_default_data_pool_name(ceph_mount_info *cmount, char *buf, size_t buflen)
 
 
 class Error(Exception):
@@ -269,6 +318,10 @@ class ObjectNotEmpty(OSError):
 class NotDirectory(OSError):
     pass
 
+class DiskQuotaExceeded(OSError):
+    pass
+
+
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
         errno.EPERM      : PermissionError,
@@ -282,6 +335,7 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
+        errno.EDQUOT     : DiskQuotaExceeded,
     }
 ELSE:
     cdef errno_to_exception =  {
@@ -296,13 +350,14 @@ ELSE:
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
         errno.ENOTEMPTY  : ObjectNotEmpty,
-        errno.ENOTDIR    : NotDirectory
+        errno.ENOTDIR    : NotDirectory,
+        errno.EDQUOT     : DiskQuotaExceeded,
     }
 
 
 cdef make_ex(ret, msg):
     """
-    Translate a librados return code into an exception.
+    Translate a libcephfs return code into an exception.
 
     :param ret: the return code
     :type ret: int
@@ -314,7 +369,7 @@ cdef make_ex(ret, msg):
     if ret in errno_to_exception:
         return errno_to_exception[ret](ret, msg)
     else:
-        return Error(msg + ': {} [Errno {:d}]'.format(os.strerror(ret), ret))
+        return OSError(ret, msg)
 
 
 class DirEntry(namedtuple('DirEntry',
@@ -393,6 +448,34 @@ cdef class DirResult(object):
                 raise make_ex(ret, "closedir failed")
             self.handle = NULL
 
+    def rewinddir(self):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        self.lib.require_state("mounted")
+        with nogil:
+            ceph_rewinddir(self.lib.cluster, self.handle)
+
+    def telldir(self):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        self.lib.require_state("mounted")
+        with nogil:
+            ret = ceph_telldir(self.lib.cluster, self.handle)
+        if ret < 0:
+            raise make_ex(ret, "telldir failed")
+        return ret
+
+    def seekdir(self, offset):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        self.lib.require_state("mounted")
+        cdef int64_t _offset = offset
+        with nogil:
+            ceph_seekdir(self.lib.cluster, self.handle, _offset)
+
+
 def cstr(val, name, encoding="utf-8", opt=False):
     """
     Create a byte string from a Python string
@@ -458,7 +541,7 @@ cdef char ** to_bytes_array(list_bytes):
     cdef char **ret = <char **>malloc(len(list_bytes) * sizeof(char *))
     if ret == NULL:
         raise MemoryError("malloc failed")
-    for i in xrange(len(list_bytes)):
+    for i in range(len(list_bytes)):
         ret[i] = <char *>list_bytes[i]
     return ret
 
@@ -468,6 +551,17 @@ cdef void* realloc_chk(void* ptr, size_t size) except NULL:
     if ret == NULL:
         raise MemoryError("realloc failed")
     return ret
+
+
+cdef iovec * to_iovec(buffers) except NULL:
+    cdef iovec *iov = <iovec *>malloc(len(buffers) * sizeof(iovec))
+    cdef char *s = NULL
+    if iov == NULL:
+        raise MemoryError("malloc failed")
+    for i in xrange(len(buffers)):
+        s = <char*>buffers[i]
+        iov[i] = [<void*>s, len(buffers[i])]
+    return iov
 
 
 cdef class LibCephFS(object):
@@ -509,13 +603,18 @@ cdef class LibCephFS(object):
             raise Error("libcephfs_initialize failed with error code: %d" % ret)
         self.state = "configuring"
 
-    def create(self, conf=None, conffile=None, auth_id=None):
+    NO_CONF_FILE = -1
+    "special value that indicates no conffile should be read when creating a mount handle"
+    DEFAULT_CONF_FILES = -2
+    "special value that indicates the default conffiles should be read when creating a mount handle"
+
+    def create(self, conf=None, conffile=NO_CONF_FILE, auth_id=None):
         """
         Create a mount handle for interacting with Ceph.  All libcephfs
         functions operate on a mount info handle.
         
         :param conf dict opt: settings overriding the default ones and conffile
-        :param conffile str opt: the path to ceph.conf to override the default settings
+        :param conffile Union[int,str], optional: the path to ceph.conf to override the default settings
         :auth_id str opt: the id used to authenticate the client entity
         """
         if conf is not None and not isinstance(conf, dict):
@@ -533,13 +632,14 @@ cdef class LibCephFS(object):
             raise Error("libcephfs_initialize failed with error code: %d" % ret)
 
         self.state = "configuring"
-        if conffile is not None:
-            # read the default conf file when '' is given
-            if conffile == '':
-                conffile = None
+        if conffile in (self.NO_CONF_FILE, None):
+            pass
+        elif conffile in (self.DEFAULT_CONF_FILES, ''):
+            self.conf_read_file(None)
+        else:
             self.conf_read_file(conffile)
         if conf is not None:
-            for key, value in conf.iteritems():
+            for key, value in conf.items():
                 self.conf_set(key, value)
 
     def get_addrs(self):
@@ -811,6 +911,122 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "fsync failed")
 
+    def lazyio(self, fd, enable):
+        """
+        Enable/disable lazyio for the file.
+
+        :param fd: the file descriptor of the file for which to enable lazio.
+        :param enable: a boolean to enable lazyio or disable lazyio.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(enable, int):
+            raise TypeError('enable must be an int')
+
+        cdef:
+            int _fd = fd
+            int _enable = enable
+
+        with nogil:
+            ret = ceph_lazyio(self.cluster, _fd, _enable)
+        if ret < 0:
+            raise make_ex(ret, "lazyio failed")
+
+    def lazyio_propagate(self, fd, offset, count):
+        """
+        Flushes the write buffer for the file thereby propogating the buffered write to the file.
+
+        :param fd: the file descriptor of the file to sync.
+        :param offset: the byte range starting.
+        :param count: the number of bytes starting from offset.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(count, int):
+            raise TypeError('count must be an int')
+
+        cdef:
+            int _fd = fd
+            int64_t _offset = offset
+            size_t _count = count
+
+        with nogil:
+            ret = ceph_lazyio_propagate(self.cluster, _fd, _offset, _count)
+        if ret < 0:
+            raise make_ex(ret, "lazyio_propagate failed")
+
+    def lazyio_synchronize(self, fd, offset, count):
+        """
+        Flushes the write buffer for the file and invalidate the read cache. This allows a
+        subsequent read operation to read and cache data directly from the file and hence
+        everyone's propagated writes would be visible.
+
+        :param fd: the file descriptor of the file to sync.
+        :param offset: the byte range starting.
+        :param count: the number of bytes starting from offset.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(count, int):
+            raise TypeError('count must be an int')
+
+        cdef:
+            int _fd = fd
+            int64_t _offset = offset
+            size_t _count = count
+
+        with nogil:
+            ret = ceph_lazyio_synchronize(self.cluster, _fd, _offset, _count)
+        if ret < 0:
+            raise make_ex(ret, "lazyio_synchronize failed")
+
+    def fallocate(self, fd, offset, length, mode=0):
+        """
+        Preallocate or release disk space for the file for the byte range.
+
+        :param fd: the file descriptor of the file to fallocate.
+        :param mode: the flags determines the operation to be performed on the given
+                     range. default operation (0) allocate and initialize to zero
+                     the file in the byte range, and the file size will be changed
+                     if offset + length is greater than the file size. if the
+                     FALLOC_FL_KEEP_SIZE flag is specified in the mode, the file size
+                     will not be changed. if the FALLOC_FL_PUNCH_HOLE flag is specified
+                     in the mode, the operation is deallocate space and zero the byte range.
+        :param offset: the byte range starting.
+        :param length: the length of the range.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(length, int):
+            raise TypeError('length must be an int')
+
+        cdef:
+            int _fd = fd
+            int _mode = mode
+            int64_t _offset = offset
+            int64_t _length = length
+
+        with nogil:
+            ret = ceph_fallocate(self.cluster, _fd, _mode, _offset, _length)
+        if ret < 0:
+            raise make_ex(ret, "fallocate failed")
+
     def getcwd(self):
         """
         Get the current working directory.
@@ -885,6 +1101,37 @@ cdef class LibCephFS(object):
 
         return handle.close()
 
+    def rewinddir(self, DirResult handle):
+        """
+        Rewind the directory stream to the beginning of the directory.
+
+        :param handle: the open directory stream handle
+        """
+        return handle.rewinddir()
+
+    def telldir(self, DirResult handle):
+        """
+        Get the current position of a directory stream.
+
+        :param handle: the open directory stream handle
+        :return value: The position of the directory stream. Note that the offsets
+                       returned by ceph_telldir do not have a particular order (cannot
+                       be compared with inequality).
+        """
+        return handle.telldir()
+
+    def seekdir(self, DirResult handle, offset):
+        """
+        Move the directory stream to a position specified by the given offset.
+
+        :param handle: the open directory stream handle
+        :param offset: the position to move the directory stream to. This offset should be
+                       a value returned by telldir. Note that this value does not refer to
+                       the nth entry in a directory, and can not be manipulated with plus
+                       or minus.
+        """
+        return handle.seekdir(offset)
+
     def mkdir(self, path, mode):
         """
         Create a directory.
@@ -926,6 +1173,25 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
+    def fchmod(self, fd, mode) :
+        """
+        Change file mode based on fd.
+        :param fd: the file descriptor of the file to change file mode
+        :param mode: the permissions to be set.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        cdef:
+            int _fd = fd
+            int _mode = mode
+        with nogil:
+            ret = ceph_fchmod(self.cluster, _fd, _mode)
+        if ret < 0:
+            raise make_ex(ret, "error in fchmod")
+
     def chown(self, path, uid, gid, follow_symlink=True):
         """
         Change directory ownership
@@ -964,6 +1230,30 @@ cdef class LibCephFS(object):
         :param gid: the gid to set
         """
         self.chown(path, uid, gid, follow_symlink=False)
+
+    def fchown(self, fd, uid, gid):
+        """
+        Change file ownership
+        :param fd: the file descriptor of the file to change ownership
+        :param uid: the uid to set
+        :param gid: the gid to set
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(uid, int):
+            raise TypeError('uid must be an int')
+        elif not isinstance(gid, int):
+            raise TypeError('gid must be an int')
+
+        cdef:
+            int _fd = fd
+            int _uid = uid
+            int _gid = gid
+        with nogil:
+            ret = ceph_fchown(self.cluster, _fd, _uid, _gid)
+        if ret < 0:
+            raise make_ex(ret, "error in fchown")
 
     def mkdirs(self, path, mode):
         """
@@ -1114,6 +1404,40 @@ cdef class LibCephFS(object):
             # itself and set ret_s to NULL, hence XDECREF).
             ref.Py_XDECREF(ret_s)
 
+    def preadv(self, fd, buffers, offset):
+        """
+        Write data to a file.
+
+        :param fd: the file descriptor of the open file to read from
+        :param buffers: the list of byte object to read from the file
+        :param offset: the offset of the file read from.  If this value is negative, the
+                       function reads from the current offset of the file descriptor.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(buffers, list):
+            raise TypeError('buffers must be a list')
+        for buf in buffers:
+            if not isinstance(buf, bytearray):
+                raise TypeError('buffers must be a list of bytes')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+
+        cdef:
+            int _fd = fd
+            int _iovcnt = len(buffers)
+            int64_t _offset = offset
+            iovec *_iov = to_iovec(buffers)
+        try:
+            with nogil:
+                ret = ceph_preadv(self.cluster, _fd, _iov, _iovcnt, _offset)
+            if ret < 0:
+                raise make_ex(ret, "error in preadv")
+            return ret
+        finally:
+            free(_iov)
+
     def write(self, fd, buf, offset):
         """
         Write data to a file.
@@ -1144,6 +1468,40 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in write")
         return ret
 
+    def pwritev(self, fd, buffers, offset):
+        """
+        Write data to a file.
+
+        :param fd: the file descriptor of the open file to write to
+        :param buffers: the list of byte object to write to the file
+        :param offset: the offset of the file write into.  If this value is negative, the
+                       function writes to the current offset of the file descriptor.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(buffers, list):
+            raise TypeError('buffers must be a list')
+        for buf in buffers:
+            if not isinstance(buf, bytes):
+                raise TypeError('buffers must be a list of bytes')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+
+        cdef:
+            int _fd = fd
+            int _iovcnt = len(buffers)
+            int64_t _offset = offset
+            iovec *_iov = to_iovec(buffers)
+        try:
+            with nogil:
+                ret = ceph_pwritev(self.cluster, _fd, _iov, _iovcnt, _offset)
+            if ret < 0:
+                raise make_ex(ret, "error in pwritev")
+            return ret
+        finally:
+            free(_iov)
+
     def flock(self, fd, operation, owner):
         """
         Apply or remove an advisory lock.
@@ -1169,7 +1527,69 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in write")
         return ret
 
-    def getxattr(self, path, name, size=255):
+    def truncate(self, path, size):
+        """
+        Truncate the file to the given size.  If this operation causes the
+        file to expand, the empty bytes will be filled in with zeros.
+
+        :param path: the path to the file to truncate.
+        :param size: the new size of the file.
+        """
+
+        if not isinstance(size, int):
+            raise TypeError('size must be a int')
+
+        statx_dict = dict()
+        statx_dict["size"] = size
+        self.setattrx(path, statx_dict, CEPH_SETATTR_SIZE, AT_SYMLINK_NOFOLLOW)
+
+    def ftruncate(self, fd, size):
+        """
+        Truncate the file to the given size.  If this operation causes the
+        file to expand, the empty bytes will be filled in with zeros.
+
+        :param path: the path to the file to truncate.
+        :param size: the new size of the file.
+        """
+
+        if not isinstance(size, int):
+            raise TypeError('size must be a int')
+
+        statx_dict = dict()
+        statx_dict["size"] = size
+        self.fsetattrx(fd, statx_dict, CEPH_SETATTR_SIZE)
+
+    def mknod(self, path, mode, rdev=0):
+        """
+        Make a block or character special file.
+
+        :param path: the path to the special file.
+        :param mode: the permissions to use and the type of special file. The type can be
+                     one of stat.S_IFREG, stat.S_IFCHR, stat.S_IFBLK, stat.S_IFIFO. Both
+                     should be combined using bitwise OR.
+        :param rdev: If the file type is stat.S_IFCHR or stat.S_IFBLK then this parameter
+                     specifies the major and minor numbers of the newly created device
+                     special file. Otherwise, it is ignored.
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(rdev, int):
+            raise TypeError('rdev must be an int')
+
+        cdef:
+            char* _path = path
+            mode_t _mode = mode
+            dev_t _rdev = rdev
+
+        with nogil:
+            ret = ceph_mknod(self.cluster, _path, _mode, _rdev)
+        if ret < 0:
+            raise make_ex(ret, "error in mknod {}".format(path.decode('utf-8')))
+
+    def getxattr(self, path, name, size=255, follow_symlink=True):
         """
          Get an extended attribute.
          
@@ -1191,9 +1611,14 @@ cdef class LibCephFS(object):
 
         try:
             ret_buf = <char *>realloc_chk(ret_buf, ret_length)
-            with nogil:
-                ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
-                                    ret_length)
+            if follow_symlink:
+                with nogil:
+                    ret = ceph_getxattr(self.cluster, _path, _name, ret_buf,
+                                        ret_length)
+            else:
+                with nogil:
+                    ret = ceph_lgetxattr(self.cluster, _path, _name, ret_buf,
+                                         ret_length)
 
             if ret < 0:
                 raise make_ex(ret, "error in getxattr")
@@ -1202,10 +1627,58 @@ cdef class LibCephFS(object):
         finally:
             free(ret_buf)
 
-    def setxattr(self, path, name, value, flags):
+    def fgetxattr(self, fd, name, size=255):
+        """
+         Get an extended attribute given the fd of a file.
+
+         :param fd: the open file descriptor referring to the file
+         :param name: the name of the extended attribute to get
+         :param size: the size of the pre-allocated buffer
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        name = cstr(name, 'name')
+
+        cdef:
+            int _fd = fd
+            char* _name = name
+
+            size_t ret_length = size
+            char *ret_buf = NULL
+
+        try:
+            ret_buf = <char *>realloc_chk(ret_buf, ret_length)
+            with nogil:
+                ret = ceph_fgetxattr(self.cluster, _fd, _name, ret_buf,
+                                    ret_length)
+
+            if ret < 0:
+                raise make_ex(ret, "error in fgetxattr")
+
+            return ret_buf[:ret]
+        finally:
+            free(ret_buf)
+
+    def lgetxattr(self, path, name, size=255):
+        """
+         Get an extended attribute without following symbolic links. This
+         function is identical to ceph_getxattr, but if the path refers to
+         a symbolic link, we get the extended attributes of the symlink
+         rather than the attributes of the file it points to.
+
+         :param path: the path to the file
+         :param name: the name of the extended attribute to get
+         :param size: the size of the pre-allocated buffer
+        """
+
+        return self.getxattr(path, name, size=size, follow_symlink=False)
+
+    def setxattr(self, path, name, value, flags, follow_symlink=True):
         """
         Set an extended attribute on a file.
-        
+
        :param path: the path to the file.
        :param name: the name of the extended attribute to set.
        :param value: the bytes of the extended attribute value
@@ -1226,13 +1699,61 @@ cdef class LibCephFS(object):
             size_t _value_len = len(value)
             int _flags = flags
 
-        with nogil:
-            ret = ceph_setxattr(self.cluster, _path, _name,
-                                _value, _value_len, _flags)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_setxattr(self.cluster, _path, _name,
+                                    _value, _value_len, _flags)
+        else:
+            with nogil:
+                ret = ceph_lsetxattr(self.cluster, _path, _name,
+                                    _value, _value_len, _flags)
+
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
-    def removexattr(self, path, name):
+    def fsetxattr(self, fd, name, value, flags):
+        """
+        Set an extended attribute on a file.
+
+        :param fd: the open file descriptor referring to the file.
+        :param name: the name of the extended attribute to set.
+        :param value: the bytes of the extended attribute value
+        """
+        self.require_state("mounted")
+
+        name = cstr(name, 'name')
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be a int')
+        if not isinstance(value, bytes):
+            raise TypeError('value must be a bytes')
+
+        cdef:
+            int _fd = fd
+            char *_name = name
+            char *_value = value
+            size_t _value_len = len(value)
+            int _flags = flags
+
+        with nogil:
+            ret = ceph_fsetxattr(self.cluster, _fd, _name,
+                                 _value, _value_len, _flags)
+        if ret < 0:
+            raise make_ex(ret, "error in fsetxattr")
+
+    def lsetxattr(self, path, name, value, flags):
+        """
+        Set an extended attribute on a file but do not follow symbolic link.
+
+        :param path: the path to the file.
+        :param name: the name of the extended attribute to set.
+        :param value: the bytes of the extended attribute value
+        """
+
+        self.setxattr(path, name, value, flags, follow_symlink=False)
+
+    def removexattr(self, path, name, follow_symlink=True):
         """
         Remove an extended attribute of a file.
 
@@ -1248,12 +1769,48 @@ cdef class LibCephFS(object):
             char *_path = path
             char *_name = name
 
-        with nogil:
-            ret = ceph_removexattr(self.cluster, _path, _name)
+        if follow_symlink:
+            with nogil:
+                ret = ceph_removexattr(self.cluster, _path, _name)
+        else:
+            with nogil:
+                ret = ceph_lremovexattr(self.cluster, _path, _name)
+
         if ret < 0:
             raise make_ex(ret, "error in removexattr")
 
-    def listxattr(self, path, size=65536):
+    def fremovexattr(self, fd, name):
+        """
+        Remove an extended attribute of a file.
+
+        :param fd: the open file descriptor referring to the file.
+        :param name: name of the extended attribute to remove.
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        name = cstr(name, 'name')
+
+        cdef:
+            int _fd = fd
+            char *_name = name
+
+        with nogil:
+            ret = ceph_fremovexattr(self.cluster, _fd, _name)
+        if ret < 0:
+            raise make_ex(ret, "error in fremovexattr")
+
+    def lremovexattr(self, path, name):
+        """
+        Remove an extended attribute of a file but do not follow symbolic link.
+
+        :param path: path of the file.
+        :param name: name of the extended attribute to remove.
+        """
+        self.removexattr(path, name, follow_symlink=False)
+
+    def listxattr(self, path, size=65536, follow_symlink=True):
         """
         List the extended attribute keys set on a file.
 
@@ -1271,8 +1828,12 @@ cdef class LibCephFS(object):
 
         try:
             ret_buf = <char *>realloc_chk(ret_buf, ret_length)
-            with nogil:
-                ret = ceph_listxattr(self.cluster, _path, ret_buf, ret_length)
+            if follow_symlink:
+                with nogil:
+                    ret = ceph_listxattr(self.cluster, _path, ret_buf, ret_length)
+            else:
+                with nogil:
+                    ret = ceph_llistxattr(self.cluster, _path, ret_buf, ret_length)
 
             if ret < 0:
                 raise make_ex(ret, "error in listxattr")
@@ -1280,6 +1841,45 @@ cdef class LibCephFS(object):
             return ret, ret_buf[:ret]
         finally:
             free(ret_buf)
+
+    def flistxattr(self, fd, size=65536):
+        """
+        List the extended attribute keys set on a file.
+
+        :param fd: the open file descriptor referring to the file.
+        :param size: the size of list buffer to be filled with extended attribute keys.
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+            char *ret_buf = NULL
+            size_t ret_length = size
+
+        try:
+            ret_buf = <char *>realloc_chk(ret_buf, ret_length)
+            with nogil:
+                ret = ceph_flistxattr(self.cluster, _fd, ret_buf, ret_length)
+
+            if ret < 0:
+                raise make_ex(ret, "error in flistxattr")
+
+            return ret, ret_buf[:ret]
+        finally:
+            free(ret_buf)
+
+    def llistxattr(self, path, size=65536):
+        """
+        List the extended attribute keys set on a file but do not follow symbolic link.
+
+        :param path: path of the file.
+        :param size: the size of list buffer to be filled with extended attribute keys.
+        """
+
+        return self.listxattr(path, size=size, follow_symlink=False)
 
     def stat(self, path, follow_symlink=True):
         """
@@ -1410,6 +2010,101 @@ cdef class LibCephFS(object):
             dict_result["version"] = stx.stx_version
 
         return dict_result
+
+    def setattrx(self, path, dict_stx, mask, flags):
+        """
+        Set a file's attributes.
+
+        :param path: the path to the file/directory to set the attributes of.
+        :param mask: a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+        :param stx: a dict of statx structure that must include attribute values to set on the file.
+        :param flags: mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if not isinstance(dict_stx, dict):
+            raise TypeError('dict_stx must be a dict')
+        if not isinstance(mask, int):
+            raise TypeError('mask must be a int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be a int')
+
+        cdef statx stx
+
+        if (mask & CEPH_SETATTR_MODE):
+            stx.stx_mode = dict_stx["mode"]
+        if (mask & CEPH_SETATTR_UID):
+            stx.stx_uid = dict_stx["uid"]
+        if (mask & CEPH_SETATTR_GID):
+            stx.stx_gid = dict_stx["gid"]
+        if (mask & CEPH_SETATTR_MTIME):
+            stx.stx_mtime = to_timespec(dict_stx["mtime"].timestamp())
+        if (mask & CEPH_SETATTR_ATIME):
+            stx.stx_atime = to_timespec(dict_stx["atime"].timestamp())
+        if (mask & CEPH_SETATTR_CTIME):
+            stx.stx_ctime = to_timespec(dict_stx["ctime"].timestamp())
+        if (mask & CEPH_SETATTR_SIZE):
+            stx.stx_size = dict_stx["size"]
+        if (mask & CEPH_SETATTR_BTIME):
+            stx.stx_btime = to_timespec(dict_stx["btime"].timestamp())
+
+        cdef:
+            char* _path = path
+            int _mask = mask
+            int _flags = flags
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_setattrx(self.cluster, _path, &stx, _mask, _flags)
+        if ret < 0:
+            raise make_ex(ret, "error in setattrx: %s" % path)
+
+    def fsetattrx(self, fd, dict_stx, mask):
+        """
+        Set a file's attributes.
+
+        :param path: the path to the file/directory to set the attributes of.
+        :param mask: a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+        :param stx: a dict of statx structure that must include attribute values to set on the file.
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be a int')
+        if not isinstance(dict_stx, dict):
+            raise TypeError('dict_stx must be a dict')
+        if not isinstance(mask, int):
+            raise TypeError('mask must be a int')
+
+        cdef statx stx
+
+        if (mask & CEPH_SETATTR_MODE):
+            stx.stx_mode = dict_stx["mode"]
+        if (mask & CEPH_SETATTR_UID):
+            stx.stx_uid = dict_stx["uid"]
+        if (mask & CEPH_SETATTR_GID):
+            stx.stx_gid = dict_stx["gid"]
+        if (mask & CEPH_SETATTR_MTIME):
+            stx.stx_mtime = to_timespec(dict_stx["mtime"].timestamp())
+        if (mask & CEPH_SETATTR_ATIME):
+            stx.stx_atime = to_timespec(dict_stx["atime"].timestamp())
+        if (mask & CEPH_SETATTR_CTIME):
+            stx.stx_ctime = to_timespec(dict_stx["ctime"].timestamp())
+        if (mask & CEPH_SETATTR_SIZE):
+            stx.stx_size = dict_stx["size"]
+        if (mask & CEPH_SETATTR_BTIME):
+            stx.stx_btime = to_timespec(dict_stx["btime"].timestamp())
+
+        cdef:
+            int _fd = fd
+            int _mask = mask
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_fsetattrx(self.cluster, _fd, &stx, _mask)
+        if ret < 0:
+            raise make_ex(ret, "error in fsetattrx")
 
     def symlink(self, existing, newname):
         """
@@ -1760,3 +2455,252 @@ cdef class LibCephFS(object):
                 ret = ceph_futimens(self.cluster, _fd, buf)
         if ret < 0:
             raise make_ex(ret, "error in futimens")
+
+    def get_file_replication(self, fd):
+        """
+        Get the file replication information from an open file descriptor.
+
+        :param fd : the open file descriptor referring to the file to get
+                    the replication information of.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+
+        with nogil:
+            ret = ceph_get_file_replication(self.cluster, _fd)
+        if ret < 0:
+            raise make_ex(ret, "error in get_file_replication")
+
+        return ret
+
+    def get_path_replication(self, path):
+        """
+        Get the file replication information given the path.
+
+        :param path: the path of the file/directory to get the replication information of.
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        cdef:
+            char* _path = path
+
+        with nogil:
+            ret = ceph_get_path_replication(self.cluster, _path)
+        if ret < 0:
+            raise make_ex(ret, "error in get_path_replication")
+
+        return ret
+
+    def get_pool_id(self, pool_name):
+        """
+        Get the id of the named pool.
+
+        :param pool_name: the name of the pool.
+        """
+
+        self.require_state("mounted")
+        pool_name = cstr(pool_name, 'pool_name')
+
+        cdef:
+            char* _pool_name = pool_name
+
+        with nogil:
+            ret = ceph_get_pool_id(self.cluster, _pool_name)
+        if ret < 0:
+            raise make_ex(ret, "error in get_pool_id")
+
+        return ret
+
+    def get_pool_replication(self, pool_id):
+        """
+        Get the pool replication factor.
+
+        :param pool_id: the pool id to look up
+        """
+
+        self.require_state("mounted")
+        if not isinstance(pool_id, int):
+            raise TypeError('pool_id must be an int')
+
+        cdef:
+            int _pool_id = pool_id
+
+        with nogil:
+            ret = ceph_get_pool_replication(self.cluster, _pool_id)
+        if ret < 0:
+            raise make_ex(ret, "error in get_pool_replication")
+
+        return ret
+
+    def debug_get_fd_caps(self, fd):
+        """
+        Get the capabilities currently issued to the client given the fd.
+
+        :param fd: the file descriptor to get issued
+        """
+
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+
+        with nogil:
+            ret = ceph_debug_get_fd_caps(self.cluster, _fd)
+        if ret < 0:
+            raise make_ex(ret, "error in debug_get_fd_caps")
+
+        return ret
+
+    def debug_get_file_caps(self, path):
+        """
+        Get the capabilities currently issued to the client given the path.
+
+        :param path: the path of the file/directory to get the capabilities of.
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+
+        cdef:
+            char* _path = path
+
+        with nogil:
+            ret = ceph_debug_get_file_caps(self.cluster, _path)
+        if ret < 0:
+            raise make_ex(ret, "error in debug_get_file_caps")
+
+        return ret
+
+    def get_cap_return_timeout(self):
+        """
+        Get the amount of time that the client has to return caps
+
+        In the event that a client does not return its caps, the MDS may blacklist
+        it after this timeout. Applications should check this value and ensure
+        that they set the delegation timeout to a value lower than this.
+        """
+
+        self.require_state("mounted")
+
+        with nogil:
+            ret = ceph_get_cap_return_timeout(self.cluster)
+        if ret < 0:
+            raise make_ex(ret, "error in get_cap_return_timeout")
+
+        return ret
+
+    def set_uuid(self, uuid):
+        """
+        Set ceph client uuid. Must be called before mount.
+
+        :param uuid: the uuid to set
+        """
+
+        uuid = cstr(uuid, 'uuid')
+
+        cdef:
+            char* _uuid = uuid
+
+        with nogil:
+            ceph_set_uuid(self.cluster, _uuid)
+
+    def set_session_timeout(self, timeout):
+        """
+        Set ceph client session timeout. Must be called before mount.
+
+        :param timeout: the timeout to set
+        """
+
+        if not isinstance(timeout, int):
+            raise TypeError('timeout must be an int')
+
+        cdef:
+            int _timeout = timeout
+
+        with nogil:
+            ceph_set_session_timeout(self.cluster, _timeout)
+
+    def get_layout(self, fd):
+        """
+        Set ceph client session timeout. Must be called before mount.
+
+        :param fd: file descriptor of the file/directory for which to get the layout
+        """
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+            int stripe_unit
+            int stripe_count
+            int object_size
+            int pool_id
+            char *buf = NULL
+            int buflen = 256
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_get_file_layout(self.cluster, _fd, &stripe_unit, &stripe_count, &object_size, &pool_id)
+        if ret < 0:
+            raise make_ex(stripe_unit, "error in get_file_layout")
+        dict_result["stripe_unit"] = stripe_unit
+        dict_result["stripe_count"] = stripe_count
+        dict_result["object_size"] = object_size
+        dict_result["pool_id"] = pool_id
+
+        try:
+            while True:
+                buf = <char *>realloc_chk(buf, buflen)
+                with nogil:
+                    ret = ceph_get_file_pool_name(self.cluster, _fd, buf, buflen)
+                if ret > 0:
+                    dict_result["pool_name"] = decode_cstr(buf)
+                    return dict_result
+                elif ret == -errno.ERANGE:
+                    buflen = buflen * 2
+                else:
+                    raise make_ex(ret, "error in get_file_pool_name")
+        finally:
+           free(buf)
+
+
+    def get_default_pool(self):
+        """
+        Get the default pool name and id of cephfs. This returns dict{pool_name, pool_id}.
+        """
+
+        cdef:
+            char *buf = NULL
+            int buflen = 256
+            dict_result = dict()
+
+        try:
+            while True:
+                buf = <char *>realloc_chk(buf, buflen)
+                with nogil:
+                    ret = ceph_get_default_data_pool_name(self.cluster, buf, buflen)
+                if ret > 0:
+                    dict_result["pool_name"] = decode_cstr(buf)
+                    break
+                elif ret == -errno.ERANGE:
+                    buflen = buflen * 2
+                else:
+                    raise make_ex(ret, "error in get_default_data_pool_name")
+
+            with nogil:
+                ret = ceph_get_pool_id(self.cluster, buf)
+            if ret < 0:
+                raise make_ex(ret, "error in get_pool_id")
+            dict_result["pool_id"] = ret
+            return dict_result
+
+        finally:
+           free(buf)

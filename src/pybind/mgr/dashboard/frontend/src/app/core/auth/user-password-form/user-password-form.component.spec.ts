@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -22,29 +22,25 @@ describe('UserPasswordFormComponent', () => {
   let router: Router;
   let authStorageService: AuthStorageService;
 
-  configureTestBed(
-    {
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ReactiveFormsModule,
-        ComponentsModule,
-        ToastrModule.forRoot(),
-        SharedModule
-      ],
-      declarations: [UserPasswordFormComponent],
-      providers: i18nProviders
-    },
-    true
-  );
+  configureTestBed({
+    imports: [
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ReactiveFormsModule,
+      ComponentsModule,
+      ToastrModule.forRoot(),
+      SharedModule
+    ],
+    declarations: [UserPasswordFormComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(UserPasswordFormComponent);
     component = fixture.componentInstance;
     form = component.userForm;
-    httpTesting = TestBed.get(HttpTestingController);
-    router = TestBed.get(Router);
-    authStorageService = TestBed.get(AuthStorageService);
+    httpTesting = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
+    authStorageService = TestBed.inject(AuthStorageService);
     spyOn(router, 'navigate');
     fixture.detectChanges();
     formHelper = new FormHelper(form);
@@ -82,6 +78,6 @@ describe('UserPasswordFormComponent', () => {
     });
     request.flush({});
     expect(component.onPasswordChange).toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/logout']);
+    expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 });

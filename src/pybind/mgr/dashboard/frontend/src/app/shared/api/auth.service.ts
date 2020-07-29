@@ -8,10 +8,9 @@ import { tap } from 'rxjs/operators';
 import { Credentials } from '../models/credentials';
 import { LoginResponse } from '../models/login-response';
 import { AuthStorageService } from '../services/auth-storage.service';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class AuthService {
   constructor(
@@ -41,7 +40,7 @@ export class AuthService {
 
   logout(callback: Function = null) {
     return this.http.post('api/auth/logout', null).subscribe((resp: any) => {
-      this.router.navigate(['/logout'], { skipLocationChange: true });
+      this.router.navigate(['/login'], { skipLocationChange: true });
       this.authStorageService.remove();
       if (callback) {
         callback();

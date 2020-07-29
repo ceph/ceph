@@ -10,10 +10,11 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -80,24 +81,6 @@ void CloseRequest<I>::handle_shut_down_update_watchers(int r) {
     lderr(cct) << "failed to shut down update watchers: " << cpp_strerror(r)
                << dendl;
   }
-
-  send_shut_down_io_queue();
-}
-
-template <typename I>
-void CloseRequest<I>::send_shut_down_io_queue() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  std::shared_lock owner_locker{m_image_ctx->owner_lock};
-  m_image_ctx->io_work_queue->shut_down(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_shut_down_io_queue>(this));
-}
-
-template <typename I>
-void CloseRequest<I>::handle_shut_down_io_queue(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   send_shut_down_exclusive_lock();
 }
@@ -167,10 +150,10 @@ void CloseRequest<I>::send_flush() {
     CloseRequest<I>, &CloseRequest<I>::handle_flush>(this);
   auto aio_comp = io::AioCompletion::create_and_start(ctx, m_image_ctx,
                                                       io::AIO_TYPE_FLUSH);
-  auto req = io::ImageDispatchSpec<I>::create_flush_request(
-    *m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+  auto req = io::ImageDispatchSpec<I>::create_flush(
+    *m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+    io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
-  delete req;
 }
 
 template <typename I>
@@ -227,6 +210,30 @@ void CloseRequest<I>::handle_flush_readahead(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
+  send_shut_down_image_dispatcher();
+}
+
+template <typename I>
+void CloseRequest<I>::send_shut_down_image_dispatcher() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->io_image_dispatcher->shut_down(create_context_callback<
+    CloseRequest<I>,
+    &CloseRequest<I>::handle_shut_down_image_dispatcher>(this));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_shut_down_image_dispatcher(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to shut down image dispatcher: "
+               << cpp_strerror(r) << dendl;
+  }
+
   send_shut_down_object_dispatcher();
 }
 
@@ -250,6 +257,7 @@ void CloseRequest<I>::handle_shut_down_object_dispatcher(int r) {
     lderr(cct) << "failed to shut down object dispatcher: "
                << cpp_strerror(r) << dendl;
   }
+
   send_flush_op_work_queue();
 }
 
@@ -289,7 +297,6 @@ void CloseRequest<I>::handle_close_parent(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  delete m_image_ctx->parent;
   m_image_ctx->parent = nullptr;
   save_result(r);
   if (r < 0) {

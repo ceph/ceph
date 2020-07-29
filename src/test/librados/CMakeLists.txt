@@ -132,7 +132,7 @@ add_executable(ceph_test_rados_api_tier_pp
   tier_cxx.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rados_api_tier_pp
-  librados global ${UNITTEST_LIBS} Boost::system radostest-cxx)
+  librados global ${UNITTEST_LIBS} Boost::system radostest-cxx cls_cas_internal)
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(ceph_test_rados_api_tier_pp spawn)
 endif()
@@ -190,3 +190,15 @@ target_link_libraries(unittest_librados_config
   librados
   ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
 
+# Removing this test. We can't shove it into Finisher as it's not a
+# Context any more, and wrapping it to adapt it would be less fair.
+
+#add_executable(ceph_test_rados_completion_speed
+#  completion_speed.cc)
+#target_link_libraries(ceph_test_rados_completion_speed
+#  librados ${UNITTEST_LIBS} radostest-cxx)
+
+add_executable(ceph_test_rados_op_speed
+  op_speed.cc)
+target_link_libraries(ceph_test_rados_op_speed
+  librados ${UNITTEST_LIBS} radostest-cxx)

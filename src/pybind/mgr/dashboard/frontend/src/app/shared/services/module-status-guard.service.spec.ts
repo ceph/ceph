@@ -39,19 +39,16 @@ describe('ModuleStatusGuardService', () => {
     expect(router.url).toBe(urlResult);
   };
 
-  configureTestBed(
-    {
-      imports: [RouterTestingModule.withRoutes(routes)],
-      providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
-      declarations: [FooComponent]
-    },
-    true
-  );
+  configureTestBed({
+    imports: [RouterTestingModule.withRoutes(routes)],
+    providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
+    declarations: [FooComponent]
+  });
 
   beforeEach(() => {
-    service = TestBed.get(ModuleStatusGuardService);
-    httpClient = TestBed.get(HttpClient);
-    router = TestBed.get(Router);
+    service = TestBed.inject(ModuleStatusGuardService);
+    httpClient = TestBed.inject(HttpClient);
+    router = TestBed.inject(Router);
     route = new ActivatedRouteSnapshot();
     route.url = [];
     route.data = {
@@ -60,7 +57,7 @@ describe('ModuleStatusGuardService', () => {
         redirectTo: '/foo'
       }
     };
-    ngZone = TestBed.get(NgZone);
+    ngZone = TestBed.inject(NgZone);
   });
 
   it('should be created', () => {

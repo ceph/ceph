@@ -61,6 +61,14 @@ TYPE_FEATUREFUL(entity_inst_t)
 #include "crush/CrushWrapper.h"
 TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
 
+#include "cls/cas/cls_cas_ops.h"
+TYPE(cls_cas_chunk_create_or_get_ref_op)
+TYPE(cls_cas_chunk_get_ref_op)
+TYPE(cls_cas_chunk_put_ref_op)
+
+#include "cls/cas/cls_cas_internal.h"
+TYPE(chunk_refs_t)
+
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
 TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
@@ -265,8 +273,8 @@ MESSAGE(MMDSResolve)
 #include "messages/MMDSResolveAck.h"
 MESSAGE(MMDSResolveAck)
 
-#include "messages/MMDSSlaveRequest.h"
-MESSAGE(MMDSSlaveRequest)
+#include "messages/MMDSPeerRequest.h"
+MESSAGE(MMDSPeerRequest)
 
 #include "messages/MMDSSnapUpdate.h"
 MESSAGE(MMDSSnapUpdate)

@@ -18,6 +18,11 @@ add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
+# unittest_rgw_bucket_sync_cache
+add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
+add_ceph_unittest(unittest_rgw_bucket_sync_cache)
+target_link_libraries(unittest_rgw_bucket_sync_cache ${rgw_libs})
+
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
@@ -81,6 +86,7 @@ target_link_libraries(ceph_test_rgw_obj
   cls_user_client
   librados
   global
+  ceph-common
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -196,3 +202,6 @@ target_link_libraries(unittest_rgw_url ${rgw_libs})
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_ceph_test(test-ceph-diff-sorted.sh
+  ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)

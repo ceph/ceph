@@ -1,3 +1,5 @@
+  $ ceph balancer off
+  $ ceph balancer mode none
   $ ceph osd pool create balancer_opt 128
   pool 'balancer_opt' created
   $ ceph osd pool application enable balancer_opt rados

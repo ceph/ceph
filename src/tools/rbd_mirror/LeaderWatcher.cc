@@ -9,6 +9,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "include/stringify.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/watcher/Types.h"
 #include "Threads.h"
 
@@ -35,8 +36,8 @@ LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
 			    io_ctx.get_pool_name())),
     m_notifier_id(librados::Rados(io_ctx).get_instance_id()),
     m_instance_id(stringify(m_notifier_id)),
-    m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
-                                 m_cct->_conf.get_val<uint64_t>(
+    m_leader_lock(new LeaderLock(m_ioctx, *m_threads->asio_engine, m_oid, this,
+                                 true, m_cct->_conf.get_val<uint64_t>(
                                    "rbd_blacklist_expire_seconds"))) {
 }
 

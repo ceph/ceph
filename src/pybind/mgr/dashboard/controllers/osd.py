@@ -19,7 +19,7 @@ from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 try:
     from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
-except ImportError:
+except ImportError:  # pragma: no cover
     pass  # For typing only
 
 
@@ -58,7 +58,7 @@ class Osd(RESTController):
             osd['stats_history'] = {}
             osd_spec = str(osd_id)
             if 'osd' not in osd:
-                continue
+                continue  # pragma: no cover - simple early continue
             for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = stat.split('.')[1]
                 rates = CephService.get_rates('osd', osd_spec, stat)
@@ -105,10 +105,10 @@ class Osd(RESTController):
         try:
             histogram = CephService.send_command(
                 'osd', srv_spec=svc_id, prefix='perf histogram dump')
-        except SendCommandError as e:
-            if 'osd down' in str(e):
+        except SendCommandError as e:  # pragma: no cover - the handling is too obvious
+            if 'osd down' in str(e):  # pragma: no cover - no complexity there
                 histogram = str(e)
-            else:
+            else:  # pragma: no cover - no complexity there
                 raise
 
         return {
@@ -117,7 +117,7 @@ class Osd(RESTController):
             'histogram': histogram,
         }
 
-    def set(self, svc_id, device_class):
+    def set(self, svc_id, device_class):  # pragma: no cover
         old_device_class = CephService.send_command('mon', 'osd crush get-device-class',
                                                     ids=[svc_id])
         old_device_class = old_device_class[0]['device_class']
@@ -157,16 +157,27 @@ class Osd(RESTController):
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
     @osd_task('delete', {'svc_id': '{svc_id}'})
-    def delete(self, svc_id, force=None):
+    def delete(self, svc_id, preserve_id=None, force=None):  # pragma: no cover
+        replace = False
+        check = False
+        try:
+            if preserve_id is not None:
+                replace = str_to_bool(preserve_id)
+            if force is not None:
+                check = not str_to_bool(force)
+        except ValueError:
+            raise DashboardException(
+                component='osd', http_status_code=400, msg='Invalid parameter(s)')
         orch = OrchClient.instance()
-        if not force:
+        if check:
             logger.info('Check for removing osd.%s...', svc_id)
             check = self._check_delete([svc_id])
             if not check['safe']:
                 logger.error('Unable to remove osd.%s: %s', svc_id, check['message'])
                 raise DashboardException(component='osd', msg=check['message'])
-        logger.info('Start removing osd.%s...', svc_id)
-        orch.osds.remove([svc_id])
+
+        logger.info('Start removing osd.%s (replace: %s)...', svc_id, replace)
+        orch.osds.remove([svc_id], replace)
         while True:
             removal_osds = orch.osds.removing_status()
             logger.info('Current removing OSDs %s', removal_osds)

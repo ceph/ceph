@@ -147,7 +147,7 @@ int MemDB::_init(bool create)
   int r;
   dout(1) << __func__ << dendl;
   if (create) {
-    r = ::mkdir(m_db_path.c_str(), 0700);
+    r = compat_mkdir(m_db_path.c_str(), 0700);
     if (r < 0) {
       r = -errno;
       if (r != -EEXIST) {
@@ -187,14 +187,14 @@ int MemDB::do_open(ostream &out, bool create)
   return _init(create);
 }
 
-int MemDB::open(ostream &out, const vector<ColumnFamily>& cfs) {
+int MemDB::open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
-int MemDB::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+int MemDB::create_and_open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }

@@ -23,7 +23,6 @@
 #include "librbd/api/Namespace.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Types.h"
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/RemoveImageStateRequest.h"

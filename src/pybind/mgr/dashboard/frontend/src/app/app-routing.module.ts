@@ -1,4 +1,4 @@
-import { NgModule } from '@angular/core';
+import { Injectable, NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -16,9 +16,12 @@ import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-li
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
-import { MonitoringListComponent } from './ceph/cluster/prometheus/monitoring-list/monitoring-list.component';
+import { ActiveAlertListComponent } from './ceph/cluster/prometheus/active-alert-list/active-alert-list.component';
+import { RulesListComponent } from './ceph/cluster/prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
+import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
+import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -41,6 +44,7 @@ import { FeatureTogglesGuardService } from './shared/services/feature-toggles-gu
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 
+@Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
     const result: IBreadcrumb[] = [];
@@ -63,11 +67,12 @@ export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   }
 }
 
+@Injectable()
 export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
     const path = route.params.name;
     const text = _.startCase(path);
-    return [{ text: text, path: path }];
+    return [{ text: `${text}/Edit`, path: path }];
   }
 }
 
@@ -144,32 +149,54 @@ const routes: Routes = [
         data: { breadcrumbs: 'Cluster/Logs' }
       },
       {
+        path: 'telemetry',
+        component: TelemetryComponent,
+        data: { breadcrumbs: 'Telemetry configuration' }
+      },
+      {
         path: 'monitoring',
         data: { breadcrumbs: 'Cluster/Monitoring' },
         children: [
+          { path: '', redirectTo: 'active-alerts', pathMatch: 'full' },
           {
-            path: '',
-            component: MonitoringListComponent
+            path: 'active-alerts',
+            data: { breadcrumbs: 'Active Alerts' },
+            component: ActiveAlertListComponent
           },
           {
-            path: 'silence/' + URLVerbs.CREATE,
-            component: SilenceFormComponent,
-            data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
+            path: 'alerts',
+            data: { breadcrumbs: 'Alerts' },
+            component: RulesListComponent
           },
           {
-            path: `silence/${URLVerbs.CREATE}/:id`,
-            component: SilenceFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
-          },
-          {
-            path: `silence/${URLVerbs.EDIT}/:id`,
-            component: SilenceFormComponent,
-            data: { breadcrumbs: ActionLabels.EDIT }
-          },
-          {
-            path: `silence/${URLVerbs.RECREATE}/:id`,
-            component: SilenceFormComponent,
-            data: { breadcrumbs: ActionLabels.RECREATE }
+            path: 'silences',
+            data: { breadcrumbs: 'Silences' },
+            children: [
+              {
+                path: '',
+                component: SilenceListComponent
+              },
+              {
+                path: URLVerbs.CREATE,
+                component: SilenceFormComponent,
+                data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
+              },
+              {
+                path: `${URLVerbs.CREATE}/:id`,
+                component: SilenceFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `${URLVerbs.EDIT}/:id`,
+                component: SilenceFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
+              {
+                path: `${URLVerbs.RECREATE}/:id`,
+                component: SilenceFormComponent,
+                data: { breadcrumbs: ActionLabels.RECREATE }
+              }
+            ]
           }
         ]
       },
@@ -292,8 +319,7 @@ const routes: Routes = [
         path: 'login-change-password',
         component: LoginPasswordFormComponent,
         canActivate: [NoSsoGuardService]
-      },
-      { path: 'logout', children: [] }
+      }
     ]
   },
   {

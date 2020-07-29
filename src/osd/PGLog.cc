@@ -19,6 +19,16 @@
 #include "include/unordered_map.h"
 #include "common/ceph_context.h"
 
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -140,18 +150,14 @@ void PGLog::IndexedLog::trim(
 ostream& PGLog::IndexedLog::print(ostream& out) const
 {
   out << *this << std::endl;
-  for (list<pg_log_entry_t>::const_iterator p = log.begin();
-       p != log.end();
-       ++p) {
+  for (auto p = log.begin(); p != log.end(); ++p) {
     out << *p << " " <<
       (logged_object(p->soid) ? "indexed" : "NOT INDEXED") <<
       std::endl;
     ceph_assert(!p->reqid_is_indexed() || logged_req(p->reqid));
   }
 
-  for (list<pg_log_dup_t>::const_iterator p = dups.begin();
-       p != dups.end();
-       ++p) {
+  for (auto p = dups.begin(); p != dups.end(); ++p) {
     out << *p << std::endl;
   }
 
@@ -232,15 +238,14 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_item>::const_iterator i = omissing.get_items().begin();
+  for (auto i = omissing.get_items().begin();
        i != omissing.get_items().end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
 	     << " have " << i->second.have << dendl;
   }
 
-  list<pg_log_entry_t>::const_reverse_iterator first_non_divergent =
-    log.log.rbegin();
+  auto first_non_divergent = log.log.rbegin();
   while (1) {
     if (first_non_divergent == log.log.rend())
       break;
@@ -254,7 +259,7 @@ void PGLog::proc_replica_log(
 
   /* Because olog.head >= log.tail, we know that both pgs must at least have
    * the event represented by log.tail.  Similarly, because log.head >= olog.tail,
-   * we know that the even represented by olog.tail must be common to both logs.
+   * we know that the event represented by olog.tail must be common to both logs.
    * Furthermore, the event represented by a log tail was necessarily trimmed,
    * thus neither olog.tail nor log.tail can be divergent. It's
    * possible that olog/log contain no actual events between olog.head and
@@ -295,10 +300,7 @@ void PGLog::proc_replica_log(
     eversion_t first_missing =
       omissing.get_items().at(omissing.get_rmissing().begin()->second).need;
     oinfo.last_complete = eversion_t();
-    list<pg_log_entry_t>::const_iterator i = olog.log.begin();
-    for (;
-	 i != olog.log.end();
-	 ++i) {
+    for (auto i = olog.log.begin(); i != olog.log.end(); ++i) {
       if (i->version < first_missing)
 	oinfo.last_complete = i->version;
       else
@@ -368,7 +370,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
   // The logs must overlap.
   ceph_assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_item>::const_iterator i = missing.get_items().begin();
+  for (auto i = missing.get_items().begin();
        i != missing.get_items().end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
@@ -383,12 +385,10 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
   eversion_t orig_tail = log.tail;
   if (olog.tail < log.tail) {
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
-    list<pg_log_entry_t>::iterator from = olog.log.begin();
-    list<pg_log_entry_t>::iterator to;
+    auto from = olog.log.begin();
+    auto to = from;
     eversion_t last;
-    for (to = from;
-	 to != olog.log.end();
-	 ++to) {
+    for (; to != olog.log.end(); ++to) {
       if (to->version > log.tail)
 	break;
       log.index(*to);
@@ -425,8 +425,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
     dout(10) << "merge_log extending head to " << olog.head << dendl;
 
     // find start point in olog
-    list<pg_log_entry_t>::iterator to = olog.log.end();
-    list<pg_log_entry_t>::iterator from = olog.log.end();
+    auto to = olog.log.end();
+    auto from = olog.log.end();
     eversion_t lower_bound = std::max(olog.tail, orig_tail);
     while (1) {
       if (from == olog.log.begin())
@@ -593,22 +593,18 @@ void PGLog::check() {
   if (log.log.size() != log_keys_debug.size()) {
     derr << "log.log.size() != log_keys_debug.size()" << dendl;
     derr << "actual log:" << dendl;
-    for (list<pg_log_entry_t>::iterator i = log.log.begin();
-	 i != log.log.end();
-	 ++i) {
+    for (auto i = log.log.begin(); i != log.log.end(); ++i) {
       derr << "    " << *i << dendl;
     }
     derr << "log_keys_debug:" << dendl;
-    for (set<string>::const_iterator i = log_keys_debug.begin();
+    for (auto i = log_keys_debug.begin();
 	 i != log_keys_debug.end();
 	 ++i) {
       derr << "    " << *i << dendl;
     }
   }
   ceph_assert(log.log.size() == log_keys_debug.size());
-  for (list<pg_log_entry_t>::iterator i = log.log.begin();
-       i != log.log.end();
-       ++i) {
+  for (auto i = log.log.begin(); i != log.log.end(); ++i) {
     ceph_assert(log_keys_debug.count(i->get_key_name()));
   }
 }
@@ -731,26 +727,26 @@ void PGLog::_write_log_and_missing_wo_missing(
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
-  for (list<pg_log_entry_t>::iterator p = log.log.begin();
+  for (auto p = log.log.begin();
        p != log.log.end() && p->version <= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
-  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+  for (auto p = log.log.rbegin();
        p != log.log.rend() &&
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (log_keys_debug) {
-    for (map<string, bufferlist>::iterator i = (*km).begin();
+    for (auto i = (*km).begin();
 	 i != (*km).end();
 	 ++i) {
       if (i->first[0] == '_')
@@ -783,17 +779,17 @@ void PGLog::_write_log_and_missing_wo_missing(
       break;
     bufferlist bl;
     encode(entry, bl);
-    (*km)[entry.get_key_name()].claim(bl);
+    (*km)[entry.get_key_name()] = std::move(bl);
   }
 
-  for (list<pg_log_dup_t>::reverse_iterator p = log.dups.rbegin();
+  for (auto p = log.dups.rbegin();
        p != log.dups.rend() &&
 	 (p->version >= dirty_from_dups || p->version >= write_from_dups) &&
 	 p->version >= dirty_to_dups;
        ++p) {
     bufferlist bl;
     encode(*p, bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (dirty_divergent_priors) {
@@ -860,26 +856,26 @@ void PGLog::_write_log_and_missing(
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
-  for (list<pg_log_entry_t>::iterator p = log.log.begin();
+  for (auto p = log.log.begin();
        p != log.log.end() && p->version <= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
-  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+  for (auto p = log.log.rbegin();
        p != log.log.rend() &&
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (log_keys_debug) {
-    for (map<string, bufferlist>::iterator i = (*km).begin();
+    for (auto i = (*km).begin();
 	 i != (*km).end();
 	 ++i) {
       if (i->first[0] == '_')
@@ -912,17 +908,17 @@ void PGLog::_write_log_and_missing(
       break;
     bufferlist bl;
     encode(entry, bl);
-    (*km)[entry.get_key_name()].claim(bl);
+    (*km)[entry.get_key_name()] = std::move(bl);
   }
 
-  for (list<pg_log_dup_t>::reverse_iterator p = log.dups.rbegin();
+  for (auto p = log.dups.rbegin();
        p != log.dups.rend() &&
 	 (p->version >= dirty_from_dups || p->version >= write_from_dups) &&
 	 p->version >= dirty_to_dups;
        ++p) {
     bufferlist bl;
     encode(*p, bl);
-    (*km)[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()] = std::move(bl);
   }
 
   if (clear_divergent_priors) {
@@ -980,7 +976,7 @@ void PGLog::rebuild_missing_set_with_deletes(
   // versions on disk, just as if we were reading the log + metadata
   // off disk originally
   set<hobject_t> did;
-  for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
+  for (auto i = log.log.rbegin();
        i != log.log.rend();
        ++i) {
     if (i->version <= info.last_complete)

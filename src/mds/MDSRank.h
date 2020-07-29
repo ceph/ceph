@@ -17,6 +17,8 @@
 
 #include <string_view>
 
+#include <boost/asio/io_context.hpp>
+
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
@@ -37,6 +39,7 @@
 #include "MDSContext.h"
 #include "PurgeQueue.h"
 #include "Server.h"
+#include "MetricsHandler.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -118,6 +121,7 @@ class SnapClient;
 class MDSTableServer;
 class MDSTableClient;
 class Messenger;
+class MetricAggregator;
 class Objecter;
 class MonClient;
 class MgrClient;
@@ -151,7 +155,8 @@ class MDSRank {
         MonClient *monc_,
         MgrClient *mgrc,
         Context *respawn_hook_,
-        Context *suicide_hook_);
+        Context *suicide_hook_,
+	boost::asio::io_context& ioc);
 
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
@@ -264,6 +269,7 @@ class MDSRank {
     double get_dispatch_queue_max_age(utime_t now) const;
 
     void send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
+    void send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
     void forward_message_mds(const cref_t<MClientRequest>& req, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
     void send_message_client_counted(const ref_t<Message>& m, Session* session);
@@ -531,6 +537,9 @@ class MDSRank {
     // because its init/shutdown happens at the top level.
     PurgeQueue purge_queue;
 
+    MetricsHandler metrics_handler;
+    std::unique_ptr<MetricAggregator> metric_aggregator;
+
     list<cref_t<Message>> waiting_for_nolaggy;
     MDSContext::que finished_queue;
     // Dispatch, retry, queues
@@ -572,6 +581,8 @@ class MDSRank {
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
 private:
+    bool send_status = true;
+
     // "task" string that gets displayed in ceph status
     inline static const std::string SCRUB_STATUS_KEY = "scrub status";
 
@@ -579,7 +590,12 @@ private:
     void schedule_update_timer_task();
     void send_task_status();
 
+    bool is_rank0() const {
+      return whoami == (mds_rank_t)0;
+    }
+
     mono_time starttime = mono_clock::zero();
+    boost::asio::io_context& ioc;
 };
 
 /* This expects to be given a reference which it is responsible for.
@@ -628,7 +644,8 @@ public:
       MonClient *monc_,
       MgrClient *mgrc,
       Context *respawn_hook_,
-      Context *suicide_hook_);
+      Context *suicide_hook_,
+      boost::asio::io_context& ioc);
 
   void init();
   void tick();

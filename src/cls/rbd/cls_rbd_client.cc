@@ -7,12 +7,21 @@
 #include "include/encoding.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
+#include "include/neorados/RADOS.hpp"
 #include "common/bit_vector.hpp"
 
 #include <errno.h>
 
 namespace librbd {
 namespace cls_client {
+
+using std::map;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
 
 void create_image(librados::ObjectWriteOperation *op, uint64_t size,
                   uint8_t order, uint64_t features,
@@ -52,7 +61,7 @@ int get_features_finish(bufferlist::const_iterator *it, uint64_t *features,
   try {
     decode(*features, *it);
     decode(*incompatible_features, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -106,7 +115,7 @@ int get_object_prefix_finish(bufferlist::const_iterator *it,
 {
   try {
     decode(*object_prefix, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -136,7 +145,7 @@ void get_data_pool_start(librados::ObjectReadOperation *op) {
 int get_data_pool_finish(bufferlist::const_iterator *it, int64_t *data_pool_id) {
   try {
     decode(*data_pool_id, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -170,7 +179,7 @@ int get_size_finish(bufferlist::const_iterator *it, uint64_t *size,
   try {
     decode(*order, *it);
     decode(*size, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -216,7 +225,7 @@ void get_flags_start(librados::ObjectReadOperation *op, snapid_t snap_id) {
 int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags) {
   try {
     decode(*flags, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -258,7 +267,7 @@ int op_features_get_finish(bufferlist::const_iterator *it, uint64_t *op_features
 {
   try {
     decode(*op_features, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -315,7 +324,7 @@ int get_parent_finish(bufferlist::const_iterator *it,
     decode(pspec->image_id, *it);
     decode(pspec->snap_id, *it);
     decode(*parent_overlap, *it);
-  } catch (const buffer::error &) {
+  } catch (const ceph::buffer::error &) {
     return -EBADMSG;
   }
   return 0;
@@ -382,7 +391,7 @@ int parent_get_finish(bufferlist::const_iterator* it,
                       cls::rbd::ParentImageSpec* parent_image_spec) {
   try {
     decode(*parent_image_spec, *it);
-  } catch (const buffer::error &) {
+  } catch (const ceph::buffer::error &) {
     return -EBADMSG;
   }
   return 0;
@@ -418,7 +427,7 @@ int parent_overlap_get_finish(bufferlist::const_iterator* it,
                               std::optional<uint64_t>* parent_overlap) {
   try {
     decode(*parent_overlap, *it);
-  } catch (const buffer::error &) {
+  } catch (const ceph::buffer::error &) {
     return -EBADMSG;
   }
   return 0;
@@ -533,7 +542,7 @@ int get_children_finish(bufferlist::const_iterator *it,
                         std::set<std::string>* children) {
   try {
     decode(*children, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -567,7 +576,7 @@ int snapshot_get_finish(bufferlist::const_iterator* it,
 {
   try {
     decode(*snap_info, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -636,7 +645,7 @@ int get_snapcontext_finish(bufferlist::const_iterator *it,
 {
   try {
     decode(*snapc, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   if (!snapc->is_valid()) {
@@ -674,7 +683,7 @@ int get_snapshot_name_finish(bufferlist::const_iterator *it,
 {
   try {
     decode(*name, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -709,7 +718,7 @@ int get_snapshot_timestamp_finish(bufferlist::const_iterator *it,
 {
   try {
     decode(*timestamp, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -779,7 +788,7 @@ int old_snapshot_list_finish(bufferlist::const_iterator *it,
       decode((*sizes)[i], *it);
       decode((*names)[i], *it);
     }
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -812,7 +821,7 @@ int get_all_features_finish(bufferlist::const_iterator *it,
                             uint64_t *all_features) {
   try {
     decode(*all_features, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -833,8 +842,17 @@ int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
   return get_all_features_finish(&it, all_features);
 }
 
-void copyup(librados::ObjectWriteOperation *op, bufferlist data) {
+template <typename O>
+void copyup(O* op, ceph::buffer::list data) {
   op->exec("rbd", "copyup", data);
+}
+
+void copyup(neorados::WriteOp* op, ceph::buffer::list data) {
+  copyup<neorados::WriteOp>(op, data);
+}
+
+void copyup(librados::ObjectWriteOperation *op, bufferlist data) {
+  copyup<librados::ObjectWriteOperation>(op, data);
 }
 
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
@@ -845,13 +863,24 @@ int copyup(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->operate(oid, &op);
 }
 
-void sparse_copyup(librados::ObjectWriteOperation *op,
-                   const std::map<uint64_t, uint64_t> &extent_map,
-                   bufferlist data) {
+template <typename O, typename E>
+void sparse_copyup(O* op, const E& extent_map, ceph::buffer::list data) {
   bufferlist bl;
   encode(extent_map, bl);
   encode(data, bl);
   op->exec("rbd", "sparse_copyup", bl);
+}
+
+void sparse_copyup(neorados::WriteOp* op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   ceph::buffer::list data) {
+  sparse_copyup<neorados::WriteOp>(op, extent_map, data);
+}
+
+void sparse_copyup(librados::ObjectWriteOperation *op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   bufferlist data) {
+  sparse_copyup<librados::ObjectWriteOperation>(op, extent_map, data);
 }
 
 int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
@@ -876,7 +905,7 @@ int get_protection_status_finish(bufferlist::const_iterator *it,
 {
   try {
     decode(*protection_status, *it);
-  } catch (const buffer::error &) {
+  } catch (const ceph::buffer::error &) {
     return -EBADMSG;
   }
   return 0;
@@ -926,7 +955,7 @@ int snapshot_get_limit_finish(bufferlist::const_iterator *it, uint64_t *limit)
 {
   try {
     decode(*limit, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -969,7 +998,7 @@ int get_stripe_unit_count_finish(bufferlist::const_iterator *it,
   try {
     decode(*stripe_unit, *it);
     decode(*stripe_count, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1021,7 +1050,7 @@ int get_create_timestamp_finish(bufferlist::const_iterator *it,
 
   try {
     decode(*timestamp, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1054,7 +1083,7 @@ int get_access_timestamp_finish(bufferlist::const_iterator *it,
 
   try {
     decode(*timestamp, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1100,7 +1129,7 @@ int get_modify_timestamp_finish(bufferlist::const_iterator *it,
 
   try {
     decode(*timestamp, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1146,7 +1175,7 @@ void get_id_start(librados::ObjectReadOperation *op) {
 int get_id_finish(bufferlist::const_iterator *it, std::string *id) {
   try {
     decode(*id, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1195,7 +1224,7 @@ void dir_get_id_start(librados::ObjectReadOperation *op,
 int dir_get_id_finish(bufferlist::const_iterator *iter, std::string *image_id) {
   try {
     decode(*image_id, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -1227,7 +1256,7 @@ void dir_get_name_start(librados::ObjectReadOperation *op,
 int dir_get_name_finish(bufferlist::const_iterator *it, std::string *name) {
   try {
     decode(*name, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1262,7 +1291,7 @@ int dir_list_finish(bufferlist::const_iterator *it, map<string, string> *images)
 {
   try {
     decode(*images, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1376,7 +1405,7 @@ int object_map_load_finish(bufferlist::const_iterator *it,
                            ceph::BitVector<2> *object_map) {
   try {
     decode(*object_map, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1516,7 +1545,7 @@ int metadata_list_finish(bufferlist::const_iterator *it,
   ceph_assert(pairs);
   try {
     decode(*pairs, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1534,7 +1563,7 @@ int metadata_get_finish(bufferlist::const_iterator *it,
                          std::string* value) {
   try {
     decode(*value, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1621,7 +1650,7 @@ int children_list_finish(bufferlist::const_iterator *it,
   child_images->clear();
   try {
     decode(*child_images, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1688,7 +1717,7 @@ int migration_get_finish(bufferlist::const_iterator *it,
                          cls::rbd::MigrationSpec *migration_spec) {
   try {
     decode(*migration_spec, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1724,21 +1753,33 @@ void migration_remove(librados::ObjectWriteOperation *op) {
   op->exec("rbd", "migration_remove", bl);
 }
 
+template <typename O>
+void assert_snapc_seq(O* op, uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state) {
+  bufferlist bl;
+  encode(snapc_seq, bl);
+  encode(state, bl);
+  op->exec("rbd", "assert_snapc_seq", bl);
+}
+
+void assert_snapc_seq(neorados::WriteOp* op,
+                      uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state) {
+  assert_snapc_seq<neorados::WriteOp>(op, snapc_seq, state);
+}
+
+void assert_snapc_seq(librados::ObjectWriteOperation *op,
+                      uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state) {
+  assert_snapc_seq<librados::ObjectWriteOperation>(op, snapc_seq, state);
+}
+
 int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
                      uint64_t snapc_seq,
                      cls::rbd::AssertSnapcSeqState state) {
   librados::ObjectWriteOperation op;
   assert_snapc_seq(&op, snapc_seq, state);
   return ioctx->operate(oid, &op);
-}
-
-void assert_snapc_seq(librados::ObjectWriteOperation *op,
-                      uint64_t snapc_seq,
-                      cls::rbd::AssertSnapcSeqState state) {
-  bufferlist bl;
-  encode(snapc_seq, bl);
-  encode(state, bl);
-  op->exec("rbd", "assert_snapc_seq", bl);
 }
 
 void mirror_uuid_get_start(librados::ObjectReadOperation *op) {
@@ -1750,7 +1791,7 @@ int mirror_uuid_get_finish(bufferlist::const_iterator *it,
                            std::string *uuid) {
   try {
     decode(*uuid, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1798,7 +1839,7 @@ int mirror_mode_get_finish(bufferlist::const_iterator *it,
     uint32_t mirror_mode_decode;
     decode(mirror_mode_decode, *it);
     *mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode_decode);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -1851,7 +1892,7 @@ int mirror_peer_list_finish(bufferlist::const_iterator *it,
   peers->clear();
   try {
     decode(*peers, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -1998,7 +2039,7 @@ int mirror_image_list_finish(bufferlist::const_iterator *it,
 {
   try {
     decode(*mirror_image_ids, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2031,7 +2072,7 @@ int mirror_image_get_image_id_finish(bufferlist::const_iterator *it,
                                      std::string *image_id) {
   try {
     decode(*image_id, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2084,7 +2125,7 @@ int mirror_image_get_finish(bufferlist::const_iterator *iter,
                             cls::rbd::MirrorImage *mirror_image) {
   try {
     decode(*mirror_image, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2179,7 +2220,7 @@ int mirror_image_status_get_finish(bufferlist::const_iterator *iter,
                                    cls::rbd::MirrorImageStatus *status) {
   try {
     decode(*status, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2223,7 +2264,7 @@ int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
   try {
     decode(*images, *iter);
     decode(*statuses, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2263,7 +2304,7 @@ int mirror_image_status_get_summary_finish(
     std::map<cls::rbd::MirrorImageStatusState, int32_t> *states) {
   try {
     decode(*states, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2311,7 +2352,7 @@ int mirror_image_instance_get_finish(bufferlist::const_iterator *iter,
                                      entity_inst_t *instance) {
   try {
     decode(*instance, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2352,7 +2393,7 @@ int mirror_image_instance_list_finish(
   instances->clear();
   try {
     decode(*instances, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2368,7 +2409,7 @@ int mirror_instances_list_finish(bufferlist::const_iterator *iter,
   instance_ids->clear();
   try {
     decode(*instance_ids, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2435,7 +2476,7 @@ int mirror_image_map_list_finish(bufferlist::const_iterator *iter,
                                  std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping) {
   try {
     decode(*image_mapping, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2531,7 +2572,7 @@ int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
   auto iter = out.cbegin();
   try {
     decode(*cgs, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -2593,7 +2634,7 @@ int group_image_list(librados::IoCtx *ioctx,
   auto iter = bl2.cbegin();
   try {
     decode(*images, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -2638,7 +2679,7 @@ int image_group_get_finish(bufferlist::const_iterator *iter,
 {
   try {
     decode(*group_spec, *iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
@@ -2696,7 +2737,7 @@ int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
   auto iter = outbl.cbegin();
   try {
     decode(*snapshot, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -2720,7 +2761,7 @@ int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
   auto iter = outbl.cbegin();
   try {
     decode(*snapshots, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -2779,7 +2820,7 @@ int trash_list_finish(bufferlist::const_iterator *it,
 
   try {
     decode(*entries, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -2816,7 +2857,7 @@ int trash_get_finish(bufferlist::const_iterator *it,
   ceph_assert(trash_spec);
   try {
     decode(*trash_spec, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 
@@ -2909,7 +2950,7 @@ int namespace_list_finish(bufferlist::const_iterator *it,
 
   try {
     decode(*entries, *it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
 

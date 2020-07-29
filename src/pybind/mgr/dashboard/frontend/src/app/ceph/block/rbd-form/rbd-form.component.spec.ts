@@ -1,18 +1,16 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, discardPeriodicTasks, fakeAsync, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ToastrModule } from 'ngx-toastr';
-
-import { By } from '@angular/platform-browser';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ImageSpec } from '../../../shared/models/image-spec';
 import { SharedModule } from '../../../shared/shared.module';
@@ -35,8 +33,7 @@ describe('RbdFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       ToastrModule.forRoot(),
-      SharedModule,
-      TooltipModule
+      SharedModule
     ],
     declarations: [RbdFormComponent, RbdConfigurationFormComponent],
     providers: [
@@ -44,7 +41,6 @@ describe('RbdFormComponent', () => {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ pool: 'foo', name: 'bar', snap: undefined })
       },
-      i18nProviders,
       RbdService
     ]
   });
@@ -52,7 +48,9 @@ describe('RbdFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdFormComponent);
     component = fixture.componentInstance;
-    activatedRoute = TestBed.get(ActivatedRoute);
+    activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
+
+    component.loadingReady();
   });
 
   it('should create', () => {
@@ -65,15 +63,19 @@ describe('RbdFormComponent', () => {
     let cloneAction: jasmine.Spy;
     let copyAction: jasmine.Spy;
     let rbdServiceGetSpy: jasmine.Spy;
+    let routerNavigate: jasmine.Spy;
+
+    const DELAY = 100;
 
     beforeEach(() => {
-      createAction = spyOn(component, 'createAction').and.stub();
-      editAction = spyOn(component, 'editAction').and.stub();
-      cloneAction = spyOn(component, 'cloneAction').and.stub();
-      copyAction = spyOn(component, 'copyAction').and.stub();
+      createAction = spyOn(component, 'createAction').and.returnValue(of(null));
+      editAction = spyOn(component, 'editAction');
+      editAction.and.returnValue(of(null));
+      cloneAction = spyOn(component, 'cloneAction').and.returnValue(of(null));
+      copyAction = spyOn(component, 'copyAction').and.returnValue(of(null));
       spyOn(component, 'setResponse').and.stub();
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      rbdServiceGetSpy = spyOn(TestBed.get(RbdService), 'get');
+      routerNavigate = spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      rbdServiceGetSpy = spyOn(TestBed.inject(RbdService), 'get');
       rbdServiceGetSpy.and.returnValue(of({ pool_name: 'foo', pool_image: 'bar' }));
       component.mode = undefined;
     });
@@ -86,12 +88,28 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(0);
       expect(cloneAction).toHaveBeenCalledTimes(0);
       expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should unsubscribe right after image data is received', () => {
+      component.mode = RbdFormMode.editing;
+      rbdServiceGetSpy.and.returnValue(of({ pool_name: 'foo', pool_image: 'bar' }));
+      editAction.and.returnValue(NEVER);
+      component.ngOnInit();
+      component.submit();
+
+      expect(component['rbdImage'].observers.length).toEqual(0);
+      expect(createAction).toHaveBeenCalledTimes(0);
+      expect(editAction).toHaveBeenCalledTimes(1);
+      expect(cloneAction).toHaveBeenCalledTimes(0);
+      expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(0);
     });
 
     it('should not edit image if no image data is received', fakeAsync(() => {
       component.mode = RbdFormMode.editing;
       rbdServiceGetSpy.and.returnValue(
-        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(100))
+        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(DELAY))
       );
       component.ngOnInit();
       component.submit();
@@ -100,8 +118,9 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(0);
       expect(cloneAction).toHaveBeenCalledTimes(0);
       expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(0);
 
-      discardPeriodicTasks();
+      tick(DELAY);
     }));
 
     it('should edit image after image data is received', () => {
@@ -113,12 +132,13 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(1);
       expect(cloneAction).toHaveBeenCalledTimes(0);
       expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(1);
     });
 
     it('should not clone image if no image data is received', fakeAsync(() => {
       component.mode = RbdFormMode.cloning;
       rbdServiceGetSpy.and.returnValue(
-        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(100))
+        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(DELAY))
       );
       component.ngOnInit();
       component.submit();
@@ -127,8 +147,9 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(0);
       expect(cloneAction).toHaveBeenCalledTimes(0);
       expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(0);
 
-      discardPeriodicTasks();
+      tick(DELAY);
     }));
 
     it('should clone image after image data is received', () => {
@@ -140,12 +161,13 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(0);
       expect(cloneAction).toHaveBeenCalledTimes(1);
       expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(1);
     });
 
     it('should not copy image if no image data is received', fakeAsync(() => {
       component.mode = RbdFormMode.copying;
       rbdServiceGetSpy.and.returnValue(
-        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(100))
+        of({ pool_name: 'foo', pool_image: 'bar' }).pipe(delay(DELAY))
       );
       component.ngOnInit();
       component.submit();
@@ -154,8 +176,9 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(0);
       expect(cloneAction).toHaveBeenCalledTimes(0);
       expect(copyAction).toHaveBeenCalledTimes(0);
+      expect(routerNavigate).toHaveBeenCalledTimes(0);
 
-      discardPeriodicTasks();
+      tick(DELAY);
     }));
 
     it('should copy image after image data is received', () => {
@@ -167,6 +190,7 @@ describe('RbdFormComponent', () => {
       expect(editAction).toHaveBeenCalledTimes(0);
       expect(cloneAction).toHaveBeenCalledTimes(0);
       expect(copyAction).toHaveBeenCalledTimes(1);
+      expect(routerNavigate).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -174,7 +198,7 @@ describe('RbdFormComponent', () => {
     let rbdService: RbdService;
 
     beforeEach(() => {
-      rbdService = TestBed.get(RbdService);
+      rbdService = TestBed.inject(RbdService);
       component.mode = RbdFormMode.editing;
       fixture.detectChanges();
       spyOn(rbdService, 'get').and.callThrough();
@@ -256,7 +280,7 @@ describe('RbdFormComponent', () => {
 
     describe('test edit form flags', () => {
       const prepare = (pool: string, image: string, enabledFeatures: string[]): void => {
-        const rbdService = TestBed.get(RbdService);
+        const rbdService = TestBed.inject(RbdService);
         spyOn(rbdService, 'get').and.returnValue(
           of({
             name: image,
@@ -313,7 +337,7 @@ describe('RbdFormComponent', () => {
 
     describe('test create form flags', () => {
       beforeEach(() => {
-        const rbdService = TestBed.get(RbdService);
+        const rbdService = TestBed.inject(RbdService);
         spyOn(rbdService, 'defaultFeatures').and.returnValue(of(defaultFeatures));
         component.router = { url: '/block/rbd/create' } as Router;
         fixture.detectChanges();

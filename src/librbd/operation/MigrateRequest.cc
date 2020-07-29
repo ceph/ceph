@@ -10,7 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/AsyncOperation.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -69,7 +69,7 @@ private:
     m_async_op = new io::AsyncOperation();
     m_async_op->start_op(image_ctx);
 
-    if (!image_ctx.io_work_queue->writes_blocked()) {
+    if (!image_ctx.io_image_dispatcher->writes_blocked()) {
       migrate_object();
       return;
     }
@@ -80,7 +80,7 @@ private:
     m_async_op->finish_op();
     delete m_async_op;
     m_async_op = nullptr;
-    image_ctx.io_work_queue->wait_on_writes_unblocked(ctx);
+    image_ctx.io_image_dispatcher->wait_on_writes_unblocked(ctx);
   }
 
   void handle_start_async_op(int r) {
@@ -130,7 +130,7 @@ private:
 
       auto req = deep_copy::ObjectCopyRequest<I>::create(
         image_ctx.parent, &image_ctx, 0, 0, image_ctx.migration_info.snap_map,
-        m_object_no, image_ctx.migration_info.flatten, ctx);
+        m_object_no, image_ctx.migration_info.flatten, nullptr, ctx);
 
       ldout(cct, 20) << "deep copy object req " << req << ", object_no "
                      << m_object_no << dendl;

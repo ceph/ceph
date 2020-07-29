@@ -64,6 +64,29 @@ static std::string map_option_int_cb(const char *value_char)
   return stringify(d);
 }
 
+static std::string map_option_string_cb(const char *value_char)
+{
+  return value_char;
+}
+
+static std::string map_option_read_from_replica_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "no") || !strcmp(value_char, "balance") ||
+      !strcmp(value_char, "localize")) {
+    return value_char;
+  }
+  return "";
+}
+
+static std::string map_option_compression_hint_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "none") || !strcmp(value_char, "compressible") ||
+      !strcmp(value_char, "incompressible")) {
+    return value_char;
+  }
+  return "";
+}
+
 static void put_map_option(const std::string &key, const std::string &val)
 {
   map_options[key] = val;
@@ -152,6 +175,18 @@ static int parse_map_options(const std::string &options_string)
       put_map_option("abort_on_full", this_char);
     } else if (!strcmp(this_char, "alloc_size")) {
       if (put_map_option_value("alloc_size", value_char, map_option_int_cb))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "crush_location")) {
+      if (put_map_option_value("crush_location", value_char,
+                               map_option_string_cb))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "read_from_replica")) {
+      if (put_map_option_value("read_from_replica", value_char,
+                               map_option_read_from_replica_cb))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "compression_hint")) {
+      if (put_map_option_value("compression_hint", value_char,
+                               map_option_compression_hint_cb))
         return -EINVAL;
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
@@ -434,11 +469,18 @@ int execute_map(const po::variables_map &vm,
     return r;
   }
 
+  if (vm["quiesce"].as<bool>()) {
+    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
+  }
   if (vm["read-only"].as<bool>()) {
     put_map_option("rw", "ro");
   }
   if (vm["exclusive"].as<bool>()) {
     put_map_option("exclusive", "exclusive");
+  }
+
+  if (vm.count("quiesce-hook")) {
+    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
   }
 
   // parse default options first so they can be overwritten by cli options

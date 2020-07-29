@@ -105,25 +105,42 @@ or run ``cephadm bootstrap -h`` to see all available options:
   cluster by putting them in a standard ini-style configuration file
   and using the ``--config *<config-file>*`` option.
 
+* You can choose the ssh user cephadm will use to connect to hosts by
+  using the ``--ssh-user *<user>*`` option. The ssh key will be added
+  to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
+  passwordless sudo access.
+
+* If you are using a container on an authenticated registry that requires
+  login you may add the three arguments ``--registry-url <url of registry>``,
+  ``--registry-username <username of account on registry>``,
+  ``--registry-password <password of account on registry>`` OR
+  ``--registry-json <json file with login info>``. Cephadm will attempt
+  to login to this registry so it may pull your container and then store
+  the login info in its config database so other hosts added to the cluster
+  may also make use of the authenticated registry.
 
 Enable Ceph CLI
 ===============
 
 Cephadm does not require any Ceph packages to be installed on the
-host.  However, we recommend enabling easy access to the the ``ceph``
+host.  However, we recommend enabling easy access to the ``ceph``
 command.  There are several ways to do this:
 
 * The ``cephadm shell`` command launches a bash shell in a container
-  with all of the Ceph packages installed.  By default, if
+  with all of the Ceph packages installed. By default, if
   configuration and keyring files are found in ``/etc/ceph`` on the
   host, they are passed into the container environment so that the
-  shell is fully functional::
+  shell is fully functional. Note that when executed on a MON host,
+  ``cephadm shell`` will infer the ``config`` from the MON container
+  instead of using the default configuration. If ``--mount <path>``
+  is given, then the host ``<path>`` (file or directory) will appear
+  under ``/mnt`` inside the container::
 
     # cephadm shell
 
 * It may be helpful to create an alias::
 
-    # alias ceph='cephadm shell --'
+    # alias ceph='cephadm shell -- ceph'
 
 * You can install the ``ceph-common`` package, which contains all of the
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
@@ -150,12 +167,12 @@ To add each new host to the cluster, perform two steps:
 #. Install the cluster's public SSH key in the new host's root user's
    ``authorized_keys`` file::
 
-     # ssh-copy-id -f -i ceph.pub root@*<new-host>*
+     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@*<new-host>*
 
    For example::
 
-     # ssh-copy-id -f -i ceph.pub root@host2
-     # ssh-copy-id -f -i ceph.pub root@host3
+     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@host2
+     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@host3
 
 #. Tell Ceph that the new node is part of the cluster::
 
@@ -166,6 +183,8 @@ To add each new host to the cluster, perform two steps:
      # ceph orch host add host2
      # ceph orch host add host3
 
+
+.. _deploy_additional_monitors:
 
 Deploy additional monitors (optional)
 =====================================
@@ -251,6 +270,49 @@ hosts to the cluster. No further steps are necessary.
     # ceph orch daemon add mon newhost1:10.1.2.123
     # ceph orch daemon add mon newhost2:10.1.2.0/24
 
+  .. note::
+     The **apply** command can be confusing. For this reason, we recommend using
+     YAML specifications. 
+
+     Each 'ceph orch apply mon' command supersedes the one before it. 
+     This means that you must use the proper comma-separated list-based 
+     syntax when you want to apply monitors to more than one host. 
+     If you do not use the proper syntax, you will clobber your work 
+     as you go.
+
+     For example::
+        
+          # ceph orch apply mon host1
+          # ceph orch apply mon host2
+          # ceph orch apply mon host3
+
+     This results in only one host having a monitor applied to it: host 3.
+
+     (The first command creates a monitor on host1. Then the second command
+     clobbers the monitor on host1 and creates a monitor on host2. Then the
+     third command clobbers the monitor on host2 and creates a monitor on 
+     host3. In this scenario, at this point, there is a monitor ONLY on
+     host3.)
+
+     To make certain that a monitor is applied to each of these three hosts,
+     run a command like this::
+       
+          # ceph orch apply mon "host1,host2,host3"
+
+     Instead of using the "ceph orch apply mon" commands, run a command like
+     this::
+
+          # ceph orch apply -i file.yaml
+
+     Here is a sample **file.yaml** file::
+
+          service_type: mon
+          placement:
+            hosts:
+             - host1
+             - host2
+             - host3
+
 
 Deploy OSDs
 ===========
@@ -302,7 +364,9 @@ see :ref:`fs-volumes-and-subvolumes`.
 
 To deploy metadata servers::
 
-  # ceph orch apply mds *<fs-name>* *<num-daemons>* [*<host1>* ...]
+  # ceph orch apply mds *<fs-name>* --placement="*<num-daemons>* [*<host1>* ...]"
+
+See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
 Deploy RGWs
 ===========
@@ -332,7 +396,7 @@ Next create a zone::
 
 To deploy a set of radosgw daemons for a particular realm and zone::
 
-  # ceph orch apply rgw *<realm-name>* *<zone-name>* *<num-daemons>* [*<host1>* ...]
+  # ceph orch apply rgw *<realm-name>* *<zone-name>* --placement="*<num-daemons>* [*<host1>* ...]"
 
 For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1*
 zone on *myhost1* and *myhost2*::
@@ -340,7 +404,9 @@ zone on *myhost1* and *myhost2*::
   # radosgw-admin realm create --rgw-realm=myorg --default
   # radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
   # radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=us-east-1 --master --default
-  # ceph orch apply rgw myorg us-east-1 2 myhost1 myhost2
+  # ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
+
+See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
 Deploying NFS ganesha
 =====================
@@ -350,9 +416,18 @@ and optional *namespace*
 
 To deploy a NFS Ganesha gateway,::
 
-  # ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* *<num-daemons>* [*<host1>* ...]
+  # ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* --placement="*<num-daemons>* [*<host1>* ...]"
 
 For example, to deploy NFS with a service id of *foo*, that will use the
 RADOS pool *nfs-ganesha* and namespace *nfs-ns*,::
 
   # ceph orch apply nfs foo nfs-ganesha nfs-ns
+
+.. note::
+   Create the *nfs-ganesha* pool first if it doesn't exist.
+
+See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
+
+Deploying custom containers
+===========================
+It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard.

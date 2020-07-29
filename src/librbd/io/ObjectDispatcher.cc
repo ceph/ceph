@@ -5,9 +5,9 @@
 #include "include/Context.h"
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatch.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include <boost/variant.hpp>
@@ -35,23 +35,23 @@ struct ObjectDispatcher<I>::C_LayerIterator : public Context {
   void complete(int r) override {
     while (true) {
       object_dispatcher->m_lock.lock_shared();
-      auto it = object_dispatcher->m_object_dispatches.upper_bound(
+      auto it = object_dispatcher->m_dispatches.upper_bound(
         object_dispatch_layer);
-      if (it == object_dispatcher->m_object_dispatches.end()) {
+      if (it == object_dispatcher->m_dispatches.end()) {
         object_dispatcher->m_lock.unlock_shared();
         Context::complete(r);
         return;
       }
 
       auto& object_dispatch_meta = it->second;
-      auto object_dispatch = object_dispatch_meta.object_dispatch;
+      auto object_dispatch = object_dispatch_meta.dispatch;
 
       // prevent recursive locking back into the dispatcher while handling IO
       object_dispatch_meta.async_op_tracker->start_op();
       object_dispatcher->m_lock.unlock_shared();
 
       // next loop should start after current layer
-      object_dispatch_layer = object_dispatch->get_object_dispatch_layer();
+      object_dispatch_layer = object_dispatch->get_dispatch_layer();
 
       auto handled = execute(object_dispatch, this);
       object_dispatch_meta.async_op_tracker->finish_op();
@@ -174,112 +174,30 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 
 template <typename I>
 ObjectDispatcher<I>::ObjectDispatcher(I* image_ctx)
-  : m_image_ctx(image_ctx),
-    m_lock(ceph::make_shared_mutex(
-      librbd::util::unique_lock_name("librbd::io::ObjectDispatcher::lock",
-				     this))) {
+  : Dispatcher<I, ObjectDispatcherInterface>(image_ctx) {
   // configure the core object dispatch handler on startup
   auto object_dispatch = new ObjectDispatch(image_ctx);
-  m_object_dispatches[object_dispatch->get_object_dispatch_layer()] =
-    {object_dispatch, new AsyncOpTracker()};
-}
-
-template <typename I>
-ObjectDispatcher<I>::~ObjectDispatcher() {
-  ceph_assert(m_object_dispatches.empty());
-}
-
-template <typename I>
-void ObjectDispatcher<I>::shut_down(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 5) << dendl;
-
-  std::map<ObjectDispatchLayer, ObjectDispatchMeta> object_dispatches;
-  {
-    std::unique_lock locker{m_lock};
-    std::swap(object_dispatches, m_object_dispatches);
-  }
-
-  for (auto it : object_dispatches) {
-    shut_down_object_dispatch(it.second, &on_finish);
-  }
-  on_finish->complete(0);
-}
-
-template <typename I>
-void ObjectDispatcher<I>::register_object_dispatch(
-    ObjectDispatchInterface* object_dispatch) {
-  auto cct = m_image_ctx->cct;
-  auto type = object_dispatch->get_object_dispatch_layer();
-  ldout(cct, 5) << "object_dispatch_layer=" << type << dendl;
-
-  std::unique_lock locker{m_lock};
-  ceph_assert(type < OBJECT_DISPATCH_LAYER_LAST);
-
-  auto result = m_object_dispatches.insert(
-    {type, {object_dispatch, new AsyncOpTracker()}});
-  ceph_assert(result.second);
-}
-
-template <typename I>
-void ObjectDispatcher<I>::shut_down_object_dispatch(
-    ObjectDispatchLayer object_dispatch_layer, Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 5) << "object_dispatch_layer=" << object_dispatch_layer << dendl;
-  ceph_assert(object_dispatch_layer + 1 < OBJECT_DISPATCH_LAYER_LAST);
-
-  ObjectDispatchMeta object_dispatch_meta;
-  {
-    std::unique_lock locker{m_lock};
-    auto it = m_object_dispatches.find(object_dispatch_layer);
-    ceph_assert(it != m_object_dispatches.end());
-
-    object_dispatch_meta = it->second;
-    m_object_dispatches.erase(it);
-  }
-
-  shut_down_object_dispatch(object_dispatch_meta, &on_finish);
-  on_finish->complete(0);
-}
-
-template <typename I>
-void ObjectDispatcher<I>::shut_down_object_dispatch(
-    ObjectDispatchMeta& object_dispatch_meta, Context** on_finish) {
-  auto object_dispatch = object_dispatch_meta.object_dispatch;
-  auto async_op_tracker = object_dispatch_meta.async_op_tracker;
-
-  Context* ctx = *on_finish;
-  ctx = new LambdaContext(
-    [object_dispatch, async_op_tracker, ctx](int r) {
-      delete object_dispatch;
-      delete async_op_tracker;
-
-      ctx->complete(r);
-    });
-  ctx = new LambdaContext([object_dispatch, ctx](int r) {
-      object_dispatch->shut_down(ctx);
-    });
-  *on_finish = new LambdaContext([async_op_tracker, ctx](int r) {
-      async_op_tracker->wait_for_ops(ctx);
-    });
+  this->register_dispatch(object_dispatch);
 }
 
 template <typename I>
 void ObjectDispatcher<I>::invalidate_cache(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
+  auto image_ctx = this->m_image_ctx;
+  auto cct = image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  on_finish = util::create_async_context_callback(*m_image_ctx, on_finish);
+  on_finish = util::create_async_context_callback(*image_ctx, on_finish);
   auto ctx = new C_InvalidateCache(this, on_finish);
   ctx->complete(0);
 }
 
 template <typename I>
 void ObjectDispatcher<I>::reset_existence_cache(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
+  auto image_ctx = this->m_image_ctx;
+  auto cct = image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  on_finish = util::create_async_context_callback(*m_image_ctx, on_finish);
+  on_finish = util::create_async_context_callback(*image_ctx, on_finish);
   auto ctx = new C_ResetExistenceCache(this, on_finish);
   ctx->complete(0);
 }
@@ -288,64 +206,26 @@ template <typename I>
 void ObjectDispatcher<I>::extent_overwritten(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     uint64_t journal_tid, uint64_t new_journal_tid) {
-  auto cct = m_image_ctx->cct;
+  auto cct = this->m_image_ctx->cct;
   ldout(cct, 20) << object_no << " " << object_off << "~" << object_len
                  << dendl;
 
-  for (auto it : m_object_dispatches) {
+  std::shared_lock locker{this->m_lock};
+  for (auto it : this->m_dispatches) {
     auto& object_dispatch_meta = it.second;
-    auto object_dispatch = object_dispatch_meta.object_dispatch;
+    auto object_dispatch = object_dispatch_meta.dispatch;
     object_dispatch->extent_overwritten(object_no, object_off, object_len,
                                         journal_tid, new_journal_tid);
   }
 }
 
 template <typename I>
-void ObjectDispatcher<I>::send(ObjectDispatchSpec* object_dispatch_spec) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_dispatch_spec=" << object_dispatch_spec << dendl;
-
-  auto object_dispatch_layer = object_dispatch_spec->object_dispatch_layer;
-  ceph_assert(object_dispatch_layer + 1 < OBJECT_DISPATCH_LAYER_LAST);
-
-  // apply the IO request to all layers -- this method will be re-invoked
-  // by the dispatch layer if continuing / restarting the IO
-  while (true) {
-    m_lock.lock_shared();
-    object_dispatch_layer = object_dispatch_spec->object_dispatch_layer;
-    auto it = m_object_dispatches.upper_bound(object_dispatch_layer);
-    if (it == m_object_dispatches.end()) {
-      // the request is complete if handled by all layers
-      object_dispatch_spec->dispatch_result = DISPATCH_RESULT_COMPLETE;
-      m_lock.unlock_shared();
-      break;
-    }
-
-    auto& object_dispatch_meta = it->second;
-    auto object_dispatch = object_dispatch_meta.object_dispatch;
-    object_dispatch_spec->dispatch_result = DISPATCH_RESULT_INVALID;
-
-    // prevent recursive locking back into the dispatcher while handling IO
-    object_dispatch_meta.async_op_tracker->start_op();
-    m_lock.unlock_shared();
-
-    // advance to next layer in case we skip or continue
-    object_dispatch_spec->object_dispatch_layer =
-      object_dispatch->get_object_dispatch_layer();
-
-    bool handled = boost::apply_visitor(
-      SendVisitor{object_dispatch, object_dispatch_spec},
-      object_dispatch_spec->request);
-    object_dispatch_meta.async_op_tracker->finish_op();
-
-    // handled ops will resume when the dispatch ctx is invoked
-    if (handled) {
-      return;
-    }
-  }
-
-  // skipped through to the last layer
-  object_dispatch_spec->dispatcher_ctx.complete(0);
+bool ObjectDispatcher<I>::send_dispatch(
+    ObjectDispatchInterface* object_dispatch,
+    ObjectDispatchSpec* object_dispatch_spec) {
+  return boost::apply_visitor(
+    SendVisitor{object_dispatch, object_dispatch_spec},
+    object_dispatch_spec->request);
 }
 
 } // namespace io

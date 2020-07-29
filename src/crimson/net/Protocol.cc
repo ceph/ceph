@@ -21,7 +21,7 @@ namespace {
 namespace crimson::net {
 
 Protocol::Protocol(proto_t type,
-                   Dispatcher& dispatcher,
+                   ChainedDispatchersRef& dispatcher,
                    SocketConnection& conn)
   : proto_type(type),
     dispatcher(dispatcher),
@@ -31,13 +31,8 @@ Protocol::Protocol(proto_t type,
 
 Protocol::~Protocol()
 {
-  ceph_assert(pending_dispatch.is_closed());
+  ceph_assert(gate.is_closed());
   assert(!exit_open);
-}
-
-bool Protocol::is_connected() const
-{
-  return write_state == write_state_t::open;
 }
 
 void Protocol::close(bool dispatch_reset,
@@ -48,13 +43,15 @@ void Protocol::close(bool dispatch_reset,
     return;
   }
 
+  bool is_replace = f_accept_new ? true : false;
   logger().info("{} closing: reset {}, replace {}", conn,
                 dispatch_reset ? "yes" : "no",
-                f_accept_new ? "yes" : "no");
+                is_replace ? "yes" : "no");
 
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn_ref = conn.shared_from_this(), this] {
       logger().debug("{} closed!", conn);
+      on_closed();
 #ifdef UNIT_TESTS_BUILT
       is_closed_clean = true;
       if (conn.interceptor) {
@@ -73,11 +70,12 @@ void Protocol::close(bool dispatch_reset,
     socket->shutdown();
   }
   set_write_state(write_state_t::drop);
-  auto gate_closed = pending_dispatch.close();
-  auto reset_dispatched = seastar::futurize_apply([this, dispatch_reset] {
+  auto gate_closed = gate.close();
+  auto reset_dispatched = seastar::futurize_invoke([this, dispatch_reset, is_replace] {
     if (dispatch_reset) {
-      return dispatcher.ms_handle_reset(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+      dispatcher->ms_handle_reset(
+	  seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+	  is_replace);
     }
     return seastar::now();
   }).handle_exception([this] (std::exception_ptr eptr) {
@@ -315,7 +313,7 @@ void Protocol::write_event()
    case write_state_t::open:
      [[fallthrough]];
    case write_state_t::delay:
-    gated_dispatch("do_write_dispatch_sweep", [this] {
+    gate.dispatch_in_background("do_write_dispatch_sweep", *this, [this] {
       return do_write_dispatch_sweep();
     });
     return;

@@ -14,7 +14,6 @@
 
 #include "SocketConnection.h"
 
-#include "Config.h"
 #include "ProtocolV1.h"
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
@@ -24,9 +23,10 @@
 #endif
 
 using namespace crimson::net;
+using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   Dispatcher& dispatcher,
+                                   ChainedDispatchersRef& dispatcher,
                                    bool is_msgr2)
   : messenger(messenger)
 {
@@ -52,20 +52,20 @@ SocketConnection::get_messenger() const {
 
 bool SocketConnection::is_connected() const
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
 bool SocketConnection::is_closed() const
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_closed();
 }
 
 bool SocketConnection::is_closed_clean() const
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_closed_clean;
 }
 
@@ -77,19 +77,19 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::keepalive()
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->keepalive();
 }
 
 void SocketConnection::mark_down()
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   protocol->close(false);
 }
 
@@ -97,12 +97,12 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 {
   if (seq <= in_seq) {
     if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
-        conf.ms_die_on_old_message) {
+        local_conf()->ms_die_on_old_message) {
       ceph_abort_msg("old msgs despite reconnect_seq feature");
     }
     return false;
   } else if (seq > in_seq + 1) {
-    if (conf.ms_die_on_skipped_message) {
+    if (local_conf()->ms_die_on_skipped_message) {
       ceph_abort_msg("skipped incoming seq");
     }
     return false;
@@ -114,9 +114,9 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 
 void
 SocketConnection::start_connect(const entity_addr_t& _peer_addr,
-                                const entity_type_t& _peer_type)
+                                const entity_name_t& _peer_name)
 {
-  protocol->start_connect(_peer_addr, _peer_type);
+  protocol->start_connect(_peer_addr, _peer_name);
 }
 
 void

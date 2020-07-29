@@ -25,8 +25,11 @@
 #include <typeinfo>
 #include <typeindex>
 
-#include "include/common_fwd.h"
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/any.h"
+#include "include/common_fwd.h"
+#include "include/compat.h"
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
@@ -375,4 +378,17 @@ private:
 #endif
 #endif	// WITH_SEASTAR
 
+#if !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN)) && defined(__cplusplus)
+namespace ceph::common {
+inline void intrusive_ptr_add_ref(CephContext* cct)
+{
+  cct->get();
+}
+
+inline void intrusive_ptr_release(CephContext* cct)
+{
+  cct->put();
+}
+}
+#endif // !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN)) && defined(__cplusplus)
 #endif

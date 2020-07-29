@@ -62,8 +62,7 @@ class TestSessionMap(CephFSTestCase):
 
         status = self.fs.status()
         s = self._get_connection_count(status=status)
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.assertGreater(self._get_connection_count(status=status), s)
         self.mount_a.umount_wait()
         e = self._get_connection_count(status=status)
@@ -85,8 +84,8 @@ class TestSessionMap(CephFSTestCase):
         status = self.fs.wait_for_daemons()
 
         # Bring the clients back
-        self.mount_a.mount()
-        self.mount_b.mount()
+        self.mount_a.mount_wait()
+        self.mount_b.mount_wait()
 
         # See that they've got sessions
         self.assert_session_count(2, mds_id=self.fs.get_rank(status=status)['name'])
@@ -178,8 +177,7 @@ class TestSessionMap(CephFSTestCase):
         # Configure a client that is limited to /foo/bar
         self._configure_auth(self.mount_b, "badguy", "allow rw path=/foo/bar")
         # Check he can mount that dir and do IO
-        self.mount_b.mount(mount_path="/foo/bar")
-        self.mount_b.wait_until_mounted()
+        self.mount_b.mount_wait(mount_path="/foo/bar")
         self.mount_b.create_destroy()
         self.mount_b.umount_wait()
 
@@ -188,7 +186,7 @@ class TestSessionMap(CephFSTestCase):
         # Try to mount the client, see that it fails
         with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
-                self.mount_b.mount(mount_path="/foo/bar")
+                self.mount_b.mount_wait(mount_path="/foo/bar")
 
     def test_session_evict_blacklisted(self):
         """
@@ -198,13 +196,12 @@ class TestSessionMap(CephFSTestCase):
             self.skipTest("Requires FUSE client to use is_blacklisted()")
 
         self.fs.set_max_mds(2)
-        self.fs.wait_for_daemons()
-        status = self.fs.status()
+        status = self.fs.wait_for_daemons()
 
-        self.mount_a.run_shell(["mkdir", "d0", "d1"])
+        self.mount_a.run_shell_payload("mkdir {d0,d1} && touch {d0,d1}/file")
         self.mount_a.setfattr("d0", "ceph.dir.pin", "0")
         self.mount_a.setfattr("d1", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 0, [('/d0', 0), ('/d1', 1)])
+        self._wait_subtrees([('/d0', 0), ('/d1', 1)], status=status)
 
         self.mount_a.run_shell(["touch", "d0/f0"])
         self.mount_a.run_shell(["touch", "d1/f0"])
@@ -225,5 +222,4 @@ class TestSessionMap(CephFSTestCase):
         self.assert_session_count(1, mds_id=self.fs.get_rank(rank=1, status=status)['name'])
 
         self.mount_a.kill_cleanup()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()

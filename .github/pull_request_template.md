@@ -41,6 +41,7 @@ https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 <summary>Show available Jenkins commands</summary>
 
 - `jenkins retest this please`
+- `jenkins test classic perf`
 - `jenkins test crimson perf`
 - `jenkins test signed`
 - `jenkins test make check`

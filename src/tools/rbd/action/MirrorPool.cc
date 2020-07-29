@@ -1017,8 +1017,19 @@ int execute_peer_add(const po::variables_map &vm,
     std::cerr << "rbd: failed to list mirror peers" << std::endl;
     return r;
   }
+
+  // ignore tx-only peers since the restriction is for rx
+  mirror_peers.erase(
+    std::remove_if(
+      mirror_peers.begin(), mirror_peers.end(),
+      [](const librbd::mirror_peer_site_t& peer) {
+        return (peer.direction == RBD_MIRROR_PEER_DIRECTION_TX);
+      }),
+    mirror_peers.end());
+
   if (!mirror_peers.empty()) {
-    std::cerr << "rbd: multiple peers are not currently supported" << std::endl;
+    std::cerr << "rbd: multiple RX peers are not currently supported"
+              << std::endl;
     return -EINVAL;
   }
 
@@ -1031,7 +1042,10 @@ int execute_peer_add(const po::variables_map &vm,
   std::string uuid;
   r = rbd.mirror_peer_site_add(
     io_ctx, &uuid, mirror_peer_direction, remote_cluster, remote_client_name);
-  if (r < 0) {
+  if (r == -EEXIST) {
+    std::cerr << "rbd: mirror peer already exists" << std::endl;
+    return r;
+  } else if (r < 0) {
     std::cerr << "rbd: error adding mirror peer" << std::endl;
     return r;
   }
@@ -1173,8 +1187,37 @@ int execute_peer_set(const po::variables_map &vm,
       return -EINVAL;
     }
 
-    r = rbd.mirror_peer_site_set_direction(
-      io_ctx, uuid, boost::any_cast<rbd_mirror_peer_direction_t>(direction));
+    auto peer_direction = boost::any_cast<rbd_mirror_peer_direction_t>(
+      direction);
+    if (peer_direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+      // TODO: temporary restriction to prevent adding multiple peers
+      // until rbd-mirror daemon can properly handle the scenario
+      std::vector<librbd::mirror_peer_site_t> mirror_peers;
+      r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
+      if (r < 0) {
+        std::cerr << "rbd: failed to list mirror peers" << std::endl;
+        return r;
+      }
+
+      // ignore peer to be updated and tx-only peers since the restriction is
+      // for rx
+      mirror_peers.erase(
+        std::remove_if(
+          mirror_peers.begin(), mirror_peers.end(),
+          [uuid](const librbd::mirror_peer_site_t& peer) {
+            return (peer.uuid == uuid ||
+                    peer.direction == RBD_MIRROR_PEER_DIRECTION_TX);
+          }),
+        mirror_peers.end());
+
+      if (!mirror_peers.empty()) {
+        std::cerr << "rbd: multiple RX peers are not currently supported"
+                  << std::endl;
+        return -EINVAL;
+      }
+    }
+
+    r = rbd.mirror_peer_site_set_direction(io_ctx, uuid, peer_direction);
   } else {
     r = update_peer_config_key(io_ctx, uuid, key, value);
   }

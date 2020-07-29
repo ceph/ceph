@@ -31,6 +31,22 @@ class MgrModuleTestCase(DashboardTestCase):
 
 
 class MgrModuleTest(MgrModuleTestCase):
+
+    __options_schema = JObj({
+        'name': str,
+        'type': str,
+        'level': str,
+        'flags': int,
+        'default_value': JAny(none=True),
+        'min': JAny(none=False),
+        'max': JAny(none=False),
+        'enum_allowed': JList(str),
+        'desc': str,
+        'long_desc': str,
+        'tags': JList(str),
+        'see_also': JList(str)
+    })
+
     def test_list_disabled_module(self):
         self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'])
         self.wait_until_rest_api_accessible()
@@ -51,7 +67,7 @@ class MgrModuleTest(MgrModuleTestCase):
                             'type': str,
                             'level': str,
                             'flags': int,
-                            'default_value': JAny(none=False),
+                            'default_value': JAny(none=True),
                             'min': JAny(none=False),
                             'max': JAny(none=False),
                             'enum_allowed': JList(str),
@@ -85,7 +101,7 @@ class MgrModuleTest(MgrModuleTestCase):
                             'type': str,
                             'level': str,
                             'flags': int,
-                            'default_value': JAny(none=False),
+                            'default_value': JAny(none=True),
                             'min': JAny(none=False),
                             'max': JAny(none=False),
                             'enum_allowed': JList(str),
@@ -99,8 +115,6 @@ class MgrModuleTest(MgrModuleTestCase):
         self.assertIsNotNone(module_info)
         self.assertTrue(module_info['enabled'])
 
-
-class MgrModuleTelemetryTest(MgrModuleTestCase):
     def test_get(self):
         data = self._get('/api/mgr/module/telemetry')
         self.assertStatus(200)
@@ -124,37 +138,58 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
                     'url': str
                 }))
 
+    def test_module_options(self):
+        data = self._get('/api/mgr/module/telemetry/options')
+        self.assertStatus(200)
+        schema = JObj({
+            'channel_basic': self.__options_schema,
+            'channel_crash': self.__options_schema,
+            'channel_device': self.__options_schema,
+            'channel_ident': self.__options_schema,
+            'contact': self.__options_schema,
+            'description': self.__options_schema,
+            'device_url': self.__options_schema,
+            'enabled': self.__options_schema,
+            'interval': self.__options_schema,
+            'last_opt_revision': self.__options_schema,
+            'leaderboard': self.__options_schema,
+            'log_level': self.__options_schema,
+            'log_to_cluster': self.__options_schema,
+            'log_to_cluster_level': self.__options_schema,
+            'log_to_file': self.__options_schema,
+            'organization': self.__options_schema,
+            'proxy': self.__options_schema,
+            'url': self.__options_schema
+        })
+        self.assertSchema(data, schema)
+
+    def test_module_enable(self):
+        self._post('/api/mgr/module/telemetry/enable')
+        self.assertStatus(200)
+
+    def test_disable(self):
+        self._post('/api/mgr/module/iostat/disable')
+        self.assertStatus(200)
+
     def test_put(self):
-        self.set_config_key('config/mgr/mgr/telemetry/contact', '')
-        self.set_config_key('config/mgr/mgr/telemetry/description', '')
-        self.set_config_key('config/mgr/mgr/telemetry/enabled', 'True')
-        self.set_config_key('config/mgr/mgr/telemetry/interval', '72')
-        self.set_config_key('config/mgr/mgr/telemetry/leaderboard', 'False')
-        self.set_config_key('config/mgr/mgr/telemetry/organization', '')
-        self.set_config_key('config/mgr/mgr/telemetry/proxy', '')
-        self.set_config_key('config/mgr/mgr/telemetry/url', '')
+        self.set_config_key('config/mgr/mgr/iostat/log_level', 'critical')
+        self.set_config_key('config/mgr/mgr/iostat/log_to_cluster', 'False')
+        self.set_config_key('config/mgr/mgr/iostat/log_to_cluster_level', 'info')
+        self.set_config_key('config/mgr/mgr/iostat/log_to_file', 'True')
         self._put(
-            '/api/mgr/module/telemetry',
+            '/api/mgr/module/iostat',
             data={
                 'config': {
-                    'contact': 'tux@suse.com',
-                    'description': 'test',
-                    'enabled': False,
-                    'interval': 4711,
-                    'leaderboard': True,
-                    'organization': 'SUSE Linux',
-                    'proxy': 'foo',
-                    'url': 'https://foo.bar/report'
+                    'log_level': 'debug',
+                    'log_to_cluster': True,
+                    'log_to_cluster_level': 'warning',
+                    'log_to_file': False
                 }
             })
         self.assertStatus(200)
-        data = self._get('/api/mgr/module/telemetry')
+        data = self._get('/api/mgr/module/iostat')
         self.assertStatus(200)
-        self.assertEqual(data['contact'], 'tux@suse.com')
-        self.assertEqual(data['description'], 'test')
-        self.assertFalse(data['enabled'])
-        self.assertEqual(data['interval'], 4711)
-        self.assertTrue(data['leaderboard'])
-        self.assertEqual(data['organization'], 'SUSE Linux')
-        self.assertEqual(data['proxy'], 'foo')
-        self.assertEqual(data['url'], 'https://foo.bar/report')
+        self.assertEqual(data['log_level'], 'debug')
+        self.assertTrue(data['log_to_cluster'])
+        self.assertEqual(data['log_to_cluster_level'], 'warning')
+        self.assertFalse(data['log_to_file'])

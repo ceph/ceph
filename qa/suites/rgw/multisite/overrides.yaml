@@ -1,8 +1,12 @@
 overrides:
   ceph:
+    log-whitelist:
+    - \(PG_AVAILABILITY\)
     wait-for-scrub: false
     conf:
       client:
+        setuser: ceph
+        setgroup: ceph
         debug rgw: 20
         rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
@@ -11,5 +15,6 @@ overrides:
         rgw curl low speed time: 300
         rgw md log max shards: 4
         rgw data log num shards: 4
+        rgw sync obj etag verify: true
   rgw:
     compression type: random

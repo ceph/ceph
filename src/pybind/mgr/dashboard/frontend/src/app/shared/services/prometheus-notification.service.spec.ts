@@ -4,11 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PrometheusHelper
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '../../../testing/unit-test-helper';
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -38,7 +34,6 @@ describe('PrometheusNotificationService', () => {
     providers: [
       PrometheusNotificationService,
       PrometheusAlertFormatter,
-      i18nProviders,
       { provide: ToastrService, useValue: toastFakeService }
     ]
   });
@@ -46,17 +41,17 @@ describe('PrometheusNotificationService', () => {
   beforeEach(() => {
     prometheus = new PrometheusHelper();
 
-    service = TestBed.get(PrometheusNotificationService);
+    service = TestBed.inject(PrometheusNotificationService);
     service['notifications'] = [];
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     shown = [];
     spyOn(notificationService, 'show').and.callThrough();
     spyOn(notificationService, 'save').and.callFake((n) => shown.push(n));
 
     spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
-    prometheusService = TestBed.get(PrometheusService);
+    prometheusService = TestBed.inject(PrometheusService);
     getNotificationSinceMock = () => of(notifications);
     spyOn(prometheusService, 'getNotifications').and.callFake(() => getNotificationSinceMock());
 

@@ -355,7 +355,7 @@ class CephFSVolumeClient(object):
                 continue
 
             (group_id, volume_id) = volume.split('/')
-            group_id = group_id if group_id is not 'None' else None
+            group_id = group_id if group_id != 'None' else None
             volume_path = VolumePath(group_id, volume_id)
             access_level = volume_data['access_level']
 
@@ -378,7 +378,7 @@ class CephFSVolumeClient(object):
                 if vol_meta['auths'][auth_id] == want_auth:
                     continue
 
-                readonly = True if access_level is 'r' else False
+                readonly = access_level == 'r'
                 self._authorize_volume(volume_path, auth_id, readonly)
 
             # Recovered from partial auth updates for the auth ID's access
@@ -1099,7 +1099,7 @@ class CephFSVolumeClient(object):
 
             # Construct auth caps that if present might conflict with the desired
             # auth caps.
-            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
+            unwanted_access_level = 'r' if want_access_level == 'rw' else 'rw'
             unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
             if namespace:
                 unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
@@ -1175,7 +1175,7 @@ class CephFSVolumeClient(object):
 
             volume_path_str = str(volume_path)
             if (auth_meta is None) or (not auth_meta['volumes']):
-                log.warn("deauthorized called for already-removed auth"
+                log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
@@ -1184,7 +1184,7 @@ class CephFSVolumeClient(object):
                 return
 
             if volume_path_str not in auth_meta['volumes']:
-                log.warn("deauthorized called for already-removed auth"
+                log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
@@ -1215,7 +1215,7 @@ class CephFSVolumeClient(object):
             vol_meta = self._volume_metadata_get(volume_path)
 
             if (vol_meta is None) or (auth_id not in vol_meta['auths']):
-                log.warn("deauthorized called for already-removed auth"
+                log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
@@ -1389,7 +1389,7 @@ class CephFSVolumeClient(object):
         try:
             self.fs.rmdir(self._snapshot_path(dir_path, snapshot_name))
         except cephfs.ObjectNotFound:
-            log.warn("Snapshot was already gone: {0}".format(snapshot_name))
+            log.warning("Snapshot was already gone: {0}".format(snapshot_name))
 
     def create_snapshot_volume(self, volume_path, snapshot_name, mode=0o755):
         self._snapshot_create(self._get_path(volume_path), snapshot_name, mode)
@@ -1512,6 +1512,6 @@ class CephFSVolumeClient(object):
         try:
             ioctx.remove_object(object_name)
         except rados.ObjectNotFound:
-            log.warn("Object '{0}' was already removed".format(object_name))
+            log.warning("Object '{0}' was already removed".format(object_name))
         finally:
             ioctx.close()

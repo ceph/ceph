@@ -456,14 +456,19 @@ public:
     void seek(uint64_t ofs);
 
     void operator++();
-    bool operator==(const obj_iterator& rhs) {
+    bool operator==(const obj_iterator& rhs) const {
       return (ofs == rhs.ofs);
     }
-    bool operator!=(const obj_iterator& rhs) {
+    bool operator!=(const obj_iterator& rhs) const {
       return (ofs != rhs.ofs);
     }
     const rgw_obj_select& get_location() {
       return location;
+    }
+
+    /* where current part starts */
+    uint64_t get_part_ofs() const {
+      return part_ofs;
     }
 
     /* start of current stripe */
@@ -504,7 +509,7 @@ public:
 
     friend class RGWObjManifest;
     void dump(Formatter *f) const;
-  };
+  }; // class obj_iterator
 
   const obj_iterator& obj_begin();
   const obj_iterator& obj_end();
@@ -552,4 +557,3 @@ public:
   };
 };
 WRITE_CLASS_ENCODER(RGWObjManifest)
-

@@ -131,7 +131,7 @@ seastar::future<> AdminSocket::handle_command(crimson::net::Connection* conn,
 					      boost::intrusive_ptr<MCommand> m)
 {
   return execute_command(m->cmd, std::move(m->get_data())).then(
-    [conn, tid=m->get_tid(), this](auto result) {
+    [conn, tid=m->get_tid()](auto result) {
     auto [ret, err, out] = std::move(result);
     auto reply = make_message<MCommandReply>(ret, err);
     reply->set_tid(tid);
@@ -233,7 +233,13 @@ seastar::future<> AdminSocket::start(const std::string& path)
 
   logger().debug("{}: asok socket path={}", __func__, path);
   auto sock_path = seastar::socket_address{ seastar::unix_domain_addr{ path } };
-  server_sock = seastar::engine().listen(sock_path);
+  try {
+    server_sock = seastar::engine().listen(sock_path);
+  } catch (const std::system_error& e) {
+    logger().error("{}: unable to listen({}): {}", __func__, path, e.what());
+    server_sock.reset();
+    return seastar::make_ready_future<>();
+  }
   // listen in background
   task = seastar::do_until(
     [this] { return stop_gate.is_closed(); },
@@ -256,6 +262,8 @@ seastar::future<> AdminSocket::start(const std::string& path)
           }
         });
       });
+    }).finally([path] {
+      return seastar::remove_file(path);
     });
   return seastar::make_ready_future<>();
 }

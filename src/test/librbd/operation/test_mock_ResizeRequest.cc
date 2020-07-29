@@ -32,9 +32,10 @@ struct ImageDispatchSpec<MockImageCtx> {
   static ImageDispatchSpec* s_instance;
   AioCompletion *aio_comp = nullptr;
 
-  static ImageDispatchSpec* create_flush_request(
-      MockImageCtx &image_ctx, AioCompletion *aio_comp,
-      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+  static ImageDispatchSpec* create_flush(
+      MockImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
+      AioCompletion *aio_comp, FlushSource flush_source,
+      const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
@@ -100,12 +101,12 @@ public:
   typedef io::ImageDispatchSpec<MockImageCtx> MockIoImageDispatchSpec;
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes())
                   .Times(1);
   }
 
@@ -140,7 +141,8 @@ public:
     } else {
       expect_is_lock_owner(mock_image_ctx);
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_size"), _, _, _))
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                       StrEq("set_size"), _, _, _, _))
                     .WillOnce(Return(r));
     }
   }
@@ -158,7 +160,13 @@ public:
       .WillOnce(Invoke([&mock_image_ctx, &mock_io_image_dispatch_spec, r]() {
                   auto aio_comp = mock_io_image_dispatch_spec.s_instance->aio_comp;
                   auto ctx = new LambdaContext([aio_comp](int r) {
-                    aio_comp->fail(r);
+                    if (r < 0) {
+                      aio_comp->fail(r);
+                    } else {
+                      aio_comp->set_request_count(1);
+                      aio_comp->add_request();
+                      aio_comp->complete_request(r);
+                    }
                   });
                   mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
                 }));
@@ -250,8 +258,8 @@ TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  auto mock_io_image_dispatch_spec = new MockIoImageDispatchSpec();
-  expect_flush_cache(mock_image_ctx, *mock_io_image_dispatch_spec, 0);
+  MockIoImageDispatchSpec mock_io_image_dispatch_spec;
+  expect_flush_cache(mock_image_ctx, mock_io_image_dispatch_spec, 0);
   expect_invalidate_cache(mock_image_ctx, 0);
   expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_block_writes(mock_image_ctx, 0);
@@ -313,8 +321,8 @@ TEST_F(TestMockOperationResizeRequest, TrimError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  auto mock_io_image_dispatch_spec = new MockIoImageDispatchSpec();
-  expect_flush_cache(mock_image_ctx, *mock_io_image_dispatch_spec, 0);
+  MockIoImageDispatchSpec mock_io_image_dispatch_spec;
+  expect_flush_cache(mock_image_ctx, mock_io_image_dispatch_spec, 0);
   expect_invalidate_cache(mock_image_ctx, -EBUSY);
   expect_trim(mock_image_ctx, mock_trim_request, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
@@ -339,8 +347,8 @@ TEST_F(TestMockOperationResizeRequest, FlushCacheError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  auto mock_io_image_dispatch_spec = new MockIoImageDispatchSpec();
-  expect_flush_cache(mock_image_ctx, *mock_io_image_dispatch_spec, -EINVAL);
+  MockIoImageDispatchSpec mock_io_image_dispatch_spec;
+  expect_flush_cache(mock_image_ctx, mock_io_image_dispatch_spec, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));
 }
@@ -363,8 +371,8 @@ TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  auto mock_io_image_dispatch_spec = new MockIoImageDispatchSpec();
-  expect_flush_cache(mock_image_ctx, *mock_io_image_dispatch_spec, 0);
+  MockIoImageDispatchSpec mock_io_image_dispatch_spec;
+  expect_flush_cache(mock_image_ctx, mock_io_image_dispatch_spec, 0);
   expect_invalidate_cache(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));
@@ -387,8 +395,8 @@ TEST_F(TestMockOperationResizeRequest, PostBlockWritesError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  auto mock_io_image_dispatch_spec = new MockIoImageDispatchSpec();
-  expect_flush_cache(mock_image_ctx, *mock_io_image_dispatch_spec, 0);
+  MockIoImageDispatchSpec mock_io_image_dispatch_spec;
+  expect_flush_cache(mock_image_ctx, mock_io_image_dispatch_spec, 0);
   expect_invalidate_cache(mock_image_ctx, 0);
   expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_block_writes(mock_image_ctx, -EINVAL);

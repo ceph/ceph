@@ -58,10 +58,12 @@ set(librgw_common_srcs
   rgw_arn.cc
   rgw_basic_types.cc
   rgw_bucket.cc
+  rgw_bucket_layout.cc
   rgw_bucket_sync.cc
   rgw_cache.cc
   rgw_common.cc
   rgw_compression.cc
+  rgw_etag_verifier.cc
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_dencoder.cc
@@ -84,6 +86,7 @@ set(librgw_common_srcs
   rgw_sync.cc
   rgw_data_sync.cc
   rgw_sync_counters.cc
+  rgw_sync_error_repo.cc
   rgw_sync_module.cc
   rgw_sync_module_aws.cc
   rgw_sync_module_es.cc
@@ -145,10 +148,12 @@ set(librgw_common_srcs
   rgw_sts.cc
   rgw_rest_sts.cc
   rgw_perf_counters.cc
+  rgw_rest_oidc_provider.cc
   rgw_rest_iam.cc
   rgw_object_lock.cc
   rgw_kms.cc
-  rgw_url.cc)
+  rgw_url.cc
+  rgw_oidc_provider)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -162,6 +167,7 @@ add_library(rgw_common OBJECT ${librgw_common_srcs})
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
+target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 
 if(WITH_BOOST_CONTEXT)
   target_include_directories(rgw_common PRIVATE
@@ -220,6 +226,7 @@ add_dependencies(rgw_a civetweb_h)
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
+target_include_directories(rgw_a SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)
@@ -231,7 +238,7 @@ endif()
 target_link_libraries(rgw_a
   PRIVATE
   librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
-  cls_log_client cls_timeindex_client cls_version_client
+  cls_log_client cls_timeindex_client cls_version_client cls_cmpomap_client
   cls_user_client cls_rgw_gc_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
@@ -411,3 +418,6 @@ if(WITH_TESTS)
     ceph_rgw_multiparser
     DESTINATION bin)
 endif(WITH_TESTS)
+
+install(PROGRAMS rgw-orphan-list
+  DESTINATION bin)

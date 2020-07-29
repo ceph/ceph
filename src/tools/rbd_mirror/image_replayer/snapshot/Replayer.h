@@ -9,6 +9,10 @@
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/snapshot/Types.h"
+#include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/rolling_mean.hpp>
 #include <string>
 #include <type_traits>
 
@@ -111,42 +115,45 @@ private:
    *    v (skip if not needed)                          |
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
+   *    | (unused non-primary snapshot)                 |
+   *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
+   *    |                                               |
    *    | (interrupted sync)                            |
    *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
    *    |                                             | |
    *    | (new snapshot)                              | |
    *    |\--------------> COPY_SNAPSHOTS              | |
-   *    |                     |                       | |
-   *    |                     v                       | |
+   *    |                       |                     | |
+   *    |                       v                     | |
    *    |                 GET_REMOTE_IMAGE_STATE      | |
-   *    |                     |                       | |
-   *    |                     v                       | |
+   *    |                       |                     | |
+   *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
-   *    |                     |                       | |
-   *    |                     |/----------------------/ |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                     | |
+   *    |                       |/--------------------/ |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 REQUEST_SYNC                  |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 COPY_IMAGE                    |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 APPLY_IMAGE_STATE             |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 UPDATE_NON_PRIMARY_SNAPSHOT   |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 NOTIFY_IMAGE_UPDATE           |
-   *    |                     |                         |
-   *    |                     v                         |
-   *    |                 UNLINK_PEER                   |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    | (interrupted unlink)  v                       |
+   *    |\--------------> UNLINK_PEER                   |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 NOTIFY_LISTENER               |
-   *    |                     |                         |
-   *    |                     \------------------------/|
+   *    |                       |                       |
+   *    |                       \----------------------/|
    *    |                                               |
    *    | (remote demoted)                              |
    *    \---------------> NOTIFY_LISTENER               |
@@ -182,8 +189,7 @@ private:
   };
 
   struct C_UpdateWatchCtx;
-  struct C_TrackedOp;
-  struct ProgressContext;
+  struct DeepCopyHandler;
 
   Threads<ImageCtxT>* m_threads;
   InstanceWatcher<ImageCtxT>* m_instance_watcher;
@@ -220,7 +226,17 @@ private:
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
 
   librbd::mirror::snapshot::ImageState m_image_state;
-  ProgressContext* m_progress_ctx = nullptr;
+  DeepCopyHandler* m_deep_copy_handler = nullptr;
+
+  TimeRollingMean m_bytes_per_second;
+
+  uint64_t m_snapshot_bytes = 0;
+  boost::accumulators::accumulator_set<
+    uint64_t, boost::accumulators::stats<
+      boost::accumulators::tag::rolling_mean>> m_bytes_per_snapshot{
+    boost::accumulators::tag::rolling_window::window_size = 2};
+
+  uint32_t m_pending_snapshots = 0;
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
@@ -237,6 +253,9 @@ private:
 
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
+
+  void prune_non_primary_snapshot(uint64_t snap_id);
+  void handle_prune_non_primary_snapshot(int r);
 
   void copy_snapshots();
   void handle_copy_snapshots(int r);
@@ -257,6 +276,7 @@ private:
   void handle_copy_image(int r);
   void handle_copy_image_progress(uint64_t object_number,
                                   uint64_t object_count);
+  void handle_copy_image_read(uint64_t bytes_read);
 
   void apply_image_state();
   void handle_apply_image_state(int r);
@@ -267,7 +287,7 @@ private:
   void notify_image_update();
   void handle_notify_image_update(int r);
 
-  void unlink_peer();
+  void unlink_peer(uint64_t remote_snap_id);
   void handle_unlink_peer(int r);
 
   void finish_sync();

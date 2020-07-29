@@ -11,17 +11,14 @@ describe('SettingsService', () => {
   const exampleUrl = 'api/settings/something';
   const exampleValue = 'http://localhost:3000';
 
-  configureTestBed(
-    {
-      providers: [SettingsService],
-      imports: [HttpClientTestingModule]
-    },
-    true
-  );
+  configureTestBed({
+    providers: [SettingsService],
+    imports: [HttpClientTestingModule]
+  });
 
   beforeEach(() => {
-    service = TestBed.get(SettingsService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(SettingsService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

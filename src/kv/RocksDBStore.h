@@ -16,6 +16,7 @@
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
+#include "rocksdb/db.h"
 #include "kv/rocksdb_cache/BinnedLRUCache.h"
 #include <errno.h>
 #include "common/errno.h"
@@ -26,7 +27,7 @@
 #include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/PriorityCache.h"
-
+#include "common/pretty_binary.h"
 
 enum {
   l_rocksdb_first = 34300,
@@ -77,22 +78,79 @@ class RocksDBStore : public KeyValueDB {
   void *priv;
   rocksdb::DB *db;
   rocksdb::Env *env;
+  const rocksdb::Comparator* comparator;
   std::shared_ptr<rocksdb::Statistics> dbstats;
   rocksdb::BlockBasedTableOptions bbt_opts;
   std::string options_str;
 
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
+  friend class ShardMergeIteratorImpl;
+  friend class WholeMergeIteratorImpl;
+  /*
+   *  See RocksDB's definition of a column family(CF) and how to use it.
+   *  The interfaces of KeyValueDB is extended, when a column family is created.
+   *  Prefix will be the name of column family to use.
+   */
+public:
+  struct ColumnFamily {
+    string name;      //< name of this individual column family
+    size_t shard_cnt; //< count of shards
+    string options;   //< configure option string for this CF
+    uint32_t hash_l;  //< first character to take for hash calc.
+    uint32_t hash_h;  //< last character to take for hash calc.
+    ColumnFamily(const string &name, size_t shard_cnt, const string &options,
+		 uint32_t hash_l, uint32_t hash_h)
+      : name(name), shard_cnt(shard_cnt), options(options), hash_l(hash_l), hash_h(hash_h) {}
+  };
+private:
+  friend std::ostream& operator<<(std::ostream& out, const ColumnFamily& cf);
 
   bool must_close_default_cf = false;
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
+
+  /// column families in use, name->handles
+  struct prefix_shards {
+    uint32_t hash_l;  //< first character to take for hash calc.
+    uint32_t hash_h;  //< last character to take for hash calc.
+    std::vector<rocksdb::ColumnFamilyHandle *> handles;
+  };
+  std::unordered_map<std::string, prefix_shards> cf_handles;
+  std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
+
+  void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
+			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
+  bool is_column_family(const std::string& prefix);
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const std::string& key);
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const char* key, size_t keylen);
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const std::string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int create_db_dir();
   int do_open(std::ostream &out, bool create_if_missing, bool open_readonly,
-	      const std::vector<ColumnFamily>* cfs = nullptr);
+	      const std::string& cfs="");
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
+public:
+  static bool parse_sharding_def(const std::string_view text_def,
+				std::vector<ColumnFamily>& sharding_def,
+				char const* *error_position = nullptr,
+				std::string *error_msg = nullptr);
+  const rocksdb::Comparator* get_comparator() const {
+    return comparator;
+  }
+
+private:
+  static void sharding_def_to_columns(const std::vector<ColumnFamily>& sharding_def,
+				      std::vector<std::string>& columns);
+  int create_shards(const rocksdb::Options& opt,
+		    const vector<ColumnFamily>& sharding_def);
+  int apply_sharding(const rocksdb::Options& opt,
+		     const std::string& sharding_text);
+  int verify_sharding(const rocksdb::Options& opt,
+		      std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
+		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
 
   // manage async compactions
   ceph::mutex compact_queue_lock =
@@ -162,6 +220,7 @@ public:
     priv(p),
     db(NULL),
     env(static_cast<rocksdb::Env*>(p)),
+    comparator(nullptr),
     dbstats(NULL),
     compact_queue_stop(false),
     compact_thread(this),
@@ -174,26 +233,19 @@ public:
 
   static bool check_omap_dir(std::string &omap_dir);
   /// Opens underlying db
-  int open(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) override {
-    return do_open(out, false, false, &cfs);
+  int open(std::ostream &out, const std::string& cfs="") override {
+    return do_open(out, false, false, cfs);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(std::ostream &out,
-		      const std::vector<ColumnFamily>& cfs = {}) override;
+		      const std::string& cfs="") override;
 
-  int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) override {
-    return do_open(out, false, true, &cfs);
+  int open_read_only(std::ostream &out, const std::string& cfs="") override {
+    return do_open(out, false, true, cfs);
   }
 
   void close() override;
 
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) {
-    auto iter = cf_handles.find(cf_name);
-    if (iter == cf_handles.end())
-      return nullptr;
-    else
-      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second);
-  }
   int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(ceph::Formatter *f) override;
@@ -209,98 +261,7 @@ public:
 
   int64_t estimate_prefix_size(const std::string& prefix,
 			       const std::string& key_prefix) override;
-
-  struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
-    std::string seen ;
-    int num_seen = 0;
-    static std::string pretty_binary_string(const std::string& in) {
-      char buf[10];
-      std::string out;
-      out.reserve(in.length() * 3);
-      enum { NONE, HEX, STRING } mode = NONE;
-      unsigned from = 0, i;
-      for (i=0; i < in.length(); ++i) {
-        if ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-          (mode == HEX && in.length() - i >= 4 &&
-          ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-          (in[i+1] < 32 || (unsigned char)in[i+1] > 126) ||
-          (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
-          (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
-
-          if (mode == STRING) {
-            out.append(in.substr(from, i - from));
-            out.push_back('\'');
-          }
-          if (mode != HEX) {
-            out.append("0x");
-            mode = HEX;
-          }
-          if (in.length() - i >= 4) {
-            // print a whole u32 at once
-            snprintf(buf, sizeof(buf), "%08x",
-                  (uint32_t)(((unsigned char)in[i] << 24) |
-                            ((unsigned char)in[i+1] << 16) |
-                            ((unsigned char)in[i+2] << 8) |
-                            ((unsigned char)in[i+3] << 0)));
-            i += 3;
-          } else {
-            snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)in[i]);
-          }
-          out.append(buf);
-        } else {
-          if (mode != STRING) {
-            out.push_back('\'');
-            mode = STRING;
-            from = i;
-          }
-        }
-      }
-      if (mode == STRING) {
-        out.append(in.substr(from, i - from));
-        out.push_back('\'');
-      }
-      return out;
-    }
-    void Put(const rocksdb::Slice& key,
-                    const rocksdb::Slice& value) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nPut( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) 
-            + " Value size = " + std::to_string(size) + ")";
-      num_seen++;
-    }
-    void SingleDelete(const rocksdb::Slice& key) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      seen += "\nSingleDelete(Prefix = "+ prefix + " Key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-      num_seen++;
-    }
-    void Delete(const rocksdb::Slice& key) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      seen += "\nDelete( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-
-      num_seen++;
-    }
-    void Merge(const rocksdb::Slice& key,
-                      const rocksdb::Slice& value) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nMerge( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + " Value size = " 
-            + std::to_string(size) + ")";
-
-      num_seen++;
-    }
-    bool Continue() override { return num_seen < 50; }
-
-  };
-
+  struct RocksWBHandler;
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;
@@ -398,8 +359,11 @@ public:
     size_t value_size() override;
   };
 
-  Iterator get_iterator(const std::string& prefix) override;
-
+  Iterator get_iterator(const std::string& prefix, IteratorOpts opts = 0) override;
+private:
+  /// this iterator spans single cf
+  rocksdb::Iterator* new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
+public:
   /// Utility
   static std::string combine_strings(const std::string &prefix, const std::string &value) {
     std::string out = prefix;
@@ -504,18 +468,34 @@ err:
     return 0;
   }
 
-  int set_cache_capacity(int64_t capacity);
-  int64_t get_cache_capacity();
-
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
       const override {
     return std::dynamic_pointer_cast<PriorityCache::PriCache>(
         bbt_opts.block_cache);
   }
 
-  WholeSpaceIterator get_wholespace_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
+private:
+  WholeSpaceIterator get_default_cf_iterator();
+
+  using cf_deleter_t = std::function<void(rocksdb::ColumnFamilyHandle*)>;
+  using columns_t = std::map<std::string,
+			     std::unique_ptr<rocksdb::ColumnFamilyHandle,
+					     cf_deleter_t>>;
+  int prepare_for_reshard(const std::string& new_sharding,
+			  columns_t& to_process_columns);
+  int reshard_cleanup(const columns_t& current_columns);
+public:
+  struct resharding_ctrl {
+    size_t bytes_per_iterator = 10000000; /// amount of data to process before refreshing iterator
+    size_t keys_per_iterator =  10000;
+    size_t bytes_per_batch =    1000000;  /// amount of data before submitting batch
+    size_t keys_per_batch =     1000;
+    bool   unittest_fail_after_first_batch = false;
+    bool   unittest_fail_after_processing_column = false;
+    bool   unittest_fail_after_successful_processing = false;
+  };
+  int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
 };
-
-
 
 #endif

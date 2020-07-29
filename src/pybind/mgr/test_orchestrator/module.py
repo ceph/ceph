@@ -7,14 +7,12 @@ import functools
 import itertools
 from subprocess import check_output, CalledProcessError
 
-from ceph.deployment.service_spec import NFSServiceSpec, ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, IscsiServiceSpec
 
 try:
     from typing import Callable, List, Sequence, Tuple
 except ImportError:
     pass  # type checking
-
-import six
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -162,14 +160,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _get_ceph_daemons(self):
         # type: () -> List[orchestrator.DaemonDescription]
         """ Return ceph daemons on the running host."""
-        types = ("mds", "osd", "mon", "rgw", "mgr")
+        types = ("mds", "osd", "mon", "rgw", "mgr", "nfs", "iscsi")
         out = map(str, check_output(['ps', 'aux']).splitlines())
         processes = [p for p in out if any(
-            [('ceph-' + t in p) for t in types])]
+            [('ceph-{} '.format(t) in p) for t in types])]
 
         daemons = []
         for p in processes:
-            daemon = orchestrator.DaemonDescription()
             # parse daemon type
             m = re.search('ceph-([^ ]+)', p)
             if m:
@@ -178,8 +175,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 raise AssertionError('Fail to determine daemon type from {}'.format(p))
 
             # parse daemon ID. Possible options: `-i <id>`, `--id=<id>`, `--id <id>`
-            patterns = ['-i\s(\w+)', '--id[\s=](\w+)']
-            daemon_id = None
+            patterns = [r'-i\s(\w+)', r'--id[\s=](\w+)']
             for pattern in patterns:
                 m = re.search(pattern, p)
                 if m:
@@ -197,10 +193,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         if self._services:
             # Dummy data
             services = self._services
-            # Can't deduce service type from dummy data (no daemons).
-            # Assume service_type is service_name.
             if service_type is not None:
-                services = list(filter(lambda s: s.service_name == service_type, services))
+                services = list(filter(lambda s: s.spec.service_type == service_type, services))
         else:
             # Deduce services from daemons running on localhost
             all_daemons = self._get_ceph_daemons()
@@ -211,12 +205,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 daemon_size = len(list(daemons))
                 services.append(orchestrator.ServiceDescription(
                     spec=ServiceSpec(
-                        service_type=service_type,
+                        service_type=daemon_type,
                     ),
                     size=daemon_size, running=daemon_size))
         
         def _filter_func(svc):
-            if service_name is not None and service_name != svc.service_name:
+            if service_name is not None and service_name != svc.spec.service_name():
                 return False
             return True
 
@@ -229,7 +223,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         it returns the mgr we're running in.
         """
         if daemon_type:
-            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi", "crash")
+            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi", "crash", "nfs")
             assert daemon_type in daemon_types, daemon_type + " unsupported"
 
         daemons = self._daemons if self._daemons else self._get_ceph_daemons()
@@ -247,6 +241,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return list(filter(_filter_func, daemons))
 
+    def preview_drivegroups(self, drive_group_name=None, dg_specs=None):
+        return [{}]
+
     def create_osds(self, drive_group):
         # type: (DriveGroupSpec) -> TestCompletion
         """ Creates OSDs from a drive group specification.
@@ -259,9 +256,15 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
             drive_group.validate()
-            if drive_group.placement.host_pattern:
-                if not drive_group.placement.pattern_matches_hosts([h.hostname for h in all_hosts]):
-                    raise orchestrator.OrchestratorValidationError('failed to match')
+
+            def get_hosts_func(label=None, as_hostspec=False):
+                if as_hostspec:
+                    return all_hosts
+                return [h.hostname for h in all_hosts]
+
+            if not drive_group.placement.filter_matching_hosts(get_hosts_func):
+                raise orchestrator.OrchestratorValidationError('failed to match')
+
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
                 message='create_osds',
@@ -272,12 +275,18 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def apply_drivegroups(self, specs):
         # type: (List[DriveGroupSpec]) -> TestCompletion
         drive_group = specs[0]
+
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
             drive_group.validate()
-            if drive_group.placement.host_pattern:
-                if not drive_group.placement.pattern_matches_hosts([h.hostname for h in all_hosts]):
-                    raise orchestrator.OrchestratorValidationError('failed to match')
+
+            def get_hosts_func(label=None, as_hostspec=False):
+                if as_hostspec:
+                    return all_hosts
+                return [h.hostname for h in all_hosts]
+
+            if not drive_group.placement.filter_matching_hosts(get_hosts_func):
+                raise orchestrator.OrchestratorValidationError('failed to match')
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
                 message='apply_drivesgroups',
@@ -316,6 +325,16 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def apply_nfs(self, spec):
         pass
 
+    @deferred_write("add_iscsi")
+    def add_iscsi(self, spec):
+        # type: (IscsiServiceSpec) -> None
+        pass
+
+    @deferred_write("apply_iscsi")
+    def apply_iscsi(self, spec):
+        # type: (IscsiServiceSpec) -> None
+        pass
+
     @deferred_write("add_mds")
     def add_mds(self, spec):
         pass
@@ -344,11 +363,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             raise orchestrator.NoOrchestrator()
         if host == 'raise_import_error':
             raise ImportError("test_orchestrator not enabled")
-        assert isinstance(host, six.string_types)
+        assert isinstance(host, str)
 
     @deferred_write("remove_host")
     def remove_host(self, host):
-        assert isinstance(host, six.string_types)
+        assert isinstance(host, str)
 
     @deferred_write("apply_mgr")
     def apply_mgr(self, spec):

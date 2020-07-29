@@ -3,16 +3,31 @@
 CephFS Shell
 =============
 
-The File System (FS) shell includes various shell-like commands that directly interact with the :term:`Ceph File System`.
+CephFS Shell provides shell-like commands that directly interact with the
+:term:`Ceph File System`.
+
+This tool can be used in interactive mode as well as in non-interactive mode.
+In former mode, cephfs-shell opens a shell session and after the given command
+is finished, it prints the prompt string and waits indefinitely. When the
+shell session is finished, cephfs-shell quits with the return value of last
+executed command. In non-interactive mode, cephfs-shell issues a command and
+exits right after the command's execution is complete with the command's return
+value.
+
+Behaviour of CephFS Shell can be tweaked using cephfs-shell.conf. CephFS Shell
+looks for it by default at the path provided in environment variable
+`CEPHFS_SHELL_CONF` and then in user's home directory
+(`~/.cephfs-shell.conf`).
 
 Usage :
 
-    cephfs-shell [-options] -- [command, command,...]
+    cephfs-shell [options] [command]
+    cephfs-shell [options] -- [command, command,...]
 
 Options :
-    -c, --config FILE     Set Configuration file.
-    -b, --batch FILE      Process a batch file.
-    -t, --test FILE       Test against transcript(s) in FILE
+    -c, --config FILE     Path to cephfs-shell.conf
+    -b, --batch FILE      Path to batch file.
+    -t, --test FILE       Path to transcript(s) in FILE for testing
 
 
 .. note::
@@ -441,3 +456,54 @@ Usage :
 
 Options:
   -h, --help   Shows the help message
+
+df
+--
+
+Display amount of available disk space
+
+Usage :
+
+    df [-h] [file [file ...]]
+
+* file - name of the file
+
+Options:
+  -h, --help   Shows the help message
+
+du
+--
+
+Show disk usage of a directory
+
+Usage :
+
+    du [-h] [-r] [paths [paths ...]]
+
+* paths - name of the directory
+
+Options:
+  -h, --help   Shows the help message
+
+  -r     Recursive Disk usage of all directories
+
+
+quota
+-----
+
+Quota management for a Directory
+
+Usage :
+
+    quota [-h] [--max_bytes [MAX_BYTES]] [--max_files [MAX_FILES]] {get,set} path
+
+* {get,set} - quota operation type.
+
+* path - name of the directory.
+
+Options :
+  -h, --help   Shows the help message
+
+  --max_bytes MAX_BYTES    Set max cumulative size of the data under this directory
+
+  --max_files MAX_FILES    Set total number of files under this directory tree

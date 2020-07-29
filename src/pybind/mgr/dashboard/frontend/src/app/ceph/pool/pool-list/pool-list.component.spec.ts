@@ -1,23 +1,20 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -49,20 +46,21 @@ describe('PoolListComponent', () => {
   configureTestBed({
     declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
     imports: [
+      BrowserAnimationsModule,
       SharedModule,
       ToastrModule.forRoot(),
       RouterTestingModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       HttpClientTestingModule
     ],
-    providers: [i18nProviders, PgCategoryService]
+    providers: [PgCategoryService]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(PoolListComponent);
     component = fixture.componentInstance;
     component.permissions.pool.read = true;
-    poolService = TestBed.get(PoolService);
+    poolService = TestBed.inject(PoolService);
     spyOn(poolService, 'getList').and.callFake(() => of(getPoolList()));
     fixture.detectChanges();
   });
@@ -72,7 +70,11 @@ describe('PoolListComponent', () => {
   });
 
   it('should have columns that are sortable', () => {
-    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+    expect(
+      component.columns
+        .filter((column) => !(column.prop === undefined))
+        .every((column) => Boolean(column.prop))
+    ).toBeTruthy();
   });
 
   describe('monAllowPoolDelete', () => {
@@ -81,10 +83,10 @@ describe('PoolListComponent', () => {
 
     beforeEach(() => {
       configOptRead = true;
-      spyOn(TestBed.get(AuthStorageService), 'getPermissions').and.callFake(() => ({
+      spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(() => ({
         configOpt: { read: configOptRead }
       }));
-      configurationService = TestBed.get(ConfigurationService);
+      configurationService = TestBed.inject(ConfigurationService);
     });
 
     it('should set value correctly if mon_allow_pool_delete flag is set to true', () => {
@@ -145,7 +147,7 @@ describe('PoolListComponent', () => {
 
     const callDeletion = () => {
       component.deletePoolModal();
-      const deletion: CriticalConfirmationModalComponent = component.modalRef.content;
+      const deletion: CriticalConfirmationModalComponent = component.modalRef.componentInstance;
       deletion.submitActionObservable();
     };
 
@@ -165,13 +167,13 @@ describe('PoolListComponent', () => {
     };
 
     beforeEach(() => {
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake((deletionClass, config) => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, initialState) => {
         return {
-          content: Object.assign(new deletionClass(), config.initialState)
+          componentInstance: Object.assign(new deletionClass(), initialState)
         };
       });
       spyOn(poolService, 'delete').and.stub();
-      taskWrapper = TestBed.get(TaskWrapperService);
+      taskWrapper = TestBed.inject(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
     });
 
@@ -192,8 +194,11 @@ describe('PoolListComponent', () => {
     };
 
     beforeEach(() => {
-      summaryService = TestBed.get(SummaryService);
-      summaryService['summaryDataSource'].next({ executing_tasks: [], finished_tasks: [] });
+      summaryService = TestBed.inject(SummaryService);
+      summaryService['summaryDataSource'].next({
+        executing_tasks: [],
+        finished_tasks: []
+      });
     });
 
     it('gets all pools without executing pools', () => {
@@ -300,6 +305,8 @@ describe('PoolListComponent', () => {
           stats: {
             bytes_used: { latest: 0, rate: 0, rates: [] },
             max_avail: { latest: 0, rate: 0, rates: [] },
+            avail_raw: { latest: 0, rate: 0, rates: [] },
+            percent_used: { latest: 0, rate: 0, rates: [] },
             rd: { latest: 0, rate: 0, rates: [] },
             rd_bytes: { latest: 0, rate: 0, rates: [] },
             wr: { latest: 0, rate: 0, rates: [] },
@@ -319,7 +326,8 @@ describe('PoolListComponent', () => {
       pool = _.merge(pool, {
         stats: {
           bytes_used: { latest: 5, rate: 0, rates: [] },
-          max_avail: { latest: 15, rate: 0, rates: [] },
+          avail_raw: { latest: 15, rate: 0, rates: [] },
+          percent_used: { latest: 0.25, rate: 0, rates: [] },
           rd_bytes: {
             latest: 6,
             rate: 4,
@@ -336,7 +344,8 @@ describe('PoolListComponent', () => {
           pg_status: '8 active+clean, 2 down',
           stats: {
             bytes_used: { latest: 5, rate: 0, rates: [] },
-            max_avail: { latest: 15, rate: 0, rates: [] },
+            avail_raw: { latest: 15, rate: 0, rates: [] },
+            percent_used: { latest: 0.25, rate: 0, rates: [] },
             rd_bytes: { latest: 6, rate: 4, rates: [2, 6] }
           },
           usage: 0.25
@@ -427,7 +436,7 @@ describe('PoolListComponent', () => {
 
   describe('getSelectionTiers', () => {
     const setSelectionTiers = (tiers: number[]) => {
-      component.selection.selected = [{ tiers }];
+      component.expandedRow = { tiers };
       component.getSelectionTiers();
     };
 
@@ -437,31 +446,31 @@ describe('PoolListComponent', () => {
 
     it('should select multiple existing cache tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(getPoolList());
+      expect(component.cacheTiers).toEqual(getPoolList());
     });
 
     it('should select correct existing cache tier', () => {
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
     });
 
     it('should not select cache tier if id is invalid', () => {
       setSelectionTiers([-1]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
 
     it('should not select cache tier if empty', () => {
       setSelectionTiers([]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
 
     it('should be able to selected one pool with multiple tiers, than with a single tier, than with no tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(getPoolList());
+      expect(component.cacheTiers).toEqual(getPoolList());
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
       setSelectionTiers([]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
   });
 

@@ -8,8 +8,8 @@ import logging
 import time
 import json
 from os import path
-from six.moves import http_client
-from six.moves.urllib.parse import urljoin
+from http import client as http_client
+from urllib.parse import urljoin
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -128,7 +128,7 @@ def setup_vault(ctx, config):
     """
     Mount Transit or KV version 2 secrets engine
     """
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
     engine = cconfig.get('engine')
 
     if engine == 'kv':
@@ -169,7 +169,7 @@ def send_req(ctx, cconfig, client, path, body, method='POST'):
 
 @contextlib.contextmanager
 def create_secrets(ctx, config):
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
     engine = cconfig.get('engine')
     prefix = cconfig.get('prefix')
     secrets = cconfig.get('secrets')

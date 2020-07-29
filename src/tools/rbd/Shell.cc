@@ -122,6 +122,15 @@ std::set<std::string>& Shell::get_switch_arguments() {
   return switch_arguments;
 }
 
+void print_deprecated_warning(po::option_description option, std::string description) {
+  auto pos = description.find_first_of(":");
+  if (pos != std::string::npos) {
+  std::string param = description.substr(pos + 1, description.size() - pos - 2);
+  std::cout << "rbd: " << option.format_name() << " is deprecated, use --"
+            << param << std::endl;
+  }
+}
+
 int Shell::execute(int argc, const char **argv) {
   std::vector<std::string> arguments;
   std::vector<std::string> ceph_global_init_args;
@@ -202,6 +211,46 @@ int Shell::execute(int argc, const char **argv) {
     }
 
     int r = (*action->execute)(vm, ceph_global_init_args);
+
+    if (vm.size() > 0) {
+      for (auto opt : vm) {
+        try {
+          auto option = command_opts.find(opt.first, false);
+          auto description = option.description();
+          auto result = boost::find_first(description, "deprecated");
+          if (!result.empty()) {
+            print_deprecated_warning(option, description);
+          }
+        } catch (exception& e) {
+          continue;
+        }
+      }
+    }
+
+    po::options_description global_opts;
+    get_global_options(&global_opts);
+    auto it = ceph_global_init_args.begin();
+    for ( ; it != ceph_global_init_args.end(); ++it) {
+      auto  pos = (*it).find_last_of("-");
+      auto prefix_style = po::command_line_style::allow_long;
+      if (pos == 0) {
+        prefix_style = po::command_line_style::allow_dash_for_short;
+      } else if (pos == std::string::npos) {
+        continue;
+      }
+
+      for (size_t i = 0; i < global_opts.options().size(); ++i) {
+        std::string param_name =  global_opts.options()[i]->canonical_display_name(
+                                  prefix_style);
+        auto description = global_opts.options()[i]->description();
+        auto result = boost::find_first(description, "deprecated");
+        if (!result.empty() && *it == param_name) {
+          print_deprecated_warning(*global_opts.options()[i], description);
+          break;
+        }
+      }
+    }
+
     if (r != 0) {
       return std::abs(r);
     }
@@ -290,10 +339,10 @@ void Shell::get_global_options(po::options_description *opts) {
     ((at::CONFIG_PATH + ",c").c_str(), po::value<std::string>(), "path to cluster configuration")
     ("cluster", po::value<std::string>(), "cluster name")
     ("id", po::value<std::string>(), "client id (without 'client.' prefix)")
-    ("user", po::value<std::string>(), "client id (without 'client.' prefix)")
+    ("user", po::value<std::string>(), "deprecated[:id]")
     ("name,n", po::value<std::string>(), "client name")
     ("mon_host,m", po::value<std::string>(), "monitor host")
-    ("secret", po::value<at::Secret>(), "path to secret key (deprecated)")
+    ("secret", po::value<at::Secret>(), "deprecated[:keyfile]")
     ("keyfile,K", po::value<std::string>(), "path to secret key")
     ("keyring,k", po::value<std::string>(), "path to keyring");
 }
@@ -343,9 +392,13 @@ void Shell::print_help() {
     }
   }
 
-  po::options_description global_opts(OptionPrinter::OPTIONAL_ARGUMENTS);
+  po::options_description global_opts;
   get_global_options(&global_opts);
-  std::cout << std::endl << global_opts << std::endl
+
+  std::cout << std::endl << OptionPrinter::OPTIONAL_ARGUMENTS << ":" << std::endl;
+  OptionPrinter::print_optional(global_opts, name_width, std::cout);
+
+  std::cout << std::endl
             << "See '" << APP_NAME << " help <command>' for help on a specific "
             << "command." << std::endl;
  }

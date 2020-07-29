@@ -1,11 +1,9 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
   selector: 'cd-role-details',
@@ -14,7 +12,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 })
 export class RoleDetailsComponent implements OnChanges, OnInit {
   @Input()
-  selection: CdTableSelection;
+  selection: any;
   @Input()
   scopes: Array<string>;
   selectedItem: any;
@@ -22,39 +20,37 @@ export class RoleDetailsComponent implements OnChanges, OnInit {
   columns: CdTableColumn[];
   scopes_permissions: Array<any> = [];
 
-  constructor(private i18n: I18n) {}
-
   ngOnInit() {
     this.columns = [
       {
         prop: 'scope',
-        name: this.i18n('Scope'),
+        name: $localize`Scope`,
         flexGrow: 2
       },
       {
         prop: 'read',
-        name: this.i18n('Read'),
+        name: $localize`Read`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
         prop: 'create',
-        name: this.i18n('Create'),
+        name: $localize`Create`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
         prop: 'update',
-        name: this.i18n('Update'),
+        name: $localize`Update`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
         prop: 'delete',
-        name: this.i18n('Delete'),
+        name: $localize`Delete`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
@@ -63,8 +59,8 @@ export class RoleDetailsComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
-    if (this.selection.hasSelection) {
-      this.selectedItem = this.selection.first();
+    if (this.selection) {
+      this.selectedItem = this.selection;
       // Build the scopes/permissions data used by the data table.
       const scopes_permissions: any[] = [];
       _.each(this.scopes, (scope) => {

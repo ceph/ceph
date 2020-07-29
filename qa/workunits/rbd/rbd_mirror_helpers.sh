@@ -233,6 +233,43 @@ EOF
     done
 }
 
+peer_add()
+{
+    local cluster=$1 ; shift
+    local pool=$1 ; shift
+    local client_cluster=$1 ; shift
+
+    local uuid_var_name
+    if [ -n "$1" ]; then
+        uuid_var_name=$1 ; shift
+    fi
+
+    local error_code
+    local peer_uuid
+
+    for s in 1 2 4 8 16 32; do
+        set +e
+        peer_uuid=$(rbd --cluster ${cluster} mirror pool peer add \
+            ${pool} ${client_cluster} $@)
+        error_code=$?
+        set -e
+
+        if [ $error_code -eq 17 ]; then
+            # raced with a remote heartbeat ping -- remove and retry
+            sleep $s
+            rbd --cluster ${cluster} --pool ${pool} mirror pool peer remove ${peer_uuid}
+        else
+            test $error_code -eq 0
+            if [ -n "$uuid_var_name" ]; then
+                eval ${uuid_var_name}=${peer_uuid}
+            fi
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 setup_pools()
 {
     local cluster=$1
@@ -264,8 +301,8 @@ setup_pools()
 
     if [ -z ${RBD_MIRROR_MANUAL_PEERS} ]; then
       if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
-        rbd --cluster ${cluster} mirror pool peer add ${POOL} ${remote_cluster}
-        rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
+        peer_add ${cluster} ${POOL} ${remote_cluster}
+        peer_add ${cluster} ${PARENT_POOL} ${remote_cluster}
       else
         mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
         CEPH_ARGS='' ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
@@ -275,12 +312,11 @@ setup_pools()
         admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
         CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
 
-        CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer add ${POOL} \
-            client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX} \
+        CEPH_ARGS='' peer_add ${cluster} ${POOL} \
+            client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX} '' \
             --remote-mon-host "${mon_addr}" --remote-key-file ${admin_key_file}
 
-        uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} \
-            client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX})
+        peer_add ${cluster} ${PARENT_POOL} client.${CEPH_ID}@${remote_cluster}${PEER_CLUSTER_SUFFIX} uuid
         CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
         CEPH_ARGS='' rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
       fi

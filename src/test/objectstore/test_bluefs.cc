@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <random>
 #include <thread>
+#include <stack>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -54,6 +55,36 @@ private:
   }
 };
 
+class ConfSaver {
+  std::stack<std::pair<std::string, std::string>> saved_settings;
+  ConfigProxy& conf;
+public:
+  ConfSaver(ConfigProxy& conf) : conf(conf) {
+    conf._clear_safe_to_start_threads();
+  };
+  ~ConfSaver() {
+    conf._clear_safe_to_start_threads();
+    while(saved_settings.size() > 0) {
+      auto& e = saved_settings.top();
+      conf.set_val_or_die(e.first, e.second);
+      saved_settings.pop();
+    }
+    conf.set_safe_to_start_threads();
+    conf.apply_changes(nullptr);
+  }
+  void SetVal(const char* key, const char* val) {
+    std::string skey(key);
+    std::string prev_val;
+    conf.get_val(skey, &prev_val);
+    conf.set_val_or_die(skey, val);
+    saved_settings.emplace(skey, prev_val);
+  }
+  void ApplyChanges() {
+    conf.set_safe_to_start_threads();
+    conf.apply_changes(nullptr);
+  }
+};
+
 TEST(BlueFS, mkfs) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
@@ -82,6 +113,7 @@ TEST(BlueFS, mkfs_mount) {
 TEST(BlueFS, mkfs_mount_duplicate_gift) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{ size };
+  bluefs_extent_t dup_ext;
   {
     BlueFS fs(g_ceph_context);
     ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
@@ -98,6 +130,9 @@ TEST(BlueFS, mkfs_mount_duplicate_gift) {
       h->append("bar", 3);
       h->append("baz", 3);
       fs.fsync(h);
+      ceph_assert(h->file->fnode.extents.size() > 0);
+      dup_ext = h->file->fnode.extents[0];
+      ceph_assert(dup_ext.bdev == BlueFS::BDEV_DB);
       fs.close_writer(h);
     }
 
@@ -109,7 +144,10 @@ TEST(BlueFS, mkfs_mount_duplicate_gift) {
     ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
     ASSERT_EQ(0, fs.mount());
     // free allocation presumably allocated for file1 
-    fs.debug_inject_duplicate_gift(BlueFS::BDEV_DB, 5 * 1048576, 1048576);
+    std::cout << "duplicate extent: " << std::hex
+      << dup_ext.offset << "~" << dup_ext.length
+      << std::dec << std::endl;
+    fs.debug_inject_duplicate_gift(BlueFS::BDEV_DB, dup_ext.offset, dup_ext.length);
     {
       // overwrite file1 with file2 
       BlueFS::FileWriter *h;
@@ -158,8 +196,7 @@ TEST(BlueFS, write_read) {
     BlueFS::FileReader *h;
     ASSERT_EQ(0, fs.open_for_read("dir", "file", &h));
     bufferlist bl;
-    BlueFS::FileReaderBuffer buf(4096);
-    ASSERT_EQ(9, fs.read(h, &buf, 0, 1024, &bl, NULL));
+    ASSERT_EQ(9, fs.read(h, 0, 1024, &bl, NULL));
     ASSERT_EQ(0, strncmp("foobarbaz", bl.c_str(), 9));
     delete h;
   }
@@ -199,13 +236,14 @@ TEST(BlueFS, small_appends) {
 }
 
 TEST(BlueFS, very_large_write) {
-  // we'll write a ~3G file, so allocate more than that for the whole fs
+  // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size = 1048576 * 1024 * 8ull;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
 
   bool old = g_ceph_context->_conf.get_val<bool>("bluefs_buffered_io");
   g_ceph_context->_conf.set_val("bluefs_buffered_io", "false");
+  uint64_t total_written = 0;
 
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
@@ -223,6 +261,12 @@ TEST(BlueFS, very_large_write) {
     ASSERT_EQ(0, fs.open_for_write("dir", "bigfile", &h, false));
     for (unsigned i = 0; i < 3*1024*1048576ull / sizeof(buf); ++i) {
       h->append(buf, sizeof(buf));
+      total_written += sizeof(buf);
+    }
+    fs.fsync(h);
+    for (unsigned i = 0; i < 2*1024*1048576ull / sizeof(buf); ++i) {
+      h->append(buf, sizeof(buf));
+      total_written += sizeof(buf);
     }
     fs.fsync(h);
     fs.close_writer(h);
@@ -231,10 +275,10 @@ TEST(BlueFS, very_large_write) {
     BlueFS::FileReader *h;
     ASSERT_EQ(0, fs.open_for_read("dir", "bigfile", &h));
     bufferlist bl;
-    BlueFS::FileReaderBuffer readbuf(10485760);
+    ASSERT_EQ(h->file->fnode.size, total_written);
     for (unsigned i = 0; i < 3*1024*1048576ull / sizeof(buf); ++i) {
       bl.clear();
-      fs.read(h, &readbuf, i * sizeof(buf), sizeof(buf), &bl, NULL);
+      fs.read(h, i * sizeof(buf), sizeof(buf), &bl, NULL);
       int r = memcmp(buf, bl.c_str(), sizeof(buf));
       if (r) {
 	cerr << "read got mismatch at offset " << i*sizeof(buf) << " r " << r
@@ -242,6 +286,23 @@ TEST(BlueFS, very_large_write) {
       }
       ASSERT_EQ(0, r);
     }
+    for (unsigned i = 0; i < 2*1024*1048576ull / sizeof(buf); ++i) {
+      bl.clear();
+      fs.read(h, i * sizeof(buf), sizeof(buf), &bl, NULL);
+      int r = memcmp(buf, bl.c_str(), sizeof(buf));
+      if (r) {
+	cerr << "read got mismatch at offset " << i*sizeof(buf) << " r " << r
+	     << std::endl;
+      }
+      ASSERT_EQ(0, r);
+    }
+    delete h;
+    ASSERT_EQ(0, fs.open_for_read("dir", "bigfile", &h));
+    ASSERT_EQ(h->file->fnode.size, total_written);
+    unique_ptr<char> huge_buf(new char[h->file->fnode.size]);
+    auto l = h->file->fnode.size;
+    int64_t r = fs.read(h, 0, l, NULL, huge_buf.get());
+    ASSERT_EQ(r, l);
     delete h;
   }
   fs.umount();
@@ -339,7 +400,7 @@ void sync_fs(BlueFS &fs)
     while (1) {
       if (writes_done == true)
         break;
-      fs.sync_metadata();
+      fs.sync_metadata(false);
       sleep(1);
     }
 }
@@ -502,10 +563,10 @@ TEST(BlueFS, test_simple_compaction_sync) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
-	  fs.sync_metadata();
+	  fs.sync_metadata(false);
        }
        ASSERT_EQ(0, fs.rmdir(dir));
-       fs.sync_metadata();
+       fs.sync_metadata(false);
     }
   }
   fs.compact_log();
@@ -555,10 +616,10 @@ TEST(BlueFS, test_simple_compaction_async) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
-	  fs.sync_metadata();
+	  fs.sync_metadata(false);
        }
        ASSERT_EQ(0, fs.rmdir(dir));
-       fs.sync_metadata();
+       fs.sync_metadata(false);
     }
   }
   fs.compact_log();
@@ -677,6 +738,45 @@ TEST(BlueFS, test_replay) {
     fs.compact_log();
   }
   fs.umount();
+  // remount and check log can replay safe?
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  fs.umount();
+}
+
+TEST(BlueFS, test_replay_growth) {
+  uint64_t size = 1048576LL * (2 * 1024 + 128);
+  TempBdev bdev{size};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  conf.SetVal("bluefs_min_log_runway", "32768");
+  conf.SetVal("bluefs_max_log_runway", "65536");
+  conf.SetVal("bluefs_allocator", "stupid");
+  conf.SetVal("bluefs_sync_write", "true");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mkdir("dir"));
+
+  char data[2000];
+  BlueFS::FileWriter *h;
+  ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+  for (size_t i = 0; i < 10000; i++) {
+    h->append(data, 2000);
+    fs.fsync(h);
+  }
+  fs.close_writer(h);
+  fs.umount(true); //do not compact on exit!
+
   // remount and check log can replay safe?
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));

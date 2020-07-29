@@ -40,54 +40,107 @@
 #include <climits>
 #include <locale>
 #include <memory>
+#include <math.h>
 
 #include "tools/RadosDump.h"
 #include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
 #include "include/stringify.h"
 #include "global/signal_handler.h"
-#include "common/rabin.h"
+#include "common/CDC.h"
+
+struct EstimateResult {
+  std::unique_ptr<CDC> cdc;
+
+  uint64_t chunk_size;
+
+  ceph::mutex lock = ceph::make_mutex("EstimateResult::lock");
+
+  // < key, <count, chunk_size> >
+  map< string, pair <uint64_t, uint64_t> > chunk_statistics;
+  uint64_t total_bytes = 0;
+  std::atomic<uint64_t> total_objects = {0};
+
+  EstimateResult(std::string alg, int chunk_size)
+    : cdc(CDC::create(alg, chunk_size)),
+      chunk_size(1ull << chunk_size) {}
+
+  void add_chunk(bufferlist& chunk, const std::string& fp_algo) {
+    string fp;
+    if (fp_algo == "sha1") {
+      sha1_digest_t sha1_val = crypto::digest<crypto::SHA1>(chunk);
+      fp = sha1_val.to_str();
+    } else if (fp_algo == "sha256") {
+      sha256_digest_t sha256_val = crypto::digest<crypto::SHA256>(chunk);
+      fp = sha256_val.to_str();
+    } else if (fp_algo == "sha512") {
+      sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
+      fp = sha512_val.to_str();
+    } else {
+      ceph_assert(0 == "no support fingerperint algorithm");
+    }
+
+    std::lock_guard l(lock);
+    auto p = chunk_statistics.find(fp);
+    if (p != chunk_statistics.end()) {
+      p->second.first++;
+      if (p->second.second != chunk.length()) {
+	cerr << "warning: hash collision on " << fp
+	     << ": was " << p->second.second
+	     << " now " << chunk.length() << std::endl;
+      }
+    } else {
+      chunk_statistics[fp] = make_pair(1, chunk.length());
+    }
+    total_bytes += chunk.length();
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("target_chunk_size", chunk_size);
+
+    uint64_t dedup_bytes = 0;
+    uint64_t dedup_objects = chunk_statistics.size();
+    for (auto& j : chunk_statistics) {
+      dedup_bytes += j.second.second;
+    }
+    //f->dump_unsigned("dedup_bytes", dedup_bytes);
+    //f->dump_unsigned("original_bytes", total_bytes);
+    f->dump_float("dedup_bytes_ratio",
+		  (double)dedup_bytes / (double)total_bytes);
+    f->dump_float("dedup_objects_ratio",
+		  (double)dedup_objects / (double)total_objects);
+
+    uint64_t avg = total_bytes / dedup_objects;
+    uint64_t sqsum = 0;
+    for (auto& j : chunk_statistics) {
+      sqsum += (avg - j.second.second) * (avg - j.second.second);
+    }
+    uint64_t stddev = sqrt(sqsum / dedup_objects);
+    f->dump_unsigned("chunk_size_average", avg);
+    f->dump_unsigned("chunk_size_stddev", stddev);
+  }
+};
+
+map<uint64_t, EstimateResult> dedup_estimates;  // chunk size -> result
 
 using namespace librados;
-unsigned default_op_size = 1 << 22;
+unsigned default_op_size = 1 << 26;
 unsigned default_max_thread = 2;
-int32_t default_report_period = 2;
-map< string, pair <uint64_t, uint64_t> > chunk_statistics; // < key, <count, chunk_size> >
-ceph::mutex glock = ceph::make_mutex("chunk_statistics::Locker");
+int32_t default_report_period = 10;
+ceph::mutex glock = ceph::make_mutex("glock");
 
 void usage()
 {
-  cout << " usage: [--op <estimate|chunk_scrub|add_chunk_ref|get_chunk_ref>] [--pool <pool_name> ] " << std::endl;
+  cout << " usage: [--op <estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|dump-chunk-refs>] [--pool <pool_name> ] " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
-  cout << "   --chunk-algorithm <fixed|rabin> " << std::endl;
+  cout << "   --chunk-algorithm <fixed|fastcdc> " << std::endl;
   cout << "   --fingerprint-algorithm <sha1|sha256|sha512> " << std::endl;
   cout << "   --chunk-pool <pool name> " << std::endl;
   cout << "   --max-thread <threads> " << std::endl;
-  cout << "   --report-perioid <seconds> " << std::endl;
+  cout << "   --report-period <seconds> " << std::endl;
+  cout << "   --max-seconds <seconds>" << std::endl;
   cout << "   --max-read-size <bytes> " << std::endl;
-  cout << std::endl;
-  cout << "   ***these options are for rabin chunk*** " << std::endl;
-  cout << "   **rabin_hash = (rabin_hash * rabin_prime + new_byte - old_byte * pow) % (mod_prime) ** " << std::endl;
-  cout << "   **default_chunk_mask = 7 ** " << std::endl;
-  cout << "   **default_mod_prime = 6148914691236517051 ** " << std::endl;
-  cout << "   **default_rabin_prime = 3 ** " << std::endl;
-  cout << "   **default_pow = 907234050803559263 ** " << std::endl;
-  cout << "   **default_window_size = 48** " << std::endl;
-  cout << "   **default_min_chunk = 16384** " << std::endl;
-  cout << "   **default_max_chunk = 4194304** " << std::endl;
-  cout << "   --mod-prime <uint64_t> " << std::endl;
-  cout << "   --rabin-prime <uint64_t> " << std::endl;
-  cout << "   --pow <uint64_t> " << std::endl;
-  cout << "   --chunk-mask-bit <uint32_t> " << std::endl;
-  cout << "   --window-size <uint32_t> " << std::endl;
-  cout << "   --min-chunk <uint32_t> " << std::endl;
-  cout << "   --max-chunk <uint64_t> " << std::endl;
-  exit(1);
-}
-
-[[noreturn]] static void usage_exit()
-{
-  usage();
   exit(1);
 }
 
@@ -105,143 +158,130 @@ static int rados_sistrtoll(I &i, T *val) {
 
 class EstimateDedupRatio;
 class ChunkScrub;
-class EstimateThread : public Thread 
+class CrawlerThread : public Thread
 {
   IoCtx io_ctx;
   int n;
   int m;
   ObjectCursor begin;
   ObjectCursor end;
-  ceph::mutex m_lock = ceph::make_mutex("EstimateThread::Locker");
+  ceph::mutex m_lock = ceph::make_mutex("CrawlerThread::Locker");
   ceph::condition_variable m_cond;
-  int32_t timeout;
+  int32_t report_period;
   bool m_stop = false;
   uint64_t total_bytes = 0;
+  uint64_t total_objects = 0;
   uint64_t examined_objects = 0;
-  uint64_t total_objects;
+  uint64_t examined_bytes = 0;
   uint64_t max_read_size = 0;
   bool debug = false;
 #define COND_WAIT_INTERVAL 10
 
 public:
-  EstimateThread(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, int32_t timeout,
+  CrawlerThread(IoCtx& io_ctx, int n, int m,
+		ObjectCursor begin, ObjectCursor end, int32_t report_period,
 		uint64_t num_objects, uint64_t max_read_size = default_op_size):
     io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), 
-    timeout(timeout), total_objects(num_objects), max_read_size(max_read_size)
+    report_period(report_period), total_objects(num_objects), max_read_size(max_read_size)
   {}
   void signal(int signum) {
     std::lock_guard l{m_lock};
     m_stop = true;
     m_cond.notify_all();
   }
-  virtual void print_status(Formatter *f, ostream &out) = 0;
+  virtual void print_status(Formatter *f, ostream &out) {}
   uint64_t get_examined_objects() { return examined_objects; }
+  uint64_t get_examined_bytes() { return examined_bytes; }
   uint64_t get_total_bytes() { return total_bytes; }
   uint64_t get_total_objects() { return total_objects; }
+  void set_debug(const bool debug_) { debug = debug_; }
   friend class EstimateDedupRatio;
   friend class ChunkScrub;
 };
 
-class EstimateDedupRatio : public EstimateThread
+class EstimateDedupRatio : public CrawlerThread
 {
   string chunk_algo;
   string fp_algo;
   uint64_t chunk_size;
-  map< string, pair <uint64_t, uint64_t> > local_chunk_statistics; // < key, <count, chunk_size> >
-  RabinChunk rabin;
+  uint64_t max_seconds;
 
 public:
-  EstimateDedupRatio(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
-		string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t timeout,
-		uint64_t num_objects, uint64_t max_read_size):
-    EstimateThread(io_ctx, n, m, begin, end, timeout, num_objects, max_read_size), 
-		chunk_algo(chunk_algo), fp_algo(fp_algo), chunk_size(chunk_size) { }
+  EstimateDedupRatio(
+    IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end,
+    string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t report_period,
+    uint64_t num_objects, uint64_t max_read_size,
+    uint64_t max_seconds):
+    CrawlerThread(io_ctx, n, m, begin, end, report_period, num_objects,
+		  max_read_size),
+    chunk_algo(chunk_algo),
+    fp_algo(fp_algo),
+    chunk_size(chunk_size),
+    max_seconds(max_seconds) {
+  }
 
   void* entry() {
     estimate_dedup_ratio();
     return NULL;
   }
   void estimate_dedup_ratio();
-  void print_status(Formatter *f, ostream &out);
-  map< string, pair <uint64_t, uint64_t> > &get_chunk_statistics() { return local_chunk_statistics; }
-  uint64_t fixed_chunk(string oid, uint64_t offset);
-  uint64_t rabin_chunk(string oid, uint64_t offset);
-  void add_chunk_fp_to_stat(bufferlist &chunk);
-  void set_rabin_options(uint64_t mod_prime, uint32_t rabin_prime, uint64_t pow, 
-			 uint64_t chunk_mask_bit, uint32_t window_size, uint32_t min_chunk, 
-			 uint64_t max_chunk);
 };
 
-class ChunkScrub: public EstimateThread
+class ChunkScrub: public CrawlerThread
 {
   IoCtx chunk_io_ctx;
-  int fixed_objects = 0;
+  int damaged_objects = 0;
 
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
-	     IoCtx& chunk_io_ctx, int32_t timeout, uint64_t num_objects):
-    EstimateThread(io_ctx, n, m, begin, end, timeout, num_objects), chunk_io_ctx(chunk_io_ctx)
+	     IoCtx& chunk_io_ctx, int32_t report_period, uint64_t num_objects):
+    CrawlerThread(io_ctx, n, m, begin, end, report_period, num_objects), chunk_io_ctx(chunk_io_ctx)
     { }
   void* entry() {
     chunk_scrub_common();
     return NULL;
   }
   void chunk_scrub_common();
-  int get_fixed_objects() { return fixed_objects; }
+  int get_damaged_objects() { return damaged_objects; }
   void print_status(Formatter *f, ostream &out);
 };
 
-vector<std::unique_ptr<EstimateThread>> estimate_threads;
+vector<std::unique_ptr<CrawlerThread>> estimate_threads;
 
-static void print_dedup_estimate(bool debug = false)
+static void print_dedup_estimate(std::ostream& out, std::string chunk_algo)
 {
-  uint64_t total_size = 0;
-  uint64_t dedup_size = 0;
-  uint64_t examined_objects = 0;
+  /*
+  uint64_t total_bytes = 0;
   uint64_t total_objects = 0;
-  EstimateDedupRatio *ratio = NULL;
-  for (auto &et : estimate_threads) {
-    std::lock_guard l{glock};
-    ratio = dynamic_cast<EstimateDedupRatio*>(et.get());
-    assert(ratio);
-    for (auto p : ratio->get_chunk_statistics()) {
-      auto c = chunk_statistics.find(p.first);
-      if (c != chunk_statistics.end()) {
-	c->second.first += p.second.first;
-      }	else {
-	chunk_statistics.insert(p);
-      }
-    }
-  }
-
-  if (debug) {
-    for (auto p : chunk_statistics) {
-      cout << " -- " << std::endl;
-      cout << " key: " << p.first << std::endl;
-      cout << " count: " << p.second.first << std::endl;
-      cout << " chunk_size: " << p.second.second << std::endl;
-      dedup_size += p.second.second;
-      cout << " -- " << std::endl;
-    }
-  } else {
-    for (auto p : chunk_statistics) {
-      dedup_size += p.second.second;
-    }
-
-  }
+  */
+  uint64_t examined_objects = 0;
+  uint64_t examined_bytes = 0;
 
   for (auto &et : estimate_threads) {
-    total_size += et->get_total_bytes();
     examined_objects += et->get_examined_objects();
-    if (!total_objects) {
-      total_objects = et->get_total_objects();
-    }
+    examined_bytes += et->get_examined_bytes();
   }
 
-  cout << " result: " << total_size << " | " << dedup_size << " (total size | deduped size) " << std::endl;
-  cout << " Dedup ratio: " << (100 - (double)(dedup_size)/total_size*100) << " % " << std::endl;
-  cout << " Examined objects: " << examined_objects << std::endl;
-  cout << " Total objects: " << total_objects << std::endl;
+  auto f = Formatter::create("json-pretty");
+  f->open_object_section("results");
+  f->dump_string("chunk_algo", chunk_algo);
+  f->open_array_section("chunk_sizes");
+  for (auto& i : dedup_estimates) {
+    f->dump_object("chunker", i.second);
+  }
+  f->close_section();
+
+  f->open_object_section("summary");
+  f->dump_unsigned("examined_objects", examined_objects);
+  f->dump_unsigned("examined_bytes", examined_bytes);
+  /*
+  f->dump_unsigned("total_objects", total_objects);
+  f->dump_unsigned("total_bytes", total_bytes);
+  f->dump_float("examined_ratio", (float)examined_bytes / (float)total_bytes);
+  */
+  f->close_section();
+  f->close_section();
+  f->flush(out);
 }
 
 static void handle_signal(int signum) 
@@ -252,33 +292,10 @@ static void handle_signal(int signum)
   }
 }
 
-void EstimateDedupRatio::print_status(Formatter *f, ostream &out)
-{
-  if (f) {
-    f->open_array_section("estimate_dedup_ratio");
-    f->dump_string("PID", stringify(get_pid()));
-    for (auto p : local_chunk_statistics) {
-      f->open_object_section("fingerprint object");
-      f->dump_string("fingerprint", p.first);
-      f->dump_string("count", stringify(p.second.first));
-      f->dump_string("chunk_size", stringify(p.second.second));
-      f->close_section();
-    }
-    f->close_section();
-    f->open_object_section("Status");
-    f->dump_string("Total bytes", stringify(total_bytes));
-    f->dump_string("Examined objectes", stringify(examined_objects));
-    f->close_section();
-    f->flush(out);
-    cout << std::endl;
-  }
-}
-
 void EstimateDedupRatio::estimate_dedup_ratio()
 {
   ObjectCursor shard_start;
   ObjectCursor shard_end;
-  utime_t cur_time = ceph_clock_now();
 
   io_ctx.object_list_slice(
     begin,
@@ -287,6 +304,19 @@ void EstimateDedupRatio::estimate_dedup_ratio()
     m,
     &shard_start,
     &shard_end);
+
+  utime_t start = ceph_clock_now();
+  utime_t end;
+  if (max_seconds) {
+    end = start;
+    end += max_seconds;
+  }
+
+  utime_t next_report;
+  if (report_period) {
+    next_report = start;
+    next_report += report_period;
+  }
 
   ObjectCursor c(shard_start);
   while (c < shard_end)
@@ -298,159 +328,59 @@ void EstimateDedupRatio::estimate_dedup_ratio()
       return;
     }
 
+    unsigned op_size = max_read_size;
+
     for (const auto & i : result) {
       const auto &oid = i.oid;
+
+      utime_t now = ceph_clock_now();
+      if (max_seconds && now > end) {
+	m_stop = true;
+      }
+      if (m_stop) {
+	return;
+      }
+
+      if (n == 0 && // first thread only
+	  next_report != utime_t() && now > next_report) {
+	cerr << (int)(now - start) << "s : read "
+	     << dedup_estimates.begin()->second.total_bytes << " bytes so far..."
+	     << std::endl;
+	print_dedup_estimate(cerr, chunk_algo);
+	next_report = now;
+	next_report += report_period;
+      }
+
+      // read entire object
+      bufferlist bl;
       uint64_t offset = 0;
       while (true) {
-	std::unique_lock l{m_lock};
-	if (m_stop) {
-	  Formatter *formatter = Formatter::create("json-pretty");
-	  print_status(formatter, cout);
-	  delete formatter;
-	  return;
-	}
-
-	uint64_t next_offset;
-	if (chunk_algo == "fixed") {
-	  next_offset = fixed_chunk(oid, offset);
-	} else if (chunk_algo == "rabin") {
-	  next_offset = rabin_chunk(oid, offset);
-	} else {
-	  ceph_assert(0 == "no support chunk algorithm"); 
-	}
-	
-	if (!next_offset) {
+	bufferlist t;
+	int ret = io_ctx.read(oid, t, op_size, offset);
+	if (ret <= 0) {
 	  break;
 	}
-	offset += next_offset;
-	m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
-	if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
-	  Formatter *formatter = Formatter::create("json-pretty");
-	  print_status(formatter, cout);
-	  delete formatter;
-	  cur_time = ceph_clock_now();
-	}
+	offset += ret;
+	bl.claim_append(t);
       }
       examined_objects++;
+      examined_bytes += bl.length();
+
+      // do the chunking
+      for (auto& i : dedup_estimates) {
+	vector<pair<uint64_t, uint64_t>> chunks;
+	i.second.cdc->calc_chunks(bl, &chunks);
+	for (auto& p : chunks) {
+	  bufferlist chunk;
+	  chunk.substr_of(bl, p.first, p.second);
+	  i.second.add_chunk(chunk, fp_algo);
+	  if (debug) {
+	    cout << " " << oid <<  " " << p.first << "~" << p.second << std::endl;
+	  }
+	}
+	++i.second.total_objects;
+      }
     }
-  }
-}
-
-uint64_t EstimateDedupRatio::fixed_chunk(string oid, uint64_t offset)
-{
-  unsigned op_size = max_read_size;
-  int ret;
-  bufferlist outdata;
-  ret = io_ctx.read(oid, outdata, op_size, offset);
-  if (ret <= 0) {
-    return 0;
-  }
-
-  uint64_t c_offset = 0;
-  while (c_offset < outdata.length()) {
-    bufferlist chunk;
-    if (outdata.length() - c_offset > chunk_size) {
-      bufferptr bptr(chunk_size);
-      chunk.push_back(std::move(bptr));
-      chunk.begin().copy_in(chunk_size, outdata.c_str());
-    } else {
-      bufferptr bptr(outdata.length() - c_offset);
-      chunk.push_back(std::move(bptr));
-      chunk.begin().copy_in(outdata.length() - c_offset, outdata.c_str());
-    }
-    add_chunk_fp_to_stat(chunk);
-    c_offset = c_offset + chunk_size;
-  }
-
-  if (outdata.length() < op_size) {
-    return 0;
-  }
-  return outdata.length();
-}
-
-void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk) 
-{
-  string fp;
-  if (fp_algo == "sha1") {
-    sha1_digest_t sha1_val = crypto::digest<crypto::SHA1>(chunk);
-    fp = sha1_val.to_str();
-  } else if (fp_algo == "sha256") {
-    sha256_digest_t sha256_val = crypto::digest<crypto::SHA256>(chunk);
-    fp = sha256_val.to_str();
-  } else if (fp_algo == "sha512") {
-    sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
-    fp = sha512_val.to_str();
-  } else if (chunk_algo == "rabin") {
-    uint64_t hash = rabin.gen_rabin_hash(chunk.c_str(), 0, chunk.length());
-    fp = to_string(hash);
-  } else {
-    ceph_assert(0 == "no support fingerperint algorithm"); 
-  }
-
-  auto p = local_chunk_statistics.find(fp);
-  if (p != local_chunk_statistics.end()) {
-    uint64_t count = p->second.first;
-    count++;
-    local_chunk_statistics[fp] = make_pair(count, chunk.length());
-  } else {
-    local_chunk_statistics[fp] = make_pair(1, chunk.length());
-  }
-  total_bytes += chunk.length();
-}
-
-uint64_t EstimateDedupRatio::rabin_chunk(string oid, uint64_t offset)
-{
-  unsigned op_size = max_read_size;
-  int ret;
-  bufferlist outdata;
-  ret = io_ctx.read(oid, outdata, op_size, offset);
-  if (ret <= 0) {
-    return 0;
-  }
-
-  vector<pair<uint64_t, uint64_t>> chunks;
-  rabin.do_rabin_chunks(outdata, chunks, 0, 0); // use default value
-  for (auto p : chunks) {
-    bufferlist chunk;
-    bufferptr c_data = buffer::create(p.second);
-    c_data.zero();
-    chunk.append(c_data);
-    chunk.begin().copy_in(p.second, outdata.c_str() + p.first);
-    add_chunk_fp_to_stat(chunk);
-    cout << " oid: " << oid <<  " offset: " << p.first + offset << " length: " << p.second << std::endl;
-  }
-
-  if (outdata.length() < op_size) {
-    return 0;
-  }
-  return outdata.length();
-}
-
-void EstimateDedupRatio::set_rabin_options(uint64_t mod_prime, uint32_t rabin_prime, uint64_t pow, 
-					  uint64_t chunk_mask_bit, uint32_t window_size, 
-					  uint32_t min_chunk, uint64_t max_chunk) 
-{
-  if (mod_prime != 0) {
-    rabin.set_mod_prime(mod_prime);
-  }
-  if (rabin_prime != 0) {
-    rabin.set_rabin_prime(rabin_prime);
-  }
-  if (pow != 0) {
-    rabin.set_pow(pow);
-  }
-  if (chunk_mask_bit != 0) {
-    int index = rabin.add_rabin_mask(chunk_mask_bit);
-    rabin.set_numbits(index);
-  }
-  if (window_size != 0) {
-    rabin.set_window_size(window_size);
-  }
-  if (min_chunk != 0) {
-    rabin.set_min_chunk(min_chunk);
-  }
-  if (max_chunk != 0) {
-    rabin.set_max_chunk(max_chunk);
   }
 }
 
@@ -459,7 +389,6 @@ void ChunkScrub::chunk_scrub_common()
   ObjectCursor shard_start;
   ObjectCursor shard_end;
   int ret;
-  utime_t cur_time = ceph_clock_now();
   Rados rados;
 
   ret = rados.init_with_context(g_ceph_context);
@@ -500,48 +429,60 @@ void ChunkScrub::chunk_scrub_common()
 	return;
       }
       auto oid = i.oid;
-      set<hobject_t> refs;
-      set<hobject_t> real_refs;
-      ret = cls_chunk_refcount_read(chunk_io_ctx, oid, &refs);
-      if (ret < 0) {
+      cout << oid << std::endl;
+      chunk_refs_t refs;
+      {
+	bufferlist t;
+	ret = chunk_io_ctx.getxattr(oid, CHUNK_REFCOUNT_ATTR, t);
+	if (ret < 0) {
+	  continue;
+	}
+	auto p = t.cbegin();
+	decode(refs, p);
+      }
+
+      examined_objects++;
+      if (refs.get_type() != chunk_refs_t::TYPE_BY_OBJECT) {
+	// we can't do anything here
 	continue;
       }
 
-      for (auto pp : refs) {
+      // check all objects
+      chunk_refs_by_object_t *byo =
+	static_cast<chunk_refs_by_object_t*>(refs.r.get());
+      set<hobject_t> real_refs;
+
+      uint64_t pool_missing = 0;
+      uint64_t object_missing = 0;
+      uint64_t does_not_ref = 0;
+      for (auto& pp : byo->by_object) {
 	IoCtx target_io_ctx;
 	ret = rados.ioctx_create2(pp.pool, target_io_ctx);
 	if (ret < 0) {
-	  cerr << "error opening pool "
-	       << pp.pool << ": "
-	       << cpp_strerror(ret) << std::endl;
+	  cerr << oid << " ref " << pp
+	       << ": referencing pool does not exist" << std::endl;
+	  ++pool_missing;
 	  continue;
 	}
 
-	ret = cls_chunk_has_chunk(target_io_ctx, pp.oid.name, oid);
-	if (ret != -ENOENT) {
-	  real_refs.insert(pp);
-	} 
-      }
-
-      if (refs.size() != real_refs.size()) {
-	ObjectWriteOperation op;
-	cls_chunk_refcount_set(op, real_refs);
-	ret = chunk_io_ctx.operate(oid, &op);
-	if (ret < 0) {
-	  continue;
+	ret = cls_cas_references_chunk(target_io_ctx, pp.oid.name, oid);
+	if (ret == -ENOENT) {
+	  cerr << oid << " ref " << pp
+	       << ": referencing object missing" << std::endl;
+	  ++object_missing;
+	} else if (ret == -ENOLINK) {
+	  cerr << oid << " ref " << pp
+	       << ": referencing object does not reference chunk"
+	       << std::endl;
+	  ++does_not_ref;
 	}
-	fixed_objects++;
       }
-      examined_objects++;
-      m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
-      if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
-	Formatter *formatter = Formatter::create("json-pretty");
-	print_status(formatter, cout);
-	delete formatter;
-	cur_time = ceph_clock_now();
+      if (pool_missing || object_missing || does_not_ref) {
+	++damaged_objects;
       }
     }
   }
+  cout << "--done--" << std::endl;
 }
 
 void ChunkScrub::print_status(Formatter *f, ostream &out)
@@ -551,8 +492,8 @@ void ChunkScrub::print_status(Formatter *f, ostream &out)
     f->dump_string("PID", stringify(get_pid()));
     f->open_object_section("Status");
     f->dump_string("Total object", stringify(total_objects));
-    f->dump_string("Examined objectes", stringify(examined_objects));
-    f->dump_string("Fixed objectes", stringify(fixed_objects));
+    f->dump_string("Examined objects", stringify(examined_objects));
+    f->dump_string("damaged objects", stringify(damaged_objects));
     f->close_section();
     f->flush(out);
     cout << std::endl;
@@ -564,15 +505,16 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
 {
   Rados rados;
   IoCtx io_ctx;
-  std::string chunk_algo;
-  string fp_algo;
+  std::string chunk_algo = "fastcdc";
+  string fp_algo = "sha1";
   string pool_name;
   uint64_t chunk_size = 0;
+  uint64_t min_chunk_size = 8192;
+  uint64_t max_chunk_size = 4*1024*1024;
   unsigned max_thread = default_max_thread;
   uint32_t report_period = default_report_period;
   uint64_t max_read_size = default_op_size;
-  uint64_t mod_prime = 0, pow = 0, max_chunk = default_op_size;
-  uint32_t rabin_prime = 0, window_size = 0, chunk_mask_bit = 0, min_chunk = 16384;
+  uint64_t max_seconds = 0;
   int ret;
   std::map<std::string, std::string>::const_iterator i;
   bool debug = false;
@@ -589,22 +531,23 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   i = opts.find("chunk-algorithm");
   if (i != opts.end()) {
     chunk_algo = i->second.c_str();
-    if (chunk_algo != "fixed" && chunk_algo != "rabin") {
-      usage_exit();
+    if (!CDC::create(chunk_algo, 12)) {
+      cerr << "unrecognized chunk-algorithm " << chunk_algo << std::endl;
+      exit(1);
     }
   } else {
-    usage_exit();
+    cerr << "must specify chunk-algorithm" << std::endl;
+    exit(1);
   }
 
   i = opts.find("fingerprint-algorithm");
   if (i != opts.end()) {
     fp_algo = i->second.c_str();
-    if (fp_algo != "sha1" && fp_algo != "rabin"
+    if (fp_algo != "sha1"
 	&& fp_algo != "sha256" && fp_algo != "sha512") {
-      usage_exit();
+      cerr << "unrecognized fingerprint-algorithm " << fp_algo << std::endl;
+      exit(1);
     }
-  } else {
-    usage_exit();
   }
 
   i = opts.find("chunk-size");
@@ -612,9 +555,18 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &chunk_size)) {
       return -EINVAL;
     }
-  } else {
-    if (chunk_algo != "rabin") {
-      usage_exit();
+  }
+
+  i = opts.find("min-chunk-size");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &min_chunk_size)) {
+      return -EINVAL;
+    }
+  }
+  i = opts.find("max-chunk-size");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &max_chunk_size)) {
+      return -EINVAL;
     }
   }
 
@@ -630,52 +582,16 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &report_period)) {
       return -EINVAL;
     }
-  } 
+  }
+  i = opts.find("max-seconds");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &max_seconds)) {
+      return -EINVAL;
+    }
+  }
   i = opts.find("max-read-size");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &max_read_size)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("mod-prime");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &mod_prime)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("rabin-prime");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &rabin_prime)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("pow");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &pow)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("chunk-mask-bit");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &chunk_mask_bit)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("window-size");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &window_size)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("min-chunk");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &min_chunk)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("max-chunk");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &max_chunk)) {
       return -EINVAL;
     }
   } 
@@ -700,7 +616,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   }
   if (pool_name.empty()) {
     cerr << "--create-pool requested but pool_name was not specified!" << std::endl;
-    usage_exit();
+    exit(1);
   }
   ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
   if (ret < 0) {
@@ -708,6 +624,19 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
 	 << pool_name << ": "
 	 << cpp_strerror(ret) << std::endl;
     goto out;
+  }
+
+  // set up chunkers
+  if (chunk_size) {
+    dedup_estimates.emplace(std::piecewise_construct,
+			    std::forward_as_tuple(chunk_size),
+			    std::forward_as_tuple(chunk_algo, cbits(chunk_size)-1));
+  } else {
+    for (size_t cs = min_chunk_size; cs <= max_chunk_size; cs *= 2) {
+      dedup_estimates.emplace(std::piecewise_construct,
+			      std::forward_as_tuple(cs),
+			      std::forward_as_tuple(chunk_algo, cbits(cs)-1));
+    }
   }
 
   glock.lock();
@@ -728,16 +657,13 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   s = stats[pool_name];
 
   for (unsigned i = 0; i < max_thread; i++) {
-    std::unique_ptr<EstimateThread> ptr (new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
-							    chunk_algo, fp_algo, chunk_size, 
-							    report_period, s.num_objects, max_read_size));
-    if (chunk_algo == "rabin") {
-      EstimateDedupRatio *ratio = NULL;
-      ratio = dynamic_cast<EstimateDedupRatio*>(ptr.get());
-      ratio->set_rabin_options(mod_prime, rabin_prime, pow, chunk_mask_bit, window_size,
-			      min_chunk, max_chunk);
-    }
+    std::unique_ptr<CrawlerThread> ptr (
+      new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
+			     chunk_algo, fp_algo, chunk_size,
+			     report_period, s.num_objects, max_read_size,
+			     max_seconds));
     ptr->create("estimate_thread");
+    ptr->set_debug(debug);
     estimate_threads.push_back(move(ptr));
   }
   glock.unlock();
@@ -746,7 +672,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     p->join();
   }
 
-  print_dedup_estimate(debug);
+  print_dedup_estimate(cout, chunk_algo);
 
  out:
   return (ret < 0) ? 1 : 0;
@@ -756,7 +682,7 @@ static void print_chunk_scrub()
 {
   uint64_t total_objects = 0;
   uint64_t examined_objects = 0;
-  int fixed_objects = 0;
+  int damaged_objects = 0;
 
   for (auto &et : estimate_threads) {
     if (!total_objects) {
@@ -764,12 +690,12 @@ static void print_chunk_scrub()
     }
     examined_objects += et->get_examined_objects();
     ChunkScrub *ptr = static_cast<ChunkScrub*>(et.get());
-    fixed_objects += ptr->get_fixed_objects();
+    damaged_objects += ptr->get_damaged_objects();
   }
 
   cout << " Total object : " << total_objects << std::endl;
   cout << " Examined object : " << examined_objects << std::endl;
-  cout << " Fixed object : " << fixed_objects << std::endl;
+  cout << " Damaged object : " << damaged_objects << std::endl;
 }
 
 int chunk_scrub_common(const std::map < std::string, std::string > &opts,
@@ -793,14 +719,16 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     op_name= i->second.c_str();
   } else {
-    usage_exit();
+    cerr << "must specify op" << std::endl;
+    exit(1);
   }
 
   i = opts.find("chunk-pool");
   if (i != opts.end()) {
     chunk_pool_name = i->second.c_str();
   } else {
-    usage_exit();
+    cerr << "must specify --chunk-pool" << std::endl;
+    exit(1);
   }
   i = opts.find("max-thread");
   if (i != opts.end()) {
@@ -836,20 +764,23 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     goto out;
   }
 
-  if (op_name == "add-chunk-ref") {
+  if (op_name == "chunk-get-ref" ||
+      op_name == "chunk-put-ref") {
     string target_object_name;
     uint64_t pool_id;
     i = opts.find("object");
     if (i != opts.end()) {
       object_name = i->second.c_str();
     } else {
-      usage_exit();
+      cerr << "must specify object" << std::endl;
+      exit(1);
     }
     i = opts.find("target-ref");
     if (i != opts.end()) {
       target_object_name = i->second.c_str();
     } else {
-      usage_exit();
+      cerr << "must specify target ref" << std::endl;
+      exit(1);
     }
     i = opts.find("target-ref-pool-id");
     if (i != opts.end()) {
@@ -857,17 +788,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
 	return -EINVAL;
       }
     } else {
-      usage_exit();
-    }
-
-    set<hobject_t> refs;
-    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
-    if (ret < 0) {
-      cerr << " cls_chunk_refcount_read fail : " << cpp_strerror(ret) << std::endl;
-      return ret;
-    }
-    for (auto p : refs) {
-      cout << " " << p.oid.name << " ";
+      cerr << "must specify target-ref-pool-id" << std::endl;
+      exit(1);
     }
 
     uint32_t hash;
@@ -876,10 +798,13 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
       return ret;
     }
     hobject_t oid(sobject_t(target_object_name, CEPH_NOSNAP), "", hash, pool_id, "");
-    refs.insert(oid);
 
     ObjectWriteOperation op;
-    cls_chunk_refcount_set(op, refs);
+    if (op_name == "chunk-get-ref") {
+      cls_cas_chunk_get_ref(op, oid);
+    } else {
+      cls_cas_chunk_put_ref(op, oid);
+    }
     ret = chunk_io_ctx.operate(object_name, &op);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
@@ -887,23 +812,28 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
 
     return ret;
 
-  } else if (op_name == "get-chunk-ref") {
+  } else if (op_name == "dump-chunk-refs") {
     i = opts.find("object");
     if (i != opts.end()) {
       object_name = i->second.c_str();
     } else {
-      usage_exit();
+      cerr << "must specify object" << std::endl;
+      exit(1);
     }
-    set<hobject_t> refs;
-    cout << " refs: " << std::endl;
-    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
-    for (auto p : refs) {
-      cout << " " << p.oid.name << " ";
+    bufferlist t;
+    ret = chunk_io_ctx.getxattr(object_name, CHUNK_REFCOUNT_ATTR, t);
+    if (ret < 0) {
+      return ret;
     }
-    cout << std::endl;
-    return ret;
+    chunk_refs_t refs;
+    auto p = t.cbegin();
+    decode(refs, p);
+    auto f = Formatter::create("json-pretty");
+    f->dump_object("refs", refs);
+    f->flush(cout);
+    return 0;
   }
-  
+
   glock.lock();
   begin = chunk_io_ctx.object_list_begin();
   end = chunk_io_ctx.object_list_end();
@@ -922,15 +852,18 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   s = stats[chunk_pool_name];
 
   for (unsigned i = 0; i < max_thread; i++) {
-    std::unique_ptr<EstimateThread> ptr (new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
-							report_period, s.num_objects));
+    std::unique_ptr<CrawlerThread> ptr (
+      new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
+		     report_period, s.num_objects));
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
   glock.unlock();
 
   for (auto &p : estimate_threads) {
+    cout << "join " << std::endl;
     p->join();
+    cout << "joined " << std::endl;
   }
 
   print_chunk_scrub();
@@ -991,26 +924,20 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--report-period", (char*)NULL)) {
       opts["report-period"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-read-size", (char*)NULL)) {
-      opts["max-read-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--mod-prime", (char*)NULL)) {
-      opts["mod-prime"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--rabin-prime", (char*)NULL)) {
-      opts["rabin-prime"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--pow", (char*)NULL)) {
-      opts["pow"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--chunk-mask-bit", (char*)NULL)) {
-      opts["chunk-mask-bit"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--window-size", (char*)NULL)) {
-      opts["window-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-chunk", (char*)NULL)) {
-      opts["min-chunk"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-chunk", (char*)NULL)) {
-      opts["max-chunk"] = val;
+      opts["max-seconds"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-seconds", (char*)NULL)) {
+      opts["max-seconds"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-chunk-size", (char*)NULL)) {
+      opts["min-chunk-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-chunk-size", (char*)NULL)) {
+      opts["max-chunk-size"] = val;
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
-      if (val[0] == '-')
-        usage_exit();
+      if (val[0] == '-') {
+	cerr << "unrecognized option " << val << std::endl;
+	exit(1);
+      }
       ++i;
     }
   }
@@ -1019,13 +946,14 @@ int main(int argc, const char **argv)
     return estimate_dedup_ratio(opts, args);
   } else if (op_name == "chunk-scrub") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "add-chunk-ref") {
+  } else if (op_name == "chunk-get-ref" ||
+	     op_name == "chunk-put-ref") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "get-chunk-ref") {
+  } else if (op_name == "dump-chunk-refs") {
     return chunk_scrub_common(opts, args);
   } else {
-    usage();
-    exit(0);
+    cerr << "unrecognized op " << op_name << std::endl;
+    exit(1);
   }
 
   unregister_async_signal_handler(SIGINT, handle_signal);

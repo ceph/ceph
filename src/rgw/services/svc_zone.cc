@@ -1196,7 +1196,7 @@ read_omap:
   rule_info->storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
   rule_info->data_extra_pool = pool_name;
   rule_info->index_pool = pool_name;
-  rule_info->index_type = RGWBIType_Normal;
+  rule_info->index_type = rgw::BucketIndexType::Normal;
 
   return 0;
 }

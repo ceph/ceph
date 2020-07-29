@@ -1,9 +1,15 @@
+<cd-alert-panel *ngIf="isStale"
+                type="warning"
+                size="slim"
+                i18n>The user list data might be stale. If needed, you can manually reload it.</cd-alert-panel>
 <cd-table #table
           [autoReload]="false"
           [data]="users"
           [columns]="columns"
           columnMode="flex"
           selectionType="multiClick"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)"
           identifier="uid"
           (fetchData)="getUserList($event)">
@@ -13,6 +19,6 @@
                     [tableActions]="tableActions">
   </cd-table-actions>
   <cd-rgw-user-details cdTableDetail
-                       [selection]="selection">
+                       [selection]="expandedRow">
   </cd-rgw-user-details>
 </cd-table>

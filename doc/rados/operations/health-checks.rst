@@ -530,6 +530,28 @@ are correctly installed and that the OSD daemon(s) have been
 restarted.  If the problem persists, check the OSD log for any clues
 as to the source of the problem.
 
+BLUESTORE_SPURIOUS_READ_ERRORS
+______________________________
+
+One or more OSDs using BlueStore detects spurious read errors at main device.
+BlueStore has recovered from these errors by retrying disk reads.
+Though this might show some issues with underlying hardware, I/O subsystem,
+etc.
+Which theoretically might cause permanent data corruption.
+Some observations on the root cause can be found at 
+https://tracker.ceph.com/issues/22464
+
+This alert doesn't require immediate response but corresponding host might need
+additional attention, e.g. upgrading to the latest OS/kernel versions and
+H/W resource utilization monitoring.
+
+This warning can be disabled on all OSDs with::
+
+  ceph config set osd bluestore_warn_on_spurious_read_errors false
+
+Alternatively, it can be disabled on a specific OSD with::
+
+  ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
 
 
 Device health
@@ -687,6 +709,16 @@ Recent OSD scrubs have uncovered inconsistencies. This error is generally
 paired with *PG_DAMAGED* (see above).
 
 See :doc:`pg-repair` for more information.
+
+OSD_TOO_MANY_REPAIRS
+____________________
+
+When a read error occurs and another replica is available it is used to repair
+the error immediately, so that the client can get the object data.  Scrub
+handles errors for data at rest.  In order to identify possible failing disks
+that aren't seeing scrub errors, a count of read repairs is maintained.  If
+it exceeds a config value threshold *mon_osd_warn_num_repaired* default 10,
+this health warning is generated.
 
 LARGE_OMAP_OBJECTS
 __________________

@@ -1,0 +1,35 @@
+@use '../vendor/variables';
+@use 'bootstrap-defaults';
+@use 'functions';
+
+@mixin table-cell {
+  border: 0;
+  border-bottom: 1px solid bootstrap-defaults.$color-light-gray;
+  border-left: 1px solid bootstrap-defaults.$color-light-gray;
+  padding: 5px;
+}
+
+@mixin hf {
+  background-color: bootstrap-defaults.$color-whitesmoke-gray;
+  border-bottom: 1px solid bootstrap-defaults.$color-light-gray;
+}
+
+@mixin fluid-font-size($min-vw, $max-vw, $min-font-size, $max-font-size) {
+  $u1: unit($min-vw);
+  $u2: unit($max-vw);
+  $u3: unit($min-font-size);
+  $u4: unit($max-font-size);
+
+  @if $u1 == $u2 and $u1 == $u3 and $u1 == $u4 {
+    font-size: $min-font-size;
+    @media screen and (min-width: $min-vw) {
+      font-size: calc(
+        #{$min-font-size} + #{functions.strip-unit($max-font-size - $min-font-size)} *
+          ((100vw - #{$min-vw}) / #{functions.strip-unit($max-vw - $min-vw)})
+      );
+    }
+    @media screen and (min-width: $max-vw) {
+      font-size: $max-font-size;
+    }
+  }
+}

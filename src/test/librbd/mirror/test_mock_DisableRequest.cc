@@ -188,7 +188,7 @@ public:
 
     EXPECT_CALL(mock_get_info_request, send())
       .WillOnce(
-        Invoke([this, &mock_image_ctx, &mock_get_info_request, mirror_image,
+        Invoke([&mock_image_ctx, &mock_get_info_request, mirror_image,
                 promotion_state, r]() {
                  if (r == 0) {
                    *mock_get_info_request.mirror_image = mirror_image;
@@ -204,7 +204,7 @@ public:
       MockImageStateUpdateRequest& mock_request, int r) {
     EXPECT_CALL(mock_request, send())
       .WillOnce(
-        Invoke([this, &mock_image_ctx, &mock_request, r]() {
+        Invoke([&mock_image_ctx, &mock_request, r]() {
           mock_image_ctx.op_work_queue->queue(mock_request.on_finish, r);
         }));
   }
@@ -214,7 +214,7 @@ public:
       MockImageRemoveRequest& mock_request, int r) {
     EXPECT_CALL(mock_request, send())
       .WillOnce(
-        Invoke([this, &mock_image_ctx, &mock_request, r]() {
+        Invoke([&mock_image_ctx, &mock_request, r]() {
           mock_image_ctx.op_work_queue->queue(mock_request.on_finish, r);
         }));
   }
@@ -228,7 +228,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(::journal::Journaler::header_oid(mock_image_ctx.id),
-                     _, StrEq("journal"), StrEq("client_list"), _, _, _))
+                     _, StrEq("journal"), StrEq("client_list"), _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
                       Return(r)));
   }
@@ -243,7 +243,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(::journal::Journaler::header_oid(mock_image_ctx.id),
                      _, StrEq("journal"), StrEq("client_unregister"),
-                     ContentsEqual(bl), _, _))
+                     ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 

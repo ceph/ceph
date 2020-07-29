@@ -1,3 +1,5 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
 // Angular2-Tree Component
 ::ng-deep tree-root {
   .tree-children {
@@ -6,9 +8,10 @@
 }
 
 .quota-origin {
-  &:hover {
-    color: #212121;
-  }
+  color: bd.$color-brand-teal;
   cursor: pointer;
-  color: #2b99a8;
+
+  &:hover {
+    color: bd.$color-gray13;
+  }
 }

@@ -120,7 +120,7 @@ def generate_iso(ctx, config):
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
-        with open(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_setup.yaml')) as f:
             test_setup = ''.join(f.readlines())
             # configuring the commands to setup the nfs mount
             mnt_dir = "/export/{client}".format(client=client)
@@ -128,7 +128,7 @@ def generate_iso(ctx, config):
                 mnt_dir=mnt_dir
             )
 
-        with open(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_teardown.yaml')) as f:
             test_teardown = ''.join(f.readlines())
 
         user_data = test_setup
@@ -284,8 +284,10 @@ def _setup_nfs_mount(remote, client, service_name, mount_dir):
     export = "{dir} *(rw,no_root_squash,no_subtree_check,insecure)".format(
         dir=export_dir
     )
+    log.info("Deleting export from /etc/exports...")
     remote.run(args=[
-        'sudo', 'sed', '-i', '/^\/export\//d', "/etc/exports",
+        'sudo', 'sed', '-i', "\|{export_dir}|d".format(export_dir=export_dir),
+        '/etc/exports'
     ])
     remote.run(args=[
         'echo', export, run.Raw("|"),
@@ -318,13 +320,10 @@ def _teardown_nfs_mount(remote, client, service_name):
     remote.run(args=[
         'sudo', 'umount', export_dir
     ])
-    log.info("Deleting exported directory...")
-    remote.run(args=[
-        'sudo', 'rm', '-r', '/export'
-    ])
     log.info("Deleting export from /etc/exports...")
     remote.run(args=[
-        'sudo', 'sed', '-i', '$ d', '/etc/exports'
+        'sudo', 'sed', '-i', "\|{export_dir}|d".format(export_dir=export_dir),
+        '/etc/exports'
     ])
     log.info("Starting NFS...")
     if remote.os.package_type == "deb":
@@ -456,6 +455,12 @@ def run_qemu(ctx, config):
                         ),
                     ],
                 )
+        log.info("Deleting exported directory...")
+        for client in config.keys():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote.run(args=[
+                'sudo', 'rm', '-r', '/export'
+            ])
 
 
 @contextlib.contextmanager

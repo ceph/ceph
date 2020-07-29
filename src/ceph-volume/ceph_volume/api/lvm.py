@@ -6,6 +6,7 @@ set of utilities for interacting with LVM.
 import logging
 import os
 import uuid
+from itertools import repeat
 from math import floor
 from ceph_volume import process, util
 from ceph_volume.exceptions import (
@@ -946,17 +947,33 @@ class Volume(object):
                 'type': type_,
                 'osd_fsid': self.tags['ceph.osd_fsid'],
                 'cluster_fsid': self.tags['ceph.cluster_fsid'],
+                'osdspec_affinity': self.tags.get('ceph.osdspec_affinity', ''),
             }
             type_uuid = '{}_uuid'.format(type_)
             report[type_uuid] = self.tags['ceph.{}'.format(type_uuid)]
             return report
 
-    def clear_tags(self):
+    def _format_tag_args(self, op, tags):
+        tag_args = ['{}={}'.format(k, v) for k, v in tags.items()]
+        # weird but efficient way of ziping two lists and getting a flat list
+        return list(sum(zip(repeat(op), tag_args), ()))
+
+    def clear_tags(self, keys=None):
         """
-        Removes all tags from the Logical Volume.
+        Removes all or passed tags from the Logical Volume.
         """
-        for k in list(self.tags):
-            self.clear_tag(k)
+        if not keys:
+            keys = self.tags.keys()
+
+        del_tags = {k: self.tags[k] for k in keys if k in self.tags}
+        if not del_tags:
+            # nothing to clear
+            return
+        del_tag_args = self._format_tag_args('--deltag', del_tags)
+        # --deltag returns successful even if the to be deleted tag is not set
+        process.call(['lvchange'] + del_tag_args + [self.lv_path])
+        for k in del_tags.keys():
+            del self.tags[k]
 
 
     def set_tags(self, tags):
@@ -971,8 +988,11 @@ class Volume(object):
         At the end of all modifications, the tags are refreshed to reflect
         LVM's most current view.
         """
+        self.clear_tags(tags.keys())
+        add_tag_args = self._format_tag_args('--addtag', tags)
+        process.call(['lvchange'] + add_tag_args + [self.lv_path])
         for k, v in tags.items():
-            self.set_tag(k, v)
+            self.tags[k] = v
 
 
     def clear_tag(self, key):

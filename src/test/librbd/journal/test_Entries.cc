@@ -5,8 +5,8 @@
 #include "test/librbd/test_support.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/api/Io.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Types.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
@@ -18,11 +18,14 @@
 void register_test_journal_entries() {
 }
 
+namespace librbd {
+namespace journal {
+
 class TestJournalEntries : public TestFixture {
 public:
-  typedef std::list<journal::Journaler *> Journalers;
+  typedef std::list<::journal::Journaler *> Journalers;
 
-  struct ReplayHandler : public journal::ReplayHandler {
+  struct ReplayHandler : public ::journal::ReplayHandler {
     ceph::mutex lock = ceph::make_mutex("ReplayHandler::lock");
     ceph::condition_variable cond;
     bool entries_available;
@@ -51,7 +54,7 @@ public:
   void TearDown() override {
     for (Journalers::iterator it = m_journalers.begin();
          it != m_journalers.end(); ++it) {
-      journal::Journaler *journaler = *it;
+      ::journal::Journaler *journaler = *it;
       journaler->stop_replay();
       journaler->shut_down();
       delete journaler;
@@ -60,8 +63,8 @@ public:
     TestFixture::TearDown();
   }
 
-  journal::Journaler *create_journaler(librbd::ImageCtx *ictx) {
-    journal::Journaler *journaler = new journal::Journaler(
+  ::journal::Journaler *create_journaler(librbd::ImageCtx *ictx) {
+    ::journal::Journaler *journaler = new ::journal::Journaler(
       ictx->md_ctx, ictx->id, "dummy client", {}, nullptr);
 
     int r = journaler->register_client(bufferlist());
@@ -96,7 +99,7 @@ public:
     return true;
   }
 
-  bool get_event_entry(const journal::ReplayEntry &replay_entry,
+  bool get_event_entry(const ::journal::ReplayEntry &replay_entry,
                        librbd::journal::EventEntry *event_entry) {
     try {
       bufferlist data_bl = replay_entry.get_data();
@@ -116,7 +119,7 @@ TEST_F(TestJournalEntries, AioWrite) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  journal::Journaler *journaler = create_journaler(ictx);
+  ::journal::Journaler *journaler = create_journaler(ictx);
   ASSERT_TRUE(journaler != NULL);
 
   std::string buffer(512, '1');
@@ -126,13 +129,14 @@ TEST_F(TestJournalEntries, AioWrite) {
   C_SaferCond cond_ctx;
   auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->io_work_queue->aio_write(c, 123, buffer.size(), std::move(write_bl), 0);
+  api::Io<>::aio_write(*ictx, c, 123, buffer.size(), std::move(write_bl), 0,
+                       true);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 
   ASSERT_TRUE(wait_for_entries_available(ictx));
 
-  journal::ReplayEntry replay_entry;
+  ::journal::ReplayEntry replay_entry;
   ASSERT_TRUE(journaler->try_pop_front(&replay_entry));
 
   librbd::journal::EventEntry event_entry;
@@ -163,20 +167,20 @@ TEST_F(TestJournalEntries, AioDiscard) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  journal::Journaler *journaler = create_journaler(ictx);
+  ::journal::Journaler *journaler = create_journaler(ictx);
   ASSERT_TRUE(journaler != NULL);
 
   C_SaferCond cond_ctx;
   auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->io_work_queue->aio_discard(c, 123, 234,
-                                   ictx->discard_granularity_bytes);
+  api::Io<>::aio_discard(*ictx, c, 123, 234, ictx->discard_granularity_bytes,
+                         true);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 
   ASSERT_TRUE(wait_for_entries_available(ictx));
 
-  journal::ReplayEntry replay_entry;
+  ::journal::ReplayEntry replay_entry;
   ASSERT_TRUE(journaler->try_pop_front(&replay_entry));
 
   librbd::journal::EventEntry event_entry;
@@ -197,19 +201,19 @@ TEST_F(TestJournalEntries, AioFlush) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  journal::Journaler *journaler = create_journaler(ictx);
+  ::journal::Journaler *journaler = create_journaler(ictx);
   ASSERT_TRUE(journaler != NULL);
 
   C_SaferCond cond_ctx;
   auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->io_work_queue->aio_flush(c);
+  api::Io<>::aio_flush(*ictx, c, true);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 
   ASSERT_TRUE(wait_for_entries_available(ictx));
 
-  journal::ReplayEntry replay_entry;
+  ::journal::ReplayEntry replay_entry;
   ASSERT_TRUE(journaler->try_pop_front(&replay_entry));
 
   librbd::journal::EventEntry event_entry;
@@ -218,3 +222,6 @@ TEST_F(TestJournalEntries, AioFlush) {
   ASSERT_EQ(librbd::journal::EVENT_TYPE_AIO_FLUSH,
             event_entry.get_event_type());
 }
+
+} // namespace journal
+} // namespace librbd

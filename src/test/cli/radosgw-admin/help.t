@@ -31,6 +31,7 @@
     bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
+    bucket radoslist           list rados objects backing bucket's objects
     bi get                     retrieve bucket index object entries
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries
@@ -137,9 +138,10 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
-    orphans find               init and run search for leaked rados objects (use job-id, pool)
-    orphans finish             clean up search for leaked rados objects
-    orphans list-jobs          list the current job-ids for orphans search
+    orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)
+    orphans finish             deprecated -- clean up search for leaked rados objects
+    orphans list-jobs          deprecated -- list the current job-ids for orphans search
+                             * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool
     role create                create a AWS role for use with STS
     role rm                    remove a role
     role get                   get a role
@@ -164,6 +166,13 @@
     mfa remove                 delete MFA TOTP token
     mfa check                  check MFA TOTP token
     mfa resync                 re-sync MFA TOTP token
+    topic list                 list bucket notifications/pubsub topics
+    topic get                  get a bucket notifications/pubsub topic
+    topic rm                   remove a bucket notifications/pubsub topic
+    subscription get           get a pubsub subscription definition
+    subscription rm            remove a pubsub subscription
+    subscription pull          show events in a pubsub subscription
+    subscription ack           ack (remove) an events in a pubsub subscription
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -313,6 +322,11 @@
      --totp-seconds            the time resolution that is being used for TOTP generation
      --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
      --totp-pin                the valid value of a TOTP token at a certain time
+  
+  Bucket notifications/pubsub options:
+     --topic                   bucket notifications/pubsub topic name
+     --subscription            pubsub subscription name
+     --event-id                event id in a pubsub subscription
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name

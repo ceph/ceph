@@ -29,7 +29,7 @@
 class MDSRank;
 class MDLog;
 class LogSegment;
-struct MDSlaveUpdate;
+struct MDPeerUpdate;
 
 /*
  * a bunch of metadata in the journal
@@ -65,6 +65,7 @@ public:
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
+    static const int STATE_EPHEMERAL_RANDOM = (1<<4);
     std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
@@ -111,6 +112,7 @@ public:
     bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
     bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
     bool need_snapflush() const { return (state & STATE_NEED_SNAPFLUSH); }
+    bool is_export_ephemeral_random() const { return (state & STATE_EPHEMERAL_RANDOM); }
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
@@ -446,6 +448,10 @@ private:
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
+    if (in->is_ephemeral_rand()) {
+      state |= fullbit::STATE_EPHEMERAL_RANDOM;
+    }
+
     // make note of where this inode was last journaled
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
@@ -584,7 +590,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
+  void replay(MDSRank *mds, LogSegment *ls, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)

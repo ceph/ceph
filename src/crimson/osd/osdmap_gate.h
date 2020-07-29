@@ -42,16 +42,16 @@ class OSDMapGate {
     }
   };
 
-  // order the promises in descending order of the waited osdmap epoch,
+  // order the promises in ascending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
-  // than a given epoch
+  // than or equal to a given epoch
   using waiting_peering_t = std::map<epoch_t,
-				     OSDMapBlocker,
-				     std::greater<epoch_t>>;
+				     OSDMapBlocker>;
   const char *blocker_type;
   waiting_peering_t waiting_peering;
   epoch_t current = 0;
   std::optional<std::reference_wrapper<ShardServices>> shard_services;
+  bool stopping = false;
 public:
   OSDMapGate(
     const char *blocker_type,
@@ -61,6 +61,7 @@ public:
   // wait for an osdmap whose epoch is greater or equal to given epoch
   blocking_future<epoch_t> wait_for_map(epoch_t epoch);
   void got_map(epoch_t epoch);
+  seastar::future<> stop();
 };
 
 }

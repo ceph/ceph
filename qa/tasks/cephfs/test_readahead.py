@@ -15,8 +15,7 @@ class TestReadahead(CephFSTestCase):
 
         # Unmount and remount the client to flush cache
         self.mount_a.umount_wait()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         initial_op_r = self.mount_a.admin_socket(['perf', 'dump', 'objecter'])['objecter']['op_r']
         self.mount_a.run_shell(["dd", "if=foo", "of=/dev/null", "bs=128k", "count=32"])

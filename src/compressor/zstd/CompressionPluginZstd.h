@@ -32,7 +32,7 @@ public:
                       std::ostream *ss) override
   {
     if (compressor == 0) {
-      ZstdCompressor *interface = new ZstdCompressor();
+      ZstdCompressor *interface = new ZstdCompressor(cct);
       compressor = CompressorRef(interface);
     }
     *cs = compressor;

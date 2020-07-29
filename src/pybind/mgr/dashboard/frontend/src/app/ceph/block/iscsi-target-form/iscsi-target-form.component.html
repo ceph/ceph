@@ -1,9 +1,9 @@
-<div class="cd-col-form">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="targetForm"
         #formDir="ngForm"
         [formGroup]="targetForm"
-        novalidate
-        *ngIf="targetForm">
+        novalidate>
     <div class="card">
       <div i18n="form title|Example: Create Pool@@formTitle"
            class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
@@ -684,7 +684,7 @@
 
       </div>
       <div class="card-footer">
-        <div class="button-group text-right">
+        <div class="text-right">
           <cd-submit-button (submitAction)="submit()"
                             i18n="form action button|Example: Create Pool@@formActionButton"
                             [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>

@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import * as _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { CephServiceService } from '../../../../shared/api/ceph-service.service';
 import { HostService } from '../../../../shared/api/host.service';
@@ -77,16 +77,14 @@ describe('ServiceDaemonListComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, CephModule, CoreModule, SharedModule],
-    declarations: [],
-    providers: [i18nProviders]
+    imports: [HttpClientTestingModule, CephModule, CoreModule, SharedModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ServiceDaemonListComponent);
     component = fixture.componentInstance;
-    const hostService = TestBed.get(HostService);
-    const cephServiceService = TestBed.get(CephServiceService);
+    const hostService = TestBed.inject(HostService);
+    const cephServiceService = TestBed.inject(CephServiceService);
     spyOn(hostService, 'getDaemons').and.callFake(() =>
       of(getDaemonsByHostname(component.hostname))
     );
@@ -102,13 +100,13 @@ describe('ServiceDaemonListComponent', () => {
 
   it('should list daemons by host', () => {
     component.hostname = 'mon0';
-    component.getDaemons(new CdTableFetchDataContext(() => {}));
+    component.getDaemons(new CdTableFetchDataContext(() => undefined));
     expect(component.daemons.length).toBe(1);
   });
 
   it('should list daemons by service', () => {
     component.serviceName = 'osd';
-    component.getDaemons(new CdTableFetchDataContext(() => {}));
+    component.getDaemons(new CdTableFetchDataContext(() => undefined));
     expect(component.daemons.length).toBe(3);
   });
 });

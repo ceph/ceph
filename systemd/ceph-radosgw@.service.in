@@ -5,25 +5,29 @@ Wants=network-online.target local-fs.target time-sync.target
 PartOf=ceph-radosgw.target
 
 [Service]
+Environment=CLUSTER=ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i --setuser ceph --setgroup ceph
 LimitNOFILE=1048576
 LimitNPROC=1048576
-EnvironmentFile=-@SYSTEMD_ENV_FILE@
-Environment=CLUSTER=ceph
-ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i --setuser ceph --setgroup ceph
 LockPersonality=true
 MemoryDenyWriteExecute=true
 NoNewPrivileges=true
 PrivateDevices=yes
+PrivateTmp=true
+ProtectClock=true
 ProtectControlGroups=true
 ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
 ProtectSystem=full
-PrivateTmp=true
-TasksMax=infinity
 Restart=on-failure
-StartLimitInterval=30s
+RestrictSUIDSGID=true
 StartLimitBurst=5
+StartLimitInterval=30s
+TasksMax=infinity
 
 [Install]
 WantedBy=ceph-radosgw.target

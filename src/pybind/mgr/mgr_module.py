@@ -8,12 +8,12 @@ except ImportError:
 import logging
 import errno
 import json
-import six
 import threading
 from collections import defaultdict, namedtuple
 import rados
 import re
 import time
+from mgr_util import profile_method
 
 PG_STATES = [
     "active",
@@ -94,6 +94,9 @@ class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout',
         :type stderr: str
         """
         return super(HandleCommandResult, cls).__new__(cls, retval, stdout, stderr)
+
+
+class MonCommandFailed(RuntimeError): pass
 
 
 class OSDMap(ceph_module.BasePyOSDMap):
@@ -194,7 +197,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
     def get_take_weight_osd_map(self, root):
         uglymap = self._get_take_weight_osd_map(root)
-        return {int(k): v for k, v in six.iteritems(uglymap.get('weights', {}))}
+        return {int(k): v for k, v in uglymap.get('weights', {}).items()}
 
     @staticmethod
     def have_default_choose_args(dump):
@@ -599,7 +602,11 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         self._logger = self.getLogger()
 
     def __del__(self):
+        self._cleanup()
         self._unconfigure_logging()
+
+    def _cleanup(self):
+        pass
 
     @classmethod
     def _register_options(cls, module_name):
@@ -1078,6 +1085,17 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
+    def check_mon_command(self, cmd_dict: dict) -> HandleCommandResult:
+        """
+        Wrapper around :func:`~mgr_module.MgrModule.mon_command`, but raises,
+        if ``retval != 0``.
+        """
+
+        r = HandleCommandResult(*self.mon_command(cmd_dict))
+        if r.retval:
+            raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr} retval: {r.retval}')
+        return r
+
     def mon_command(self, cmd_dict):
         """
         Helper for modules that do simple, synchronous mon command
@@ -1362,6 +1380,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0, 0
 
+    @profile_method()
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
                                         "rbd-mirror", "rgw", "tcmu-runner")):
@@ -1386,7 +1405,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
                 schema = self.get_perf_schema(service['type'], service['id'])
                 if not schema:
-                    self.log.warn("No perf counter schema for {0}.{1}".format(
+                    self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
                     ))
                     continue

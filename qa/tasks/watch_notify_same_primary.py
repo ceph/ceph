@@ -2,11 +2,10 @@
 """
 watch_notify_same_primary task
 """
-from io import BytesIO
+from io import StringIO
 import contextlib
 import logging
 
-import six
 
 from teuthology.orchestra import run
 from teuthology.contextutil import safe_while
@@ -43,7 +42,7 @@ def task(ctx, config):
     clients = config.get('clients', ['client.0'])
     assert len(clients) == 1
     role = clients[0]
-    assert isinstance(role, six.string_types)
+    assert isinstance(role, str)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     (remote,) = ctx.cluster.only(role).remotes.keys()
@@ -68,8 +67,8 @@ def task(ctx, config):
                 "watch",
                 obj(n)],
             stdin=run.PIPE,
-            stdout=BytesIO(),
-            stderr=BytesIO(),
+            stdout=StringIO(),
+            stderr=StringIO(),
             wait=False)
         return proc
 

@@ -439,8 +439,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
 
   if (vm.count(at::IMAGE_ORDER)) {
     order = vm[at::IMAGE_ORDER].as<uint64_t>();
-    std::cerr << "rbd: --order is deprecated, use --object-size"
-	      << std::endl;
   } else if (vm.count(at::IMAGE_OBJECT_SIZE)) {
     object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
     order = std::round(std::log2(object_size));
@@ -557,6 +555,11 @@ int get_image_options(const boost::program_options::variables_map &vm,
     return r;
   }
 
+  if (vm.count(at::IMAGE_MIRROR_IMAGE_MODE)) {
+    opts->set(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+              vm[at::IMAGE_MIRROR_IMAGE_MODE].as<librbd::mirror_image_mode_t>());
+  }
+
   return 0;
 }
 
@@ -649,6 +652,24 @@ int get_formatter(const po::variables_map &vm,
     std::cerr << "rbd: --pretty-format only works when --format "
               << "is json or xml" << std::endl;
     return -EINVAL;
+  }
+  return 0;
+}
+
+int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
+  if (vm[at::SKIP_QUIESCE].as<bool>() &&
+      vm[at::IGNORE_QUIESCE_ERROR].as<bool>()) {
+    std::cerr << "rbd: " << at::IGNORE_QUIESCE_ERROR
+              << " cannot be used together with " << at::SKIP_QUIESCE
+              << std::endl;
+    return -EINVAL;
+  }
+
+  *flags = 0;
+  if (vm[at::SKIP_QUIESCE].as<bool>()) {
+    *flags |= RBD_SNAP_CREATE_SKIP_QUIESCE;
+  } else if (vm[at::IGNORE_QUIESCE_ERROR].as<bool>()) {
+    *flags |= RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
   }
   return 0;
 }

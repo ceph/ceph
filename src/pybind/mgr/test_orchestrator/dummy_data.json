@@ -1,268 +1,461 @@
 {
   "inventory": [
     {
-      "name": "host0",
+      "addr": "mgr0",
       "devices": [
         {
-          "available": false,
-          "rejected_reasons": ["locked"],
-          "sys_api": {
-            "scheduler_mode": "",
-            "rotational": "0",
-            "vendor": "",
-            "human_readable_size": "50.00 GB",
-            "sectors": 0,
-            "sas_device_handle": "",
-            "partitions": {},
-            "rev": "",
-            "sas_address": "",
-            "locked": 1,
-            "sectorsize": "512",
-            "removable": "0",
-            "path": "/dev/dm-0",
-            "support_discard": "",
-            "model": "",
-            "ro": "0",
-            "nr_requests": "128",
-            "size": 53687091200
-          },
+          "available": true,
+          "device_id": "",
+          "human_readable_type": "ssd",
           "lvs": [],
-          "path": "/dev/dm-0"
+          "path": "/dev/vdb",
+          "rejected_reasons": [],
+          "sys_api": {
+            "human_readable_size": "10.00 GB",
+            "locked": 0,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {},
+            "path": "/dev/vdb",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "0",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 10737418240,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
+        },
+        {
+          "available": true,
+          "device_id": "",
+          "human_readable_type": "hdd",
+          "lvs": [],
+          "path": "/dev/vdc",
+          "rejected_reasons": [],
+          "sys_api": {
+            "human_readable_size": "20.00 GB",
+            "locked": 0,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {},
+            "path": "/dev/vdc",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "1",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 21474836480,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
+        },
+        {
+          "available": true,
+          "device_id": "",
+          "human_readable_type": "hdd",
+          "lvs": [],
+          "path": "/dev/vdd",
+          "rejected_reasons": [],
+          "sys_api": {
+            "human_readable_size": "20.00 GB",
+            "locked": 0,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {},
+            "path": "/dev/vdd",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "1",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 21474836480,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
         },
         {
           "available": false,
-          "rejected_reasons": ["locked"],
-          "sys_api": {
-            "scheduler_mode": "",
-            "rotational": "0",
-            "vendor": "",
-            "human_readable_size": "31.47 GB",
-            "sectors": 0,
-            "sas_device_handle": "",
-            "partitions": {},
-            "rev": "",
-            "sas_address": "",
-            "locked": 1,
-            "sectorsize": "512",
-            "removable": "0",
-            "path": "/dev/dm-1",
-            "support_discard": "",
-            "model": "",
-            "ro": "0",
-            "nr_requests": "128",
-            "size": 33789313024
-          },
+          "device_id": "",
+          "human_readable_type": "hdd",
           "lvs": [],
-          "path": "/dev/dm-1"
-        },
-        {
-          "available": false,
+          "path": "/dev/vda",
           "rejected_reasons": ["locked"],
           "sys_api": {
-            "scheduler_mode": "",
-            "rotational": "0",
-            "vendor": "",
-            "human_readable_size": "394.27 GB",
-            "sectors": 0,
-            "sas_device_handle": "",
-            "partitions": {},
-            "rev": "",
-            "sas_address": "",
+            "human_readable_size": "41.00 GB",
             "locked": 1,
-            "sectorsize": "512",
-            "removable": "0",
-            "path": "/dev/dm-2",
-            "support_discard": "",
             "model": "",
-            "ro": "0",
-            "nr_requests": "128",
-            "size": 423347879936
-          },
-          "lvs": [],
-          "path": "/dev/dm-2"
-        },
-        {
-          "available": false,
-          "rejected_reasons": ["locked"],
-          "sys_api": {
-            "scheduler_mode": "cfq",
-            "rotational": "0",
-            "vendor": "ATA",
-            "human_readable_size": "476.94 GB",
-            "sectors": 0,
-            "sas_device_handle": "",
+            "nr_requests": "256",
             "partitions": {
-              "sda2": {
-                "start": "411648",
+              "vda1": {
                 "holders": [],
+                "human_readable_size": "40.00 GB",
+                "sectors": "83884032",
                 "sectorsize": 512,
-                "sectors": "2097152",
-                "size": "1024.00 MB"
-              },
-              "sda3": {
-                "start": "2508800",
-                "holders": ["dm-1", "dm-2", "dm-0"],
-                "sectorsize": 512,
-                "sectors": "997705728",
-                "size": "475.74 GB"
-              },
-              "sda1": {
-                "start": "2048",
-                "holders": [],
-                "sectorsize": 512,
-                "sectors": "409600",
-                "size": "200.00 MB"
+                "size": 42948624384,
+                "start": "2048"
               }
             },
-            "rev": "0000",
-            "sas_address": "",
-            "locked": 1,
-            "sectorsize": "512",
+            "path": "/dev/vda",
             "removable": "0",
-            "path": "/dev/sda",
-            "support_discard": "",
-            "model": "SanDisk SD8SN8U5",
+            "rev": "",
             "ro": "0",
-            "nr_requests": "128",
-            "size": 512110190592
-          },
-          "lvs": [
-            {
-              "comment": "not used by ceph",
-              "name": "swap"
-            },
-            {
-              "comment": "not used by ceph",
-              "name": "home"
-            },
-            {
-              "comment": "not used by ceph",
-              "name": "root"
-            }
-          ],
-          "path": "/dev/sda"
+            "rotational": "1",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 44023414784,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
         }
-      ]
+      ],
+      "labels": [],
+      "name": "mgr0"
+    },
+    {
+      "addr": "osd0",
+      "devices": [
+        {
+          "available": true,
+          "device_id": "",
+          "human_readable_type": "ssd",
+          "lvs": [],
+          "path": "/dev/vdb",
+          "rejected_reasons": [],
+          "sys_api": {
+            "human_readable_size": "10.00 GB",
+            "locked": 0,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {},
+            "path": "/dev/vdb",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "0",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 10737418240,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
+        },
+        {
+          "available": true,
+          "device_id": "",
+          "human_readable_type": "hdd",
+          "lvs": [],
+          "path": "/dev/vdc",
+          "rejected_reasons": [],
+          "sys_api": {
+            "human_readable_size": "20.00 GB",
+            "locked": 0,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {},
+            "path": "/dev/vdc",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "1",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 21474836480,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
+        },
+        {
+          "available": true,
+          "device_id": "",
+          "human_readable_type": "hdd",
+          "lvs": [],
+          "path": "/dev/vdd",
+          "rejected_reasons": [],
+          "sys_api": {
+            "human_readable_size": "20.00 GB",
+            "locked": 0,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {},
+            "path": "/dev/vdd",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "1",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 21474836480,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
+        },
+        {
+          "available": false,
+          "device_id": "",
+          "human_readable_type": "hdd",
+          "lvs": [],
+          "path": "/dev/vda",
+          "rejected_reasons": ["locked"],
+          "sys_api": {
+            "human_readable_size": "41.00 GB",
+            "locked": 1,
+            "model": "",
+            "nr_requests": "256",
+            "partitions": {
+              "vda1": {
+                "holders": [],
+                "human_readable_size": "40.00 GB",
+                "sectors": "83884032",
+                "sectorsize": 512,
+                "size": 42948624384,
+                "start": "2048"
+              }
+            },
+            "path": "/dev/vda",
+            "removable": "0",
+            "rev": "",
+            "ro": "0",
+            "rotational": "1",
+            "sas_address": "",
+            "sas_device_handle": "",
+            "scheduler_mode": "mq-deadline",
+            "sectors": 0,
+            "sectorsize": "512",
+            "size": 44023414784,
+            "support_discard": "0",
+            "vendor": "0x1af4"
+          }
+        }
+      ],
+      "labels": [],
+      "name": "osd0"
     }
   ],
+
   "services": [
     {
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "service_name": "crash",
-      "size": 1,
-      "running": 0,
-      "last_refresh": "2020-02-26T07:23:56.501157"
+      "placement": {
+        "hosts": [
+          {
+            "hostname": "mgr0",
+            "name": "",
+            "network": ""
+          },
+          {
+            "hostname": "osd0",
+            "name": "",
+            "network": ""
+          }
+        ]
+      },
+      "service_id": "xx",
+      "service_name": "mds.xx",
+      "service_type": "mds",
+      "status": {
+        "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "created": "2020-04-16T03:39:39.512721",
+        "last_refresh": "2020-04-16T06:51:42.412980",
+        "running": 2,
+        "size": 2
+      }
     },
     {
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+      "placement": {
+        "hosts": [
+          {
+            "hostname": "mgr0",
+            "name": "",
+            "network": ""
+          },
+          {
+            "hostname": "osd0",
+            "name": "",
+            "network": ""
+          }
+        ]
+      },
       "service_name": "mgr",
-      "size": 1,
-      "running": 1,
-      "last_refresh": "2020-02-26T07:23:56.501087"
+      "service_type": "mgr",
+      "status": {
+        "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "created": "2020-04-16T05:44:40.978366",
+        "last_refresh": "2020-04-16T06:51:42.412919",
+        "running": 2,
+        "size": 2
+      }
     },
     {
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "service_name": "mon",
-      "size": 1,
-      "running": 1,
-      "last_refresh": "2020-02-26T07:23:56.501013"
+      "placement": {
+        "hosts": [
+          {
+            "hostname": "mgr0",
+            "name": "",
+            "network": ""
+          },
+          {
+            "hostname": "osd0",
+            "name": "",
+            "network": ""
+          }
+        ]
+      },
+      "service_id": "ganesha-vstart",
+      "service_name": "nfs.ganesha-vstart",
+      "service_type": "nfs",
+      "pool": "nfs-ganesha",
+      "namespace": "vstart",
+      "status": {
+        "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "created": "2020-04-16T03:39:39.512721",
+        "last_refresh": "2020-04-16T06:51:42.412980",
+        "running": 1,
+        "size": 1
+      }
     },
     {
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "service_name": "osd",
-      "size": 4,
-      "running": 4,
-      "last_refresh": "2020-02-26T07:23:56.500960"
+      "api_password": "api_password",
+      "api_user": "api_user",
+      "placement": {
+        "hosts": [
+          {
+            "hostname": "mgr0",
+            "name": "",
+            "network": ""
+          },
+          {
+            "hostname": "osd0",
+            "name": "",
+            "network": ""
+          }
+        ]
+      },
+      "pool": "pool",
+      "service_id": "iscsi",
+      "service_name": "iscsi.iscsi",
+      "service_type": "iscsi",
+      "status": {
+        "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "created": "2020-04-16T03:39:39.512721",
+        "last_refresh": "2020-04-16T06:51:42.412980",
+        "running": 1,
+        "size": 1
+      }
     }
   ],
   "daemons": [
     {
-      "hostname": "host0",
-      "container_id": "a8ad2d6ceb5d5b8a308207ea58963b9295d52d3c282a054534b1ed52e5e77d31",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "host0",
-      "daemon_type": "crash",
-      "version": "15.1.0-1240-ge5841ce",
-      "status": -1,
-      "status_desc": "unknown",
-      "last_refresh": "2020-02-26T07:23:56.501157"
+      "container_id": "87d84858109d",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T03:39:40.394999",
+      "daemon_id": "xx.mgr0.nkchxn",
+      "daemon_type": "mds",
+      "hostname": "mgr0",
+      "last_refresh": "2020-04-16T06:51:42.412980",
+      "started": "2020-04-16T03:39:40.466639",
+      "status": 1,
+      "status_desc": "running",
+      "version": "16.0.0-827-g61ad12e"
     },
     {
-      "hostname": "host0",
-      "container_id": "10f182e93c9c9110b7223e7b8e0337445fded77a317c649fc54b188f22c6e4cb",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "host0.kjapjg",
+      "container_id": "07ff9b56bcb9",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T03:39:41.318155",
+      "daemon_id": "xx.osd0.ouawlt",
+      "daemon_type": "mds",
+      "hostname": "osd0",
+      "last_refresh": "2020-04-16T06:51:43.182850",
+      "started": "2020-04-16T03:39:41.387003",
+      "status": 1,
+      "status_desc": "running",
+      "version": "16.0.0-827-g61ad12e"
+    },
+    {
+      "container_id": "459a982152c6",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T03:36:31.577976",
+      "daemon_id": "mgr0.gvlxbw",
       "daemon_type": "mgr",
-      "version": "15.1.0-1240-ge5841ce",
+      "hostname": "mgr0",
+      "last_refresh": "2020-04-16T06:51:42.412919",
+      "started": "2020-04-16T03:36:31.632298",
       "status": 1,
       "status_desc": "running",
-      "last_refresh": "2020-02-26T07:23:56.501087"
+      "version": "16.0.0-827-g61ad12e"
     },
     {
-      "hostname": "host0",
-      "container_id": "27f178927ca4dbbd8d73380662f15828f780604f97baae4cac4d3f984e2c32af",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "host0",
-      "daemon_type": "mon",
-      "version": "15.1.0-1240-ge5841ce",
+      "container_id": "37b7fc67390a",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T05:44:41.551646",
+      "daemon_id": "osd0.mnsbeq",
+      "daemon_type": "mgr",
+      "hostname": "osd0",
+      "last_refresh": "2020-04-16T06:51:43.182937",
+      "started": "2020-04-16T05:44:41.606514",
       "status": 1,
       "status_desc": "running",
-      "last_refresh": "2020-02-26T07:23:56.501013"
+      "version": "16.0.0-827-g61ad12e"
     },
     {
-      "hostname": "host0",
-      "container_id": "71803dddfb9f736c26cc2127e684c66486034292ea94bc560d00132c29fe8b16",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "0",
-      "daemon_type": "osd",
-      "version": "15.1.0-1240-ge5841ce",
+      "container_id": "aeba86ca1655",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T05:44:41.551646",
+      "daemon_id": "ganesha-vstart.osd0",
+      "daemon_type": "nfs",
+      "hostname": "osd0",
+      "last_refresh": "2020-04-16T06:51:43.182937",
+      "started": "2020-04-16T05:44:41.606514",
       "status": 1,
       "status_desc": "running",
-      "last_refresh": "2020-02-26T07:23:56.501050"
+      "version": "3.2"
     },
     {
-      "hostname": "host0",
-      "container_id": "3ca816209df390e8de3cdff78d95f69efd664b4017036b4d7c47563731e1fe37",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "1",
-      "daemon_type": "osd",
-      "version": "15.1.0-1240-ge5841ce",
+      "container_id": "e695cd698d8a",
+      "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
+      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "created": "2020-04-16T05:44:41.551646",
+      "daemon_id": "iscsi.osd0.abc123",
+      "daemon_type": "iscsi",
+      "hostname": "osd0",
+      "last_refresh": "2020-04-16T06:51:43.182937",
+      "started": "2020-04-16T05:44:41.606514",
       "status": 1,
       "status_desc": "running",
-      "last_refresh": "2020-02-26T07:23:56.500960"
-    },
-    {
-      "hostname": "host0",
-      "container_id": "fcbcc88f023f3734f9015fcdae09277ed4c5e6b0ed1590275e4538d897588acb",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "2",
-      "daemon_type": "osd",
-      "version": "15.1.0-1240-ge5841ce",
-      "status": 1,
-      "status_desc": "running",
-      "last_refresh": "2020-02-26T07:23:56.501123"
-    },
-    {
-      "hostname": "host0",
-      "container_id": "55f3894fffa52854e22354c7629cc4c58db46903ac0d977988b81ed5ba4ad759",
-      "container_image_id": "d457abd6b7ef89251b9ba7b1ae2edbebffd3bf0e0b9069b59d48c7f38b11c944",
-      "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
-      "daemon_id": "3",
-      "daemon_type": "osd",
-      "version": "15.1.0-1240-ge5841ce",
-      "status": 1,
-      "status_desc": "running",
-      "last_refresh": "2020-02-26T07:23:56.501193"
+      "version": "3.4"
     }
   ]
 }

@@ -1,9 +1,12 @@
+import json
+
 from teuthology.orchestra.run import CommandFailedError
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 
 from tasks.cephfs.filesystem import FileLayout
+
 
 class TestAdminCommands(CephFSTestCase):
     """
@@ -21,6 +24,12 @@ class TestAdminCommands(CephFSTestCase):
         s = self.fs.mon_manager.raw_cluster_cmd("fs", "status")
         self.assertTrue("active" in s)
 
+        mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json-pretty"))["mdsmap"]
+        self.assertEqual(mdsmap[0]["state"], "active")
+
+        mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json"))["mdsmap"]
+        self.assertEqual(mdsmap[0]["state"], "active")
+
     def _setup_ec_pools(self, n, metadata=True, overwrites=True):
         if metadata:
             self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-meta", "8")
@@ -30,6 +39,11 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
+    def _check_pool_application_metadata_key_value(self, pool, app, key, value):
+        output = self.fs.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'application', 'get', pool, app, key)
+        self.assertEqual(str(output.strip()), value)
+
     def test_add_data_pool_root(self):
         """
         That a new data pool can be added and used for the root directory.
@@ -37,6 +51,19 @@ class TestAdminCommands(CephFSTestCase):
 
         p = self.fs.add_data_pool("foo")
         self.fs.set_dir_layout(self.mount_a, ".", FileLayout(pool=p))
+
+    def test_add_data_pool_application_metadata(self):
+        """
+        That the application metadata set on a newly added data pool is as expected.
+        """
+        pool_name = "foo"
+        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        mon_cmd('osd', 'pool', 'create', pool_name, str(self.fs.pgs_per_fs_pool))
+        # Check whether https://tracker.ceph.com/issues/43061 is fixed
+        mon_cmd('osd', 'pool', 'application', 'enable', pool_name, 'cephfs')
+        self.fs.add_data_pool(pool_name, create=False)
+        self._check_pool_application_metadata_key_value(
+            pool_name, 'cephfs', 'data', self.fs.name)
 
     def test_add_data_pool_subdir(self):
         """
@@ -47,6 +74,14 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.run_shell("mkdir subdir")
         self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
 
+    def test_add_data_pool_non_alphamueric_name_as_subdir(self):
+        """
+        That a new data pool with non-alphanumeric name can be added and used for a sub-directory.
+        """
+        p = self.fs.add_data_pool("I-am-data_pool00.")
+        self.mount_a.run_shell("mkdir subdir")
+        self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
+
     def test_add_data_pool_ec(self):
         """
         That a new EC data pool can be added.
@@ -54,7 +89,7 @@ class TestAdminCommands(CephFSTestCase):
 
         n = "test_add_data_pool_ec"
         self._setup_ec_pools(n, metadata=False)
-        p = self.fs.add_data_pool(n+"-data", create=False)
+        self.fs.add_data_pool(n+"-data", create=False)
 
     def test_new_default_ec(self):
         """
@@ -111,6 +146,58 @@ class TestAdminCommands(CephFSTestCase):
                 raise
         else:
             raise RuntimeError("expected failure")
+
+    def test_fs_new_pool_application_metadata(self):
+        """
+        That the application metadata set on the pools of a newly created filesystem are as expected.
+        """
+        self.fs.delete_all_filesystems()
+        fs_name = "test_fs_new_pool_application"
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        for p in pool_names:
+            mon_cmd('osd', 'pool', 'create', p, str(self.fs.pgs_per_fs_pool))
+            mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
+        mon_cmd('fs', 'new', fs_name, pool_names[0], pool_names[1])
+        for i in range(2):
+            self._check_pool_application_metadata_key_value(
+                pool_names[i], 'cephfs', keys[i], fs_name)
+
+    def test_required_client_features(self):
+        """
+        That `ceph fs required_client_features` command functions.
+        """
+
+        def is_required(index):
+            out = self.fs.mon_manager.raw_cluster_cmd('fs', 'get', self.fs.name, '--format=json-pretty')
+            features = json.loads(out)['mdsmap']['required_client_features']
+            if "feature_{0}".format(index) in features:
+                return True;
+            return False;
+
+        features = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'feature', 'ls', '--format=json-pretty'))
+        self.assertGreater(len(features), 0);
+
+        for f in features:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', str(f['index']))
+
+        for f in features:
+            index = f['index']
+            feature = f['name']
+            if feature == 'reserved':
+                feature = str(index)
+
+            if index % 3 == 0:
+                continue;
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'add', feature)
+            self.assertTrue(is_required(index))
+
+            if index % 2 == 0:
+                continue;
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', feature)
+            self.assertFalse(is_required(index))
+
 
 class TestConfigCommands(CephFSTestCase):
     """

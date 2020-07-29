@@ -72,7 +72,8 @@ void DemoteRequest<I>::create_snapshot() {
     DemoteRequest<I>, &DemoteRequest<I>::handle_create_snapshot>(this);
 
   auto req = CreatePrimaryRequest<I>::create(
-    m_image_ctx, m_global_image_id,
+    m_image_ctx, m_global_image_id, CEPH_NOSNAP,
+    SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
     (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
      snapshot::CREATE_PRIMARY_FLAG_DEMOTED), nullptr, ctx);
   req->send();

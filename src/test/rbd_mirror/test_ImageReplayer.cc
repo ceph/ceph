@@ -31,10 +31,10 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/api/Io.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
@@ -170,13 +170,13 @@ public:
     m_global_image_id = get_global_image_id(m_remote_ioctx, m_remote_image_id);
 
     auto cct = reinterpret_cast<CephContext*>(m_local_ioctx.cct());
-    m_threads.reset(new Threads<>(cct));
+    m_threads.reset(new Threads<>(m_local_cluster));
 
     m_image_sync_throttler.reset(new Throttler<>(
         cct, "rbd_mirror_concurrent_image_syncs"));
 
     m_instance_watcher = InstanceWatcher<>::create(
-        m_local_ioctx, m_threads->work_queue, nullptr,
+        m_local_ioctx, *m_threads->asio_engine, nullptr,
         m_image_sync_throttler.get());
     m_instance_watcher->handle_acquire_leader();
 
@@ -489,7 +489,7 @@ public:
     size_t written;
     bufferlist bl;
     bl.append(std::string(test_data, len));
-    written = ictx->io_work_queue->write(off, len, std::move(bl), 0);
+    written = librbd::api::Io<>::write(*ictx, off, len, std::move(bl), 0);
     printf("wrote: %d\n", (int)written);
     ASSERT_EQ(len, written);
   }
@@ -501,8 +501,8 @@ public:
     char *result = (char *)malloc(len + 1);
 
     ASSERT_NE(static_cast<char *>(NULL), result);
-    read = ictx->io_work_queue->read(
-      off, len, librbd::io::ReadResult{result, len}, 0);
+    read = librbd::api::Io<>::read(
+      *ictx, off, len, librbd::io::ReadResult{result, len}, 0);
     printf("read: %d\n", (int)read);
     ASSERT_EQ(len, static_cast<size_t>(read));
     result[len] = '\0';
@@ -525,7 +525,7 @@ public:
     C_SaferCond aio_flush_ctx;
     auto c = librbd::io::AioCompletion::create(&aio_flush_ctx);
     c->get();
-    ictx->io_work_queue->aio_flush(c);
+    librbd::api::Io<>::aio_flush(*ictx, c, true);
     ASSERT_EQ(0, c->wait_for_complete());
     c->put();
 
@@ -536,7 +536,7 @@ public:
     } else {
       uint64_t snap_id = CEPH_NOSNAP;
       ASSERT_EQ(0, librbd::api::Mirror<>::image_snapshot_create(
-                     ictx, &snap_id));
+                  ictx, 0, &snap_id));
     }
 
     printf("flushed\n");
@@ -1008,8 +1008,9 @@ TEST_F(TestImageReplayerJournal, MultipleReplayFailures_SingleEpoch) {
   librbd::ImageCtx *ictx;
   this->open_image(this->m_local_ioctx, this->m_image_name, false, &ictx);
   ictx->features &= ~RBD_FEATURE_JOURNALING;
+  librbd::NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					     "foo"));
+					     "foo", 0, prog_ctx));
   ASSERT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
 					      "foo"));
   ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
@@ -1061,8 +1062,9 @@ TEST_F(TestImageReplayerJournal, MultipleReplayFailures_MultiEpoch) {
   librbd::ImageCtx *ictx;
   this->open_image(this->m_local_ioctx, this->m_image_name, false, &ictx);
   ictx->features &= ~RBD_FEATURE_JOURNALING;
+  librbd::NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					     "foo"));
+					     "foo", 0, prog_ctx));
   ASSERT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
 					      "foo"));
   ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
@@ -1465,8 +1467,9 @@ TYPED_TEST(TestImageReplayer, SnapshotUnprotect) {
   this->open_remote_image(&remote_image_ctx);
 
   // create a protected snapshot
+  librbd::NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
-                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+              cls::rbd::UserSnapshotNamespace{}, "snap1", 0, prog_ctx));
   ASSERT_EQ(0, remote_image_ctx->operations->snap_protect(
                  cls::rbd::UserSnapshotNamespace{}, "snap1"));
   this->flush(remote_image_ctx);
@@ -1508,8 +1511,9 @@ TYPED_TEST(TestImageReplayer, SnapshotProtect) {
   this->open_remote_image(&remote_image_ctx);
 
   // create an unprotected snapshot
+  librbd::NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
-                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+                 cls::rbd::UserSnapshotNamespace{}, "snap1", 0, prog_ctx));
   this->flush(remote_image_ctx);
 
   this->create_replayer();
@@ -1549,8 +1553,9 @@ TYPED_TEST(TestImageReplayer, SnapshotRemove) {
   this->open_remote_image(&remote_image_ctx);
 
   // create a user snapshot
+  librbd::NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
-                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+                 cls::rbd::UserSnapshotNamespace{}, "snap1", 0, prog_ctx));
   this->flush(remote_image_ctx);
 
   this->create_replayer();
@@ -1584,8 +1589,9 @@ TYPED_TEST(TestImageReplayer, SnapshotRename) {
   this->open_remote_image(&remote_image_ctx);
 
   // create a user snapshot
+  librbd::NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, remote_image_ctx->operations->snap_create(
-                 cls::rbd::UserSnapshotNamespace{}, "snap1"));
+                 cls::rbd::UserSnapshotNamespace{}, "snap1", 0, prog_ctx));
   this->flush(remote_image_ctx);
 
   this->create_replayer();

@@ -4,7 +4,6 @@
 #include "include/compat.h"
 #include "common/errno.h"
 
-#include <boost/utility/string_ref.hpp>
 
 #include <curl/curl.h>
 #include <curl/easy.h>
@@ -20,6 +19,7 @@
 #include "rgw_tools.h"
 
 #include <atomic>
+#include <string_view>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -88,7 +88,7 @@ struct rgw_http_req_data : public RefCountedObject {
     }
 #endif
     std::unique_lock l{lock};
-    cond.wait(l);
+    cond.wait(l, [this]{return done==true;});
     return ret;
   }
 
@@ -541,16 +541,25 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
   curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
   curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf->rgw_curl_low_speed_time);
   curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
-  if (h) {
-    curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
-  }
   curl_easy_setopt(easy_handle, CURLOPT_READFUNCTION, send_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)req_data);
   if (send_data_hint || is_upload_request(method)) {
     curl_easy_setopt(easy_handle, CURLOPT_UPLOAD, 1L);
   }
   if (has_send_len) {
-    curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, (void *)send_len); 
+    // TODO: prevent overflow by using curl_off_t
+    // and: CURLOPT_INFILESIZE_LARGE, CURLOPT_POSTFIELDSIZE_LARGE
+    const long size = send_len;
+    curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, size);
+    if (method == "POST") {
+      curl_easy_setopt(easy_handle, CURLOPT_POSTFIELDSIZE, size); 
+      // TODO: set to size smaller than 1MB should prevent the "Expect" field
+      // from being sent. So explicit removal is not needed
+      h = curl_slist_append(h, "Expect:");
+    }
+  }
+  if (h) {
+    curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
   if (!verify_ssl) {
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -558,6 +567,7 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
     dout(20) << "ssl verification is set to off" << dendl;
   }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
+  curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, req_timeout);
 
   return 0;
 }
@@ -596,12 +606,12 @@ RGWHTTPClient::~RGWHTTPClient()
 
 int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
 {
-  const boost::string_ref header_line(static_cast<const char *>(ptr), len);
+  const std::string_view header_line(static_cast<const char *>(ptr), len);
 
   /* We're tokening the line that way due to backward compatibility. */
   const size_t sep_loc = header_line.find_first_of(" \t:");
 
-  if (boost::string_ref::npos == sep_loc) {
+  if (std::string_view::npos == sep_loc) {
     /* Wrongly formatted header? Just skip it. */
     return 0;
   }
@@ -618,8 +628,8 @@ int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
   const size_t val_loc_s = value_part.find_first_not_of(' ');
   const size_t val_loc_e = value_part.find_first_of("\r\n");
 
-  if (boost::string_ref::npos == val_loc_s ||
-      boost::string_ref::npos == val_loc_e) {
+  if (std::string_view::npos == val_loc_s ||
+      std::string_view::npos == val_loc_e) {
     /* Empty value case. */
     found_headers.emplace(name, header_value_t());
   } else {

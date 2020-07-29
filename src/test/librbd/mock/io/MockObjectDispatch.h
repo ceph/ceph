@@ -20,18 +20,18 @@ public:
   MockObjectDispatch() : lock("MockObjectDispatch::lock", true, false) {
   }
 
-  MOCK_CONST_METHOD0(get_object_dispatch_layer, ObjectDispatchLayer());
+  MOCK_CONST_METHOD0(get_dispatch_layer, ObjectDispatchLayer());
 
   MOCK_METHOD1(shut_down, void(Context*));
 
   MOCK_METHOD8(execute_read,
                bool(uint64_t, uint64_t, uint64_t, librados::snap_t,
-                    ceph::bufferlist*, ExtentMap*, DispatchResult*, Context*));
+                    ceph::bufferlist*, Extents*, DispatchResult*, Context*));
   bool read(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace& parent_trace, ceph::bufferlist* read_data,
-      ExtentMap* extent_map, int* dispatch_flags,
+      Extents* extent_map, int* dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) {
     return execute_read(object_no, object_off, object_len, snap_id, read_data,

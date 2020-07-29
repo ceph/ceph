@@ -5,6 +5,4 @@ import { Component } from '@angular/core';
   templateUrl: './rbd-performance.component.html',
   styleUrls: ['./rbd-performance.component.scss']
 })
-export class RbdPerformanceComponent {
-  constructor() {}
-}
+export class RbdPerformanceComponent {}

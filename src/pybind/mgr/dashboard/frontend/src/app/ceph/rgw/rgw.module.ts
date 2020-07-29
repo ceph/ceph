@@ -3,12 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { AlertModule } from 'ngx-bootstrap/alert';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { ModalModule } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { AuthGuardService } from '../../shared/services/auth-guard.service';
@@ -29,28 +25,16 @@ import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 
 @NgModule({
-  entryComponents: [
-    RgwDaemonDetailsComponent,
-    RgwBucketDetailsComponent,
-    RgwUserDetailsComponent,
-    RgwUserSwiftKeyModalComponent,
-    RgwUserS3KeyModalComponent,
-    RgwUserCapabilityModalComponent,
-    RgwUserSubuserModalComponent
-  ],
   imports: [
     CommonModule,
     SharedModule,
     FormsModule,
     ReactiveFormsModule,
     PerformanceCounterModule,
-    AlertModule.forRoot(),
-    BsDropdownModule.forRoot(),
-    TabsModule.forRoot(),
-    TooltipModule.forRoot(),
-    ModalModule.forRoot(),
+    NgbNavModule,
     RouterModule,
-    NgBootstrapFormValidationModule
+    NgBootstrapFormValidationModule,
+    NgbTooltipModule
   ],
   exports: [
     Rgw501Component,

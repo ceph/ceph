@@ -26,6 +26,7 @@ import { OrdinalPipe } from './ordinal.pipe';
 import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
+import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
 
 @NgModule({
@@ -56,7 +57,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     UpperFirstPipe,
     RbdConfigurationSourcePipe,
     DurationPipe,
-    MapPipe
+    MapPipe,
+    TruncatePipe
   ],
   exports: [
     ArrayPipe,
@@ -84,7 +86,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     UpperFirstPipe,
     RbdConfigurationSourcePipe,
     DurationPipe,
-    MapPipe
+    MapPipe,
+    TruncatePipe
   ],
   providers: [
     ArrayPipe,
@@ -108,7 +111,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     MillisecondsPipe,
     NotAvailablePipe,
     UpperFirstPipe,
-    MapPipe
+    MapPipe,
+    TruncatePipe
   ]
 })
 export class PipesModule {}

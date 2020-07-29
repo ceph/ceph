@@ -2,8 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
+import { forkJoin } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
@@ -11,6 +11,7 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -23,21 +24,24 @@ import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
   templateUrl: './rgw-bucket-form.component.html',
   styleUrls: ['./rgw-bucket-form.component.scss']
 })
-export class RgwBucketFormComponent implements OnInit {
+export class RgwBucketFormComponent extends CdForm implements OnInit {
   bucketForm: CdFormGroup;
   editing = false;
-  error = false;
-  loading = false;
   owners: string[] = null;
   action: string;
   resource: string;
   zonegroup: string;
   placementTargets: object[] = [];
-  isVersioningEnabled = false;
   isVersioningAlreadyEnabled = false;
-  isMfaDeleteEnabled = false;
   isMfaDeleteAlreadyEnabled = false;
   icons = Icons;
+
+  get isVersioningEnabled(): boolean {
+    return this.bucketForm.getValue('versioning');
+  }
+  get isMfaDeleteEnabled(): boolean {
+    return this.bucketForm.getValue('mfa-delete');
+  }
 
   constructor(
     private route: ActivatedRoute,
@@ -47,12 +51,12 @@ export class RgwBucketFormComponent implements OnInit {
     private rgwSiteService: RgwSiteService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = this.i18n('bucket');
+    this.resource = $localize`bucket`;
     this.createForm();
   }
 
@@ -84,58 +88,69 @@ export class RgwBucketFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Get the list of possible owners.
-    this.rgwUserService.enumerate().subscribe((resp: string[]) => {
-      this.owners = resp.sort();
-    });
+    const promises = {
+      owners: this.rgwUserService.enumerate()
+    };
 
     if (!this.editing) {
-      // Get placement targets:
-      this.rgwSiteService.getPlacementTargets().subscribe((placementTargets: any) => {
-        this.zonegroup = placementTargets['zonegroup'];
-        _.forEach(placementTargets['placement_targets'], (placementTarget) => {
-          placementTarget['description'] = `${placementTarget['name']} (${this.i18n('pool')}: ${
-            placementTarget['data_pool']
-          })`;
-          this.placementTargets.push(placementTarget);
-        });
-
-        // If there is only 1 placement target, select it by default:
-        if (this.placementTargets.length === 1) {
-          this.bucketForm.get('placement-target').setValue(this.placementTargets[0]['name']);
-        }
-      });
+      promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');
     }
 
     // Process route parameters.
     this.route.params.subscribe((params: { bid: string }) => {
-      if (!params.hasOwnProperty('bid')) {
-        return;
+      if (params.hasOwnProperty('bid')) {
+        const bid = decodeURIComponent(params.bid);
+        promises['getBid'] = this.rgwBucketService.get(bid);
       }
-      const bid = decodeURIComponent(params.bid);
-      this.loading = true;
 
-      this.rgwBucketService.get(bid).subscribe((resp: object) => {
-        this.loading = false;
-        // Get the default values (incl. the values from disabled fields).
-        const defaults = _.clone(this.bucketForm.getRawValue());
-        // Get the values displayed in the form. We need to do that to
-        // extract those key/value pairs from the response data, otherwise
-        // the Angular react framework will throw an error if there is no
-        // field for a given key.
-        let value: object = _.pick(resp, _.keys(defaults));
-        value['placement-target'] = resp['placement_rule'];
-        // Append default values.
-        value = _.merge(defaults, value);
-        // Update the form.
-        this.bucketForm.setValue(value);
-        if (this.editing) {
-          this.setVersioningStatus(resp['versioning']);
-          this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
-          this.setMfaDeleteStatus(resp['mfa_delete']);
-          this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
-          this.setMfaDeleteValidators();
+      forkJoin(promises).subscribe((data: any) => {
+        // Get the list of possible owners.
+        this.owners = (<string[]>data.owners).sort();
+
+        // Get placement targets:
+        if (data['getPlacementTargets']) {
+          const placementTargets = data['getPlacementTargets'];
+          this.zonegroup = placementTargets['zonegroup'];
+          _.forEach(placementTargets['placement_targets'], (placementTarget) => {
+            placementTarget['description'] = `${placementTarget['name']} (${$localize`pool`}: ${
+              placementTarget['data_pool']
+            })`;
+            this.placementTargets.push(placementTarget);
+          });
+
+          // If there is only 1 placement target, select it by default:
+          if (this.placementTargets.length === 1) {
+            this.bucketForm.get('placement-target').setValue(this.placementTargets[0]['name']);
+          }
         }
+
+        if (data['getBid']) {
+          const bidResp = data['getBid'];
+          // Get the default values (incl. the values from disabled fields).
+          const defaults = _.clone(this.bucketForm.getRawValue());
+
+          // Get the values displayed in the form. We need to do that to
+          // extract those key/value pairs from the response data, otherwise
+          // the Angular react framework will throw an error if there is no
+          // field for a given key.
+          let value: object = _.pick(bidResp, _.keys(defaults));
+          value['placement-target'] = bidResp['placement_rule'];
+          value['versioning'] = bidResp['versioning'] === RgwBucketVersioning.ENABLED;
+          value['mfa-delete'] = bidResp['mfa_delete'] === RgwBucketMfaDelete.ENABLED;
+
+          // Append default values.
+          value = _.merge(defaults, value);
+
+          // Update the form.
+          this.bucketForm.setValue(value);
+          if (this.editing) {
+            this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
+            this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
+            this.setMfaDeleteValidators();
+          }
+        }
+
+        this.loadingReady();
       });
     });
   }
@@ -172,7 +187,7 @@ export class RgwBucketFormComponent implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Updated Object Gateway bucket "{{bid}}".', values)
+              $localize`Updated Object Gateway bucket '${values.bid}'.`
             );
             this.goToListView();
           },
@@ -198,7 +213,7 @@ export class RgwBucketFormComponent implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Created Object Gateway bucket "{{bid}}"', values)
+              $localize`Created Object Gateway bucket '${values.bid}'`
             );
             this.goToListView();
           },
@@ -308,25 +323,7 @@ export class RgwBucketFormComponent implements OnInit {
     return this.isVersioningEnabled ? RgwBucketVersioning.ENABLED : RgwBucketVersioning.SUSPENDED;
   }
 
-  setVersioningStatus(status: RgwBucketVersioning) {
-    this.isVersioningEnabled = status === RgwBucketVersioning.ENABLED;
-  }
-
-  updateVersioning() {
-    this.isVersioningEnabled = !this.isVersioningEnabled;
-    this.setMfaDeleteValidators();
-  }
-
   getMfaDeleteStatus() {
     return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
-  }
-
-  setMfaDeleteStatus(status: RgwBucketMfaDelete) {
-    this.isMfaDeleteEnabled = status === RgwBucketMfaDelete.ENABLED;
-  }
-
-  updateMfaDelete() {
-    this.isMfaDeleteEnabled = !this.isMfaDeleteEnabled;
-    this.setMfaDeleteValidators();
   }
 }

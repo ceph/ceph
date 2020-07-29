@@ -9,6 +9,7 @@
 #include "common/Timer.h"
 #include "common/safe_io.h"
 #include "common/TracepointProvider.h"
+#include "common/openssl_opts_handler.h"
 #include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
@@ -203,17 +204,13 @@ int radosgw_Main(int argc, const char **argv)
   }
 
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
-  global_pre_init(
-    &defaults, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-    flags);
+  // Prevent global_init() from dropping permissions until frontends can bind
+  // privileged ports
+  flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
 
-  // Now that we've determined which frontend(s) to use, continue with global
-  // initialization. Passing false as the final argument ensures that
-  // global_pre_init() is not invoked twice.
-  // claim the reference and release it after subsequent destructors have fired
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
-			 flags, "rgw_data", false);
+			 flags, "rgw_data");
 
   // First, let's determine which frontends are configured.
   list<string> frontends;
@@ -229,9 +226,6 @@ int radosgw_Main(int argc, const char **argv)
     string& f = *iter;
 
     if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
-      // If civetweb or beast is configured as a frontend, prevent global_init() from
-      // dropping permissions by setting the appropriate flag.
-      flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
@@ -306,6 +300,8 @@ int radosgw_Main(int argc, const char **argv)
   mutex.lock();
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
   mutex.unlock();
+
+  ceph::crypto::init_openssl_engine_once();
 
   common_init_finish(g_ceph_context);
 
@@ -607,10 +603,11 @@ int radosgw_Main(int argc, const char **argv)
   // add a watcher to respond to realm configuration changes
   RGWPeriodPusher pusher(store);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
-  RGWRealmReloader reloader(store, service_map_meta, &pauser);
+  std::optional<RGWRealmReloader> reloader(std::in_place, store,
+                                           service_map_meta, &pauser);
 
   RGWRealmWatcher realm_watcher(g_ceph_context, store->svc()->zone->get_realm());
-  realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
+  realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
 #if defined(HAVE_SYS_PRCTL_H)
@@ -622,6 +619,8 @@ int radosgw_Main(int argc, const char **argv)
   wait_shutdown();
 
   derr << "shutting down" << dendl;
+
+  reloader.reset(); // stop the realm reloader
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {

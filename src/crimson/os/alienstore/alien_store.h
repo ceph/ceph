@@ -10,9 +10,9 @@
 #include "os/ObjectStore.h"
 #include "osd/osd_types.h"
 
+#include "crimson/os/alienstore/thread_pool.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
-#include "crimson/thread/ThreadPool.h"
 
 namespace ceph::os {
 class Transaction;
@@ -38,7 +38,6 @@ public:
     ObjectMap::ObjectMapIterator iter;
     AlienStore* store;
   };
-  mutable std::unique_ptr<crimson::thread::ThreadPool> tp;
   AlienStore(const std::string& path, const ConfigValues& values);
   ~AlienStore() final;
 
@@ -53,6 +52,11 @@ public:
                                    uint64_t offset,
                                    size_t len,
                                    uint32_t op_flags = 0) final;
+  read_errorator::future<ceph::bufferlist> readv(CollectionRef c,
+						 const ghobject_t& oid,
+						 interval_set<uint64_t>& m,
+						 uint32_t op_flags = 0) final;
+					      
 
   get_attr_errorator::future<ceph::bufferptr> get_attr(CollectionRef c,
                                             const ghobject_t& oid,
@@ -65,14 +69,14 @@ public:
     const ghobject_t& oid,
     const omap_keys_t& keys) final;
 
-  seastar::future<std::vector<ghobject_t>, ghobject_t> list_objects(
+  seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) const final;
 
   /// Retrieves paged set of values > start (if present)
-  seastar::future<bool, omap_values_t> omap_get_values(
+  seastar::future<std::tuple<bool, omap_values_t>> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -87,7 +91,8 @@ public:
 
   seastar::future<> write_meta(const std::string& key,
                   const std::string& value) final;
-  seastar::future<int, std::string> read_meta(const std::string& key) final;
+  seastar::future<std::tuple<int, std::string>> read_meta(
+    const std::string& key) final;
   uuid_d get_fsid() const final;
   seastar::future<store_statfs_t> stat() const final;
   unsigned get_max_attr_name_length() const final;
@@ -105,11 +110,13 @@ public:
   seastar::future<FuturizedStore::OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) final;
+
+  static void configure_thread_memory();
 private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
+  mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string path;
   uint64_t used_bytes = 0;
-  uuid_d osd_fsid;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
   seastar::gate transaction_gate;

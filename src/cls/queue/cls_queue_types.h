@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_QUEUE_TYPES_H
 #define CEPH_CLS_QUEUE_TYPES_H
 
@@ -11,20 +14,21 @@
 
 constexpr unsigned int QUEUE_HEAD_START = 0xDEAD;
 constexpr unsigned int QUEUE_ENTRY_START = 0xBEEF;
+constexpr unsigned int QUEUE_ENTRY_OVERHEAD = sizeof(uint16_t) + sizeof(uint64_t);
 
 struct cls_queue_entry
 {
-  bufferlist data;
+  ceph::buffer::list data;
   std::string marker;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(data, bl);
     encode(marker, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(data, bl);
     decode(marker, bl);
@@ -38,23 +42,22 @@ struct cls_queue_marker
   uint64_t offset{0};
   uint64_t gen{0};
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(gen, bl);
     encode(offset, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(gen, bl);
     decode(offset, bl);
     DECODE_FINISH(bl);
   }
 
-  string to_str() {
-    string marker = std::to_string(gen) + '/' + std::to_string(offset);
-    return marker;
+  std::string to_str() {
+    return std::to_string(gen) + '/' + std::to_string(offset);
   }
 
   int from_str(const char* str) {
@@ -88,9 +91,9 @@ struct cls_queue_head
   cls_queue_marker tail{QUEUE_START_OFFSET_1K, 0};
   uint64_t queue_size{0}; // size of queue requested by user, with head size added to it
   uint64_t max_urgent_data_size{0};
-  bufferlist bl_urgent_data;  // special data known to application using queue
+  ceph::buffer::list bl_urgent_data;  // special data known to application using queue
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(max_head_size, bl);
     encode(front, bl);
@@ -101,7 +104,7 @@ struct cls_queue_head
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max_head_size, bl);
     decode(front, bl);

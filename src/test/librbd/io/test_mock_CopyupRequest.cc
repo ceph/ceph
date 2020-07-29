@@ -10,10 +10,10 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/api/Io.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/CopyupRequest.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 
@@ -25,6 +25,10 @@ struct MockTestImageCtx : public MockImageCtx {
                    MockTestImageCtx* mock_parent_image_ctx = nullptr)
     : MockImageCtx(image_ctx) {
     parent = mock_parent_image_ctx;
+  }
+  ~MockTestImageCtx() override {
+    // copyups need to complete prior to attempting to delete this object
+    wait_for_async_ops();
   }
 
   std::map<uint64_t, librbd::io::CopyupRequest<librbd::MockTestImageCtx>*> copyup_list;
@@ -51,7 +55,7 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
                                    librados::snap_t dst_snap_id_start,
                                    const SnapMap &snap_map,
                                    uint64_t object_number, bool flatten,
-                                   Context *on_finish) {
+                                   Handler*, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->object_number = object_number;
     s_instance->flatten = flatten;
@@ -79,7 +83,7 @@ namespace io {
 template <>
 struct ObjectRequest<librbd::MockTestImageCtx> {
   static void add_write_hint(librbd::MockTestImageCtx&,
-                             librados::ObjectWriteOperation*) {
+                             neorados::WriteOp*) {
   }
 };
 
@@ -93,7 +97,7 @@ struct AbstractObjectWriteRequest<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD0(get_pre_write_object_map_state, uint8_t());
   MOCK_CONST_METHOD0(is_empty_write_op, bool());
 
-  MOCK_METHOD1(add_copyup_ops, void(librados::ObjectWriteOperation*));
+  MOCK_METHOD1(add_copyup_ops, void(neorados::WriteOp*));
 };
 
 template <>
@@ -171,23 +175,19 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
   void expect_get_parent_overlap(MockTestImageCtx& mock_image_ctx,
                                  librados::snap_t snap_id, uint64_t overlap,
                                  int r) {
-    if (mock_image_ctx.object_map != nullptr) {
-      EXPECT_CALL(mock_image_ctx, get_parent_overlap(snap_id, _))
-        .WillOnce(WithArg<1>(Invoke([overlap, r](uint64_t *o) {
-                               *o = overlap;
-                               return r;
-                             })));
-    }
+    EXPECT_CALL(mock_image_ctx, get_parent_overlap(snap_id, _))
+      .WillOnce(WithArg<1>(Invoke([overlap, r](uint64_t *o) {
+                             *o = overlap;
+                             return r;
+                           })));
   }
 
   void expect_prune_parent_extents(MockTestImageCtx& mock_image_ctx,
                                    uint64_t overlap, uint64_t object_overlap) {
-    if (mock_image_ctx.object_map != nullptr) {
-      EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
-        .WillOnce(WithoutArgs(Invoke([object_overlap]() {
-                                return object_overlap;
-                              })));
-    }
+    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
+      .WillOnce(WithoutArgs(Invoke([object_overlap]() {
+                              return object_overlap;
+                            })));
   }
 
   void expect_read_parent(MockTestImageCtx& mock_image_ctx,
@@ -217,9 +217,11 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
       snapc = mock_image_ctx.snapc;
     }
 
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    EXPECT_CALL(mock_io_ctx,
                 exec(oid, _, StrEq("rbd"), StrEq("copyup"),
-                     ContentsEqual(in_bl), _, snapc))
+                     ContentsEqual(in_bl), _, _, snapc))
       .WillOnce(Return(r));
   }
 
@@ -239,9 +241,11 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
       snapc = mock_image_ctx.snapc;
     }
 
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    EXPECT_CALL(mock_io_ctx,
                 exec(oid, _, StrEq("rbd"), StrEq("sparse_copyup"),
-                     ContentsEqual(in_bl), _, snapc))
+                     ContentsEqual(in_bl), _, _, snapc))
       .WillOnce(Return(r));
   }
 
@@ -252,8 +256,9 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
       snapc = mock_image_ctx.snapc;
     }
 
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-                write(oid, _, 0, 0, snapc))
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    EXPECT_CALL(mock_io_ctx, write(oid, _, 0, 0, snapc))
       .WillOnce(Return(r));
   }
 
@@ -279,7 +284,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
   void expect_add_copyup_ops(MockAbstractObjectWriteRequest& mock_write_request) {
     EXPECT_CALL(mock_write_request, add_copyup_ops(_))
-      .WillOnce(Invoke([](librados::ObjectWriteOperation* op) {
+      .WillOnce(Invoke([](neorados::WriteOp* op) {
                   op->write(0, bufferlist{});
                 }));
   }
@@ -336,7 +341,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
   }
 
   void flush_async_operations(librbd::ImageCtx* ictx) {
-    ictx->io_work_queue->flush();
+    api::Io<>::flush(*ictx);
   }
 
   std::string m_parent_image_name;
@@ -914,8 +919,9 @@ TEST_F(TestMockIoCopyupRequest, RestartWrite) {
                        {{0, 4096}}, data, 0);
 
   MockAbstractObjectWriteRequest mock_write_request2;
-  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
-              write(ictx->get_object_name(0), _, 0, 0, _))
+  auto& mock_io_ctx = librados::get_mock_io_ctx(
+    mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+  EXPECT_CALL(mock_io_ctx, write(ictx->get_object_name(0), _, 0, 0, _))
     .WillOnce(WithoutArgs(Invoke([req, &mock_write_request2]() {
                             req->append_request(&mock_write_request2);
                             return 0;

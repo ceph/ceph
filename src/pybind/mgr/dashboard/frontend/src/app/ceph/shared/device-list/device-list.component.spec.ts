@@ -1,21 +1,18 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
-import { i18nProviders } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { SharedModule } from '../../../shared/shared.module';
 import { DeviceListComponent } from './device-list.component';
 
 describe('DeviceListComponent', () => {
   let component: DeviceListComponent;
   let fixture: ComponentFixture<DeviceListComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [DeviceListComponent],
-      imports: [SharedModule, HttpClientTestingModule],
-      providers: [i18nProviders]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [DeviceListComponent],
+    imports: [SharedModule, HttpClientTestingModule]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(DeviceListComponent);

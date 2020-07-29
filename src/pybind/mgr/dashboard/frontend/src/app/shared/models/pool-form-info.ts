@@ -1,3 +1,4 @@
+import { CrushNode } from './crush-node';
 import { CrushRule } from './crush-rule';
 import { ErasureCodeProfile } from './erasure-code-profile';
 
@@ -14,4 +15,6 @@ export class PoolFormInfo {
   pg_autoscale_modes: string[];
   erasure_code_profiles: ErasureCodeProfile[];
   used_rules: { [rule_name: string]: string[] };
+  used_profiles: { [profile_name: string]: string[] };
+  nodes: CrushNode[];
 }

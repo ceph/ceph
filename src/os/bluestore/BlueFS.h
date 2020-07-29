@@ -7,7 +7,7 @@
 #include <mutex>
 
 #include "bluefs_types.h"
-#include "BlockDevice.h"
+#include "blk/BlockDevice.h"
 
 #include "common/RefCountedObj.h"
 #include "common/ceph_context.h"
@@ -80,7 +80,7 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
-  virtual void* get_hint_by_device(uint8_t dev) const = 0;
+  virtual void* get_hint_for_log() const = 0;
   virtual void* get_hint_by_dir(const std::string& dirname) const = 0;
 
   virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
@@ -236,6 +236,15 @@ public:
     void skip(size_t n) {
       pos += n;
     }
+
+    // For the sake of simplicity, we invalidate completed rather than
+    // for the provided extent
+    void invalidate_cache(uint64_t offset, uint64_t length) {
+      if (offset >= bl_off && offset < get_buf_end()) {
+	bl.clear();
+	bl_off = 0;
+      }
+    }
   };
 
   struct FileReader {
@@ -338,7 +347,9 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  unsigned _get_slow_device_id() {
+    return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+  }
   const char* get_device_name(unsigned id);
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
@@ -347,7 +358,8 @@ private:
 				 PExtentVector* extents);
 
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
-  int _flush(FileWriter *h, bool force);
+  int _flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l);
+  int _flush(FileWriter *h, bool force, bool *flushed = nullptr);
   int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
 
 #ifdef HAVE_LIBAIO
@@ -388,14 +400,13 @@ private:
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
 
-  int _read(
+  int64_t _read(
     FileReader *h,   ///< [in] read from here
-    FileReaderBuffer *buf, ///< [in] reader state
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     ceph::buffer::list *outbl,   ///< [out] optional: reference the result here
     char *out);      ///< [out] optional: or copy it here
-  int _read_random(
+  int64_t _read_random(
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
     uint64_t len,    ///< [in] this many bytes
@@ -428,7 +439,8 @@ private:
     return 4096;
   }
 
-  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
+  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                         bool skip=false);
 
 public:
   BlueFS(CephContext* cct);
@@ -438,7 +450,7 @@ public:
   int mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout);
   int mount();
   int maybe_verify_layout(const bluefs_layout_t& layout) const;
-  void umount();
+  void umount(bool avoid_compact = false);
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
@@ -509,7 +521,9 @@ public:
   void compact_log();
 
   /// sync any uncommitted state to disk
-  void sync_metadata();
+  void sync_metadata(bool avoid_compact);
+  /// test and compact log, if necessary
+  void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
 
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
@@ -531,9 +545,10 @@ public:
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
-  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len) {
+  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                        bool skip=false) {
     std::unique_lock l(lock);
-    _add_block_extent(bdev, offset, len);
+    _add_block_extent(bdev, offset, len, skip);
     int r = _flush_and_sync_log(l);
     ceph_assert(r == 0);
   }
@@ -545,9 +560,10 @@ public:
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
-  void flush(FileWriter *h) {
-    std::lock_guard l(lock);
-    _flush(h, false);
+  void flush(FileWriter *h, bool force = false) {
+    std::unique_lock l(lock);
+    int r = _flush(h, force, l);
+    ceph_assert(r == 0);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
     std::lock_guard l(lock);
@@ -555,16 +571,18 @@ public:
   }
   int fsync(FileWriter *h) {
     std::unique_lock l(lock);
-    return _fsync(h, l);
+    int r = _fsync(h, l);
+    _maybe_compact_log(l);
+    return r;
   }
-  int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
+  int64_t read(FileReader *h, uint64_t offset, size_t len,
 	   ceph::buffer::list *outbl, char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
-    return _read(h, buf, offset, len, outbl, out);
+    return _read(h, offset, len, outbl, out);
   }
-  int read_random(FileReader *h, uint64_t offset, size_t len,
+  int64_t read_random(FileReader *h, uint64_t offset, size_t len,
 		  char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
@@ -583,6 +601,11 @@ public:
     std::lock_guard l(lock);
     return _truncate(h, offset);
   }
+  int do_replay_recovery_read(FileReader *log,
+			      size_t log_pos,
+			      size_t read_offset,
+			      size_t read_len,
+			      bufferlist* bl);
 
   /// test purpose methods
   void debug_inject_duplicate_gift(unsigned bdev, uint64_t offset, uint64_t len);
@@ -603,7 +626,7 @@ public:
     uint64_t _slow_total)
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
-  void* get_hint_by_device(uint8_t dev) const override;
+  void* get_hint_for_log() const override;
   void* get_hint_by_dir(const std::string& dirname) const override;
 
   void add_usage(void* hint, const bluefs_fnode_t& fnode) override {

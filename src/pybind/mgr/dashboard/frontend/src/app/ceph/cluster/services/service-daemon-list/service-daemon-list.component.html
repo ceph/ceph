@@ -7,3 +7,11 @@
           [autoReload]="60000"
           (fetchData)="getDaemons($event)">
 </cd-table>
+
+<ng-template #statusTpl
+             let-row="row">
+  <span class="badge"
+        [ngClass]="getStatusClass(row.status)">
+    {{ row.status_desc }}
+  </span>
+</ng-template>

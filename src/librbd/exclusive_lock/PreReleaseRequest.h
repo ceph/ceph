@@ -16,10 +16,14 @@ struct ImageCtx;
 
 namespace exclusive_lock {
 
+template <typename> struct ImageDispatch;
+
 template <typename ImageCtxT = ImageCtx>
 class PreReleaseRequest {
 public:
-  static PreReleaseRequest* create(ImageCtxT &image_ctx, bool shutting_down,
+  static PreReleaseRequest* create(ImageCtxT &image_ctx,
+                                   ImageDispatch<ImageCtxT>* image_dispatch,
+                                   bool shutting_down,
                                    AsyncOpTracker &async_op_tracker,
                                    Context *on_finish);
 
@@ -62,10 +66,13 @@ private:
    * @endverbatim
    */
 
-  PreReleaseRequest(ImageCtxT &image_ctx, bool shutting_down,
-                    AsyncOpTracker &async_op_tracker, Context *on_finish);
+  PreReleaseRequest(ImageCtxT &image_ctx,
+                    ImageDispatch<ImageCtxT>* image_dispatch,
+                    bool shutting_down, AsyncOpTracker &async_op_tracker,
+                    Context *on_finish);
 
   ImageCtxT &m_image_ctx;
+  ImageDispatch<ImageCtxT>* m_image_dispatch;
   bool m_shutting_down;
   AsyncOpTracker &m_async_op_tracker;
   Context *m_on_finish;

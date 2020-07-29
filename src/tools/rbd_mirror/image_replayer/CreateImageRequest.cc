@@ -6,12 +6,12 @@
 #include "OpenImageRequest.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/CloneRequest.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
@@ -89,7 +89,7 @@ void CreateImageRequest<I>::create_image() {
 
   auto req = librbd::image::CreateRequest<I>::create(
     config, m_local_io_ctx, m_local_image_name, m_local_image_id,
-    m_remote_image_ctx->size, image_options, false, m_mirror_image_mode,
+    m_remote_image_ctx->size, image_options, 0U, m_mirror_image_mode,
     m_global_image_id, m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue,
     ctx);
   req->send();

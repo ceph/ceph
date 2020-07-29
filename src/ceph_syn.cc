@@ -18,6 +18,7 @@
 
 #include "common/config.h"
 
+#include "common/async/context_pool.h"
 #include "client/SyntheticClient.h"
 #include "client/Client.h"
 
@@ -50,7 +51,8 @@ int main(int argc, const char **argv, char *envp[])
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
   // get monmap
-  MonClient mc(g_ceph_context);
+  ceph::async::io_context_pool  poolctx(1);
+  MonClient mc(g_ceph_context, poolctx);
   if (mc.build_initial_monmap() < 0)
     return -1;
 
@@ -63,10 +65,9 @@ int main(int argc, const char **argv, char *envp[])
   for (int i=0; i<num_client; i++) {
     messengers[i] = Messenger::create_client_messenger(g_ceph_context,
 						       "synclient");
-    messengers[i]->bind(g_conf()->public_addr);
-    mclients[i] = new MonClient(g_ceph_context);
+    mclients[i] = new MonClient(g_ceph_context, poolctx);
     mclients[i]->build_initial_monmap();
-    auto client = new StandaloneClient(messengers[i], mclients[i]);
+    auto client = new StandaloneClient(messengers[i], mclients[i], poolctx);
     client->set_filer_flags(syn_filer_flags);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
@@ -78,6 +79,8 @@ int main(int argc, const char **argv, char *envp[])
        p != synclients.end();
        ++p)
     (*p)->start_thread();
+
+  poolctx.stop();
 
   //cout << "waiting for client(s) to finish" << std::endl;
   while (!clients.empty()) {
@@ -99,4 +102,3 @@ int main(int argc, const char **argv, char *envp[])
   }
   return 0;
 }
-

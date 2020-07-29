@@ -1,10 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 
-import { PopoverModule } from 'ngx-bootstrap/popover';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SelectOption } from './select-option.model';
 import { SelectComponent } from './select.component';
 
@@ -20,8 +19,7 @@ describe('SelectComponent', () => {
 
   configureTestBed({
     declarations: [SelectComponent],
-    imports: [PopoverModule.forRoot(), TooltipModule, ReactiveFormsModule],
-    providers: i18nProviders
+    imports: [NgbPopoverModule, NgbTooltipModule, ReactiveFormsModule]
   });
 
   beforeEach(() => {
@@ -258,7 +256,7 @@ describe('SelectComponent', () => {
     });
   });
 
-  describe('if the selection limit is reached', function() {
+  describe('if the selection limit is reached', function () {
     beforeEach(() => {
       component.selectionLimit = 2;
       component.triggerSelection(component.options[0]);

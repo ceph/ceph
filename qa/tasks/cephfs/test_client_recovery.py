@@ -103,8 +103,7 @@ class TestClientRecovery(CephFSTestCase):
 
         self.mount_b.check_files()
 
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # Check that the admin socket interface is correctly reporting
         # two sessions
@@ -160,7 +159,7 @@ class TestClientRecovery(CephFSTestCase):
         in_reconnect_for = self.fs.wait_for_state('up:active', timeout=self.mds_reconnect_timeout * 2)
         # Check that the period we waited to enter active is within a factor
         # of two of the reconnect timeout.
-        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout / 2,
+        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout // 2,
                            "Should have been in reconnect phase for {0} but only took {1}".format(
                                self.mds_reconnect_timeout, in_reconnect_for
                            ))
@@ -169,8 +168,7 @@ class TestClientRecovery(CephFSTestCase):
 
         # Check that the client that timed out during reconnect can
         # mount again and do I/O
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.create_destroy()
 
         self.assert_session_count(2)
@@ -212,8 +210,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.kill_cleanup()
 
         # Bring the client back
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.create_destroy()
 
     def _test_stale_caps(self, write):
@@ -226,8 +223,7 @@ class TestClientRecovery(CephFSTestCase):
         else:
             self.mount_a.run_shell(["touch", "background_file"])
             self.mount_a.umount_wait()
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
             cap_holder = self.mount_a.open_background(write=False)
 
         self.assert_session_count(2)
@@ -238,7 +234,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible()
 
         # Simulate client death
-        self.mount_a.kill()
+        self.mount_a.suspend_netns()
 
         # wait for it to die so it doesn't voluntarily release buffer cap
         time.sleep(5)
@@ -275,10 +271,7 @@ class TestClientRecovery(CephFSTestCase):
                 pass
         finally:
             # teardown() doesn't quite handle this case cleanly, so help it out
-            self.mount_a.kill_cleanup()
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+            self.mount_a.resume_netns()
 
     def test_stale_read_caps(self):
         self._test_stale_caps(False)
@@ -302,7 +295,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible()
 
         # Simulate client death
-        self.mount_a.kill()
+        self.mount_a.suspend_netns()
 
         # wait for it to die so it doesn't voluntarily release buffer cap
         time.sleep(5)
@@ -336,10 +329,7 @@ class TestClientRecovery(CephFSTestCase):
                 # We killed it (and possibly its node), so it raises an error
                 pass
         finally:
-            self.mount_a.kill_cleanup()
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+            self.mount_a.resume_netns()
 
     def test_trim_caps(self):
         # Trim capability when reconnecting MDS
@@ -444,8 +434,7 @@ class TestClientRecovery(CephFSTestCase):
             self.mount_a.kill_cleanup()
 
         # Bring the client back
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
     def test_dir_fsync(self):
         self._test_fsync(True);
@@ -505,8 +494,7 @@ class TestClientRecovery(CephFSTestCase):
         log.info("Reached active...")
 
         # Is the child dentry visible from mount B?
-        self.mount_b.mount()
-        self.mount_b.wait_until_mounted()
+        self.mount_b.mount_wait()
         self.mount_b.run_shell(["ls", "subdir/childfile"])
 
     def test_unmount_for_evicted_client(self):
@@ -642,7 +630,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait()
 
         if isinstance(self.mount_a, FuseMount):
-            self.skipTest("Not implemented in FUSE client yet")
+            self.mount_a.mount(mount_options=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
         else:
             try:
                 self.mount_a.mount(mount_options=['recover_session=clean'])

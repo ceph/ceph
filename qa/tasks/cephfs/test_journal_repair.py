@@ -92,8 +92,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         # List files
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # First ls -R to populate MDCache, such that hardlinks will
         # resolve properly (recover_dentries does not create backtraces,
@@ -102,8 +101,7 @@ class TestJournalRepair(CephFSTestCase):
         # FIXME: hook in forward scrub here to regenerate backtraces
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.mount_a.umount_wait()  # remount to clear client cache before our second ls
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.assertEqual(proc.stdout.getvalue().strip(),
@@ -161,11 +159,8 @@ class TestJournalRepair(CephFSTestCase):
 
         # Set max_mds to 2
         self.fs.set_max_mds(2)
-
-        # See that we have two active MDSs
-        self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
-                              reject_fn=lambda v: v > 2 or v < 1)
-        active_mds_names = self.fs.get_active_names()
+        status = self.fs.wait_for_daemons()
+        active_mds_names = self.fs.get_active_names(status=status)
 
         # Switch off any unneeded MDS daemons
         for unneeded_mds in set(self.mds_cluster.mds_ids) - set(active_mds_names):
@@ -173,27 +168,13 @@ class TestJournalRepair(CephFSTestCase):
             self.mds_cluster.mds_fail(unneeded_mds)
 
         # Create a dir on each rank
-        self.mount_a.run_shell(["mkdir", "alpha"])
-        self.mount_a.run_shell(["mkdir", "bravo"])
+        self.mount_a.run_shell_payload("mkdir {alpha,bravo} && touch {alpha,bravo}/file")
         self.mount_a.setfattr("alpha/", "ceph.dir.pin", "0")
         self.mount_a.setfattr("bravo/", "ceph.dir.pin", "1")
 
-        def subtrees_assigned():
-            got_subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=active_mds_names[0])
-
-            for s in got_subtrees:
-                if s['dir']['path'] == '/bravo':
-                    if s['auth_first'] == 1:
-                        return True
-                    else:
-                        # Should not happen
-                        raise RuntimeError("/bravo is subtree but not rank 1!")
-
-            return False
-
         # Ensure the pinning has taken effect and the /bravo dir is now
         # migrated to rank 1.
-        self.wait_until_true(subtrees_assigned, 30)
+        self._wait_subtrees([('/bravo', 1), ('/alpha', 0)], rank=0, status=status)
 
         # Do some IO (this should be split across ranks according to
         # the rank-pinned dirs)
@@ -278,7 +259,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_fail_restart(active_mds_names[0])
         self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
                               reject_fn=lambda v: len(v) > 1)
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-R"], wait=True)
 
     def test_table_tool(self):
@@ -434,7 +415,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # trivial sync moutn a
         workunit(self.ctx, {

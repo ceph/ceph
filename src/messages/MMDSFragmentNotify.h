@@ -15,9 +15,9 @@
 #ifndef CEPH_MMDSFRAGMENTNOTIFY_H
 #define CEPH_MMDSFRAGMENTNOTIFY_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MMDSFragmentNotify : public SafeMessage {
+class MMDSFragmentNotify : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -38,9 +38,9 @@ private:
 
 protected:
   MMDSFragmentNotify() :
-    SafeMessage{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
+    MMDSOp{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
-    SafeMessage{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

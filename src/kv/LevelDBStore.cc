@@ -66,14 +66,14 @@ int LevelDBStore::init(string option_str)
   return 0;
 }
 
-int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
+int LevelDBStore::open(ostream &out, const std::string& cfs)  {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
-int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+int LevelDBStore::create_and_open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
@@ -177,11 +177,6 @@ int LevelDBStore::_test_init(const string& dir)
 LevelDBStore::~LevelDBStore()
 {
   close();
-  delete logger;
-
-  // Ensure db is destroyed before dependent db_cache and filterpolicy
-  db.reset();
-  delete ceph_logger;
 }
 
 void LevelDBStore::close()
@@ -197,8 +192,15 @@ void LevelDBStore::close()
     compact_queue_lock.unlock();
   }
 
-  if (logger)
+  if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  db.reset();
+  delete ceph_logger;
 }
 
 int LevelDBStore::repair(std::ostream &out)

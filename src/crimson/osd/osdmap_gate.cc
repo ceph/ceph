@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "crimson/common/exception.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/shard_services.h"
 #include "common/Formatter.h"
@@ -22,6 +23,10 @@ void OSDMapGate::OSDMapBlocker::dump_detail(Formatter *f) const
 
 blocking_future<epoch_t> OSDMapGate::wait_for_map(epoch_t epoch)
 {
+  if (__builtin_expect(stopping, false)) {
+    return make_exception_blocking_future<epoch_t>(
+	crimson::common::system_shutdown_exception());
+  }
   if (current >= epoch) {
     return make_ready_blocking_future<epoch_t>(current);
   } else {
@@ -49,6 +54,18 @@ void OSDMapGate::got_map(epoch_t epoch) {
     blocked_requests.second.promise.set_value(epoch);
   });
   waiting_peering.erase(first, last);
+}
+
+seastar::future<> OSDMapGate::stop() {
+  logger().info("osdmap::stop");
+  stopping = true;
+  auto first = waiting_peering.begin();
+  auto last = waiting_peering.end();
+  std::for_each(first, last, [](auto& blocked_requests) {
+    blocked_requests.second.promise.set_exception(
+	crimson::common::system_shutdown_exception());
+  });
+  return seastar::now();
 }
 
 }

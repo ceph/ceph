@@ -203,8 +203,13 @@ public:
   void drop_read() {
     return put_lock_type(RWState::RWREAD);
   }
-  bool get_recovery_read() {
-    return rwstate.get_recovery_read();
+  seastar::future<bool> get_recovery_read(bool can_wait = false) {
+    if (!can_wait) {
+      return seastar::make_ready_future<bool>(rwstate.get_recovery_read());
+    }
+    return with_queue([this] {
+      return rwstate.get_recovery_read();
+    }).then([] {return seastar::make_ready_future<bool>(true); });
   }
   void drop_recovery_read() {
     ceph_assert(rwstate.recovery_read_marker);
@@ -229,6 +234,9 @@ public:
 
   std::pair<ObjectContextRef, bool> get_cached_obc(const hobject_t &hoid) {
     return obc_lru.get_or_create(hoid);
+  }
+  ObjectContextRef maybe_get_cached_obc(const hobject_t &hoid) {
+    return obc_lru.get(hoid);
   }
 
   const char** get_tracked_conf_keys() const final;

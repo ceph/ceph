@@ -53,7 +53,16 @@ seastar::future<> PeeringEvent::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  return get_pg().then([this](Ref<PG> pg) {
+  return [this] {
+    if (delay) {
+      return seastar::sleep(std::chrono::milliseconds(
+		std::lround(delay*1000)));
+    } else {
+      return seastar::now();
+    }
+  }().then([this] {
+    return get_pg();
+  }).then([this](Ref<PG> pg) {
     if (!pg) {
       logger().warn("{}: pg absent, did not create", *this);
       on_pg_absent();
@@ -68,11 +77,21 @@ seastar::future<> PeeringEvent::start()
       }).then([this, pg](auto) {
 	return with_blocking_future(handle.enter(pp(*pg).process));
       }).then([this, pg] {
+        // TODO: likely we should synchronize also with the pg log-based
+        // recovery.
+	return with_blocking_future(
+          handle.enter(BackfillRecovery::bp(*pg).process));
+      }).then([this, pg] {
 	pg->do_peering_event(evt, ctx);
 	handle.exit();
 	return complete_rctx(pg);
+      }).then([this, pg] {
+	return pg->get_need_up_thru() ? shard_services.send_alive(pg->get_same_interval_since())
+                               : seastar::now();
       });
     }
+  }).then([this] {
+    return shard_services.send_pg_temp();
   }).then([this, ref=std::move(ref)] {
     logger().debug("{}: complete", *this);
   });

@@ -32,6 +32,7 @@
 #include "DaemonState.h"
 #include "MetricCollector.h"
 #include "OSDPerfMetricCollector.h"
+#include "MDSPerfMetricCollector.h"
 
 class MMgrReport;
 class MMgrOpen;
@@ -42,7 +43,7 @@ class MMgrCommand;
 struct MonCommand;
 class CommandContext;
 struct OSDPerfMetricQuery;
-
+struct MDSPerfMetricQuery;
 
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
@@ -124,8 +125,27 @@ private:
   OSDPerfMetricCollector osd_perf_metric_collector;
   void handle_osd_perf_metric_query_updated();
 
+  class MDSPerfMetricCollectorListener : public MetricListener {
+  public:
+    MDSPerfMetricCollectorListener(DaemonServer *server)
+      : server(server) {
+    }
+    void handle_query_updated() override {
+      server->handle_mds_perf_metric_query_updated();
+    }
+  private:
+    DaemonServer *server;
+  };
+  MDSPerfMetricCollectorListener mds_perf_metric_collector_listener;
+  MDSPerfMetricCollector mds_perf_metric_collector;
+  void handle_mds_perf_metric_query_updated();
+
   void handle_metric_payload(const OSDMetricPayload &payload) {
     osd_perf_metric_collector.process_reports(payload);
+  }
+
+  void handle_metric_payload(const MDSMetricPayload &payload) {
+    mds_perf_metric_collector.process_reports(payload);
   }
 
   void handle_metric_payload(const UnknownMetricPayload &payload) {
@@ -145,7 +165,8 @@ private:
     }
   };
 
-  void update_task_status(DaemonKey key, const ref_t<MMgrReport>& m);
+  void update_task_status(DaemonKey key,
+			  const std::map<std::string,std::string>& task_status);
 
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
@@ -168,6 +189,7 @@ public:
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
 
+  void fetch_missing_metadata(const DaemonKey& key, const entity_addr_t& addr);
   bool handle_open(const ceph::ref_t<MMgrOpen>& m);
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);

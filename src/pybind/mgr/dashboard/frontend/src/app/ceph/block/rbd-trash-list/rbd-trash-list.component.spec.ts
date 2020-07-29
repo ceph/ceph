@@ -1,20 +1,19 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import * as moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { By } from '@angular/platform-browser';
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
+import { Summary } from '../../../shared/models/summary.model';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -30,20 +29,21 @@ describe('RbdTrashListComponent', () => {
   configureTestBed({
     declarations: [RbdTrashListComponent, RbdTabsComponent],
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       ToastrModule.forRoot()
     ],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdTrashListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    rbdService = TestBed.get(RbdService);
+    summaryService = TestBed.inject(SummaryService);
+    rbdService = TestBed.inject(RbdService);
     fixture.detectChanges();
   });
 
@@ -54,7 +54,7 @@ describe('RbdTrashListComponent', () => {
   it('should load trash images when summary is trigged', () => {
     spyOn(rbdService, 'listTrash').and.callThrough();
 
-    summaryService['summaryDataSource'].next({ executingTasks: null });
+    summaryService['summaryDataSource'].next(new Summary());
     expect(rbdService.listTrash).toHaveBeenCalled();
   });
 
@@ -88,7 +88,7 @@ describe('RbdTrashListComponent', () => {
       addImage('1');
       addImage('2');
       component.images = images;
-      summaryService['summaryDataSource'].next({ executingTasks: [] });
+      summaryService['summaryDataSource'].next(new Summary());
       spyOn(rbdService, 'listTrash').and.callFake(() =>
         of([{ pool_name: 'rbd', status: 1, value: images }])
       );
@@ -117,12 +117,12 @@ describe('RbdTrashListComponent', () => {
       images.push({
         id: id,
         pool_name: 'pl',
-        deferment_end_time: 'abc'
+        deferment_end_time: moment()
       });
     };
 
     beforeEach(() => {
-      summaryService['summaryDataSource'].next({ executingTasks: [] });
+      summaryService['summaryDataSource'].next(new Summary());
       spyOn(rbdService, 'listTrash').and.callFake(() => {
         of([{ pool_name: 'rbd', status: 1, value: images }]);
       });

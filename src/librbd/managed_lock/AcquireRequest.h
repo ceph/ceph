@@ -13,10 +13,10 @@
 #include <string>
 
 class Context;
-class ContextWQ;
 
 namespace librbd {
 
+class AsioEngine;
 class Watcher;
 
 namespace managed_lock {
@@ -29,7 +29,8 @@ private:
 
 public:
   static AcquireRequest* create(librados::IoCtx& ioctx, Watcher *watcher,
-                                ContextWQ *work_queue, const std::string& oid,
+                                AsioEngine& asio_engine,
+                                const std::string& oid,
                                 const std::string& cookie,
                                 bool exclusive,
                                 bool blacklist_on_break_lock,
@@ -63,7 +64,7 @@ private:
    */
 
   AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
-                 ContextWQ *work_queue, const std::string& oid,
+                 AsioEngine& asio_engine, const std::string& oid,
                  const std::string& cookie, bool exclusive,
                  bool blacklist_on_break_lock,
                  uint32_t blacklist_expire_seconds, Context *on_finish);
@@ -71,7 +72,7 @@ private:
   librados::IoCtx& m_ioctx;
   Watcher *m_watcher;
   CephContext *m_cct;
-  ContextWQ *m_work_queue;
+  AsioEngine& m_asio_engine;
   std::string m_oid;
   std::string m_cookie;
   bool m_exclusive;

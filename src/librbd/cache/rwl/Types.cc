@@ -68,7 +68,7 @@ std::ostream& operator<<(std::ostream& os,
      << "ws_datalen=" << entry.ws_datalen << ", "
      << "entry_index=" << entry.entry_index;
   return os;
-};
+}
 
 template <typename ExtentsType>
 ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents)
@@ -101,7 +101,27 @@ std::ostream &operator<<(std::ostream &os,
      << "first_image_byte=" << s.first_image_byte << ", "
      << "last_image_byte=" << s.last_image_byte << "";
   return os;
-};
+}
+
+io::Extent whole_volume_extent() {
+  return io::Extent({0, std::numeric_limits<uint64_t>::max()});
+}
+
+BlockExtent block_extent(const io::Extent& image_extent) {
+  return convert_to_block_extent(image_extent.first, image_extent.second);
+}
+
+Context * override_ctx(int r, Context *ctx) {
+  if (r < 0) {
+    /* Override next_ctx status with this error */
+    return new LambdaContext(
+      [r, ctx](int _r) {
+        ctx->complete(r);
+      });
+  } else {
+    return ctx;
+  }
+}
 
 } // namespace rwl
 } // namespace cache

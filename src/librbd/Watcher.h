@@ -13,10 +13,9 @@
 #include <string>
 #include <utility>
 
-class ContextWQ;
-
 namespace librbd {
 
+namespace asio { struct ContextWQ; }
 namespace watcher { struct NotifyResponse; }
 
 class Watcher {
@@ -32,7 +31,7 @@ public:
     void finish(int r) override;
   };
 
-  Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  Watcher(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
           const std::string& oid);
   virtual ~Watcher();
 
@@ -73,7 +72,7 @@ protected:
   };
 
   librados::IoCtx& m_ioctx;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
   std::string m_oid;
   CephContext *m_cct;
   mutable ceph::shared_mutex m_watch_lock;

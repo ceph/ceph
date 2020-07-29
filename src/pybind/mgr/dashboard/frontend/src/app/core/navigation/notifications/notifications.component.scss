@@ -1,9 +1,9 @@
-@import 'defaults';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .running i {
-  color: $color-primary;
+  color: bd.$color-primary;
 }
 
 .running:hover i {
-  color: white;
+  color: bd.$color-solid-white;
 }

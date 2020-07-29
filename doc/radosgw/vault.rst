@@ -5,7 +5,9 @@ HashiCorp Vault Integration
 HashiCorp `Vault`_ can be used as a secure key management service for
 `Server-Side Encryption`_ (SSE-KMS).
 
-.. ditaa:: +---------+       +---------+        +-------+     +-------+
+.. ditaa::
+
+           +---------+       +---------+        +-------+     +-------+
            |  Client |       | RadosGW |        | Vault |     |  OSD  |
            +---------+       +---------+        +-------+     +-------+
                 | create secret   |                 |             |
@@ -59,7 +61,7 @@ KV secrets engine
 The KV secrets engine is used to store arbitrary key/value secrets in Vault. To
 enable the KV engine version 2 in Vault, use the following command::
 
-  vault secrets enable kv-v2
+  vault secrets enable -path secret kv-v2
 
 The Object Gateway can be configured to use the KV engine version 2 with the
 following setting::
@@ -264,9 +266,13 @@ Upload object
 =============
 
 When uploading an object to the Gateway, provide the SSE key ID in the request.
-As an example, using the AWS command-line client::
+As an example, for the kv engine, using the AWS command-line client::
 
   aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id myproject/mybucketkey
+  
+As an example, for the transit engine, using the AWS command-line client::
+
+  aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id mybucketkey/1
 
 The Object Gateway will fetch the key from Vault, encrypt the object and store
 it in the bucket. Any request to download the object will make the Gateway
@@ -274,10 +280,15 @@ automatically retrieve the correspondent key from Vault and decrypt the object.
 
 Note that the secret will be fetched from Vault using a URL constructed by
 concatenating the base address (``rgw crypt vault addr``), the (optional)
-URL prefix (``rgw crypt vault prefix``), and finally the key ID. In the example
-above, the Gateway would fetch the secret from::
+URL prefix (``rgw crypt vault prefix``), and finally the key ID. 
+
+In the kv engine example above, the Gateway would fetch the secret from::
 
   http://vaultserver:8200/v1/secret/data/myproject/mybucketkey
+
+In the transit engine example above, the Gateway would fetch the secret from::
+
+  http://vaultserver:8200/v1/transit/export/encryption-key/mybucketkey/1
 
 .. _Server-Side Encryption: ../encryption
 .. _Vault: https://www.vaultproject.io/docs/

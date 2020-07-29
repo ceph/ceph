@@ -1,13 +1,9 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import {
-  configureTestBed,
-  i18nProviders,
-  PrometheusHelper
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { PrometheusCustomAlert } from '../models/prometheus-alerts';
@@ -22,13 +18,13 @@ describe('PrometheusAlertFormatter', () => {
 
   configureTestBed({
     imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
-    providers: [PrometheusAlertFormatter, i18nProviders]
+    providers: [PrometheusAlertFormatter]
   });
 
   beforeEach(() => {
     prometheus = new PrometheusHelper();
-    service = TestBed.get(PrometheusAlertFormatter);
-    notificationService = TestBed.get(NotificationService);
+    service = TestBed.inject(PrometheusAlertFormatter);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
   });
 

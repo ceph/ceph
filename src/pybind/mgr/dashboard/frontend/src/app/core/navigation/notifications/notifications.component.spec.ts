@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -17,14 +17,13 @@ describe('NotificationsComponent', () => {
 
   configureTestBed({
     imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule],
-    declarations: [NotificationsComponent],
-    providers: i18nProviders
+    declarations: [NotificationsComponent]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NotificationsComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
+    summaryService = TestBed.inject(SummaryService);
 
     fixture.detectChanges();
   });

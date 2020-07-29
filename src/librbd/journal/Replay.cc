@@ -4,13 +4,13 @@
 #include "librbd/journal/Replay.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 
@@ -42,7 +42,9 @@ struct ExecuteOp : public Context {
     image_ctx.operations->execute_snap_create(event.snap_namespace,
 					      event.snap_name,
                                               on_op_complete,
-                                              event.op_tid, false);
+                                              event.op_tid,
+                                              SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
+                                              no_op_progress_callback);
   }
 
   void execute(const journal::SnapRemoveEvent &_) {

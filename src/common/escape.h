@@ -16,7 +16,7 @@
 #define CEPH_RGW_ESCAPE_H
 
 #include <ostream>
-#include <boost/utility/string_view.hpp>
+#include <string_view>
 
 /* Returns the length of a buffer that would be needed to escape 'buf'
  * as an XML attribute
@@ -50,13 +50,13 @@ void escape_json_attr(const char *buf, size_t src_len, char *out);
 //   std::cout << xml_stream_escaper(xml_input) << std::endl;
 
 struct xml_stream_escaper {
-  boost::string_view str;
+  std::string_view str;
   xml_stream_escaper(std::string_view str) : str(str.data(), str.size()) {}
 };
 std::ostream& operator<<(std::ostream& out, const xml_stream_escaper& e);
 
 struct json_stream_escaper {
-  boost::string_view str;
+  std::string_view str;
   json_stream_escaper(std::string_view str) : str(str.data(), str.size()) {}
 };
 std::ostream& operator<<(std::ostream& out, const json_stream_escaper& e);

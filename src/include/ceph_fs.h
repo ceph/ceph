@@ -151,6 +151,7 @@ extern const char *ceph_con_mode_name(int con_mode);
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_RECLAIM		27
 #define CEPH_MSG_CLIENT_RECLAIM_REPLY   28
+#define CEPH_MSG_CLIENT_METRICS         29
 #define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
@@ -882,20 +883,19 @@ struct ceph_mds_caps_head {
 	__le64 xattr_version;
 } __attribute__ ((packed));
 
-struct ceph_mds_caps_body_legacy {
-	union {
-		/* all except export */
-		struct {
-			/* filelock */
-			__le64 size, max_size, truncate_size;
-			__le32 truncate_seq;
-			struct ceph_timespec mtime, atime, ctime;
-			struct ceph_file_layout layout;
-			__le32 time_warp_seq;
-		} __attribute__ ((packed));
-		/* export message */
-		struct ceph_mds_cap_peer peer;
-	} __attribute__ ((packed));
+struct ceph_mds_caps_non_export_body {
+    /* all except export */
+    /* filelock */
+    __le64 size, max_size, truncate_size;
+    __le32 truncate_seq;
+    struct ceph_timespec mtime, atime, ctime;
+    struct ceph_file_layout layout;
+    __le32 time_warp_seq;
+} __attribute__ ((packed));
+
+struct ceph_mds_caps_export_body {
+    /* export message */
+    struct ceph_mds_cap_peer peer;
 } __attribute__ ((packed));
 
 /* cap release msg head */

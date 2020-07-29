@@ -20,15 +20,7 @@ CURRENT_PATH=`pwd`
 # for rocksdb
 case $(distro_id) in
 	ubuntu|debian|devuan)
-		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev
-        case $(distro_version) in
-            *Xenial*)
-                install_cmake3_on_xenial
-                ;;
-            *)
-                install cmake
-                ;;
-        esac
+		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
 		;;
 	centos|fedora|rhel)
         case $(distro_id) in
@@ -68,7 +60,11 @@ echo "Compile rocksdb"
 if [ -e rocksdb ]; then
 	rm -fr rocksdb
 fi
-git clone https://github.com/facebook/rocksdb.git --depth 1
+
+pushd $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../
+git submodule update --init src/rocksdb
+popd
+git clone $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../src/rocksdb rocksdb
 
 # compile code
 cd rocksdb

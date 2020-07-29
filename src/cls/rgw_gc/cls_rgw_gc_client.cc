@@ -9,6 +9,12 @@
 #include "cls/queue/cls_queue_const.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 
+using std::list;
+using std::string;
+
+using ceph::decode;
+using ceph::encode;
+
 using namespace librados;
 
 void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num_deferred_entries)
@@ -32,7 +38,7 @@ int cls_rgw_gc_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& si
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -69,7 +75,7 @@ int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string
   auto iter = out.cbegin();
   try {
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 

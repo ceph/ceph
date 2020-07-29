@@ -145,7 +145,7 @@ static seastar::future<> run(
       bufferlist msg_data;
 
       Server(unsigned msg_len)
-        : msgr_sid{seastar::engine().cpu_id()},
+        : msgr_sid{seastar::this_shard_id()},
           msg_len{msg_len} {
         lname = "server#";
         lname += std::to_string(msgr_sid);
@@ -181,7 +181,9 @@ static seastar::future<> run(
             msgr->set_crc_data();
           }
           return msgr->bind(entity_addrvec_t{addr}).then([this] {
-            return msgr->start(this);
+	    auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+	    chained_dispatchers->push_back(*this);
+            return msgr->start(chained_dispatchers);
           });
         });
       }
@@ -281,7 +283,7 @@ static seastar::future<> run(
       seastar::promise<> stopped_send_promise;
 
       Client(unsigned jobs, unsigned msg_len, unsigned depth)
-        : sid{seastar::engine().cpu_id()},
+        : sid{seastar::this_shard_id()},
           jobs{jobs},
           msg_len{msg_len},
           nr_depth{depth/jobs},
@@ -297,9 +299,8 @@ static seastar::future<> run(
         return nr_depth - depth.current();
       }
 
-      seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override {
+      void ms_handle_connect(crimson::net::ConnectionRef conn) override {
         conn_stats.connected_time = mono_clock::now();
-        return seastar::now();
       }
       seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
@@ -326,12 +327,14 @@ static seastar::future<> run(
 
       // should start messenger at this shard?
       bool is_active() {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         return sid != 0 && sid <= jobs;
       }
 
       seastar::future<> init(bool v1_crc_enabled) {
-        return container().invoke_on_all([v1_crc_enabled] (auto& client) {
+	auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+	chained_dispatchers->push_back(*this);
+        return container().invoke_on_all([v1_crc_enabled, chained_dispatchers] (auto& client) mutable {
           if (client.is_active()) {
             client.msgr = crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid);
             client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
@@ -342,7 +345,7 @@ static seastar::future<> run(
               client.msgr->set_crc_header();
               client.msgr->set_crc_data();
             }
-            return client.msgr->start(&client);
+            return client.msgr->start(chained_dispatchers);
           }
           return seastar::now();
         });
@@ -569,7 +572,7 @@ static seastar::future<> run(
 
      private:
       seastar::future<> send_msg(crimson::net::Connection* conn) {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         return depth.wait(1).then([this, conn] {
           const static pg_t pgid;
           const static object_locator_t oloc;
@@ -602,7 +605,7 @@ static seastar::future<> run(
       }
 
       void do_dispatch_messages(crimson::net::Connection* conn) {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         ceph_assert(sent_count == 0);
         conn_stats.start_time = mono_clock::now();
         // forwarded to stopped_send_promise
@@ -641,11 +644,12 @@ static seastar::future<> run(
     };
   };
 
-  return seastar::when_all_succeed(
+  return seastar::when_all(
       test_state::Server::create(server_conf.core, server_conf.block_size),
       create_sharded<test_state::Client>(client_conf.jobs, client_conf.block_size, client_conf.depth)
-  ).then([=](test_state::ServerFRef fp_server,
-             test_state::Client *client) {
+  ).then([=](auto&& ret) {
+    auto fp_server = std::move(std::get<0>(ret).get0());
+    auto client = std::move(std::get<1>(ret).get0());
     test_state::Server* server = fp_server.get();
     if (mode == perf_mode_t::both) {
       logger().info("\nperf settings:\n  {}\n  {}\n",

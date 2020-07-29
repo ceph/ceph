@@ -2,7 +2,7 @@ import datetime
 import json
 import re
 import threading
-import six
+
 from mgr_module import MgrModule, CommandResult
 from . import health as health_util
 
@@ -121,7 +121,7 @@ class Module(MgrModule):
         """Filter hourly health reports timestamp"""
         matches = filter(
             lambda t: f(health_util.HealthHistorySlot.key_to_time(t[0])),
-            six.iteritems(self.get_store_prefix(health_util.HEALTH_HISTORY_KEY_PREFIX)))
+            self.get_store_prefix(health_util.HEALTH_HISTORY_KEY_PREFIX).items())
         return map(lambda t: t[0], matches)
 
     def _health_prune_history(self, hours):
@@ -164,14 +164,14 @@ class Module(MgrModule):
         constituent components, such as when Ceph has been built with
         ENABLE_GIT_VERSION=OFF.
         """
-        r = "ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
+        r = r"ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
         m = re.match(r, version)
         ver = {} if not m else {
             "release": m.group("release"),
             "major": m.group("major"),
             "minor": m.group("minor")
         }
-        return { k:int(v) for k,v in six.iteritems(ver) }
+        return { k:int(v) for k,v in ver.items() }
 
     def _crash_history(self, hours):
         """

@@ -16,7 +16,9 @@
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
- 
+
+using std::list;
+using std::string;
 using namespace librados;
 
 #include "cls/otp/cls_otp_ops.h"
@@ -85,7 +87,7 @@ namespace rados {
         cls_otp_get_result_reply ret;
         try {
           decode(ret, iter);
-        } catch (buffer::error& err) {
+        } catch (ceph::buffer::error& err) {
 	  return -EBADMSG;
         }
 
@@ -123,7 +125,7 @@ namespace rados {
         auto iter = out.cbegin();
         try {
           decode(ret, iter);
-        } catch (buffer::error& err) {
+        } catch (ceph::buffer::error& err) {
 	  return -EBADMSG;
         }
 
@@ -176,7 +178,7 @@ namespace rados {
         auto iter = out.cbegin();
         try {
           decode(ret, iter);
-        } catch (buffer::error& err) {
+        } catch (ceph::buffer::error& err) {
 	  return -EBADMSG;
         }
 
@@ -187,4 +189,3 @@ namespace rados {
     } // namespace otp
   } // namespace cls
 } // namespace rados
-

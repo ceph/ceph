@@ -2,9 +2,10 @@ from __future__ import print_function
 from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
-                   ObjectNotFound, ObjectBusy, requires, opt,
+                   ObjectNotFound, ObjectBusy, NotConnected, requires, opt,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
-                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO)
+from datetime import timedelta
 import time
 import threading
 import json
@@ -12,9 +13,6 @@ import errno
 import os
 import re
 import sys
-
-# Are we running Python 2.x
-_python2 = sys.version_info[0] < 3
 
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
@@ -159,20 +157,13 @@ class TestRados(object):
         self.rados.delete_pool('foo')
 
     def test_create_utf8(self):
-        if _python2:
-            # Use encoded bytestring
-            poolname = b"\351\273\204"
-        else:
-            poolname = "\u9ec4"
+        poolname = "\u9ec4"
         self.rados.create_pool(poolname)
         assert self.rados.pool_exists(u"\u9ec4")
         self.rados.delete_pool(poolname)
 
     def test_pool_lookup_utf8(self):
-        if _python2:
-            poolname = u'\u9ec4'
-        else:
-            poolname = '\u9ec4'
+        poolname = '\u9ec4'
         self.rados.create_pool(poolname)
         try:
             poolid = self.rados.pool_lookup(poolname)
@@ -336,6 +327,11 @@ class TestIoctx(object):
         eq(self.ioctx.read('abc'), b'ab')
         size = self.ioctx.stat('abc')[0]
         eq(size, 2)
+
+    def test_cmpext(self):
+        self.ioctx.write('test_object', b'abcdefghi')
+        eq(0, self.ioctx.cmpext('test_object', b'abcdefghi', 0))
+        eq(-MAX_ERRNO - 4, self.ioctx.cmpext('test_object', b'abcdxxxxx', 0))
 
     def test_list_objects_empty(self):
         eq(list(self.ioctx.list_objects()), [])
@@ -997,13 +993,13 @@ class TestIoctxEc(object):
         self.rados.connect()
         self.pool = 'test-ec'
         self.profile = 'testprofile-%s' % self.pool
-        cmd = {"prefix": "osd erasure-code-profile set", 
+        cmd = {"prefix": "osd erasure-code-profile set",
                "name": self.profile, "profile": ["k=2", "m=1", "crush-failure-domain=osd"]}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0, msg=out)
         # create ec pool with profile created above
         cmd = {'prefix': 'osd pool create', 'pg_num': 8, 'pgp_num': 8,
-               'pool': self.pool, 'pool_type': 'erasure', 
+               'pool': self.pool, 'pool_type': 'erasure',
                'erasure_code_profile': self.profile}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
         eq(ret, 0, msg=out)
@@ -1197,14 +1193,101 @@ class TestCommand(object):
         eq(out['bytes_written'], cmd['count'])
 
     def test_ceph_osd_pool_create_utf8(self):
-        if _python2:
-            # Use encoded bytestring
-            poolname = b"\351\273\205"
-        else:
-            poolname = "\u9ec5"
+        poolname = "\u9ec5"
 
         cmd = {"prefix": "osd pool create", "pg_num": 16, "pool": poolname}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         eq(ret, 0)
         assert len(out) > 0
         eq(u"pool '\u9ec5' created", out)
+
+
+class TestWatchNotify(object):
+    OID = "test_watch_notify"
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.rados.create_pool('test_pool')
+        assert self.rados.pool_exists('test_pool')
+        self.ioctx = self.rados.open_ioctx('test_pool')
+        self.ioctx.write(self.OID, b'test watch notify')
+        self.lock = threading.Condition()
+        self.notify_cnt = {}
+        self.notify_data = {}
+        self.notify_error = {}
+
+    def tearDown(self):
+        self.ioctx.close()
+        self.rados.delete_pool('test_pool')
+        self.rados.shutdown()
+
+    def make_callback(self):
+        def callback(notify_id, notifier_id, watch_id, data):
+            with self.lock:
+                if watch_id not in self.notify_cnt:
+                    self.notify_cnt[watch_id] = 0
+                self.notify_cnt[watch_id] += 1
+                self.notify_data[watch_id] = data
+        return callback
+
+    def make_error_callback(self):
+        def callback(watch_id, error):
+            with self.lock:
+                self.notify_error[watch_id] = error
+        return callback
+
+
+    def test(self):
+        with self.ioctx.watch(self.OID, self.make_callback(),
+                              self.make_error_callback()) as watch1:
+            watch_id1 = watch1.get_id()
+            assert(watch_id1 > 0)
+
+            with self.rados.open_ioctx('test_pool') as ioctx:
+                watch2 = ioctx.watch(self.OID, self.make_callback(),
+                                     self.make_error_callback())
+            watch_id2 = watch2.get_id()
+            assert(watch_id2 > 0)
+
+            assert(self.ioctx.notify(self.OID, 'test'))
+            with self.lock:
+                assert(watch_id1 in self.notify_cnt)
+                assert(watch_id2 in self.notify_cnt)
+                eq(self.notify_cnt[watch_id1], 1)
+                eq(self.notify_cnt[watch_id2], 1)
+                eq(self.notify_data[watch_id1], b'test')
+                eq(self.notify_data[watch_id2], b'test')
+
+            assert(watch1.check() >= timedelta())
+            assert(watch2.check() >= timedelta())
+
+            assert(self.ioctx.notify(self.OID, 'best'))
+            with self.lock:
+                eq(self.notify_cnt[watch_id1], 2)
+                eq(self.notify_cnt[watch_id2], 2)
+                eq(self.notify_data[watch_id1], b'best')
+                eq(self.notify_data[watch_id2], b'best')
+
+            watch2.close()
+
+            assert(self.ioctx.notify(self.OID, 'rest'))
+            with self.lock:
+                eq(self.notify_cnt[watch_id1], 3)
+                eq(self.notify_cnt[watch_id2], 2)
+                eq(self.notify_data[watch_id1], b'rest')
+                eq(self.notify_data[watch_id2], b'best')
+
+            assert(watch1.check() >= timedelta())
+
+            self.ioctx.remove_object(self.OID)
+
+            for i in range(10):
+                with self.lock:
+                    if watch_id1 in self.notify_error:
+                        break
+                time.sleep(1)
+            eq(self.notify_error[watch_id1], -errno.ENOTCONN)
+            assert_raises(NotConnected, watch1.check)
+
+            assert_raises(ObjectNotFound, self.ioctx.notify, self.OID, 'test')

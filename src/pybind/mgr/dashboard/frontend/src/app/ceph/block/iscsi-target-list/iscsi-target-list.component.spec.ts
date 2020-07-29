@@ -1,20 +1,21 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -35,22 +36,23 @@ describe('IscsiTargetListComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      TabsModule.forRoot(),
       TreeModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      NgbNavModule
     ],
     declarations: [IscsiTargetListComponent, IscsiTabsComponent, IscsiTargetDetailsComponent],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    iscsiService = TestBed.get(IscsiService);
+    summaryService = TestBed.inject(SummaryService);
+    iscsiService = TestBed.inject(IscsiService);
 
     // this is needed because summaryService isn't being reset after each test.
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
@@ -167,6 +169,102 @@ describe('IscsiTargetListComponent', () => {
       addTask('iscsi/target/delete', 'iqn.b');
       expect(component.targets.length).toBe(3);
       expectItemTasks(component.targets[1], 'Deleting');
+    });
+  });
+
+  describe('handling of actions', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+
+    let action: CdTableAction;
+
+    const getAction = (name: string): CdTableAction => {
+      return component.tableActions.find((tableAction) => tableAction.name === name);
+    };
+
+    describe('edit', () => {
+      beforeEach(() => {
+        action = getAction('Edit');
+      });
+
+      it('should be disabled if no gateways', () => {
+        component.selection.selected = [
+          {
+            id: '-1'
+          }
+        ];
+        expect(action.disable(undefined)).toBeTruthy();
+        expect(action.disableDesc(undefined)).toBe('Unavailable gateway(s)');
+      });
+
+      it('should be enabled if active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 1
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeFalsy();
+        expect(action.disableDesc(undefined)).toBeUndefined();
+      });
+
+      it('should be enabled if no active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 0
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeFalsy();
+        expect(action.disableDesc(undefined)).toBeUndefined();
+      });
+    });
+
+    describe('delete', () => {
+      beforeEach(() => {
+        action = getAction('Delete');
+      });
+
+      it('should be disabled if no gateways', () => {
+        component.selection.selected = [
+          {
+            id: '-1'
+          }
+        ];
+        expect(action.disable(undefined)).toBeTruthy();
+        expect(action.disableDesc(undefined)).toBe('Unavailable gateway(s)');
+      });
+
+      it('should be disabled if active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 1
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeTruthy();
+        expect(action.disableDesc(undefined)).toBe('Target has active sessions');
+      });
+
+      it('should be enabled if no active sessions', () => {
+        component.selection.selected = [
+          {
+            id: '-1',
+            info: {
+              num_sessions: 0
+            }
+          }
+        ];
+        expect(action.disable(undefined)).toBeFalsy();
+        expect(action.disableDesc(undefined)).toBeUndefined();
+      });
     });
   });
 

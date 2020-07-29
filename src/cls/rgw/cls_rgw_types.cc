@@ -5,6 +5,11 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
+using std::list;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::Formatter;
 
 void rgw_zone_set_entry::from_str(const string& s)
 {
@@ -30,7 +35,7 @@ string rgw_zone_set_entry::to_str() const
 void rgw_zone_set_entry::encode(bufferlist &bl) const
 {
   /* no ENCODE_START, ENCODE_END for backward compatibility */
-  ceph::encode(to_str(), bl);  
+  ceph::encode(to_str(), bl);
 }
 
 void rgw_zone_set_entry::decode(bufferlist::const_iterator &bl)
@@ -156,8 +161,7 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
   list<rgw_bucket_dir_entry_meta *> l;
   rgw_bucket_dir_entry_meta::generate_test_instances(l);
 
-  list<rgw_bucket_dir_entry_meta *>::iterator iter;
-  for (iter = l.begin(); iter != l.end(); ++iter) {
+  for (auto iter = l.begin(); iter != l.end(); ++iter) {
     rgw_bucket_dir_entry_meta *m = *iter;
     rgw_bucket_dir_entry *e = new rgw_bucket_dir_entry;
     e->key.name = "name";
@@ -327,6 +331,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
+        account = (account && entry.exists);
         *key = entry.key;
         *category = entry.meta.category;
         accounted_stats->num_entries++;
@@ -576,11 +581,10 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)
 {
   list<rgw_bucket_category_stats *> l;
-  list<rgw_bucket_category_stats *>::iterator iter;
   rgw_bucket_category_stats::generate_test_instances(l);
 
-  uint8_t i;
-  for (i = 0, iter = l.begin(); iter != l.end(); ++iter, ++i) {
+  uint8_t i = 0;
+  for (auto iter = l.begin(); iter != l.end(); ++iter, ++i) {
     RGWObjCategory c = static_cast<RGWObjCategory>(i);
     rgw_bucket_dir_header *h = new rgw_bucket_dir_header;
     rgw_bucket_category_stats *s = *iter;
@@ -612,18 +616,16 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
 {
   list<rgw_bucket_dir_header *> l;
-  list<rgw_bucket_dir_header *>::iterator iter;
   rgw_bucket_dir_header::generate_test_instances(l);
 
-  uint8_t i;
-  for (i = 0, iter = l.begin(); iter != l.end(); ++iter, ++i) {
+  uint8_t i = 0;
+  for (auto iter = l.begin(); iter != l.end(); ++iter, ++i) {
     rgw_bucket_dir *d = new rgw_bucket_dir;
     rgw_bucket_dir_header *h = *iter;
     d->header = *h;
 
     list<rgw_bucket_dir_entry *> el;
-    list<rgw_bucket_dir_entry *>::iterator eiter;
-    for (eiter = el.begin(); eiter != el.end(); ++eiter) {
+    for (auto eiter = el.begin(); eiter != el.end(); ++eiter) {
       rgw_bucket_dir_entry *e = *eiter;
       d->m[e->key.name] = *e;
 
@@ -670,8 +672,7 @@ void rgw_usage_log_entry::dump(Formatter *f) const
 
   f->open_array_section("categories");
   if (usage_map.size() > 0) {
-    map<string, rgw_usage_data>::const_iterator it;
-    for (it = usage_map.begin(); it != usage_map.end(); it++) {
+    for (auto it = usage_map.begin(); it != usage_map.end(); it++) {
       const rgw_usage_data& total_usage = it->second;
       f->open_object_section("entry");
       f->dump_string("category", it->first.c_str());

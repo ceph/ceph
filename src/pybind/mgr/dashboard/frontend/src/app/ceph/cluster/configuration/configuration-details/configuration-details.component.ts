@@ -1,9 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 
 @Component({
   selector: 'cd-configuration-details',
@@ -12,25 +9,21 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 })
 export class ConfigurationDetailsComponent implements OnChanges {
   @Input()
-  selection: CdTableSelection;
-  selectedItem: any;
+  selection: any;
   flags = {
-    runtime: this.i18n('The value can be updated at runtime.'),
-    no_mon_update: this.i18n(`Daemons/clients do not pull this value from the
+    runtime: $localize`The value can be updated at runtime.`,
+    no_mon_update: $localize`Daemons/clients do not pull this value from the
       monitor config database. We disallow setting this option via 'ceph config
       set ...'. This option should be configured via ceph.conf or via the
-      command line.`),
-    startup: this.i18n('Option takes effect only during daemon startup.'),
-    cluster_create: this.i18n('Option only affects cluster creation.'),
-    create: this.i18n('Option only affects daemon creation.')
+      command line.`,
+    startup: $localize`Option takes effect only during daemon startup.`,
+    cluster_create: $localize`Option only affects cluster creation.`,
+    create: $localize`Option only affects daemon creation.`
   };
 
-  constructor(private i18n: I18n) {}
-
   ngOnChanges() {
-    if (this.selection.hasSelection) {
-      this.selectedItem = this.selection.first();
-      this.selectedItem.services = _.split(this.selectedItem.services, ',');
+    if (this.selection) {
+      this.selection.services = _.split(this.selection.services, ',');
     }
   }
 }

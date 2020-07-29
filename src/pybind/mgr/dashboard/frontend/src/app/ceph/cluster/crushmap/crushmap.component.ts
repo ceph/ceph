@@ -2,10 +2,10 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 
 import {
   ITreeOptions,
-  TREE_ACTIONS,
   TreeComponent,
   TreeModel,
-  TreeNode
+  TreeNode,
+  TREE_ACTIONS
 } from 'angular-tree-component';
 
 import { HealthService } from '../../../shared/api/health.service';
@@ -17,7 +17,7 @@ import { Icons } from '../../../shared/enum/icons.enum';
   styleUrls: ['./crushmap.component.scss']
 })
 export class CrushmapComponent implements OnInit {
-  @ViewChild('tree', { static: false }) tree: TreeComponent;
+  @ViewChild('tree') tree: TreeComponent;
 
   icons = Icons;
   loadingIndicator = true;

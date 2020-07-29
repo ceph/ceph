@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 import contextlib
 import logging
-from io import BytesIO
 import textwrap
-from configparser import ConfigParser
-
-import six
 import time
+from configparser import ConfigParser
+from io import BytesIO, StringIO
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -60,8 +58,8 @@ def install(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
-    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
+    an_osd_node = next(iter(ctx.cluster.only(is_osd_node).remotes.keys()))
 
     devstack_branch = config.get("branch", "master")
     install_devstack(devstack_node, devstack_branch)
@@ -206,7 +204,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         parser.read_file(config_stream)
         for (key, value) in update_dict.items():
             parser.set(section, key, value)
-        out_stream = six.StringIO()
+        out_stream = StringIO()
         parser.write(out_stream)
         out_stream.seek(0)
         return out_stream
@@ -251,7 +249,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         file_name = update['name']
         options = update['options']
         config_data = misc.get_file(devstack_node, file_name, sudo=True)
-        config_stream = six.StringIO(config_data)
+        config_stream = StringIO(config_data)
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
         misc.sudo_write_file(devstack_node, file_name, new_config_stream)
@@ -301,7 +299,7 @@ def exercise(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
 
     # TODO: save the log *and* preserve failures
     #devstack_archive_dir = create_devstack_archive(ctx, devstack_node)
@@ -328,8 +326,8 @@ def create_devstack_archive(ctx, devstack_node):
 def smoke(ctx, config):
     log.info("Running a basic smoketest...")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
-    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
+    an_osd_node = next(iter(ctx.cluster.only(is_osd_node).remotes.keys()))
 
     try:
         create_volume(devstack_node, an_osd_node, 'smoke0', 1)

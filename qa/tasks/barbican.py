@@ -4,9 +4,10 @@ Deploy and configure Barbican for Teuthology
 import argparse
 import contextlib
 import logging
-from six.moves import http_client
-from six.moves.urllib.parse import urlparse
+import http
 import json
+
+from urllib.parse import urlparse
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -172,7 +173,7 @@ def configure_barbican(ctx, config):
     Configure barbican paste-api and barbican-api.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     keystone_role = cconfig.get('use-keystone-role', None)
     if keystone_role is None:
@@ -239,7 +240,7 @@ def create_secrets(ctx, config):
     Create a main and an alternate s3 user.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     rgw_user = cconfig['rgw_user']
 
@@ -250,30 +251,38 @@ def create_secrets(ctx, config):
                                                  port=barbican_port)
     log.info("barbican_url=%s", barbican_url)
     #fetching user_id of user that gets secrets for radosgw
-    token_req = http_client.HTTPConnection(keystone_host, keystone_port, timeout=30)
+    token_req = http.client.HTTPConnection(keystone_host, keystone_port, timeout=30)
     token_req.request(
         'POST',
-        '/v2.0/tokens',
+        '/v3/auth/tokens',
         headers={'Content-Type':'application/json'},
-        body=json.dumps(
-            {"auth":
-             {"passwordCredentials":
-              {"username": rgw_user["username"],
-               "password": rgw_user["password"]
-              },
-              "tenantName": rgw_user["tenantName"]
-             }
+        body=json.dumps({
+            "auth": {
+                "identity": {
+                    "methods": ["password"],
+                    "password": {
+                        "user": {
+                            "domain": {"id": "default"},
+                            "name": rgw_user["username"],
+                            "password": rgw_user["password"]
+                        }
+                    }
+                },
+                "scope": {
+                    "project": {
+                        "domain": {"id": "default"},
+                        "name": rgw_user["tenantName"]
+                    }
+                }
             }
-        )
-    )
+        }))
     rgw_access_user_resp = token_req.getresponse()
     if not (rgw_access_user_resp.status >= 200 and
             rgw_access_user_resp.status < 300):
         raise Exception("Cannot authenticate user "+rgw_user["username"]+" for secret creation")
     #    baru_resp = json.loads(baru_req.data)
-    rgw_access_user_data = json.loads(rgw_access_user_resp.read())
-    rgw_user_id = rgw_access_user_data['access']['user']['id']
-
+    rgw_access_user_data = json.loads(rgw_access_user_resp.read().decode())
+    rgw_user_id = rgw_access_user_data['token']['user']['id']
     if 'secrets' in cconfig:
         for secret in cconfig['secrets']:
             if 'name' not in secret:
@@ -287,30 +296,37 @@ def create_secrets(ctx, config):
             if 'password' not in secret:
                 raise ConfigError('barbican.secrets must have "password" field')
 
-            token_req = http_client.HTTPConnection(keystone_host, keystone_port, timeout=30)
+            token_req = http.client.HTTPConnection(keystone_host, keystone_port, timeout=30)
             token_req.request(
                 'POST',
-                '/v2.0/tokens',
+                '/v3/auth/tokens',
                 headers={'Content-Type':'application/json'},
-                body=json.dumps(
-                    {
-                        "auth": {
-                            "passwordCredentials": {
-                                "username": secret["username"],
-                                "password": secret["password"]
-                            },
-                            "tenantName":secret["tenantName"]
+                body=json.dumps({
+                    "auth": {
+                        "identity": {
+                            "methods": ["password"],
+                            "password": {
+                                "user": {
+                                    "domain": {"id": "default"},
+                                    "name": secret["username"],
+                                    "password": secret["password"]
+                                }
+                            }
+                        },
+                        "scope": {
+                            "project": {
+                                "domain": {"id": "default"},
+                                "name": secret["tenantName"]
+                            }
                         }
                     }
-                )
-            )
+                }))
             token_resp = token_req.getresponse()
             if not (token_resp.status >= 200 and
                     token_resp.status < 300):
                 raise Exception("Cannot authenticate user "+secret["username"]+" for secret creation")
 
-            token_data = json.loads(token_resp.read())
-            token_id = token_data['access']['token']['id']
+            token_id = token_resp.getheader('x-subject-token')
 
             key1_json = json.dumps(
                 {
@@ -324,7 +340,7 @@ def create_secrets(ctx, config):
                     "payload_content_encoding": "base64"
                 })
 
-            sec_req = http_client.HTTPConnection(barbican_host, barbican_port, timeout=30)
+            sec_req = http.client.HTTPConnection(barbican_host, barbican_port, timeout=30)
             try:
                 sec_req.request(
                     'POST',
@@ -342,7 +358,7 @@ def create_secrets(ctx, config):
             if not (barbican_sec_resp.status >= 200 and
                     barbican_sec_resp.status < 300):
                 raise Exception("Cannot create secret")
-            barbican_data = json.loads(barbican_sec_resp.read())
+            barbican_data = json.loads(barbican_sec_resp.read().decode())
             if 'secret_ref' not in barbican_data:
                 raise ValueError("Malformed secret creation response")
             secret_ref = barbican_data["secret_ref"]
@@ -355,7 +371,7 @@ def create_secrets(ctx, config):
                         "project-access": True
                     }
                 })
-            acl_req = http_client.HTTPConnection(secret_url_parsed.netloc, timeout=30)
+            acl_req = http.client.HTTPConnection(secret_url_parsed.netloc, timeout=30)
             acl_req.request(
                 'PUT',
                 secret_url_parsed.path+'/acl',
@@ -393,11 +409,9 @@ def task(ctx, config):
       - tox: [ client.0 ]
       - keystone:
           client.0:
-            sha1: 12.0.0.0b2
+            sha1: 17.0.0.0rc2
             force-branch: master
-            tenants:
-              - name: admin
-                description:  Admin Tenant
+            projects:
               - name: rgwcrypt
                 description: Encryption Tenant
               - name: barbican
@@ -405,9 +419,6 @@ def task(ctx, config):
               - name: s3
                 description: S3 project
             users:
-              - name: admin
-                password: ADMIN
-                project: admin
               - name: rgwcrypt-user
                 password: rgwcrypt-pass
                 project: rgwcrypt
@@ -417,11 +428,8 @@ def task(ctx, config):
               - name: s3-user
                 password: s3-pass
                 project: s3
-            roles: [ name: admin, name: Member, name: creator ]
+            roles: [ name: Member, name: creator ]
             role-mappings:
-              - name: admin
-                user: admin
-                project: admin
               - name: Member
                 user: rgwcrypt-user
                 project: rgwcrypt

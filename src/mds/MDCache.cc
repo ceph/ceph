@@ -57,7 +57,7 @@
 
 #include "events/ESubtreeMap.h"
 #include "events/EUpdate.h"
-#include "events/ESlaveUpdate.h"
+#include "events/EPeerUpdate.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
 #include "events/ECommitted.h"
@@ -153,6 +153,10 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
 
+  export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
+  export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
+  export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
   bottom_lru.lru_set_midpoint(0);
@@ -213,10 +217,36 @@ MDCache::~MDCache()
 
 void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
+  dout(20) << "config changes: " << changed << dendl;
   if (changed.count("mds_cache_memory_limit"))
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
+  if (changed.count("mds_export_ephemeral_distributed")) {
+    export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
+    dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
+    mds->balancer->handle_export_pins();
+  }
+  if (changed.count("mds_export_ephemeral_random")) {
+    export_ephemeral_random_config = g_conf().get_val<bool>("mds_export_ephemeral_random");
+    dout(10) << "Migrating any ephemeral random pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    mds->balancer->handle_export_pins();
+  }
+  if (changed.count("mds_export_ephemeral_random_max")) {
+    export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+  }
   if (changed.count("mds_health_cache_threshold"))
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
@@ -301,6 +331,8 @@ void MDCache::add_inode(CInode *in)
   if (cache_toofull()) {
     exceeded_size_limit = true;
   }
+
+  in->maybe_ephemeral_dist(false);
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -328,6 +360,9 @@ void MDCache::remove_inode(CInode *o)
 
   if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
     export_pin_delayed_queue.erase(o);
+
+  o->set_ephemeral_dist(false);
+  o->set_ephemeral_rand(false);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -691,6 +726,51 @@ void MDCache::open_root()
   populate_mydir();
 }
 
+void MDCache::advance_stray() {
+  // check whether the directory has been fragmented
+  if (stray_fragmenting_index >= 0) {
+    auto&& dfs = strays[stray_fragmenting_index]->get_dirfrags();
+    bool any_fragmenting = false;
+    for (const auto& dir : dfs) {
+      if (dir->state_test(CDir::STATE_FRAGMENTING) ||
+	  mds->balancer->is_fragment_pending(dir->dirfrag())) {
+	any_fragmenting = true;
+	break;
+      }
+    }
+    if (!any_fragmenting)
+      stray_fragmenting_index = -1;
+  }
+
+  for (int i = 1; i < NUM_STRAY; i++){
+    stray_index = (stray_index + i) % NUM_STRAY;
+    if (stray_index != stray_fragmenting_index)
+      break;
+  }
+
+  if (stray_fragmenting_index == -1 && is_open()) {
+    // Fragment later stray dir in advance. We don't choose past
+    // stray dir because in-flight requests may still use it.
+    stray_fragmenting_index = (stray_index + 3) % NUM_STRAY;
+    auto&& dfs = strays[stray_fragmenting_index]->get_dirfrags();
+    bool any_fragmenting = false;
+    for (const auto& dir : dfs) {
+      if (dir->should_split()) {
+	mds->balancer->queue_split(dir, true);
+	any_fragmenting = true;
+      } else if (dir->should_merge()) {
+	mds->balancer->queue_merge(dir);
+	any_fragmenting = true;
+      }
+    }
+    if (!any_fragmenting)
+      stray_fragmenting_index = -1;
+  }
+
+  dout(10) << "advance_stray to index " << stray_index
+	   << " fragmenting index " << stray_fragmenting_index << dendl;
+}
+
 void MDCache::populate_mydir()
 {
   ceph_assert(myin);
@@ -794,25 +874,6 @@ CDir *MDCache::get_stray_dir(CInode *in)
   return straydir;
 }
 
-CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
-{
-  CDir *straydir = get_stray_dir(in);
-  string straydname;
-  in->name_stray_dentry(straydname);
-  CDentry *straydn = straydir->lookup(straydname);
-  if (!straydn) {
-    straydn = straydir->add_null_dentry(straydname);
-    straydn->mark_new();
-  } else {
-    ceph_assert(straydn->get_projected_linkage()->is_null());
-  }
-
-  straydn->state_set(CDentry::STATE_STRAY);
-  return straydn;
-}
-
-
-
 MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 {
   // inode?
@@ -830,6 +891,27 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 }
 
 
+// ====================================================================
+// consistent hash ring
+
+/*
+ * hashing implementation based on Lamping and Veach's Jump Consistent Hash: https://arxiv.org/pdf/1406.2294.pdf
+*/
+mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino)
+{
+  const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
+  uint64_t hash = rjhash64(ino);
+  int64_t b = -1, j = 0;
+  while (j < max_mds) {
+    b = j;
+    hash = hash*2862933555777941757ULL + 1;
+    j = (b + 1) * (double(1LL << 31) / double((hash >> 33) + 1));
+  }
+  // verify bounds before returning
+  auto result = mds_rank_t(b);
+  ceph_assert(result >= 0 && result < max_mds);
+  return result;
+}
 
 
 // ====================================================================
@@ -903,6 +985,11 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
 	p = p->inode->get_parent_dir();
       }
     }
+  }
+
+  if (dir->is_auth()) {
+    /* do this now that we are auth for the CDir */
+    dir->inode->maybe_pin();
   }
 
   show_subtrees();
@@ -1257,14 +1344,16 @@ CDir *MDCache::get_projected_subtree_root(CDir *dir)
 void MDCache::remove_subtree(CDir *dir)
 {
   dout(10) << "remove_subtree " << *dir << dendl;
-  ceph_assert(subtrees.count(dir));
-  ceph_assert(subtrees[dir].empty());
-  subtrees.erase(dir);
+  auto it = subtrees.find(dir);
+  ceph_assert(it != subtrees.end());
+  subtrees.erase(it);
   dir->put(CDir::PIN_SUBTREE);
   if (dir->get_parent_dir()) {
     CDir *p = get_subtree_root(dir->get_parent_dir());
-    ceph_assert(subtrees[p].count(dir));
-    subtrees[p].erase(dir);
+    auto it = subtrees.find(p);
+    ceph_assert(it != subtrees.end());
+    auto count = it->second.erase(dir);
+    ceph_assert(count == 1);
   }
 }
 
@@ -1760,7 +1849,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
   if (cur->last >= floor) {
     bool update = true;
     if (cur->state_test(CInode::STATE_AMBIGUOUSAUTH) && cur->is_auth()) {
-      // rename src inode is not projected in the slave rename prep case. so we should
+      // rename src inode is not projected in the peer rename prep case. so we should
       // avoid updateing the inode.
       ceph_assert(linkunlink < 0);
       ceph_assert(cur->is_frozen_inode());
@@ -2169,7 +2258,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       // because we are about to write into the dirfrag fnode and that needs
       // to commit before the lock can cycle.
       if (linkunlink) {
-	ceph_assert(pin->nestlock.get_num_wrlocks() || mut->is_slave());
+	ceph_assert(pin->nestlock.get_num_wrlocks() || mut->is_peer());
       }
 
       if (!mut->is_wrlocked(&pin->nestlock)) {
@@ -2239,7 +2328,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     if (!mut->is_wrlocked(&pin->versionlock))
       mds->locker->local_wrlock_grab(&pin->versionlock, mut);
 
-    ceph_assert(mut->is_wrlocked(&pin->nestlock) || mut->is_slave());
+    ceph_assert(mut->is_wrlocked(&pin->nestlock) || mut->is_peer());
     
     pin->last_dirstat_prop = mut->get_mds_stamp();
 
@@ -2355,106 +2444,106 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
 
 // ===================================
-// slave requests
+// peer requests
 
 
 /*
- * some handlers for master requests with slaves.  we need to make 
- * sure slaves journal commits before we forget we mastered them and
- * remove them from the uncommitted_masters map (used during recovery
- * to commit|abort slaves).
+ * some handlers for leader requests with peers.  we need to make
+ * sure leader journal commits before we forget we leadered them and
+ * remove them from the uncommitted_leaders map (used during recovery
+ * to commit|abort peers).
  */
-struct C_MDC_CommittedMaster : public MDCacheLogContext {
+struct C_MDC_CommittedLeader : public MDCacheLogContext {
   metareqid_t reqid;
-  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : MDCacheLogContext(s), reqid(r) {}
+  C_MDC_CommittedLeader(MDCache *s, metareqid_t r) : MDCacheLogContext(s), reqid(r) {}
   void finish(int r) override {
-    mdcache->_logged_master_commit(reqid);
+    mdcache->_logged_leader_commit(reqid);
   }
 };
 
-void MDCache::log_master_commit(metareqid_t reqid)
+void MDCache::log_leader_commit(metareqid_t reqid)
 {
-  dout(10) << "log_master_commit " << reqid << dendl;
-  uncommitted_masters[reqid].committing = true;
+  dout(10) << "log_leader_commit " << reqid << dendl;
+  uncommitted_leaders[reqid].committing = true;
   mds->mdlog->start_submit_entry(new ECommitted(reqid), 
-				 new C_MDC_CommittedMaster(this, reqid));
+				 new C_MDC_CommittedLeader(this, reqid));
 }
 
-void MDCache::_logged_master_commit(metareqid_t reqid)
+void MDCache::_logged_leader_commit(metareqid_t reqid)
 {
-  dout(10) << "_logged_master_commit " << reqid << dendl;
-  ceph_assert(uncommitted_masters.count(reqid));
-  uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
-  mds->queue_waiters(uncommitted_masters[reqid].waiters);
-  uncommitted_masters.erase(reqid);
+  dout(10) << "_logged_leader_commit " << reqid << dendl;
+  ceph_assert(uncommitted_leaders.count(reqid));
+  uncommitted_leaders[reqid].ls->uncommitted_leaders.erase(reqid);
+  mds->queue_waiters(uncommitted_leaders[reqid].waiters);
+  uncommitted_leaders.erase(reqid);
 }
 
 // while active...
 
-void MDCache::committed_master_slave(metareqid_t r, mds_rank_t from)
+void MDCache::committed_leader_peer(metareqid_t r, mds_rank_t from)
 {
-  dout(10) << "committed_master_slave mds." << from << " on " << r << dendl;
-  ceph_assert(uncommitted_masters.count(r));
-  uncommitted_masters[r].slaves.erase(from);
-  if (!uncommitted_masters[r].recovering && uncommitted_masters[r].slaves.empty())
-    log_master_commit(r);
+  dout(10) << "committed_leader_peer mds." << from << " on " << r << dendl;
+  ceph_assert(uncommitted_leaders.count(r));
+  uncommitted_leaders[r].peers.erase(from);
+  if (!uncommitted_leaders[r].recovering && uncommitted_leaders[r].peers.empty())
+    log_leader_commit(r);
 }
 
-void MDCache::logged_master_update(metareqid_t reqid)
+void MDCache::logged_leader_update(metareqid_t reqid)
 {
-  dout(10) << "logged_master_update " << reqid << dendl;
-  ceph_assert(uncommitted_masters.count(reqid));
-  uncommitted_masters[reqid].safe = true;
-  auto p = pending_masters.find(reqid);
-  if (p != pending_masters.end()) {
-    pending_masters.erase(p);
-    if (pending_masters.empty())
+  dout(10) << "logged_leader_update " << reqid << dendl;
+  ceph_assert(uncommitted_leaders.count(reqid));
+  uncommitted_leaders[reqid].safe = true;
+  auto p = pending_leaders.find(reqid);
+  if (p != pending_leaders.end()) {
+    pending_leaders.erase(p);
+    if (pending_leaders.empty())
       process_delayed_resolve();
   }
 }
 
 /*
- * Master may crash after receiving all slaves' commit acks, but before journalling
- * the final commit. Slaves may crash after journalling the slave commit, but before
- * sending commit ack to the master. Commit masters with no uncommitted slave when
+ * Leader may crash after receiving all peers' commit acks, but before journalling
+ * the final commit. Peers may crash after journalling the peer commit, but before
+ * sending commit ack to the leader. Commit leaders with no uncommitted peer when
  * resolve finishes.
  */
-void MDCache::finish_committed_masters()
+void MDCache::finish_committed_leaders()
 {
-  for (map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
-       p != uncommitted_masters.end();
+  for (map<metareqid_t, uleader>::iterator p = uncommitted_leaders.begin();
+       p != uncommitted_leaders.end();
        ++p) {
     p->second.recovering = false;
-    if (!p->second.committing && p->second.slaves.empty()) {
-      dout(10) << "finish_committed_masters " << p->first << dendl;
-      log_master_commit(p->first);
+    if (!p->second.committing && p->second.peers.empty()) {
+      dout(10) << "finish_committed_leaders " << p->first << dendl;
+      log_leader_commit(p->first);
     }
   }
 }
 
 /*
- * at end of resolve... we must journal a commit|abort for all slave
+ * at end of resolve... we must journal a commit|abort for all peer
  * updates, before moving on.
  * 
- * this is so that the master can safely journal ECommitted on ops it
- * masters when it reaches up:active (all other recovering nodes must
+ * this is so that the leader can safely journal ECommitted on ops it
+ * leaders when it reaches up:active (all other recovering nodes must
  * complete resolve before that happens).
  */
-struct C_MDC_SlaveCommit : public MDCacheLogContext {
+struct C_MDC_PeerCommit : public MDCacheLogContext {
   mds_rank_t from;
   metareqid_t reqid;
-  C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : MDCacheLogContext(c), from(f), reqid(r) {}
+  C_MDC_PeerCommit(MDCache *c, int f, metareqid_t r) : MDCacheLogContext(c), from(f), reqid(r) {}
   void finish(int r) override {
-    mdcache->_logged_slave_commit(from, reqid);
+    mdcache->_logged_peer_commit(from, reqid);
   }
 };
 
-void MDCache::_logged_slave_commit(mds_rank_t from, metareqid_t reqid)
+void MDCache::_logged_peer_commit(mds_rank_t from, metareqid_t reqid)
 {
-  dout(10) << "_logged_slave_commit from mds." << from << " " << reqid << dendl;
+  dout(10) << "_logged_peer_commit from mds." << from << " " << reqid << dendl;
   
   // send a message
-  auto req = make_message<MMDSSlaveRequest>(reqid, 0, MMDSSlaveRequest::OP_COMMITTED);
+  auto req = make_message<MMDSPeerRequest>(reqid, 0, MMDSPeerRequest::OP_COMMITTED);
   mds->send_message_mds(req, from);
 }
 
@@ -2505,11 +2594,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
-  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *dir = p->first;
-
+  for (auto& [dir, bounds] : subtrees) {
     // journal subtree as "ours" if we are
     //   me, -2
     //   me, me
@@ -2525,19 +2610,21 @@ ESubtreeMap *MDCache::create_subtree_map()
       dout(15) << " ambig subtree " << *dir << dendl;
       le->ambiguous_subtrees.insert(dir->dirfrag());
     } else {
-      dout(15) << " subtree " << *dir << dendl;
+      dout(15) << " auth subtree " << *dir << dendl;
     }
 
     dirs_to_add[dir->dirfrag()] = dir;
     le->subtrees[dir->dirfrag()].clear();
 
-
     // bounds
-    for (set<CDir*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      CDir *bound = *q;
-      dout(15) << " subtree bound " << *bound << dendl;
+    size_t nbounds = bounds.size();
+    if (nbounds > 3) {
+      dout(15) << "  subtree has " << nbounds << " bounds" << dendl;
+    }
+    for (auto& bound : bounds) {
+      if (nbounds <= 3) {
+        dout(15) << "  subtree bound " << *bound << dendl;
+      }
       dirs_to_add[bound->dirfrag()] = bound;
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
     }
@@ -2546,18 +2633,18 @@ ESubtreeMap *MDCache::create_subtree_map()
   // apply projected renames
   for (const auto& [diri, renames] : projected_subtree_renames) {
     for (const auto& [olddir, newdir] : renames) {
-      dout(10) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
+      dout(15) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
 
       auto&& dfls = diri->get_dirfrags();
       for (const auto& dir : dfls) {
-	dout(10) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
+	dout(15) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
 	CDir *oldparent = get_projected_subtree_root(olddir);
-	dout(10) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
+	dout(15) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
 	CDir *newparent = get_projected_subtree_root(newdir);
-	dout(10) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
+	dout(15) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
 
 	if (oldparent == newparent) {
-	  dout(10) << "parent unchanged for " << dir->dirfrag() << " at "
+	  dout(15) << "parent unchanged for " << dir->dirfrag() << " at "
 		   << oldparent->dirfrag() << dendl;
 	  continue;
 	}
@@ -2588,10 +2675,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 	  }
 	  
 	  // see if any old bounds move to the new parent.
-	  for (set<CDir*>::iterator p = subtrees[oldparent].begin();
-	       p != subtrees[oldparent].end();
-	       ++p) {
-	    CDir *bound = *p;
+	  for (auto& bound : subtrees.at(oldparent)) {
 	    if (dir->contains(bound->get_parent_dir()))
 	      _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				      le->subtrees);
@@ -2605,21 +2689,22 @@ ESubtreeMap *MDCache::create_subtree_map()
   // subtrees than needed due to migrations that are just getting
   // started or just completing.  but on replay, the "live" map will
   // be simple and we can do a straight comparison.
-  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = le->subtrees.begin(); p != le->subtrees.end(); ++p) {
-    if (le->ambiguous_subtrees.count(p->first))
+  for (auto& [frag, bfrags] : le->subtrees) {
+    if (le->ambiguous_subtrees.count(frag))
       continue;
     unsigned i = 0;
-    while (i < p->second.size()) {
-      dirfrag_t b = p->second[i];
+    while (i < bfrags.size()) {
+      dirfrag_t b = bfrags[i];
       if (le->subtrees.count(b) &&
 	  le->ambiguous_subtrees.count(b) == 0) {
-	vector<dirfrag_t>& bb = le->subtrees[b];
-	dout(10) << "simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
-	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
-	  p->second.push_back(*r);
+	auto& bb = le->subtrees.at(b);
+	dout(10) << "simplify: " << frag << " swallowing " << b << " with bounds " << bb << dendl;
+	for (auto& r : bb) {
+	  bfrags.push_back(r);
+        }
 	dirs_to_add.erase(b);
 	le->subtrees.erase(b);
-	p->second.erase(p->second.begin() + i);
+	bfrags.erase(bfrags.begin() + i);
       } else {
 	++i;
       }
@@ -2670,14 +2755,14 @@ void MDCache::resolve_start(MDSContext *resolve_done_)
 
 void MDCache::send_resolves()
 {
-  send_slave_resolves();
+  send_peer_resolves();
 
   if (!resolve_done) {
     // I'm survivor: refresh snap cache
     mds->snapclient->sync(
 	new MDSInternalContextWrapper(mds,
 	  new LambdaContext([this](int r) {
-	    maybe_finish_slave_resolve();
+	    maybe_finish_peer_resolve();
 	    })
 	  )
 	);
@@ -2698,23 +2783,20 @@ void MDCache::send_resolves()
   send_subtree_resolves();
 }
 
-void MDCache::send_slave_resolves()
+void MDCache::send_peer_resolves()
 {
-  dout(10) << "send_slave_resolves" << dendl;
+  dout(10) << "send_peer_resolves" << dendl;
 
   map<mds_rank_t, ref_t<MMDSResolve>> resolves;
 
   if (mds->is_resolve()) {
-    for (map<mds_rank_t, map<metareqid_t, MDSlaveUpdate*> >::iterator p = uncommitted_slave_updates.begin();
-	 p != uncommitted_slave_updates.end();
+    for (map<metareqid_t, upeer>::iterator p = uncommitted_peers.begin();
+	 p != uncommitted_peers.end();
 	 ++p) {
-      resolves[p->first] = make_message<MMDSResolve>();
-      for (map<metareqid_t, MDSlaveUpdate*>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
-	dout(10) << " including uncommitted " << q->first << dendl;
-	resolves[p->first]->add_slave_request(q->first, false);
-      }
+      mds_rank_t leader = p->second.leader;
+      auto &m = resolves[leader];
+      if (!m) m = make_message<MMDSResolve>();
+      m->add_peer_request(p->first, false);
     }
   } else {
     set<mds_rank_t> resolve_set;
@@ -2723,16 +2805,16 @@ void MDCache::send_slave_resolves()
 	 p != active_requests.end();
 	 ++p) {
       MDRequestRef& mdr = p->second;
-      if (!mdr->is_slave())
+      if (!mdr->is_peer())
 	continue;
-      if (!mdr->slave_did_prepare() && !mdr->committing) {
+      if (!mdr->peer_did_prepare() && !mdr->committing) {
 	continue;
       }
-      mds_rank_t master = mdr->slave_to_mds;
-      if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
+      mds_rank_t leader = mdr->peer_to_mds;
+      if (resolve_set.count(leader) || is_ambiguous_peer_update(p->first, leader)) {
 	dout(10) << " including uncommitted " << *mdr << dendl;
-	if (!resolves.count(master))
-	  resolves[master] = make_message<MMDSResolve>();
+	if (!resolves.count(leader))
+	  resolves[leader] = make_message<MMDSResolve>();
 	if (!mdr->committing &&
 	    mdr->has_more() && mdr->more()->is_inode_exporter) {
 	  // re-send cap exports
@@ -2740,18 +2822,18 @@ void MDCache::send_slave_resolves()
 	  map<client_t, Capability::Export> cap_map;
 	  in->export_client_caps(cap_map);
 	  bufferlist bl;
-          MMDSResolve::slave_inode_cap inode_caps(in->ino(), cap_map);
+          MMDSResolve::peer_inode_cap inode_caps(in->ino(), cap_map);
           encode(inode_caps, bl);
-	  resolves[master]->add_slave_request(p->first, bl);
+	  resolves[leader]->add_peer_request(p->first, bl);
 	} else {
-	  resolves[master]->add_slave_request(p->first, mdr->committing);
+	  resolves[leader]->add_peer_request(p->first, mdr->committing);
 	}
       }
     }
   }
 
   for (auto &p : resolves) {
-    dout(10) << "sending slave resolve to mds." << p.first << dendl;
+    dout(10) << "sending peer resolve to mds." << p.first << dendl;
     mds->send_message_mds(p.second, p.first);
     resolve_ack_gather.insert(p.first);
   }
@@ -2866,7 +2948,7 @@ void MDCache::send_subtree_resolves()
   resolves_pending = false;
 }
 
-void MDCache::maybe_finish_slave_resolve() {
+void MDCache::maybe_finish_peer_resolve() {
   if (resolve_ack_gather.empty() && resolve_need_rollback.empty()) {
     // snap cache get synced or I'm in resolve state
     if (mds->snapclient->is_synced() || resolve_done)
@@ -2883,7 +2965,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 
   resolve_gather.insert(who);
   discard_delayed_resolve(who);
-  ambiguous_slave_updates.erase(who);
+  ambiguous_peer_updates.erase(who);
 
   rejoin_gather.insert(who);
   rejoin_sent.erase(who);        // i need to send another
@@ -2903,83 +2985,83 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   // tell the balancer too.
   mds->balancer->handle_mds_failure(who);
 
-  // clean up any requests slave to/from this node
+  // clean up any requests peer to/from this node
   list<MDRequestRef> finish;
   for (ceph::unordered_map<metareqid_t, MDRequestRef>::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) {
     MDRequestRef& mdr = p->second;
-    // slave to the failed node?
-    if (mdr->slave_to_mds == who) {
-      if (mdr->slave_did_prepare()) {
-	dout(10) << " slave request " << *mdr << " uncommitted, will resolve shortly" << dendl;
-	if (is_ambiguous_slave_update(p->first, mdr->slave_to_mds))
-	  remove_ambiguous_slave_update(p->first, mdr->slave_to_mds);
+    // peer to the failed node?
+    if (mdr->peer_to_mds == who) {
+      if (mdr->peer_did_prepare()) {
+	dout(10) << " peer request " << *mdr << " uncommitted, will resolve shortly" << dendl;
+	if (is_ambiguous_peer_update(p->first, mdr->peer_to_mds))
+	  remove_ambiguous_peer_update(p->first, mdr->peer_to_mds);
 
-	if (!mdr->more()->waiting_on_slave.empty()) {
+	if (!mdr->more()->waiting_on_peer.empty()) {
 	  ceph_assert(mdr->more()->srcdn_auth_mds == mds->get_nodeid());
 	  // will rollback, no need to wait
-	  mdr->reset_slave_request();
-	  mdr->more()->waiting_on_slave.clear();
+	  mdr->reset_peer_request();
+	  mdr->more()->waiting_on_peer.clear();
 	}
       } else if (!mdr->committing) {
-	dout(10) << " slave request " << *mdr << " has no prepare, finishing up" << dendl;
-	if (mdr->slave_request || mdr->slave_rolling_back())
+	dout(10) << " peer request " << *mdr << " has no prepare, finishing up" << dendl;
+	if (mdr->peer_request || mdr->peer_rolling_back())
 	  mdr->aborted = true;
 	else
 	  finish.push_back(mdr);
       }
     }
 
-    if (mdr->is_slave() && mdr->slave_did_prepare()) {
-      if (mdr->more()->waiting_on_slave.count(who)) {
+    if (mdr->is_peer() && mdr->peer_did_prepare()) {
+      if (mdr->more()->waiting_on_peer.count(who)) {
 	ceph_assert(mdr->more()->srcdn_auth_mds == mds->get_nodeid());
-	dout(10) << " slave request " << *mdr << " no longer need rename notity ack from mds."
+	dout(10) << " peer request " << *mdr << " no longer need rename notity ack from mds."
 		 << who << dendl;
-	mdr->more()->waiting_on_slave.erase(who);
-	if (mdr->more()->waiting_on_slave.empty() && mdr->slave_request)
+	mdr->more()->waiting_on_peer.erase(who);
+	if (mdr->more()->waiting_on_peer.empty() && mdr->peer_request)
 	  mds->queue_waiter(new C_MDS_RetryRequest(this, mdr));
       }
 
       if (mdr->more()->srcdn_auth_mds == who &&
-	  mds->mdsmap->is_clientreplay_or_active_or_stopping(mdr->slave_to_mds)) {
+	  mds->mdsmap->is_clientreplay_or_active_or_stopping(mdr->peer_to_mds)) {
 	// rename srcdn's auth mds failed, resolve even I'm a survivor.
-	dout(10) << " slave request " << *mdr << " uncommitted, will resolve shortly" << dendl;
-	add_ambiguous_slave_update(p->first, mdr->slave_to_mds);
+	dout(10) << " peer request " << *mdr << " uncommitted, will resolve shortly" << dendl;
+	add_ambiguous_peer_update(p->first, mdr->peer_to_mds);
       }
-    } else if (mdr->slave_request) {
-      const cref_t<MMDSSlaveRequest> &slave_req = mdr->slave_request;
-      // FIXME: Slave rename request can arrive after we notice mds failure.
+    } else if (mdr->peer_request) {
+      const cref_t<MMDSPeerRequest> &peer_req = mdr->peer_request;
+      // FIXME: Peer rename request can arrive after we notice mds failure.
       // 	This can cause mds to crash (does not affect integrity of FS).
-      if (slave_req->get_op() == MMDSSlaveRequest::OP_RENAMEPREP &&
-	  slave_req->srcdn_auth == who)
-	slave_req->mark_interrupted();
+      if (peer_req->get_op() == MMDSPeerRequest::OP_RENAMEPREP &&
+	  peer_req->srcdn_auth == who)
+	peer_req->mark_interrupted();
     }
     
-    // failed node is slave?
-    if (mdr->is_master() && !mdr->committing) {
+    // failed node is peer?
+    if (mdr->is_leader() && !mdr->committing) {
       if (mdr->more()->srcdn_auth_mds == who) {
-	dout(10) << " master request " << *mdr << " waiting for rename srcdn's auth mds."
+	dout(10) << " leader request " << *mdr << " waiting for rename srcdn's auth mds."
 		 << who << " to recover" << dendl;
 	ceph_assert(mdr->more()->witnessed.count(who) == 0);
 	if (mdr->more()->is_ambiguous_auth)
 	  mdr->clear_ambiguous_auth();
 	// rename srcdn's auth mds failed, all witnesses will rollback
 	mdr->more()->witnessed.clear();
-	pending_masters.erase(p->first);
+	pending_leaders.erase(p->first);
       }
 
       if (mdr->more()->witnessed.count(who)) {
 	mds_rank_t srcdn_auth = mdr->more()->srcdn_auth_mds;
-	if (srcdn_auth >= 0 && mdr->more()->waiting_on_slave.count(srcdn_auth)) {
-	  dout(10) << " master request " << *mdr << " waiting for rename srcdn's auth mds."
+	if (srcdn_auth >= 0 && mdr->more()->waiting_on_peer.count(srcdn_auth)) {
+	  dout(10) << " leader request " << *mdr << " waiting for rename srcdn's auth mds."
 		   << mdr->more()->srcdn_auth_mds << " to reply" << dendl;
-	  // waiting for the slave (rename srcdn's auth mds), delay sending resolve ack
-	  // until either the request is committing or the slave also fails.
-	  ceph_assert(mdr->more()->waiting_on_slave.size() == 1);
-	  pending_masters.insert(p->first);
+	  // waiting for the peer (rename srcdn's auth mds), delay sending resolve ack
+	  // until either the request is committing or the peer also fails.
+	  ceph_assert(mdr->more()->waiting_on_peer.size() == 1);
+	  pending_leaders.insert(p->first);
 	} else {
-	  dout(10) << " master request " << *mdr << " no longer witnessed by slave mds."
+	  dout(10) << " leader request " << *mdr << " no longer witnessed by peer mds."
 		   << who << " to recover" << dendl;
 	  if (srcdn_auth >= 0)
 	    ceph_assert(mdr->more()->witnessed.count(srcdn_auth) == 0);
@@ -2989,12 +3071,12 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	}
       }
       
-      if (mdr->more()->waiting_on_slave.count(who)) {
-	dout(10) << " master request " << *mdr << " waiting for slave mds." << who
+      if (mdr->more()->waiting_on_peer.count(who)) {
+	dout(10) << " leader request " << *mdr << " waiting for peer mds." << who
 		 << " to recover" << dendl;
 	// retry request when peer recovers
-	mdr->more()->waiting_on_slave.erase(who);
-	if (mdr->more()->waiting_on_slave.empty())
+	mdr->more()->waiting_on_peer.erase(who);
+	if (mdr->more()->waiting_on_peer.empty())
 	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, mdr));
       }
 
@@ -3003,18 +3085,18 @@ void MDCache::handle_mds_failure(mds_rank_t who)
     }
   }
 
-  for (map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
-       p != uncommitted_masters.end();
+  for (map<metareqid_t, uleader>::iterator p = uncommitted_leaders.begin();
+       p != uncommitted_leaders.end();
        ++p) {
-    // The failed MDS may have already committed the slave update
-    if (p->second.slaves.count(who)) {
+    // The failed MDS may have already committed the peer update
+    if (p->second.peers.count(who)) {
       p->second.recovering = true;
-      p->second.slaves.erase(who);
+      p->second.peers.erase(who);
     }
   }
 
   while (!finish.empty()) {
-    dout(10) << "cleaning up slave request " << *finish.front() << dendl;
+    dout(10) << "cleaning up peer request " << *finish.front() << dendl;
     request_finish(finish.front());
     finish.pop_front();
   }
@@ -3143,40 +3225,40 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 
   discard_delayed_resolve(from);
 
-  // ambiguous slave requests?
-  if (!m->slave_requests.empty()) {
+  // ambiguous peer requests?
+  if (!m->peer_requests.empty()) {
     if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
-      for (auto p = m->slave_requests.begin(); p != m->slave_requests.end(); ++p) {
-	if (uncommitted_masters.count(p->first) && !uncommitted_masters[p->first].safe) {
+      for (auto p = m->peer_requests.begin(); p != m->peer_requests.end(); ++p) {
+	if (uncommitted_leaders.count(p->first) && !uncommitted_leaders[p->first].safe) {
 	  ceph_assert(!p->second.committing);
-	  pending_masters.insert(p->first);
+	  pending_leaders.insert(p->first);
 	}
       }
 
-      if (!pending_masters.empty()) {
-	dout(10) << " still have pending updates, delay processing slave resolve" << dendl;
+      if (!pending_leaders.empty()) {
+	dout(10) << " still have pending updates, delay processing peer resolve" << dendl;
 	delayed_resolve[from] = m;
 	return;
       }
     }
 
     auto ack = make_message<MMDSResolveAck>();
-    for (const auto &p : m->slave_requests) {
-      if (uncommitted_masters.count(p.first)) {  //mds->sessionmap.have_completed_request(p.first)) {
+    for (const auto &p : m->peer_requests) {
+      if (uncommitted_leaders.count(p.first)) {  //mds->sessionmap.have_completed_request(p.first)) {
 	// COMMIT
 	if (p.second.committing) {
-	  // already committing, waiting for the OP_COMMITTED slave reply
-	  dout(10) << " already committing slave request " << p << " noop "<< dendl;
+	  // already committing, waiting for the OP_COMMITTED peer reply
+	  dout(10) << " already committing peer request " << p << " noop "<< dendl;
 	} else {
-	  dout(10) << " ambiguous slave request " << p << " will COMMIT" << dendl;
+	  dout(10) << " ambiguous peer request " << p << " will COMMIT" << dendl;
 	  ack->add_commit(p.first);
 	}
-	uncommitted_masters[p.first].slaves.insert(from);   // wait for slave OP_COMMITTED before we log ECommitted
+	uncommitted_leaders[p.first].peers.insert(from);   // wait for peer OP_COMMITTED before we log ECommitted
 
 	if (p.second.inode_caps.length() > 0) {
-	  // slave wants to export caps (rename)
+	  // peer wants to export caps (rename)
 	  ceph_assert(mds->is_resolve());
-          MMDSResolve::slave_inode_cap inode_caps;
+          MMDSResolve::peer_inode_cap inode_caps;
 	  auto q = p.second.inode_caps.cbegin();
           decode(inode_caps, q);
 	  inodeno_t ino = inode_caps.ino;
@@ -3197,15 +3279,15 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 	  }
 
 	  // will process these caps in rejoin stage
-	  rejoin_slave_exports[ino].first = from;
-	  rejoin_slave_exports[ino].second.swap(cap_exports);
+	  rejoin_peer_exports[ino].first = from;
+	  rejoin_peer_exports[ino].second.swap(cap_exports);
 
-	  // send information of imported caps back to slave
+	  // send information of imported caps back to peer
 	  encode(rejoin_imported_caps[from][ino], ack->commit[p.first]);
 	}
       } else {
 	// ABORT
-	dout(10) << " ambiguous slave request " << p << " will ABORT" << dendl;
+	dout(10) << " ambiguous peer request " << p << " will ABORT" << dendl;
 	ceph_assert(!p.second.committing);
 	ack->add_abort(p.first);
       }
@@ -3335,7 +3417,7 @@ void MDCache::maybe_resolve_finish()
 
   dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
   disambiguate_my_imports();
-  finish_committed_masters();
+  finish_committed_leaders();
 
   if (resolve_done) {
     ceph_assert(mds->is_resolve());
@@ -3358,60 +3440,60 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
     return;
   }
 
-  if (ambiguous_slave_updates.count(from)) {
+  if (ambiguous_peer_updates.count(from)) {
     ceph_assert(mds->mdsmap->is_clientreplay_or_active_or_stopping(from));
     ceph_assert(mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
   }
 
   for (const auto &p : ack->commit) {
-    dout(10) << " commit on slave " << p.first << dendl;
+    dout(10) << " commit on peer " << p.first << dendl;
     
-    if (ambiguous_slave_updates.count(from)) {
-      remove_ambiguous_slave_update(p.first, from);
+    if (ambiguous_peer_updates.count(from)) {
+      remove_ambiguous_peer_update(p.first, from);
       continue;
     }
 
     if (mds->is_resolve()) {
       // replay
-      MDSlaveUpdate *su = get_uncommitted_slave_update(p.first, from);
+      MDPeerUpdate *su = get_uncommitted_peer(p.first, from);
       ceph_assert(su);
 
       // log commit
-      mds->mdlog->start_submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", p.first, from,
-						      ESlaveUpdate::OP_COMMIT, su->origop),
-				     new C_MDC_SlaveCommit(this, from, p.first));
+      mds->mdlog->start_submit_entry(new EPeerUpdate(mds->mdlog, "unknown", p.first, from,
+						      EPeerUpdate::OP_COMMIT, su->origop),
+				     new C_MDC_PeerCommit(this, from, p.first));
       mds->mdlog->flush();
 
-      finish_uncommitted_slave_update(p.first, from);
+      finish_uncommitted_peer(p.first);
     } else {
       MDRequestRef mdr = request_get(p.first);
-      // information about master imported caps
+      // information about leader imported caps
       if (p.second.length() > 0)
 	mdr->more()->inode_import.share(p.second);
 
-      ceph_assert(mdr->slave_request == 0);  // shouldn't be doing anything!
+      ceph_assert(mdr->peer_request == 0);  // shouldn't be doing anything!
       request_finish(mdr);
     }
   }
 
   for (const auto &metareq : ack->abort) {
-    dout(10) << " abort on slave " << metareq << dendl;
+    dout(10) << " abort on peer " << metareq << dendl;
 
     if (mds->is_resolve()) {
-      MDSlaveUpdate *su = get_uncommitted_slave_update(metareq, from);
+      MDPeerUpdate *su = get_uncommitted_peer(metareq, from);
       ceph_assert(su);
 
       // perform rollback (and journal a rollback entry)
       // note: this will hold up the resolve a bit, until the rollback entries journal.
       MDRequestRef null_ref;
       switch (su->origop) {
-      case ESlaveUpdate::LINK:
+      case EPeerUpdate::LINK:
 	mds->server->do_link_rollback(su->rollback, from, null_ref);
 	break;
-      case ESlaveUpdate::RENAME:
+      case EPeerUpdate::RENAME:
 	mds->server->do_rename_rollback(su->rollback, from, null_ref);
 	break;
-      case ESlaveUpdate::RMDIR:
+      case EPeerUpdate::RMDIR:
 	mds->server->do_rmdir_rollback(su->rollback, from, null_ref);
 	break;
       default:
@@ -3420,8 +3502,8 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
     } else {
       MDRequestRef mdr = request_get(metareq);
       mdr->aborted = true;
-      if (mdr->slave_request) {
-	if (mdr->slave_did_prepare()) // journaling slave prepare ?
+      if (mdr->peer_request) {
+	if (mdr->peer_did_prepare()) // journaling peer prepare ?
 	  add_rollback(metareq, from);
       } else {
 	request_finish(mdr);
@@ -3429,38 +3511,59 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
     }
   }
 
-  if (!ambiguous_slave_updates.count(from)) {
+  if (!ambiguous_peer_updates.count(from)) {
     resolve_ack_gather.erase(from);
-    maybe_finish_slave_resolve();
+    maybe_finish_peer_resolve();
   }
 }
 
-void MDCache::add_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master, MDSlaveUpdate *su)
+void MDCache::add_uncommitted_peer(metareqid_t reqid, LogSegment *ls, mds_rank_t leader, MDPeerUpdate *su)
 {
-  ceph_assert(uncommitted_slave_updates[master].count(reqid) == 0);
-  uncommitted_slave_updates[master][reqid] = su;
+  auto const &ret = uncommitted_peers.emplace(std::piecewise_construct,
+                                               std::forward_as_tuple(reqid),
+                                               std::forward_as_tuple());
+  ceph_assert(ret.second);
+  ls->uncommitted_peers.insert(reqid);
+  upeer &u = ret.first->second;
+  u.leader = leader;
+  u.ls = ls;
+  u.su = su;
+  if (su == nullptr) {
+    return;
+  }
   for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p)
-    uncommitted_slave_rename_olddir[*p]++;
+    uncommitted_peer_rename_olddir[*p]++;
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p)
-    uncommitted_slave_unlink[*p]++;
+    uncommitted_peer_unlink[*p]++;
 }
 
-void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master)
+void MDCache::finish_uncommitted_peer(metareqid_t reqid, bool assert_exist)
 {
-  ceph_assert(uncommitted_slave_updates[master].count(reqid));
-  MDSlaveUpdate* su = uncommitted_slave_updates[master][reqid];
+  auto it = uncommitted_peers.find(reqid);
+  if (it == uncommitted_peers.end()) {
+    ceph_assert(!assert_exist);
+    return;
+  }
+  upeer &u = it->second;
+  MDPeerUpdate* su = u.su;
 
-  uncommitted_slave_updates[master].erase(reqid);
-  if (uncommitted_slave_updates[master].empty())
-    uncommitted_slave_updates.erase(master);
+  if (!u.waiters.empty()) {
+    mds->queue_waiters(u.waiters);
+  }
+  u.ls->uncommitted_peers.erase(reqid);
+  uncommitted_peers.erase(it);
+
+  if (su == nullptr) {
+    return;
+  }
   // discard the non-auth subtree we renamed out of
   for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p) {
     CInode *diri = *p;
-    map<CInode*, int>::iterator it = uncommitted_slave_rename_olddir.find(diri);
-    ceph_assert(it != uncommitted_slave_rename_olddir.end());
+    map<CInode*, int>::iterator it = uncommitted_peer_rename_olddir.find(diri);
+    ceph_assert(it != uncommitted_peer_rename_olddir.end());
     it->second--;
     if (it->second == 0) {
-      uncommitted_slave_rename_olddir.erase(it);
+      uncommitted_peer_rename_olddir.erase(it);
       auto&& ls = diri->get_dirfrags();
       for (const auto& dir : ls) {
 	CDir *root = get_subtree_root(dir);
@@ -3473,14 +3576,14 @@ void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t mast
     } else
       ceph_assert(it->second > 0);
   }
-  // removed the inodes that were unlinked by slave update
+  // removed the inodes that were unlinked by peer update
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p) {
     CInode *in = *p;
-    map<CInode*, int>::iterator it = uncommitted_slave_unlink.find(in);
-    ceph_assert(it != uncommitted_slave_unlink.end());
+    map<CInode*, int>::iterator it = uncommitted_peer_unlink.find(in);
+    ceph_assert(it != uncommitted_peer_unlink.end());
     it->second--;
     if (it->second == 0) {
-      uncommitted_slave_unlink.erase(it);
+      uncommitted_peer_unlink.erase(it);
       if (!in->get_projected_parent_dn())
 	mds->mdcache->remove_inode_recursive(in);
     } else
@@ -3489,25 +3592,28 @@ void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t mast
   delete su;
 }
 
-MDSlaveUpdate* MDCache::get_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master)
+MDPeerUpdate* MDCache::get_uncommitted_peer(metareqid_t reqid, mds_rank_t leader)
 {
 
-  MDSlaveUpdate* su = NULL;
-  if (uncommitted_slave_updates.count(master) &&
-      uncommitted_slave_updates[master].count(reqid)) {
-    su = uncommitted_slave_updates[master][reqid];
-    ceph_assert(su);
+  MDPeerUpdate* su = nullptr;
+  auto it = uncommitted_peers.find(reqid);
+  if (it != uncommitted_peers.end() &&
+      it->second.leader == leader) {
+    su = it->second.su;
   }
   return su;
 }
 
-void MDCache::finish_rollback(metareqid_t reqid) {
+void MDCache::finish_rollback(metareqid_t reqid, MDRequestRef& mdr) {
   auto p = resolve_need_rollback.find(reqid);
   ceph_assert(p != resolve_need_rollback.end());
-  if (mds->is_resolve())
-    finish_uncommitted_slave_update(reqid, p->second);
+  if (mds->is_resolve()) {
+    finish_uncommitted_peer(reqid, false);
+  } else if (mdr) {
+    finish_uncommitted_peer(mdr->reqid, mdr->more()->peer_update_journaled);
+  }
   resolve_need_rollback.erase(p);
-  maybe_finish_slave_resolve();
+  maybe_finish_peer_resolve();
 }
 
 void MDCache::disambiguate_other_imports()
@@ -4087,7 +4193,7 @@ void MDCache::rejoin_send_rejoins()
 	 p != active_requests.end();
 	 ++p) {
       MDRequestRef& mdr = p->second;
-      if (mdr->is_slave())
+      if (mdr->is_peer())
 	continue;
       // auth pins
       for (const auto& q : mdr->object_states) {
@@ -4735,17 +4841,17 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
         // dn auth_pin?
         const auto pinned_it = strong->authpinned_dentries.find(dirfrag);
         if (pinned_it != strong->authpinned_dentries.end()) {
-          const auto slave_reqid_it = pinned_it->second.find(ss);
-          if (slave_reqid_it != pinned_it->second.end()) {
-            for (const auto &r : slave_reqid_it->second) {
+          const auto peer_reqid_it = pinned_it->second.find(ss);
+          if (peer_reqid_it != pinned_it->second.end()) {
+            for (const auto &r : peer_reqid_it->second) {
 	      dout(10) << " dn authpin by " << r << " on " << *dn << dendl;
 
-	      // get/create slave mdrequest
+	      // get/create peer mdrequest
 	      MDRequestRef mdr;
 	      if (have_request(r.reqid))
 	        mdr = request_get(r.reqid);
 	      else
-	        mdr = request_start_slave(r.reqid, r.attempt, strong);
+	        mdr = request_start_peer(r.reqid, r.attempt, strong);
 	      mdr->auth_pin(dn);
             }
           }
@@ -4756,7 +4862,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
         if (xlocked_it != strong->xlocked_dentries.end()) {
           const auto ss_req_it = xlocked_it->second.find(ss);
           if (ss_req_it != xlocked_it->second.end()) {
-	    const MMDSCacheRejoin::slave_reqid& r = ss_req_it->second;
+	    const MMDSCacheRejoin::peer_reqid& r = ss_req_it->second;
 	    dout(10) << " dn xlock by " << r << " on " << *dn << dendl;
 	    MDRequestRef mdr = request_get(r.reqid);  // should have this from auth_pin above.
 	    ceph_assert(mdr->is_auth_pinned(dn));
@@ -4835,12 +4941,12 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
       for (const auto& r : authpinned_inodes_it->second) {
 	dout(10) << " inode authpin by " << r << " on " << *in << dendl;
 
-	// get/create slave mdrequest
+	// get/create peer mdrequest
 	MDRequestRef mdr;
 	if (have_request(r.reqid))
 	  mdr = request_get(r.reqid);
 	else
-	  mdr = request_start_slave(r.reqid, r.attempt, strong);
+	  mdr = request_start_peer(r.reqid, r.attempt, strong);
 	if (strong->frozen_authpin_inodes.count(in->vino())) {
 	  ceph_assert(!in->get_num_auth_pins());
 	  mdr->freeze_auth_pin(in);
@@ -5379,9 +5485,9 @@ bool MDCache::process_imported_caps()
       return true;
     }
 
-    // process caps that were exported by slave rename
-    for (map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > >::iterator p = rejoin_slave_exports.begin();
-	 p != rejoin_slave_exports.end();
+    // process caps that were exported by peer rename
+    for (map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > >::iterator p = rejoin_peer_exports.begin();
+	 p != rejoin_peer_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
       ceph_assert(in);
@@ -5410,7 +5516,7 @@ bool MDCache::process_imported_caps()
 		      p->second.first, CEPH_CAP_FLAG_AUTH);
       }
     }
-    rejoin_slave_exports.clear();
+    rejoin_peer_exports.clear();
     rejoin_imported_caps.clear();
 
     // process cap imports
@@ -6709,32 +6815,38 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
     ++p;
     CInode *diri = dir->get_inode();
     if (dir->is_auth()) {
-      if (!diri->is_auth() && !diri->is_base() &&
-	  dir->get_num_head_items() == 0) {
-	if (dir->state_test(CDir::STATE_EXPORTING) ||
-	    !(mds->is_active() || mds->is_stopping()) ||
-	    dir->is_freezing() || dir->is_frozen())
-	  continue;
+      if (diri->is_auth() && !diri->is_base()) {
+        /* this situation should correspond to an export pin */
+        if (dir->get_num_head_items() == 0 && dir->get_num_ref() == 1) {
+          /* pinned empty subtree, try to drop */
+          if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
+            dout(20) << "trimming empty pinned subtree " << *dir << dendl;
+            dir->state_clear(CDir::STATE_AUXSUBTREE);
+            remove_subtree(dir);
+            diri->close_dirfrag(dir->dirfrag().frag);
+          }
+        }
+      } else if (!diri->is_auth() && !diri->is_base() && dir->get_num_head_items() == 0) {
+        if (dir->state_test(CDir::STATE_EXPORTING) ||
+           !(mds->is_active() || mds->is_stopping()) ||
+           dir->is_freezing() || dir->is_frozen())
+          continue;
 
-	migrator->export_empty_import(dir);
+        migrator->export_empty_import(dir);
         ++trimmed;
       }
-    } else {
-      if (!diri->is_auth()) {
-	if (dir->get_num_ref() > 1)  // only subtree pin
-	  continue;
-	auto&& ls = diri->get_subtree_dirfrags();
-	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
-	  continue;
+    } else if (!diri->is_auth() && dir->get_num_ref() <= 1) {
+      // only subtree pin
+      auto&& ls = diri->get_subtree_dirfrags();
+      if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
+        continue;
 
-	// don't trim subtree root if its auth MDS is recovering.
-	// This simplify the cache rejoin code.
-	if (dir->is_subtree_root() &&
-	    rejoin_ack_gather.count(dir->get_dir_auth().first))
-	  continue;
-	trim_dirfrag(dir, 0, expiremap);
-        ++trimmed;
-      }
+      // don't trim subtree root if its auth MDS is recovering.
+      // This simplify the cache rejoin code.
+      if (dir->is_subtree_root() && rejoin_ack_gather.count(dir->get_dir_auth().first))
+        continue;
+      trim_dirfrag(dir, 0, expiremap);
+      ++trimmed;
     }
   }
 
@@ -7213,7 +7325,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
 	dn->state_clear(CDentry::STATE_AUTH);
 	in->state_clear(CInode::STATE_AUTH);
       }
-    } else if (keep_dir && dnl->is_null()) { // keep null dentry for slave rollback
+    } else if (keep_dir && dnl->is_null()) { // keep null dentry for peer rollback
       dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
     } else { // just remove it
       dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
@@ -7756,30 +7868,44 @@ bool MDCache::shutdown_pass()
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
+
+  {
+    dout(10) << "Migrating any ephemerally pinned inodes" << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
+    mds->balancer->handle_export_pins();
+  }
+
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
-  if (!subtrees.empty() &&
-      mds->get_nodeid() != 0) {
-    dout(7) << "looking for subtrees to export to mds0" << dendl;
+  if (!subtrees.empty() && mds->get_nodeid() != 0) {
+    dout(7) << "looking for subtrees to export" << dendl;
     std::vector<CDir*> ls;
-    for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
-         it != subtrees.end();
-         ++it) {
-      CDir *dir = it->first;
-      if (dir->get_inode()->is_mdsdir())
+    for (auto& [dir, bounds] : subtrees) {
+      dout(10) << "  examining " << *dir << " bounds " << bounds << dendl;
+      if (dir->get_inode()->is_mdsdir() || !dir->is_auth())
 	continue;
-      if (dir->is_auth()) {
-	num_auth_subtree++;
-	if (dir->is_frozen() ||
-	    dir->is_freezing() ||
-	    dir->is_ambiguous_dir_auth() ||
-	    dir->state_test(CDir::STATE_EXPORTING))
-	  continue;
-	ls.push_back(dir);
+      num_auth_subtree++;
+      if (dir->is_frozen() ||
+          dir->is_freezing() ||
+          dir->is_ambiguous_dir_auth() ||
+          dir->state_test(CDir::STATE_EXPORTING) ||
+          dir->get_inode()->is_ephemerally_pinned()) {
+        continue;
       }
+      ls.push_back(dir);
     }
 
     migrator->clear_export_queue();
+
     for (const auto& dir : ls) {
       mds_rank_t dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
@@ -8551,17 +8677,23 @@ CInode *MDCache::cache_traverse(const filepath& fp)
   dout(10) << "cache_traverse " << fp << dendl;
 
   CInode *in;
-  if (fp.get_ino())
+  unsigned depth = 0;
+
+  if (fp.get_ino()) {
     in = get_inode(fp.get_ino());
-  else
+  } else if (fp.depth() > 0 && fp[0] == "~mdsdir") {
+    in = myin;
+    depth = 1;
+  } else {
     in = root;
+  }
   if (!in)
     return NULL;
 
-  for (unsigned i = 0; i < fp.depth(); i++) {
-    std::string_view dname = fp[i];
+  for (; depth < fp.depth(); depth++) {
+    std::string_view dname = fp[depth];
     frag_t fg = in->pick_dirfrag(dname);
-    dout(20) << " " << i << " " << dname << " frag " << fg << " from " << *in << dendl;
+    dout(20) << " " << depth << " " << dname << " frag " << fg << " from " << *in << dendl;
     CDir *curdir = in->get_dirfrag(fg);
     if (!curdir)
       return NULL;
@@ -8765,7 +8897,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       decode(backtrace, bl);
     } catch (const buffer::error &decode_exc) {
       derr << "corrupt backtrace on ino x0" << std::hex << ino
-           << std::dec << ": " << decode_exc << dendl;
+           << std::dec << ": " << decode_exc.what() << dendl;
       open_ino_finish(ino, info, -EIO);
       return;
     }
@@ -9381,7 +9513,7 @@ int MDCache::get_num_client_requests()
       p != active_requests.end();
       ++p) {
     MDRequestRef& mdr = p->second;
-    if (mdr->reqid.name.is_client() && !mdr->is_slave())
+    if (mdr->reqid.name.is_client() && !mdr->is_peer())
       count++;
   }
   return count;
@@ -9389,11 +9521,11 @@ int MDCache::get_num_client_requests()
 
 MDRequestRef MDCache::request_start(const cref_t<MClientRequest>& req)
 {
-  // did we win a forward race against a slave?
+  // did we win a forward race against a peer?
   if (active_requests.count(req->get_reqid())) {
     MDRequestRef& mdr = active_requests[req->get_reqid()];
     ceph_assert(mdr);
-    if (mdr->is_slave()) {
+    if (mdr->is_peer()) {
       dout(10) << "request_start already had " << *mdr << ", waiting for finish" << dendl;
       mdr->more()->waiting_for_finish.push_back(new C_MDS_RetryMessage(mds, req));
     } else {
@@ -9420,14 +9552,14 @@ MDRequestRef MDCache::request_start(const cref_t<MClientRequest>& req)
   return mdr;
 }
 
-MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, const cref_t<Message> &m)
+MDRequestRef MDCache::request_start_peer(metareqid_t ri, __u32 attempt, const cref_t<Message> &m)
 {
   int by = m->get_source().num();
   MDRequestImpl::Params params;
   params.reqid = ri;
   params.attempt = attempt;
-  params.triggering_slave_req = m;
-  params.slave_to = by;
+  params.triggering_peer_req = m;
+  params.peer_to = by;
   params.initiated = m->get_recv_stamp();
   params.throttled = m->get_throttle_stamp();
   params.all_read = m->get_recv_complete_stamp();
@@ -9436,7 +9568,7 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, const c
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
   ceph_assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
-  dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
+  dout(7) << "request_start_peer " << *mdr << " by mds." << by << dendl;
   return mdr;
 }
 
@@ -9473,15 +9605,15 @@ void MDCache::request_finish(MDRequestRef& mdr)
   dout(7) << "request_finish " << *mdr << dendl;
   mdr->mark_event("finishing request");
 
-  // slave finisher?
-  if (mdr->has_more() && mdr->more()->slave_commit) {
-    Context *fin = mdr->more()->slave_commit;
-    mdr->more()->slave_commit = 0;
+  // peer finisher?
+  if (mdr->has_more() && mdr->more()->peer_commit) {
+    Context *fin = mdr->more()->peer_commit;
+    mdr->more()->peer_commit = 0;
     int ret;
     if (mdr->aborted) {
       mdr->aborted = false;
       ret = -1;
-      mdr->more()->slave_rolling_back = true;
+      mdr->more()->peer_rolling_back = true;
     } else {
       ret = 0;
       mdr->committing = true;
@@ -9517,41 +9649,14 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
 void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 {
-  mdr->mark_event("forwarding request");
+  CachedStackStringStream css;
+  *css << "forwarding request to mds." << who;
+  mdr->mark_event(css->strv());
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
-    if (mdr->is_batch_head) {
-      int mask = mdr->client_request->head.args.getattr.mask;
-
-      switch (mdr->client_request->get_op()) {
-	case CEPH_MDS_OP_GETATTR:
-	  {
-	    CInode* in = mdr->in[0];
-	    if (in) {
-	      auto it = in->batch_ops.find(mask);
-	      if (it != in->batch_ops.end()) {
-                it->second->forward(who);
-                in->batch_ops.erase(it);
-	      }
-	    }
-	    break;
-	  }
-	case CEPH_MDS_OP_LOOKUP:
-	  {
-	    if (mdr->dn[0].size()) {
-	      CDentry* dn = mdr->dn[0].back();
-	      auto it = dn->batch_ops.find(mask);
-	      if (it != dn->batch_ops.end()) {
-		it->second->forward(who);
-		dn->batch_ops.erase(it);
-	      }
-	    }
-	    break;
-	  }
-	default:
-	  ceph_abort();
-      }
+    if (mdr->is_batch_head()) {
+      mdr->release_batch_op()->forward(who);
     } else {
       mds->forward_message_mds(mdr->release_client_request(), who);
     }
@@ -9571,8 +9676,8 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
 {
   if (mdr->client_request) {
     mds->server->dispatch_client_request(mdr);
-  } else if (mdr->slave_request) {
-    mds->server->dispatch_slave_request(mdr);
+  } else if (mdr->peer_request) {
+    mds->server->dispatch_peer_request(mdr);
   } else {
     switch (mdr->internal_op) {
     case CEPH_MDS_OP_FRAGMENTDIR:
@@ -9608,20 +9713,20 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
   if (!mdr->has_more())
     return;
 
-  // clean up slaves
+  // clean up peers
   //  (will implicitly drop remote dn pins)
-  for (set<mds_rank_t>::iterator p = mdr->more()->slaves.begin();
-       p != mdr->more()->slaves.end();
+  for (set<mds_rank_t>::iterator p = mdr->more()->peers.begin();
+       p != mdr->more()->peers.end();
        ++p) {
-    auto r = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt,
-					    MMDSSlaveRequest::OP_FINISH);
+    auto r = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt,
+					    MMDSPeerRequest::OP_FINISH);
 
     if (mdr->killed && !mdr->committing) {
       r->mark_abort();
     } else if (mdr->more()->srcdn_auth_mds == *p &&
 	       mdr->more()->inode_import.length() > 0) {
       // information about rename imported caps
-      r->inode_export.claim(mdr->more()->inode_import);
+      r->inode_export = std::move(mdr->more()->inode_import);
     }
 
     mds->send_message_mds(r, *p);
@@ -9653,7 +9758,7 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
     }
   }
 
-  mdr->more()->slaves.clear(); /* we no longer have requests out to them, and
+  mdr->more()->peers.clear(); /* we no longer have requests out to them, and
                                 * leaving them in can cause double-notifies as
                                 * this function can get called more than once */
 }
@@ -9708,15 +9813,15 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 
 void MDCache::request_kill(MDRequestRef& mdr)
 {
-  // rollback slave requests is tricky. just let the request proceed.
+  // rollback peer requests is tricky. just let the request proceed.
   if (mdr->has_more() &&
-      (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_slave.empty())) {
+      (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_peer.empty())) {
     if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
       ceph_assert(mdr->more()->witnessed.empty());
       mdr->aborted = true;
-      dout(10) << "request_kill " << *mdr << " -- waiting for slave reply, delaying" << dendl;
+      dout(10) << "request_kill " << *mdr << " -- waiting for peer reply, delaying" << dendl;
     } else {
-      dout(10) << "request_kill " << *mdr << " -- already started slave prep, no-op" << dendl;
+      dout(10) << "request_kill " << *mdr << " -- already started peer prep, no-op" << dendl;
     }
 
     ceph_assert(mdr->used_prealloc_ino == 0);
@@ -9955,29 +10060,40 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
-  std::vector<CDir*> ls;
+  if (next.ino)
+    next.frag = strays[MDS_INO_STRAY_INDEX(next.ino)]->dirfragtree[next.frag.value()];
+
   for (int i = 0; i < NUM_STRAY; ++i) {
     if (strays[i]->ino() < next.ino)
       continue;
-    strays[i]->get_dirfrags(ls);
-  }
 
-  for (const auto& dir : ls) {
-    if (dir->dirfrag() < next)
-      continue;
-    if (!dir->is_complete()) {
-      dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
-      return;
-    }
-    for (auto &p : dir->items) {
-      CDentry *dn = p.second;
-      dn->state_set(CDentry::STATE_STRAY);
-      CDentry::linkage_t *dnl = dn->get_projected_linkage();
-      if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
-	if (in->inode.nlink == 0)
-	  in->state_set(CInode::STATE_ORPHAN);
-	maybe_eval_stray(in);
+    std::vector<CDir*> ls;
+    strays[i]->get_dirfrags(ls);
+
+    for (const auto& dir : ls) {
+      if (dir->get_frag() < next.frag)
+	continue;
+
+      if (!dir->can_auth_pin()) {
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+
+      if (!dir->is_complete()) {
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+
+      for (auto &p : dir->items) {
+	CDentry *dn = p.second;
+	dn->state_set(CDentry::STATE_STRAY);
+	CDentry::linkage_t *dnl = dn->get_projected_linkage();
+	if (dnl->is_primary()) {
+	  CInode *in = dnl->get_inode();
+	  if (in->inode.nlink == 0)
+	    in->state_set(CInode::STATE_ORPHAN);
+	  maybe_eval_stray(in);
+	}
       }
     }
   }
@@ -10661,7 +10777,7 @@ void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 			      uint64_t features)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ceph_assert(in->is_auth());
   encode(in->inode.ino, bl);  // bleh, minor assymetry here
   encode(in->last, bl);
@@ -10671,6 +10787,10 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 
   in->_encode_base(bl, features);
   in->_encode_locks_state_for_replica(bl, mds->get_state() < MDSMap::STATE_ACTIVE);
+
+  __u32 state = in->state;
+  encode(state, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -10767,7 +10887,7 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
 
 void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   inodeno_t ino;
   snapid_t last;
   __u32 nonce;
@@ -10801,12 +10921,24 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << __func__ << " different linkage in dentry " << *dn << dendl;
   }
+
+  if (struct_v >= 2) {
+    __u32 s;
+    decode(s, p);
+    s &= CInode::MASK_STATE_REPLICATED;
+    if (s & CInode::STATE_RANDEPHEMERALPIN) {
+      dout(10) << "replica inode is random ephemeral pinned" << dendl;
+      in->set_ephemeral_rand(true);
+    }
+  }
+
   DECODE_FINISH(p); 
 }
 
  
 void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 {
+  ceph_assert(straydn->get_num_auth_pins());
   ENCODE_START(1, 1, bl);
   uint64_t features = mds->mdsmap->get_up_features();
   encode_replica_inode(get_myin(), who, bl, features);
@@ -11361,8 +11493,8 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: i won't merge|split anything in stray" << dendl;
     return false;
   }
-  if (diri->is_mdsdir() || diri->is_stray() || diri->ino() == MDS_INO_CEPH) {
-    dout(7) << "can_fragment: i won't fragment the mdsdir or straydir or .ceph" << dendl;
+  if (diri->is_mdsdir() || diri->ino() == MDS_INO_CEPH) {
+    dout(7) << "can_fragment: i won't fragment mdsdir or .ceph" << dendl;
     return false;
   }
 
@@ -11448,7 +11580,7 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
   CDir *first = dirs.front();
   int bits = first->get_frag().bits() - frag.bits();
-  dout(10) << " we are merginb by " << bits << " bits" << dendl;
+  dout(10) << " we are merging by " << bits << " bits" << dendl;
 
   dirfrag_t basedirfrag(diri->ino(), frag);
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
@@ -11763,7 +11895,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   dout(10) << "dispatch_fragment_dir " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
 
-  if (mdr->more()->slave_error)
+  if (mdr->more()->peer_error)
     mdr->aborted = true;
 
   if (!mdr->aborted) {
@@ -12179,6 +12311,12 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& 
       uncommitted_fragments.erase(it);
     }
   }
+}
+
+void MDCache::wait_for_uncommitted_fragments(MDSGather *gather)
+{
+  for (auto& p : uncommitted_fragments)
+    p.second.waiters.push_back(gather->new_sub());
 }
 
 void MDCache::rollback_uncommitted_fragments()
@@ -13232,12 +13370,15 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   return true;
 }
 
-void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
+void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   // process export_pin_delayed_queue whenever a new MDSMap received
   auto &q = export_pin_delayed_queue;
   for (auto it = q.begin(); it != q.end(); ) {
     auto *in = *it;
     mds_rank_t export_pin = in->get_export_pin(false);
+    if (in->is_ephemerally_pinned()) {
+      dout(10) << "ephemeral export pin to " << export_pin << " for " << *in << dendl;
+    }
     dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
       << " max_mds=" << mdsmap.get_max_mds() << dendl;
     if (export_pin >= mdsmap.get_max_mds()) {
@@ -13247,7 +13388,20 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
 
     in->state_clear(CInode::STATE_DELAYEDEXPORTPIN);
     it = q.erase(it);
-    in->maybe_export_pin();
+    in->queue_export_pin(export_pin);
+  }
+
+  if (mdsmap.get_max_mds() != oldmap.get_max_mds()) {
+    dout(10) << "Checking ephemerally pinned directories for redistribute due to max_mds change." << dendl;
+    /* copy to vector to avoid removals during iteration */
+    std::vector<CInode*> migrate;
+    migrate.assign(rand_ephemeral_pins.begin(), rand_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_rand();
+    }
+    migrate.assign(dist_ephemeral_pins.begin(), dist_ephemeral_pins.end());
+    for (auto& in : migrate) {
+      in->maybe_ephemeral_dist();
+    }
   }
 }
-

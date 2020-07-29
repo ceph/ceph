@@ -3,6 +3,7 @@
 SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
+CORPUS_COMMIT=9cd9ad020d93b0b420924fec55da307aff8bd422
 
 [ -z "$SUDO" ] && SUDO=sudo
 if [ -z "$CEPHADM" ]; then
@@ -54,8 +55,10 @@ CEPHADM="$SUDO $CEPHADM_BIN"
 CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
 TMPDIR=$(mktemp -d)
 git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
-CORPUS_DIR=${TMPDIR}/archive
 trap "$SUDO rm -rf $TMPDIR" EXIT
+
+git -C $TMPDIR checkout $CORPUS_COMMIT
+CORPUS_DIR=${TMPDIR}/archive
 
 for subdir in `ls ${CORPUS_DIR}`; do
     for tarfile in `ls ${CORPUS_DIR}/${subdir} | grep .tgz`; do

@@ -20,7 +20,7 @@ and its private keyring.
 
 It is also possible to deploy BlueStore across two additional devices:
 
-* A *WAL device* (identified as ``block.wal`` in the data directory) can be
+* A *write-ahead log (WAL) device* (identified as ``block.wal`` in the data directory) can be
   used for BlueStore's internal journal or write-ahead log. It is only useful
   to use a WAL device if the device is faster than the primary device (e.g.,
   when it is on an SSD and the primary device is an HDD).
@@ -141,7 +141,7 @@ automatically manage these within the space of ``block``.
 Automatic Cache Sizing
 ======================
 
-Bluestore can be configured to automatically resize it's caches when tc_malloc
+Bluestore can be configured to automatically resize it's caches when TCMalloc
 is configured as the memory allocator and the ``bluestore_cache_autotune``
 setting is enabled.  This option is currently enabled by default.  Bluestore
 will attempt to keep OSD heap memory usage under a designated target size via

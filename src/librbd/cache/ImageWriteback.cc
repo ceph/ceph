@@ -10,6 +10,7 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ReadResult.h"
 
+#undef dout_subsys
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ImageWriteback: " << __func__ << ": "
@@ -73,14 +74,15 @@ void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void ImageWriteback<I>::aio_flush(Context *on_finish) {
+void ImageWriteback<I>::aio_flush(io::FlushSource flush_source, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "on_finish=" << on_finish << dendl;
 
   ImageCtx *image_ctx = util::get_image_ctx(&m_image_ctx);
   auto aio_comp = io::AioCompletion::create_and_start(
       on_finish, image_ctx, io::AIO_TYPE_FLUSH);
-  io::ImageFlushRequest<> req(*image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+  io::ImageFlushRequest<> req(*image_ctx, aio_comp, flush_source,
+                              {});
   req.set_bypass_image_cache();
   req.send();
 }

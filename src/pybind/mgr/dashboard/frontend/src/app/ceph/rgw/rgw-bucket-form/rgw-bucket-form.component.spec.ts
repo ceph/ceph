@@ -8,9 +8,10 @@ import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
+import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -24,6 +25,7 @@ describe('RgwBucketFormComponent', () => {
   let rgwBucketService: RgwBucketService;
   let getPlacementTargetsSpy: jasmine.Spy;
   let rgwBucketServiceGetSpy: jasmine.Spy;
+  let enumerateSpy: jasmine.Spy;
   let formHelper: FormHelper;
 
   configureTestBed({
@@ -34,16 +36,16 @@ describe('RgwBucketFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot()
-    ],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwBucketFormComponent);
     component = fixture.componentInstance;
-    rgwBucketService = TestBed.get(RgwBucketService);
+    rgwBucketService = TestBed.inject(RgwBucketService);
     rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
-    getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'getPlacementTargets');
+    getPlacementTargetsSpy = spyOn(TestBed.inject(RgwSiteService), 'get');
+    enumerateSpy = spyOn(TestBed.inject(RgwUserService), 'enumerate');
     formHelper = new FormHelper(component.bucketForm);
   });
 
@@ -156,6 +158,7 @@ describe('RgwBucketFormComponent', () => {
         ]
       };
       getPlacementTargetsSpy.and.returnValue(observableOf(payload));
+      enumerateSpy.and.returnValue(observableOf([]));
       fixture.detectChanges();
 
       expect(component.zonegroup).toBe(payload.zonegroup);
@@ -174,8 +177,8 @@ describe('RgwBucketFormComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 
@@ -200,7 +203,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Created Object Gateway bucket ""'
+        `Created Object Gateway bucket 'null'`
       );
     });
 
@@ -211,7 +214,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway bucket "".'
+        `Updated Object Gateway bucket 'null'.`
       );
     });
   });
@@ -226,9 +229,12 @@ describe('RgwBucketFormComponent', () => {
       component['route'].params = observableOf({ bid: 'bid' });
       component.editing = true;
       rgwBucketServiceGetSpy.and.returnValue(observableOf(fakeResponse));
+      enumerateSpy.and.returnValue(observableOf([]));
       component.ngOnInit();
-      component.isVersioningEnabled = versioningChecked;
-      component.isMfaDeleteEnabled = mfaDeleteChecked;
+      component.bucketForm.patchValue({
+        versioning: versioningChecked,
+        'mfa-delete': mfaDeleteChecked
+      });
       fixture.detectChanges();
 
       const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector('#mfa-token-serial');

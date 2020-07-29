@@ -4,11 +4,11 @@
 #include "librbd/cache/WriteAroundObjectDispatch.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -44,7 +44,7 @@ void WriteAroundObjectDispatch<I>::init() {
   if (m_init_max_dirty > 0) {
     m_image_ctx->disable_zero_copy = true;
   }
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
 }
 
 template <typename I>
@@ -59,7 +59,7 @@ template <typename I>
 bool WriteAroundObjectDispatch<I>::read(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::ExtentMap* extent_map,
+    ceph::bufferlist* read_data, io::Extents* extent_map,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   return dispatch_unoptimized_io(object_no, object_off, object_len,

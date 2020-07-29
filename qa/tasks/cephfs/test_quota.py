@@ -47,7 +47,7 @@ class TestQuota(CephFSTestCase):
         self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes",
                               "%s" % size_before)
 
-        self.mount_b.mount(mount_path="/subdir")
+        self.mount_b.mount_wait(mount_path="/subdir")
 
         self.assertDictEqual(
             self.mount_b.df(),

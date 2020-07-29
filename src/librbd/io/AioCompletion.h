@@ -19,10 +19,10 @@
 #include <condition_variable>
 #include <mutex>
 
+struct Context;
 
 namespace librbd {
 namespace io {
-
 
 /**
  * AioCompletion is the overall completion for a single
@@ -71,6 +71,8 @@ struct AioCompletion {
   bool event_notify = false;
   bool was_armed = false;
   bool external_callback = false;
+
+  Context* image_dispatcher_ctx = nullptr;
 
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
@@ -179,7 +181,7 @@ private:
   void queue_complete();
   void complete_external_callback();
   void complete_event_socket();
-
+  void notify_callbacks_complete();
 };
 
 class C_AioRequest : public Context {

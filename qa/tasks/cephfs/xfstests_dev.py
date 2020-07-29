@@ -1,5 +1,4 @@
 from io import BytesIO
-import six
 import logging
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 class XFSTestsDev(CephFSTestCase):
 
     def setUp(self):
-        CephFSTestCase.setUp(self)
+        super(XFSTestsDev, self).setUp()
         self.prepare_xfstests_dev()
 
     def prepare_xfstests_dev(self):
@@ -51,16 +50,10 @@ class XFSTestsDev(CephFSTestCase):
 
     def get_admin_key(self):
         import configparser
-        from sys import version_info as sys_version_info
 
         cp = configparser.ConfigParser()
-        if sys_version_info.major > 2:
-            cp.read_string(self.fs.mon_manager.raw_cluster_cmd(
-                'auth', 'get-or-create', 'client.admin'))
-        # TODO: remove this part when we stop supporting Python 2
-        elif sys_version_info.major <= 2:
-            cp.read_string(six.text_type(self.fs.mon_manager.raw_cluster_cmd(
-                'auth', 'get-or-create', 'client.admin')))
+        cp.read_string(self.fs.mon_manager.raw_cluster_cmd(
+            'auth', 'get-or-create', 'client.admin'))
 
         return cp['client.admin']['key']
 
@@ -172,3 +165,5 @@ class XFSTestsDev(CephFSTestCase):
         self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
                                              self.repo_path],
                                        omit_sudo=False, check_status=False)
+
+        super(XFSTestsDev, self).tearDown()

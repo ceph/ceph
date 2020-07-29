@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>OSD Recovery Priority</ng-container>
 
@@ -81,16 +81,14 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button *ngIf="permissions.configOpt.update"
-                            (submitAction)="submitAction()"
-                            [form]="osdRecvSpeedForm"
-                            i18n>Submit</cd-submit-button>
-          <cd-back-button [back]="bsModalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-submit-button *ngIf="permissions.configOpt.update"
+                          (submitAction)="submitAction()"
+                          [form]="osdRecvSpeedForm"
+                          i18n>Submit</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

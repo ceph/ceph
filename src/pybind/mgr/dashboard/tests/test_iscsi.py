@@ -105,6 +105,31 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self.assertStatus(200)
         self.assertJsonBody(discoveryauth)
 
+    def test_bad_discoveryauth(self):
+        discoveryauth = {
+            'user': 'myiscsiusername',
+            'password': 'myiscsipasswordmyiscsipasswordmyiscsipassword',
+            'mutual_user': '',
+            'mutual_password': ''
+        }
+        put_response = {
+            'detail': 'Bad authentication',
+            'code': 'target_bad_auth',
+            'component': 'iscsi'
+        }
+        get_response = {
+            'user': '',
+            'password': '',
+            'mutual_user': '',
+            'mutual_password': ''
+        }
+        self._put('/api/iscsi/discoveryauth', discoveryauth)
+        self.assertStatus(400)
+        self.assertJsonBody(put_response)
+        self._get('/api/iscsi/discoveryauth')
+        self.assertStatus(200)
+        self.assertJsonBody(get_response)
+
     def test_disable_discoveryauth(self):
         discoveryauth = {
             'user': '',
@@ -200,16 +225,44 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self._update_iscsi_target(create_request, update_request, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_add_bad_client(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw4"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'].append(
+            {
+                "luns": [{"image": "lun1", "pool": "rbd"}],
+                "client_iqn": "iqn.1994-05.com.redhat:rh7-client4",
+                "auth": {
+                    "password": "myiscsipassword7myiscsipassword7myiscsipasswo",
+                    "user": "myiscsiusername7",
+                    "mutual_password": "myiscsipassword8",
+                    "mutual_user": "myiscsiusername8"}
+            })
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+
+        self._task_post('/api/iscsi/target', create_request)
+        self.assertStatus(201)
+        self._task_put('/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
+        self.assertStatus(400)
+        self._get('/api/iscsi/target/{}'.format(update_request['new_target_iqn']))
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_change_client_password(self, _validate_image_mock):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw5"
         create_request = copy.deepcopy(iscsi_target_request)
         create_request['target_iqn'] = target_iqn
         update_request = copy.deepcopy(create_request)
         update_request['new_target_iqn'] = target_iqn
-        update_request['clients'][0]['auth']['password'] = 'mynewiscsipassword'
+        update_request['clients'][0]['auth']['password'] = 'MyNewPassword'
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
-        response['clients'][0]['auth']['password'] = 'mynewiscsipassword'
+        response['clients'][0]['auth']['password'] = 'MyNewPassword'
         self._update_iscsi_target(create_request, update_request, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
@@ -553,6 +606,7 @@ class IscsiClientMock(object):
 
     def get_settings(self):
         return {
+            "api_version": 2,
             "backstores": [
                 "user:rbd"
             ],

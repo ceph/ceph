@@ -5,9 +5,7 @@ try:
 except ImportError:
     pass
 
-from ceph.deployment.inventory import Device
-
-from ..inventory import Devices
+from ..inventory import Device
 from ..drive_group import DriveGroupSpec, DeviceSelection
 
 from .filter import FilterGenerator
@@ -18,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DriveSelection(object):
     def __init__(self,
                  spec,  # type: DriveGroupSpec
-                 disks,  # type: Devices
+                 disks,  # type: List[Device]
                  ):
         self.disks = disks.copy()
         self.spec = spec
@@ -136,11 +134,19 @@ class DriveSelection(object):
             if disk in devices:
                 continue
 
-            if not all(m.compare(disk) for m in FilterGenerator(device_filter)):
-                logger.debug(
-                    "Ignoring disk {}. Filter did not match".format(
-                        disk.path))
-                continue
+            if self.spec.filter_logic == 'AND':
+                if not all(m.compare(disk) for m in FilterGenerator(device_filter)):
+                    logger.debug(
+                        "Ignoring disk {}. Not all filter did match the disk".format(
+                            disk.path))
+                    continue
+
+            if self.spec.filter_logic == 'OR':
+                if not any(m.compare(disk) for m in FilterGenerator(device_filter)):
+                    logger.debug(
+                        "Ignoring disk {}. No filter matched the disk".format(
+                            disk.path))
+                    continue
 
             logger.debug('Adding disk {}'.format(disk.path))
             devices.append(disk)

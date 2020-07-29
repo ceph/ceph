@@ -21,18 +21,6 @@
  */
 class KeyValueDB {
 public:
-  /*
-   *  See RocksDB's definition of a column family(CF) and how to use it.
-   *  The interfaces of KeyValueDB is extended, when a column family is created.
-   *  Prefix will be the name of column family to use.
-   */
-  struct ColumnFamily {
-    std::string name;      //< name of this individual column family
-    std::string option;    //< configure option string for this CF
-    ColumnFamily(const std::string &name, const std::string &option)
-      : name(name), option(option) {}
-  };
-
   class TransactionImpl {
   public:
     /// Set Keys
@@ -155,12 +143,11 @@ public:
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(std::string option_str="") = 0;
-  virtual int open(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) = 0;
+  virtual int open(std::ostream &out, const std::string& cfs="") = 0;
   // std::vector cfs contains column families to be created when db is created.
-  virtual int create_and_open(std::ostream &out,
-			      const std::vector<ColumnFamily>& cfs = {}) = 0;
+  virtual int create_and_open(std::ostream &out, const std::string& cfs="") = 0;
 
-  virtual int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) {
+  virtual int open_read_only(std::ostream &out, const std::string& cfs="") {
     return -ENOTSUP;
   }
 
@@ -325,20 +312,13 @@ private:
     }
   };
 public:
-
-  virtual WholeSpaceIterator get_wholespace_iterator() = 0;
-  virtual Iterator get_iterator(const std::string &prefix) {
+  typedef uint32_t IteratorOpts;
+  static const uint32_t ITERATOR_NOCACHE = 1;
+  virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) = 0;
+  virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0) {
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
-      get_wholespace_iterator());
-  }
-
-  void add_column_family(const std::string& cf_name, void *handle) {
-    cf_handles.insert(std::make_pair(cf_name, handle));
-  }
-
-  bool is_column_family(const std::string& prefix) {
-    return cf_handles.count(prefix);
+      get_wholespace_iterator(opts));
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -438,8 +418,6 @@ protected:
   std::vector<std::pair<std::string,
 			std::shared_ptr<MergeOperator> > > merge_ops;
 
-  /// column families in use, name->handle
-  std::unordered_map<std::string, void *> cf_handles;
 };
 
 #endif

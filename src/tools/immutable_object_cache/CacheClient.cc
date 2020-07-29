@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/bind/bind.hpp>
 #include "CacheClient.h"
 #include "common/Cond.h"
 
@@ -58,6 +59,7 @@ namespace immutable_obj_cache {
         thd->join();
         delete thd;
       }
+      delete m_worker_io_service_work;
       delete m_worker;
     }
     return 0;

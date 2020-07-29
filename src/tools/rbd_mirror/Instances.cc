@@ -3,10 +3,10 @@
 
 #include "include/stringify.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "InstanceWatcher.h"
 #include "Instances.h"
 #include "Threads.h"
@@ -262,7 +262,7 @@ void Instances<I>::remove_instances(const Instances<I>::clock_t::time_point& tim
 
   auto gather_ctx = new C_Gather(m_cct, ctx);
   for (auto& instance_id : instance_ids) {
-    InstanceWatcher<I>::remove_instance(m_ioctx, m_threads->work_queue,
+    InstanceWatcher<I>::remove_instance(m_ioctx, *m_threads->asio_engine,
                                         instance_id, gather_ctx->new_sub());
   }
 

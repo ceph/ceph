@@ -27,7 +27,7 @@ class ObjectDispatch : public ObjectDispatchInterface {
 public:
   ObjectDispatch(ImageCtxT* image_ctx);
 
-  ObjectDispatchLayer get_object_dispatch_layer() const override {
+  ObjectDispatchLayer get_dispatch_layer() const override {
     return OBJECT_DISPATCH_LAYER_CORE;
   }
 
@@ -37,7 +37,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      ExtentMap* extent_map, int* object_dispatch_flags,
+      Extents* extent_map, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 

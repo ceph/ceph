@@ -92,6 +92,11 @@ public:
     uint64_t offset,
     size_t len,
     uint32_t op_flags = 0) = 0;
+  virtual read_errorator::future<ceph::bufferlist> readv(
+    CollectionRef c,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    uint32_t op_flags = 0) = 0;
 
   using get_attr_errorator = crimson::errorator<
     crimson::ct_error::enoent,
@@ -117,12 +122,12 @@ public:
                                          CollectionRef c,
                                          const ghobject_t& oid,
                                          const omap_keys_t& keys) = 0;
-  virtual seastar::future<std::vector<ghobject_t>, ghobject_t> list_objects(
-                                         CollectionRef c,
-                                         const ghobject_t& start,
-                                         const ghobject_t& end,
-                                         uint64_t limit) const = 0;
-  virtual seastar::future<bool, omap_values_t> omap_get_values(
+  virtual seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
+    CollectionRef c,
+    const ghobject_t& start,
+    const ghobject_t& end,
+    uint64_t limit) const = 0;
+  virtual seastar::future<std::tuple<bool, omap_values_t>> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -149,7 +154,8 @@ public:
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
-  virtual seastar::future<int, std::string> read_meta(const std::string& key) = 0;
+  virtual seastar::future<std::tuple<int, std::string>> read_meta(
+    const std::string& key) = 0;
   virtual uuid_d get_fsid() const  = 0;
   virtual unsigned get_max_attr_name_length() const = 0;
 };

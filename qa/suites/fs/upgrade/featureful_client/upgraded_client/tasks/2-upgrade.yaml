@@ -1,7 +1,5 @@
 overrides:
   ceph:
-    mon_bind_msgr2: false
-    mon_bind_addrvec: false
     log-whitelist:
     - scrub mismatch
     - ScrubResult
@@ -29,9 +27,6 @@ tasks:
     daemons: [mon.*, mgr.*]
     mon-health-to-clog: false
     wait-for-healthy: false
-- exec:
-    mon.a:
-      - ceph config set global mon_warn_on_msgr2_not_enabled false
 - ceph.healthy:
 - ceph.restart:
     daemons: [osd.*]
@@ -44,10 +39,8 @@ tasks:
     wait-for-osds-up: true
 - exec:
     mon.a:
-    - ceph mon enable-msgr2
     - ceph versions
     - ceph osd dump -f json-pretty
-    - ceph config rm global mon_warn_on_msgr2_not_enabled
     - ceph osd require-osd-release octopus
     - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
     #- ceph osd set-require-min-compat-client nautilus

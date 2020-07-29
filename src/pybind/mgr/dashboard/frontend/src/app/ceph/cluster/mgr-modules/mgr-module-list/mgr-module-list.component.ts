@@ -1,10 +1,10 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { timer as observableTimer } from 'rxjs';
 
 import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
+import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
@@ -21,7 +21,7 @@ import { NotificationService } from '../../../../shared/services/notification.se
   templateUrl: './mgr-module-list.component.html',
   styleUrls: ['./mgr-module-list.component.scss']
 })
-export class MgrModuleListComponent {
+export class MgrModuleListComponent extends ListWithDetails {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @BlockUI()
@@ -36,25 +36,25 @@ export class MgrModuleListComponent {
   constructor(
     private authStorageService: AuthStorageService,
     private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService,
-    private i18n: I18n
+    private notificationService: NotificationService
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().configOpt;
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Enabled'),
+        name: $localize`Enabled`,
         prop: 'enabled',
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: this.i18n('Always-On'),
+        name: $localize`Always-On`,
         prop: 'always_on',
         isHidden: true,
         flexGrow: 1,
@@ -66,7 +66,7 @@ export class MgrModuleListComponent {
       this.selection.first() && encodeURIComponent(this.selection.first().name);
     this.tableActions = [
       {
-        name: this.i18n('Edit'),
+        name: $localize`Edit`,
         permission: 'update',
         disable: () => {
           if (!this.selection.hasSelection) {
@@ -79,14 +79,14 @@ export class MgrModuleListComponent {
         icon: Icons.edit
       },
       {
-        name: this.i18n('Enable'),
+        name: $localize`Enable`,
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('enabled'),
         icon: Icons.start
       },
       {
-        name: this.i18n('Disable'),
+        name: $localize`Disable`,
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('disabled'),
@@ -144,7 +144,7 @@ export class MgrModuleListComponent {
     if (this.selection.hasSelection) {
       const selected = this.selection.first();
       if (selected.always_on) {
-        return this.i18n('This Manager module is always on.');
+        return $localize`This Manager module is always on.`;
       }
     }
 
@@ -189,13 +189,13 @@ export class MgrModuleListComponent {
       $obs = this.mgrModuleService.enable(module.name);
     }
     $obs.subscribe(
-      () => {},
+      () => undefined,
       () => {
         // Suspend showing the notification toasties.
         this.notificationService.suspendToasties(true);
         // Block the whole UI to prevent user interactions until
         // the connection to the backend is reestablished
-        this.blockUI.start(this.i18n('Reconnecting, please wait ...'));
+        this.blockUI.start($localize`Reconnecting, please wait ...`);
         fnWaitUntilReconnected();
       }
     );

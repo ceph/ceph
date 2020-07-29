@@ -68,7 +68,9 @@ public:
   CyanStore(const std::string& path);
   ~CyanStore() final;
 
-  seastar::future<> stop() final {return seastar::now();}
+  seastar::future<> stop() final {
+    return seastar::now();
+  }
   seastar::future<> mount() final;
   seastar::future<> umount() final;
 
@@ -84,6 +86,12 @@ public:
     uint64_t offset,
     size_t len,
     uint32_t op_flags = 0) final;
+  read_errorator::future<ceph::bufferlist> readv(
+    CollectionRef c,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    uint32_t op_flags = 0) final;
+
   get_attr_errorator::future<ceph::bufferptr> get_attr(
     CollectionRef c,
     const ghobject_t& oid,
@@ -97,14 +105,14 @@ public:
     const ghobject_t& oid,
     const omap_keys_t& keys) final;
 
-  seastar::future<std::vector<ghobject_t>, ghobject_t> list_objects(
+  seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) const final;
 
   /// Retrieves paged set of values > start (if present)
-  seastar::future<bool, omap_values_t> omap_get_values(
+  seastar::future<std::tuple<bool, omap_values_t>> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -123,7 +131,8 @@ public:
 
   seastar::future<> write_meta(const std::string& key,
 		  const std::string& value) final;
-  seastar::future<int, std::string> read_meta(const std::string& key) final;
+  seastar::future<std::tuple<int, std::string>>
+  read_meta(const std::string& key) final;
   uuid_d get_fsid() const final;
   unsigned get_max_attr_name_length() const final;
 

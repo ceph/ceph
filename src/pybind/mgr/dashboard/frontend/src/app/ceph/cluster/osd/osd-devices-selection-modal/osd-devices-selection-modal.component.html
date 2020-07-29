@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>{{ deviceType }} devices</ng-container>
 
@@ -34,7 +34,7 @@
         <cd-submit-button (submitAction)="onSubmit()"
                           [form]="formGroup"
                           [disabled]="!canSubmit || filteredDevices.length === 0">{{ action | titlecase }}</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+        <cd-back-button [back]="activeModal.close"></cd-back-button>
       </div>
     </form>
   </ng-container>

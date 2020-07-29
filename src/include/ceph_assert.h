@@ -4,12 +4,12 @@
 #include <cstdlib>
 #include <string>
 
-#if defined(__linux__)
-#include <features.h>
-
 #ifndef __STRING
 # define __STRING(x) #x
 #endif
+
+#if defined(__linux__)
+#include <features.h>
 
 #elif defined(__FreeBSD__)
 #include <sys/cdefs.h>
@@ -70,7 +70,7 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 #define assert_warn(expr)							\
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
+   : ::ceph::__ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 }
 

@@ -33,13 +33,7 @@ import logging
 import tempfile
 import threading
 
-try:
-    # python 3 
-    from urllib.parse import urlparse
-except ImportError:
-    # python 2 fallback
-    from urlparse import urlparse
-
+from urllib.parse import urlparse
 from datetime import tzinfo, datetime, timedelta
    
 from urllib3.exceptions import MaxRetryError,ProtocolError
@@ -250,6 +244,27 @@ class BaseThread(threading.Thread):
     daemon = True
 
 
+def clean_event(event):
+    """ clean an event record """
+    if not event.first_timestamp:
+        log.error("first_timestamp is empty")
+        if event.metadata.creation_timestamp:
+            log.error("setting first_timestamp to the creation timestamp")
+            event.first_timestamp = event.metadata.creation_timestamp
+        else:
+            log.error("defaulting event first timestamp to current datetime")
+            event.first_timestamp = datetime.datetime.now()
+
+    if not event.last_timestamp:
+        log.error("setting event last timestamp to {}".format(event.first_timestamp))
+        event.last_timestamp = event.first_timestamp
+
+    if not event.count:
+        event.count = 1
+
+    return event
+
+
 class NamespaceWatcher(BaseThread):
     """Watch events in a given namespace 
     
@@ -289,7 +304,7 @@ class NamespaceWatcher(BaseThread):
             self.resource_version = resp.metadata.resource_version
             
             for item in resp.items:
-                self.events[item.metadata.name] = item
+                self.events[item.metadata.name] = clean_event(item)
             log.info('Added {} events'.format(len(resp.items)))
 
     def run(self):
@@ -311,7 +326,7 @@ class NamespaceWatcher(BaseThread):
                         with self.lock:
 
                             if item['type'] in ['ADDED', 'MODIFIED']:
-                                self.events[obj.metadata.name] = obj
+                                self.events[obj.metadata.name] = clean_event(obj)
 
                             elif item['type'] == 'DELETED':
                                 del self.events[obj.metadata.name]
@@ -331,6 +346,10 @@ class NamespaceWatcher(BaseThread):
                     # refresh the resource_version & watcher
                     log.warning("API exception caught in watcher ({})".format(e))
                     log.warning("Restarting namespace watcher")
+                    self.fetch()
+
+                except ProtocolError as e:
+                    log.warning("Namespace watcher hit protocolerror ({}) - restarting".format(e))
                     self.fetch()
 
                 except Exception:
@@ -1156,10 +1175,10 @@ class Module(MgrModule):
 
             s += fmt.format(
                     datetime.strftime(event.last_timestamp,"%Y/%m/%d %H:%M:%S"),
-                    event.type,
-                    event.count,
-                    event.message,
-                    event_name
+                    str(event.type),
+                    str(event.count),
+                    str(event.message),
+                    str(event_name)
             )
         s += "Total : {:>3}\n".format(len(events))
         return s

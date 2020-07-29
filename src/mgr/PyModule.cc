@@ -31,7 +31,11 @@
 std::string PyModule::config_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+// Boost apparently can't be bothered to fix its own usage of its own
+// deprecated features.
 #include <boost/python.hpp>
+#undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"  // boost clobbers this
 // decode a Python exception into a string
@@ -43,6 +47,7 @@ std::string handle_pyerror()
     PyObject *exc, *val, *tb;
     object formatted_list, formatted;
     PyErr_Fetch(&exc, &val, &tb);
+    PyErr_NormalizeException(&exc, &val, &tb);
     handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
     object traceback(import("traceback"));
     if (!tb) {
@@ -56,6 +61,7 @@ std::string handle_pyerror()
           std::stringstream ss;
           ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
           Py_XDECREF(name_attr);
+          ss << "\nError processing exception object: " << peek_pyerror();
           return ss.str();
         }
     } else {
@@ -69,6 +75,7 @@ std::string handle_pyerror()
           std::stringstream ss;
           ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
           Py_XDECREF(name_attr);
+          ss << "\nError processing exception object: " << peek_pyerror();
           return ss.str();
         }
     }
@@ -118,7 +125,6 @@ namespace {
     {nullptr, nullptr, 0, nullptr}
   };
 
-#if PY_MAJOR_VERSION >= 3
   static PyModuleDef ceph_logger_module = {
     PyModuleDef_HEAD_INIT,
     "ceph_logger",
@@ -126,7 +132,6 @@ namespace {
     -1,
     log_methods,
   };
-#endif
 }
 
 PyModuleConfig::PyModuleConfig() = default;  
@@ -249,7 +254,6 @@ std::string PyModule::get_site_packages()
   return site_packages.str();
 }
 
-#if PY_MAJOR_VERSION >= 3
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
@@ -257,25 +261,12 @@ PyObject* PyModule::init_ceph_logger()
   PySys_SetObject("stdout", py_logger);
   return py_logger;
 }
-#else
-void PyModule::init_ceph_logger()
-{
-  auto py_logger = Py_InitModule("ceph_logger", log_methods);
-  PySys_SetObject(const_cast<char*>("stderr"), py_logger);
-  PySys_SetObject(const_cast<char*>("stdout"), py_logger);
-}
-#endif
 
-#if PY_MAJOR_VERSION >= 3
 PyObject* PyModule::init_ceph_module()
-#else
-void PyModule::init_ceph_module()
-#endif
 {
   static PyMethodDef module_methods[] = {
     {nullptr, nullptr, 0, nullptr}
   };
-#if PY_MAJOR_VERSION >= 3
   static PyModuleDef ceph_module_def = {
     PyModuleDef_HEAD_INIT,
     "ceph_module",
@@ -288,9 +279,6 @@ void PyModule::init_ceph_module()
     nullptr
   };
   PyObject *ceph_module = PyModule_Create(&ceph_module_def);
-#else
-  PyObject *ceph_module = Py_InitModule("ceph_module", module_methods);
-#endif
   ceph_assert(ceph_module != nullptr);
   std::map<const char*, PyTypeObject*> classes{
     {{"BaseMgrModule", &BaseMgrModuleType},
@@ -308,9 +296,7 @@ void PyModule::init_ceph_module()
 
     PyModule_AddObject(ceph_module, name, (PyObject *)type);
   }
-#if PY_MAJOR_VERSION >= 3
   return ceph_module;
-#endif
 }
 
 int PyModule::load(PyThreadState *pMainThreadState)
@@ -330,26 +316,15 @@ int PyModule::load(PyThreadState *pMainThreadState)
       pMyThreadState.set(thread_state);
       // Some python modules do not cope with an unpopulated argv, so lets
       // fake one.  This step also picks up site-packages into sys.path.
-#if PY_MAJOR_VERSION >= 3
       const wchar_t *argv[] = {L"ceph-mgr"};
       PySys_SetArgv(1, (wchar_t**)argv);
-#else
-      const char *argv[] = {"ceph-mgr"};
-      PySys_SetArgv(1, (char**)argv);
-#endif
       // Configure sys.path to include mgr_module_path
       string paths = (":" + g_conf().get_val<std::string>("mgr_module_path") +
 		      ":" + get_site_packages());
-#if PY_MAJOR_VERSION >= 3
       wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
       dout(10) << "Computed sys.path '"
 	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
-#else
-      string sys_path(Py_GetPath() + paths);
-      PySys_SetPath(const_cast<char*>(sys_path.c_str()));
-      dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
-#endif
     }
   }
   // Environment is all good, import the external module

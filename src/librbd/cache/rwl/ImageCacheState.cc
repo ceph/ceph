@@ -9,6 +9,7 @@
 #include "common/config_proxy.h"
 #include "common/ceph_json.h"
 
+#undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::rwl::ImageCacheState: " << this << " " \

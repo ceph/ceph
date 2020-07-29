@@ -11,15 +11,15 @@ import os
 import pkgutil
 import re
 import sys
+import urllib
 
-import six
-from six.moves.urllib.parse import unquote
+from functools import wraps
 
 # pylint: disable=wrong-import-position
 import cherrypy
 
 from ..security import Scope, Permission
-from ..tools import wraps, getargspec, TaskManager, get_request_body_params
+from ..tools import getargspec, TaskManager, get_request_body_params
 from ..exceptions import ScopeNotValid, PermissionNotValid
 from ..services.auth import AuthManager, JwtManager
 from ..plugins import PLUGIN_MANAGER
@@ -655,8 +655,8 @@ class BaseController(object):
         @wraps(func)
         def inner(*args, **kwargs):
             for key, value in kwargs.items():
-                if isinstance(value, six.text_type):
-                    kwargs[key] = unquote(value)
+                if isinstance(value, str):
+                    kwargs[key] = urllib.parse.unquote(value)
 
             # Process method arguments.
             params = get_request_body_params(cherrypy.request)
@@ -717,6 +717,7 @@ class RESTController(BaseController):
     * bulk_delete()
     * get(key)
     * set(data, key)
+    * singleton_set(data)
     * delete(key)
 
     Test with curl:
@@ -749,7 +750,8 @@ class RESTController(BaseController):
         ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204}),
         ('get', {'method': 'GET', 'resource': True, 'status': 200}),
         ('delete', {'method': 'DELETE', 'resource': True, 'status': 204}),
-        ('set', {'method': 'PUT', 'resource': True, 'status': 200})
+        ('set', {'method': 'PUT', 'resource': True, 'status': 200}),
+        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200})
     ])
 
     @classmethod

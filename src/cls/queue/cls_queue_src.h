@@ -1,6 +1,10 @@
 #ifndef CEPH_CLS_QUEUE_SRC_H
 #define CEPH_CLS_QUEUE_SRC_H
 
+#include "objclass/objclass.h"
+#include "cls/queue/cls_queue_types.h"
+#include "cls/queue/cls_queue_ops.h"
+
 int queue_write_head(cls_method_context_t hctx, cls_queue_head& head);
 int queue_read_head(cls_method_context_t hctx, cls_queue_head& head);
 int queue_init(cls_method_context_t hctx, const cls_queue_init_op& op);

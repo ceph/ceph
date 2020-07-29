@@ -38,7 +38,10 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
                  RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX,
                  RBD_SNAP_REMOVE_UNPROTECT, RBD_SNAP_MIRROR_STATE_PRIMARY,
-                 RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)
+                 RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED,
+                 RBD_SNAP_CREATE_SKIP_QUIESCE,
+                 RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
+                 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
 
 rados = None
 ioctx = None
@@ -190,7 +193,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
             feature_data_pool = 128
         image_name = get_temp_image_name()
         if exception is None:
-            RBD().create(ioctx, image_name, IMG_SIZE)
+            RBD().create(ioctx, image_name, IMG_SIZE, old_format=(format == 1))
             try:
                 with Image(ioctx, image_name) as image:
                     eq(format == 1, image.old_format())
@@ -588,6 +591,10 @@ class TestImage(object):
     def test_image_auto_close(self):
         image = Image(ioctx, image_name)
 
+    def test_use_after_close(self):
+        self.image.close()
+        assert_raises(InvalidArgument, self.image.stat)
+
     def test_write(self):
         data = rand_data(256)
         self.image.write(data, 0)
@@ -596,6 +603,20 @@ class TestImage(object):
         data = rand_data(256)
         self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
         self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_NOCACHE)
+
+    def test_write_zeroes(self):
+        data = rand_data(256)
+        self.image.write(data, 0)
+        self.image.write_zeroes(0, 256)
+        eq(self.image.read(256, 256), b'\0' * 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [])
+
+    def test_write_zeroes_thick_provision(self):
+        data = rand_data(256)
+        self.image.write(data, 0)
+        self.image.write_zeroes(0, 256, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
+        eq(self.image.read(256, 256), b'\0' * 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 256, True)])
 
     def test_read(self):
         data = self.image.read(0, 20)
@@ -779,6 +800,14 @@ class TestImage(object):
     def test_create_snap_exists(self):
         self.image.create_snap('snap1')
         assert_raises(ImageExists, self.image.create_snap, 'snap1')
+        self.image.remove_snap('snap1')
+
+    def test_create_snap_flags(self):
+        self.image.create_snap('snap1', 0)
+        self.image.remove_snap('snap1')
+        self.image.create_snap('snap1', RBD_SNAP_CREATE_SKIP_QUIESCE)
+        self.image.remove_snap('snap1')
+        self.image.create_snap('snap1', RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
         self.image.remove_snap('snap1')
 
     def test_list_snaps(self):
@@ -1188,6 +1217,20 @@ class TestImage(object):
         eq(sys.getrefcount(comp), 2)
         eq(self.image.read(256, 256), b'\0' * 256)
 
+    def test_aio_write_zeroes(self):
+        retval = [None]
+        def cb(comp):
+            retval[0] = comp.get_return_value()
+
+        data = rand_data(256)
+        self.image.write(data, 0)
+        comp = self.image.aio_write_zeroes(0, 256, cb)
+        comp.wait_for_complete_and_cb()
+        eq(retval[0], 0)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(self.image.read(256, 256), b'\0' * 256)
+
     def test_aio_flush(self):
         retval = [None]
         def cb(comp):
@@ -1371,6 +1414,30 @@ class TestClone(object):
         self._test_with_params(features, self.image.stat()['order'],
                                self.image.stripe_unit(),
                                self.image.stripe_count())
+
+    def test_stripe_unit_and_count(self):
+        global features
+        global ioctx
+        image_name = get_temp_image_name()
+        RBD().create(ioctx, image_name, IMG_SIZE, IMG_ORDER, old_format=False,
+                     features=int(features), stripe_unit=1048576, stripe_count=8)
+        image = Image(ioctx, image_name)
+        image.create_snap('snap1')
+        image.protect_snap('snap1')
+        clone_name = get_temp_image_name()
+        RBD().clone(ioctx, image_name, 'snap1', ioctx, clone_name)
+        clone = Image(ioctx, clone_name)
+
+        eq(1048576, clone.stripe_unit())
+        eq(8, clone.stripe_count())
+
+        clone.close()
+        RBD().remove(ioctx, clone_name)
+        image.unprotect_snap('snap1')
+        image.remove_snap('snap1')
+        image.close()
+        RBD().remove(ioctx, image_name)
+
 
     def test_unprotected(self):
         self.image.create_snap('snap2')
@@ -1593,12 +1660,13 @@ class TestClone(object):
         assert_raises(ReadOnlyImage, self.clone.flatten)
         self.clone.remove_snap('snap2')
 
-    def check_flatten_with_order(self, new_order):
+    def check_flatten_with_order(self, new_order, stripe_unit=None,
+                                 stripe_count=None):
         global ioctx
         global features
         clone_name2 = get_temp_image_name()
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         #with Image(ioctx, 'clone2') as clone:
         clone2 = Image(ioctx, clone_name2)
         clone2.flatten()
@@ -1608,7 +1676,7 @@ class TestClone(object):
 
         # flatten after resizing to non-block size
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         with Image(ioctx, clone_name2) as clone:
             clone.resize(IMG_SIZE // 2 - 1)
             clone.flatten()
@@ -1617,7 +1685,7 @@ class TestClone(object):
 
         # flatten after resizing to non-block size
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         with Image(ioctx, clone_name2) as clone:
             clone.resize(IMG_SIZE // 2 + 1)
             clone.flatten()
@@ -1628,7 +1696,7 @@ class TestClone(object):
         self.check_flatten_with_order(IMG_ORDER)
 
     def test_flatten_smaller_order(self):
-        self.check_flatten_with_order(IMG_ORDER - 2)
+        self.check_flatten_with_order(IMG_ORDER - 2, 1048576, 1)
 
     def test_flatten_larger_order(self):
         self.check_flatten_with_order(IMG_ORDER + 2)
@@ -1855,10 +1923,13 @@ class TestExclusiveLock(object):
                 rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
                 with Image(ioctx2, image_name) as image, \
                      Image(blacklist_ioctx, image_name) as blacklist_image:
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(0, len(lock_owners))
+
                     blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
                     assert_raises(ReadOnlyImage, image.lock_acquire,
                                   RBD_LOCK_MODE_EXCLUSIVE)
-
                     lock_owners = list(image.lock_get_owners())
                     eq(1, len(lock_owners))
                     eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])
@@ -2094,7 +2165,8 @@ class TestMirroring(object):
         info['mode'] = RBD_MIRROR_IMAGE_MODE_SNAPSHOT;
         eq(info, entries[self.image.id()])
 
-        snap_id = self.image.mirror_image_create_snapshot()
+        snap_id = self.image.mirror_image_create_snapshot(
+            RBD_SNAP_CREATE_SKIP_QUIESCE)
 
         snaps = list(self.image.list_snaps())
         eq(2, len(snaps))

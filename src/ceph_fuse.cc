@@ -16,7 +16,9 @@
 #include <sys/utsname.h>
 #include <iostream>
 #include <string>
+#include <optional>
 
+#include "common/async/context_pool.h"
 #include "common/config.h"
 #include "common/errno.h"
 
@@ -40,9 +42,12 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-#include <fuse.h>
+#include "include/ceph_fuse.h"
+#include <fuse_lowlevel.h>
 
 #define dout_context g_ceph_context
+
+ceph::async::io_context_pool icp;
 
 static void fuse_usage()
 {
@@ -51,7 +56,20 @@ static void fuse_usage()
     "-h",
   };
   struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  struct fuse_cmdline_opts opts = {};
+  if (fuse_parse_cmdline(&args, &opts) != -1) {
+    if (opts.show_help) {
+      cout << "usage: " << argv[0] << " [options] <mountpoint>\n\n";
+      cout << "FUSE options:\n";
+      fuse_cmdline_help();
+      fuse_lowlevel_help();
+      cout << "\n";
+    }
+  } else {
+#else
   if (fuse_parse_cmdline(&args, nullptr, nullptr, nullptr) == -1) {
+#endif
     derr << "fuse_parse_cmdline failed." << dendl;
   }
   ceph_assert(args.allocated);
@@ -105,7 +123,12 @@ int main(int argc, const char **argv, const char *envp[]) {
       };
 
       struct fuse_args fargs = FUSE_ARGS_INIT(2, (char**)tmpargv);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+      struct fuse_cmdline_opts opts = {};
+      if (fuse_parse_cmdline(&fargs, &opts) == -1) {
+#else
       if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
+#endif
        derr << "fuse_parse_cmdline failed." << dendl;
       }
       ceph_assert(fargs.allocated);
@@ -223,7 +246,8 @@ int main(int argc, const char **argv, const char *envp[]) {
     int tester_r = 0;
     void *tester_rp = nullptr;
 
-    MonClient *mc = new MonClient(g_ceph_context);
+    icp.start(cct->_conf.get_val<std::uint64_t>("client_asio_thread_count"));
+    MonClient *mc = new MonClient(g_ceph_context, icp);
     int r = mc->build_initial_monmap();
     if (r == -EINVAL) {
       cerr << "failed to generate initial mon list" << std::endl;
@@ -238,7 +262,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->set_policy(entity_name_t::TYPE_MDS,
 			  Messenger::Policy::lossless_client(0));
 
-    client = new StandaloneClient(messenger, mc);
+    client = new StandaloneClient(messenger, mc, icp);
     if (filer_flags) {
       client->set_filer_flags(filer_flags);
     }
@@ -305,6 +329,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     client->unmount();
     cfuse->finalize();
   out_shutdown:
+    icp.stop();
     client->shutdown();
   out_init_failed:
     unregister_async_signal_handler(SIGHUP, sighup_handler);

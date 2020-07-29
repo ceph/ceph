@@ -11,7 +11,9 @@ Storage Cluster requires at least one Ceph Monitor, Ceph Manager, and
 Ceph OSD (Object Storage Daemon). The Ceph Metadata Server is also
 required when running Ceph File System clients.
 
-.. ditaa::  +---------------+ +------------+ +------------+ +---------------+
+.. ditaa::
+
+            +---------------+ +------------+ +------------+ +---------------+
             |      OSDs     | | Monitors   | |  Managers  | |      MDSs     |
             +---------------+ +------------+ +------------+ +---------------+
 

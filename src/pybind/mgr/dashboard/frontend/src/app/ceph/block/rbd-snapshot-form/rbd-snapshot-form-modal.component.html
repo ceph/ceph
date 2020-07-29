@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title|Example: Create rbdSnapshot@@formTitle"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
 
@@ -29,16 +29,14 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button [form]="snapshotForm"
-                            i18n="form action button|Example: Create rbdSnapshot@@formActionButton"
-                            (submitAction)="submit()">{{ action | titlecase }}
-            {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button [back]="modalRef.hide"
-                          name="Close"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-submit-button [form]="snapshotForm"
+                          i18n="form action button|Example: Create rbdSnapshot@@formActionButton"
+                          (submitAction)="submit()">{{ action | titlecase }}
+          {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="activeModal.close"
+                        name="Close"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

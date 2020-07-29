@@ -115,6 +115,10 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
                                map<string, bufferlist> * const pattrs,
                                optional_yield y)
 {
+  if(user.id == RGW_USER_ANON_ID) {
+    ldout(svc.meta_be->ctx(), 20) << "RGWSI_User_RADOS::read_user_info(): anonymous user" << dendl;
+    return -ENOENT;
+  }
   bufferlist bl;
   RGWUID user_id;
 
@@ -738,7 +742,11 @@ int RGWSI_User_RADOS::list_buckets(RGWSI_MetaBackend::Context *ctx,
   int ret;
 
   buckets->clear();
-  
+   if (user.id == RGW_USER_ANON_ID) {
+    ldout(cct, 20) << "RGWSI_User_RADOS::list_buckets(): anonymous user" << dendl;
+    *is_truncated = false;
+    return 0;
+  } 
   rgw_raw_obj obj = get_buckets_obj(user);
 
   bool truncated = false;

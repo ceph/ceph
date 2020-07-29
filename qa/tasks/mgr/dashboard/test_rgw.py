@@ -4,7 +4,8 @@ from __future__ import absolute_import
 import base64
 import logging
 import time
-import urllib
+
+from urllib import parse
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.twofactor.totp import TOTP
@@ -112,11 +113,32 @@ class RgwApiCredentialsTest(RgwTestCase):
                       data['message'])
 
 
+class RgwSiteTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
+
+    def test_get_placement_targets(self):
+        data = self._get('/api/rgw/site?query=placement-targets')
+        self.assertStatus(200)
+        self.assertSchema(data, JObj({
+            'zonegroup': str,
+            'placement_targets': JList(JObj({
+                'name': str,
+                'data_pool': str
+            }))
+        }))
+
+    def test_get_realms(self):
+        data = self._get('/api/rgw/site?query=realms')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
+
+
 class RgwBucketTest(RgwTestCase):
 
     _mfa_token_serial = '1'
     _mfa_token_seed = '23456723'
-    _mfa_token_time_step = 3
+    _mfa_token_time_step = 2
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -152,7 +174,7 @@ class RgwBucketTest(RgwTestCase):
         totp_key = base64.b32decode(self._mfa_token_seed)
         totp = TOTP(totp_key, 6, SHA1(), self._mfa_token_time_step, backend=default_backend(),
                     enforce_key_length=False)
-        time_value = time.time()
+        time_value = int(time.time())
         return totp.generate(time_value)
 
     def test_all(self):
@@ -241,7 +263,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['mfa_delete'], 'Enabled')
 
         # Update bucket: disable versioning & MFA Delete.
-        time.sleep(self._mfa_token_time_step + 2)  # Required to get new TOTP pin.
+        time.sleep(self._mfa_token_time_step * 3)  # Required to get new TOTP pin.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
@@ -292,7 +314,7 @@ class RgwBucketTest(RgwTestCase):
         def _verify_tenant_bucket(bucket, tenant, uid):
             full_bucket_name = '{}/{}'.format(tenant, bucket)
             _data = self._get('/api/rgw/bucket/{}'.format(
-                urllib.quote_plus(full_bucket_name)))
+                parse.quote_plus(full_bucket_name)))
             self.assertStatus(200)
             self.assertSchema(_data, JObj(sub_elems={
                 'owner': JLeaf(str),
@@ -314,7 +336,7 @@ class RgwBucketTest(RgwTestCase):
         # Update bucket: different user with different tenant, enable versioning.
         self._put(
             '/api/rgw/bucket/{}'.format(
-                urllib.quote_plus('testx/teuth-test-bucket')),
+                parse.quote_plus('testx/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'testx2$teuth-test-user2',
@@ -326,7 +348,7 @@ class RgwBucketTest(RgwTestCase):
         # Change owner to a non-tenanted user
         self._put(
             '/api/rgw/bucket/{}'.format(
-                urllib.quote_plus('testx2/teuth-test-bucket')),
+                parse.quote_plus('testx2/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'admin'
@@ -355,7 +377,7 @@ class RgwBucketTest(RgwTestCase):
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
+            parse.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
@@ -488,6 +510,11 @@ class RgwUserTest(RgwTestCase):
         self.assertStatus(200)
         self.assertGreaterEqual(len(data), 1)
         self.assertIn('admin', data)
+
+    def test_get_emails(self):
+        data = self._get('/api/rgw/user/get_emails')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
 
     def test_create_get_update_delete(self):
         # Create a new user.

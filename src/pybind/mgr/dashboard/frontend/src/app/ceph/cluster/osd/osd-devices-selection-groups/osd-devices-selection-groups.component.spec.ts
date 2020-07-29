@@ -1,14 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  i18nProviders
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, FixtureHelper, Mocks } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
@@ -18,25 +15,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   let component: OsdDevicesSelectionGroupsComponent;
   let fixture: ComponentFixture<OsdDevicesSelectionGroupsComponent>;
   let fixtureHelper: FixtureHelper;
-  const devices: InventoryDevice[] = [
-    {
-      hostname: 'node0',
-      uid: '1',
-      path: 'sda',
-      sys_api: {
-        vendor: 'AAA',
-        model: 'aaa',
-        size: 1024,
-        rotational: 'false',
-        human_readable_size: '1 KB'
-      },
-      available: false,
-      rejected_reasons: [''],
-      device_id: 'AAA-aaa-id0',
-      human_readable_type: 'nvme/ssd',
-      osd_ids: []
-    }
-  ];
+  const devices: InventoryDevice[] = [Mocks.getInventoryDevice('node0', '1')];
 
   const buttonSelector = '.cd-col-form-input button';
   const getButton = () => {
@@ -50,8 +29,13 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   };
 
   configureTestBed({
-    imports: [FormsModule, HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
-    providers: [i18nProviders],
+    imports: [
+      BrowserAnimationsModule,
+      FormsModule,
+      HttpClientTestingModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
 

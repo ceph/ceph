@@ -1,10 +1,10 @@
 .. _drivegroups:
 
-===========
-DriveGroups
-===========
+=========================
+OSD Service Specification
+=========================
 
-DriveGroups are a way to describe a cluster layout using the properties of disks.
+:ref:`orchestrator-cli-service-spec` of type ``osd`` are a way to describe a cluster layout using the properties of disks.
 It gives the user an abstract way tell ceph which disks should turn into an OSD
 with which configuration without knowing the specifics of device names and paths.
 
@@ -15,14 +15,16 @@ Instead of doing this::
 for each device and each host, we can define a yaml|json file that allows us to describe
 the layout. Here's the most basic example.
 
-Create a file called i.e. drivegroups.yml
+Create a file called i.e. osd_spec.yml
 
 .. code-block:: yaml
 
-    default_drive_group:    <- name of the drive_group (name can be custom)
-      host_pattern: '*'     <- which hosts to target, currently only supports globs
-      data_devices:         <- the type of devices you are applying specs to
-        all: true           <- a filter, check below for a full list
+    service_type: osd
+    service_id: default_drive_group  <- name of the drive_group (name can be custom)
+    placement:
+      host_pattern: '*'              <- which hosts to target, currently only supports globs
+    data_devices:                    <- the type of devices you are applying specs to
+      all: true                      <- a filter, check below for a full list
 
 This would translate to:
 
@@ -32,15 +34,32 @@ There will be a more detailed section on host_pattern down below.
 
 and pass it to `osd create` like so::
 
-  [monitor 1] # ceph orch apply osd -i /path/to/drivegroup.yml
+  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml
 
 This will go out on all the matching hosts and deploy these OSDs.
 
 Since we want to have more complex setups, there are more filters than just the 'all' filter.
 
+Also, there is a `--dry-run` flag that can be passed to the `apply osd` command, which gives you a synopsis
+of the proposed layout.
+
+Example::
+
+  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+
+
 
 Filters
 =======
+
+.. note::
+   Filters are applied using a `AND` gate by default. This essentially means that a drive needs to fulfill all filter
+   criteria in order to get selected.
+   If you wish to change this behavior you can adjust this behavior by setting
+
+    `filter_logic: OR`  # valid arguments are `AND`, `OR`
+
+   in the OSD Specification.
 
 You can assign disks to certain groups by their attributes using filters.
 
@@ -165,10 +184,13 @@ This example would deploy all OSDs with encryption enabled.
 
 .. code-block:: yaml
 
-    example_drive_group:
-      data_devices:
-        all: true
-      encrypted: true
+    service_type: osd
+    service_id: example_osd_spec
+    placement:
+      host_pattern: '*'
+    data_devices:
+      all: true
+    encrypted: true
 
 See a full list in the DriveGroupSpecs
 
@@ -200,23 +222,27 @@ This is a common setup and can be described quite easily:
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: osd_spec_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        model: HDD-123-foo <- note that HDD-123 would also be valid
-      db_devices:
-        model: MC-55-44-XZ <- same here, MC-55-44 is valid
+    data_devices:
+      model: HDD-123-foo <- note that HDD-123 would also be valid
+    db_devices:
+      model: MC-55-44-XZ <- same here, MC-55-44 is valid
 
 However, we can improve it by reducing the filters on core properties of the drives:
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: osd_spec_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        rotational: 1
-      db_devices:
-        rotational: 0
+    data_devices:
+      rotational: 1
+    db_devices:
+      rotational: 0
 
 Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
 
@@ -224,12 +250,14 @@ If you know that drives with more than 2TB will always be the slower data device
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: osd_spec_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        size: '2TB:'
-      db_devices:
-        size: ':2TB'
+    data_devices:
+      size: '2TB:'
+    db_devices:
+      size: ':2TB'
 
 Note: All of the above DriveGroups are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
@@ -262,20 +290,24 @@ This can be described with two layouts.
 
 .. code-block:: yaml
 
-    drive_group_hdd:
+    service_type: osd
+    service_id: osd_spec_hdd
+    placement:
       host_pattern: '*'
-      data_devices:
-        rotational: 0
-      db_devices:
-        model: MC-55-44-XZ
-        limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
-
-    drive_group_ssd:
+    data_devices:
+      rotational: 0
+    db_devices:
+      model: MC-55-44-XZ
+      limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
+      
+    service_type: osd
+    service_id: osd_spec_ssd
+    placement:
       host_pattern: '*'
-      data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        vendor: VendorC
+    data_devices:
+      model: MC-55-44-XZ
+    db_devices:
+      vendor: VendorC
 
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(8) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
@@ -312,21 +344,26 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
 
 .. code-block:: yaml
 
-    drive_group_node_one_to_five:
+    service_type: osd
+    service_id: osd_spec_node_one_to_five
+    placement:
       host_pattern: 'node[1-5]'
-      data_devices:
-        rotational: 1
-      db_devices:
-        rotational: 0
-
-    drive_group_six_to_ten:
+    data_devices:
+      rotational: 1
+    db_devices:
+      rotational: 0
+      
+      
+    service_type: osd
+    service_id: osd_spec_six_to_ten
+    placement:
       host_pattern: 'node[6-10]'
-      data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        model: SSD-123-foo
+    data_devices:
+      model: MC-55-44-XZ
+    db_devices:
+      model: SSD-123-foo
 
-This will apply different drive groups to different hosts depending on the `host_pattern` key.
+This applies different OSD specs to different hosts depending on the `host_pattern` key.
 
 Dedicated wal + db
 ------------------
@@ -352,18 +389,20 @@ It's however possible to deploy the WAL on a dedicated device as well, if it mak
     Size: 256GB
 
 
-The drivegroup for this case would look like this (using the `model` filter)
+The OSD spec for this case would look like the following (using the `model` filter):
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: osd_spec_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        model: SSD-123-foo
-      wal_devices:
-        model: NVME-QQQQ-987
+    data_devices:
+      model: MC-55-44-XZ
+    db_devices:
+      model: SSD-123-foo
+    wal_devices:
+      model: NVME-QQQQ-987
 
 
 This can easily be done with other filters, like `size` or `vendor` as well.

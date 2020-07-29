@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import six
 from contextlib import contextmanager
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
@@ -100,6 +99,16 @@ class CephfsTest(DashboardTestCase):
         self._delete("/api/cephfs/{}/client/1234".format(fs_id))
         self.assertStatus(404)
 
+    def test_cephfs_evict_invalid_client_id(self):
+        fs_id = self.get_fs_id()
+        self._delete("/api/cephfs/{}/client/xyz".format(fs_id))
+        self.assertStatus(400)
+        self.assertJsonBody({
+            "component": 'cephfs',
+            "code": "invalid_cephfs_client_id",
+            "detail": "Invalid cephfs client ID xyz"
+        })
+
     def test_cephfs_get(self):
         fs_id = self.get_fs_id()
         data = self._get("/api/cephfs/{}/".format(fs_id))
@@ -135,6 +144,15 @@ class CephfsTest(DashboardTestCase):
         self.assertToHave(cephfs, 'id')
         self.assertToHave(cephfs, 'mdsmap')
 
+    def test_cephfs_get_quotas(self):
+        fs_id = self.get_fs_id()
+        data = self._get("/api/cephfs/{}/get_quotas?path=/".format(fs_id))
+        self.assertStatus(200)
+        self.assertSchema(data, JObj({
+            'max_bytes': int,
+            'max_files': int
+        }))
+
     def test_cephfs_tabs(self):
         fs_id = self.get_fs_id()
         data = self._get("/ui-api/cephfs/{}/tabs".format(fs_id))
@@ -154,11 +172,11 @@ class CephfsTest(DashboardTestCase):
 
         # Name
         self.assertToHave(data, 'name')
-        self.assertIsInstance(data['name'], six.string_types)
+        self.assertIsInstance(data['name'], str)
 
         # Standbys
         self.assertToHave(data, 'standbys')
-        self.assertIsInstance(data['standbys'], six.string_types)
+        self.assertIsInstance(data['standbys'], str)
 
         # MDS counters
         counters = data['mds_counters']

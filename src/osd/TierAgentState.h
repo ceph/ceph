@@ -14,6 +14,17 @@
 #ifndef CEPH_OSD_TIERAGENT_H
 #define CEPH_OSD_TIERAGENT_H
 
+#include <ctime>
+#include <list>
+#include <map>
+#include <utility>
+
+#include "common/Formatter.h"
+#include "common/histogram.h"
+#include "common/hobject.h"
+
+#include "osd/HitSet.h"
+
 struct TierAgentState {
   /// current position iterating across pool
   hobject_t position;
@@ -27,10 +38,10 @@ struct TierAgentState {
   int hist_age;
 
   /// past HitSet(s) (not current)
-  map<time_t,HitSetRef> hit_set_map;
+  std::map<time_t,HitSetRef> hit_set_map;
 
   /// a few recent things we've seen that are clean
-  list<hobject_t> recent_clean;
+  std::list<hobject_t> recent_clean;
 
   enum flush_mode_t {
     FLUSH_MODE_IDLE,   // nothing to flush
@@ -89,7 +100,7 @@ struct TierAgentState {
 
   /// add archived HitSet
   void add_hit_set(time_t start, HitSetRef hs) {
-    hit_set_map.insert(make_pair(start, hs));
+    hit_set_map.insert(std::make_pair(start, hs));
   }
 
   /// remove old/trimmed HitSet
@@ -103,7 +114,7 @@ struct TierAgentState {
     hit_set_map.clear();
   }
 
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->dump_string("flush_mode", get_flush_mode_name());
     f->dump_string("evict_mode", get_evict_mode_name());
     f->dump_unsigned("evict_effort", evict_effort);

@@ -3,11 +3,13 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/AsioEngine.h"
 #include "librbd/DeepCopyRequest.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/internal.h"
 #include "librbd/api/Image.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
@@ -46,7 +48,7 @@ public:
       librados::snap_t src_snap_id_end,
       librados::snap_t dst_snap_id_start,
       bool flatten, const ObjectNumber &object_number,
-      const SnapSeqs &snap_seqs, ProgressContext *prog_ctx,
+      const SnapSeqs &snap_seqs, Handler *handler,
       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -99,7 +101,8 @@ public:
                                      librados::snap_t src_snap_id_start,
                                      librados::snap_t src_snap_id_end,
                                      librados::snap_t dst_snap_id_start,
-                                     bool flatten, ContextWQ *work_queue,
+                                     bool flatten,
+                                     librbd::asio::ContextWQ *work_queue,
                                      SnapSeqs *snap_seqs, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -148,8 +151,9 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
-  ThreadPool *m_thread_pool;
-  ContextWQ *m_work_queue;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
+  librbd::asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -159,8 +163,9 @@ public:
 
     ASSERT_EQ(0, open_image(m_image_name, &m_dst_image_ctx));
 
-    librbd::ImageCtx::get_thread_pool_instance(m_src_image_ctx->cct,
-                                               &m_thread_pool, &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_src_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   void TearDown() override {
@@ -266,7 +271,7 @@ TEST_F(TestMockDeepCopyRequest, SimpleCopy) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs;
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, CEPH_NOSNAP, 0, false,
       boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);
@@ -284,7 +289,7 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopySnapshots) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs;
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, CEPH_NOSNAP, 0, false,
       boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);
@@ -317,7 +322,7 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnRefreshObjectMap) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs;
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, CEPH_NOSNAP, 0, false,
       boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);
@@ -337,7 +342,7 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopyImage) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs;
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, CEPH_NOSNAP, 0, false,
       boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);
@@ -374,7 +379,7 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopyMetadata) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs;
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, CEPH_NOSNAP, 0, false,
       boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);
@@ -415,7 +420,7 @@ TEST_F(TestMockDeepCopyRequest, Snap) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs = {{m_src_image_ctx->snap_id, 123}};
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, m_src_image_ctx->snap_id,
       0, false, boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);
@@ -452,7 +457,7 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnRollbackObjectMap) {
 
   C_SaferCond ctx;
   librbd::SnapSeqs snap_seqs = {{m_src_image_ctx->snap_id, 123}};
-  librbd::NoOpProgressContext no_op;
+  librbd::deep_copy::NoOpHandler no_op;
   auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
       &mock_src_image_ctx, &mock_dst_image_ctx, 0, m_src_image_ctx->snap_id,
       0, false, boost::none, m_work_queue, &snap_seqs, &no_op, &ctx);

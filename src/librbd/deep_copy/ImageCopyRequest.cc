@@ -5,9 +5,8 @@
 #include "ObjectCopyRequest.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/Utils.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "osdc/Striper.h"
 
@@ -30,13 +29,13 @@ ImageCopyRequest<I>::ImageCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                       bool flatten,
                                       const ObjectNumber &object_number,
                                       const SnapSeqs &snap_seqs,
-                                      ProgressContext *prog_ctx,
+                                      Handler *handler,
                                       Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_src_snap_id_start(src_snap_id_start),
     m_src_snap_id_end(src_snap_id_end), m_dst_snap_id_start(dst_snap_id_start),
     m_flatten(flatten), m_object_number(object_number), m_snap_seqs(snap_seqs),
-    m_prog_ctx(prog_ctx), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
+    m_handler(handler), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(ceph::make_mutex(unique_lock_name("ImageCopyRequest::m_lock", this))) {
 }
 
@@ -161,9 +160,9 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     [this, ono](int r) {
       handle_object_copy(ono, r);
     });
-  ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
+  auto req = ObjectCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
-    m_snap_map, ono, m_flatten, ctx);
+    m_snap_map, ono, m_flatten, m_handler, ctx);
   req->send();
   return 0;
 }
@@ -193,7 +192,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
         uint64_t progress_object_no = *m_object_number + 1;
         m_updating_progress = true;
         m_lock.unlock();
-        m_prog_ctx->update_progress(progress_object_no, m_end_object_no);
+        m_handler->update_progress(progress_object_no, m_end_object_no);
         m_lock.lock();
         ceph_assert(m_updating_progress);
         m_updating_progress = false;

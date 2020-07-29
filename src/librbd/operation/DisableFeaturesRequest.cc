@@ -11,8 +11,9 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/image/SetFlagsRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/object_map/RemoveRequest.h"
 
@@ -95,7 +96,7 @@ void DisableFeaturesRequest<I>::send_block_writes() {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   std::unique_lock locker{image_ctx.owner_lock};
-  image_ctx.io_work_queue->block_writes(create_context_callback<
+  image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     DisableFeaturesRequest<I>,
     &DisableFeaturesRequest<I>::handle_block_writes>(this));
 }
@@ -401,9 +402,12 @@ void DisableFeaturesRequest<I>::send_remove_journal() {
     DisableFeaturesRequest<I>,
     &DisableFeaturesRequest<I>::handle_remove_journal>(this);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<I>::get_work_queue(cct, &context_wq);
+
   journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
     image_ctx.md_ctx, image_ctx.id, librbd::Journal<>::IMAGE_CLIENT_ID,
-    image_ctx.op_work_queue, ctx);
+    context_wq, ctx);
 
   req->send();
 }
@@ -633,7 +637,7 @@ Context *DisableFeaturesRequest<I>::handle_finish(int r) {
       image_ctx.exclusive_lock->unblock_requests();
     }
 
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
   }
   image_ctx.state->handle_prepare_lock_complete();
 

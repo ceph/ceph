@@ -128,6 +128,11 @@ public:
     return 0;
   }
 
+  string get_subuser() const override {
+    abort();
+    return 0;
+  }
+
   void to_str(std::ostream& out) const override {
     out << id;
   }

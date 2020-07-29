@@ -5,7 +5,7 @@ Installing Ceph
 ===============
 
 There are several different ways to install Ceph.  Choose the
-method that best suites your needs.
+method that best suits your needs.
 
 Recommended methods
 ~~~~~~~~~~~~~~~~~~~
@@ -13,7 +13,7 @@ Recommended methods
 :ref:`Cephadm <cephadm>` installs and manages a Ceph cluster using containers and
 systemd, with tight integration with the CLI and dashboard GUI.
 
-* cephadm only supports only Octopus and newer releases.
+* cephadm only supports Octopus and newer releases.
 * cephadm is fully integrated with the new orchestration API and
   fully supports the new CLI and dashboard features to manage
   cluster deployment.

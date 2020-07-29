@@ -40,8 +40,6 @@ class PrimaryLogPG;
 class PGLSFilter;
 class HitSet;
 struct TierAgentState;
-class MOSDOp;
-class MOSDOpReply;
 class OSDService;
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg);
@@ -88,7 +86,7 @@ public:
 
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
-    vector<snapid_t> snaps;  ///< src's snaps (if clone)
+    std::vector<snapid_t> snaps;  ///< src's snaps (if clone)
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
@@ -96,9 +94,9 @@ public:
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
-    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
-    mempool::osd_pglog::map<uint32_t, int> reqid_return_codes; // map reqids by index to error code
-    map<string, bufferlist> attrs; // xattrs
+    mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    mempool::osd_pglog::map<uint32_t, int> reqid_return_codes; // std::map reqids by index to error code
+    std::map<std::string, ceph::buffer::list> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool is_data_digest() {
@@ -136,10 +134,10 @@ public:
     ceph_tid_t objecter_tid2;
 
     object_copy_cursor_t cursor;
-    map<string,bufferlist> attrs;
-    bufferlist data;
-    bufferlist omap_header;
-    bufferlist omap_data;
+    std::map<std::string,ceph::buffer::list> attrs;
+    ceph::buffer::list data;
+    ceph::buffer::list omap_header;
+    ceph::buffer::list omap_data;
     int rval;
 
     object_copy_cursor_t temp_cursor;
@@ -154,12 +152,12 @@ public:
     unsigned src_obj_fadvise_flags;
     unsigned dest_obj_fadvise_flags;
 
-    map<uint64_t, CopyOpRef> chunk_cops;
+    std::map<uint64_t, CopyOpRef> chunk_cops;
     int num_chunk;
     bool failed;
     uint64_t start_offset = 0;
     uint64_t last_offset = 0;
-    vector<OSDOp> chunk_ops;
+    std::vector<OSDOp> chunk_ops;
   
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
@@ -194,20 +192,20 @@ public:
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
 
   friend class CopyFromCallback;
-  friend class CopyFromFinisher;
+  friend struct CopyFromFinisher;
   friend class PromoteCallback;
-  friend class PromoteFinisher;
+  friend struct PromoteFinisher;
 
   struct ProxyReadOp {
     OpRequestRef op;
     hobject_t soid;
     ceph_tid_t objecter_tid;
-    vector<OSDOp> &ops;
+    std::vector<OSDOp> &ops;
     version_t user_version;
     int data_offset;
     bool canceled;              ///< true if canceled
 
-    ProxyReadOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
+    ProxyReadOp(OpRequestRef _op, hobject_t oid, std::vector<OSDOp>& _ops)
       : op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
 	user_version(0), data_offset(0),
@@ -220,14 +218,14 @@ public:
     OpRequestRef op;
     hobject_t soid;
     ceph_tid_t objecter_tid;
-    vector<OSDOp> &ops;
+    std::vector<OSDOp> &ops;
     version_t user_version;
     bool sent_reply;
     utime_t mtime;
     bool canceled;
     osd_reqid_t reqid;
 
-    ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
+    ProxyWriteOp(OpRequestRef _op, hobject_t oid, std::vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
 	user_version(0), sent_reply(false),
@@ -239,7 +237,7 @@ public:
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
     OpRequestRef op;            ///< initiating op
-    list<OpRequestRef> dup_ops; ///< bandwagon jumpers
+    std::list<OpRequestRef> dup_ops; ///< bandwagon jumpers
     version_t flushed_version;  ///< user version we are flushing
     ceph_tid_t objecter_tid;    ///< copy-from request tid
     int rval;                   ///< copy-from result
@@ -247,8 +245,8 @@ public:
     bool removal;               ///< we are removing the backend object
     std::optional<std::function<void()>> on_flush; ///< callback, may be null
     // for chunked object
-    map<uint64_t, int> io_results; 
-    map<uint64_t, ceph_tid_t> io_tids; 
+    std::map<uint64_t, int> io_results; 
+    std::map<uint64_t, ceph_tid_t> io_tids; 
     uint64_t chunks;
 
     FlushOp()
@@ -267,7 +265,7 @@ public:
       : cb(cb), objecter_tid(tid) {}
   };
   typedef std::shared_ptr<ManifestOp> ManifestOpRef;
-  map<hobject_t, ManifestOpRef> manifest_ops;
+  std::map<hobject_t, ManifestOpRef> manifest_ops;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() override {
@@ -307,7 +305,7 @@ public:
     const object_stat_sum_t &stat_diff,
     bool is_delete) override;
   void on_failed_pull(
-    const set<pg_shard_t> &from,
+    const std::set<pg_shard_t> &from,
     const hobject_t &soid,
     const eversion_t &version) override;
   void cancel_pull(const hobject_t &soid) override;
@@ -338,7 +336,7 @@ public:
 			 OpRequestRef op) override {
     osd->store->queue_transaction(ch, std::move(t), op);
   }
-  void queue_transactions(vector<ObjectStore::Transaction>& tls,
+  void queue_transactions(std::vector<ObjectStore::Transaction>& tls,
 			  OpRequestRef op) override {
     osd->store->queue_transactions(ch, tls, op, NULL);
   }
@@ -348,13 +346,13 @@ public:
   epoch_t get_last_peering_reset_epoch() const override {
     return get_last_peering_reset();
   }
-  const set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
+  const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
-  const set<pg_shard_t> &get_acting_shards() const override {
+  const std::set<pg_shard_t> &get_acting_shards() const override {
     return recovery_state.get_actingset();
   }
-  const set<pg_shard_t> &get_backfill_shards() const override {
+  const std::set<pg_shard_t> &get_backfill_shards() const override {
     return get_backfill_targets();
   }
 
@@ -362,15 +360,15 @@ public:
     return gen_prefix(out);
   }
 
-  const map<hobject_t, set<pg_shard_t>>
+  const std::map<hobject_t, std::set<pg_shard_t>>
     &get_missing_loc_shards() const override {
     return recovery_state.get_missing_loc().get_missing_locs();
   }
-  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
+  const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
     return recovery_state.get_peer_missing();
   }
   using PGBackend::Listener::get_shard_missing;
-  const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
+  const std::map<pg_shard_t, pg_info_t> &get_shard_info() const override {
     return recovery_state.get_peer_info();
   }
   using PGBackend::Listener::get_shard_info;  
@@ -401,7 +399,7 @@ public:
 
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    const map<string, bufferlist> &attrs) override {
+    const std::map<std::string, ceph::buffer::list> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
 
@@ -444,7 +442,7 @@ public:
 
   void pgb_set_object_snap_mapping(
     const hobject_t &soid,
-    const set<snapid_t> &snaps,
+    const std::set<snapid_t> &snaps,
     ObjectStore::Transaction *t) override {
     return update_object_snap_mapping(t, soid, snaps);
   }
@@ -455,7 +453,7 @@ public:
   }
 
   void log_operation(
-    vector<pg_log_entry_t>&& logv,
+    std::vector<pg_log_entry_t>&& logv,
     const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
@@ -486,7 +484,7 @@ public:
   }
 
   void replica_clear_repop_obc(
-    const vector<pg_log_entry_t> &logv,
+    const std::vector<pg_log_entry_t> &logv,
     ObjectStore::Transaction &t);
 
   void op_applied(const eversion_t &applied_version) override;
@@ -575,7 +573,7 @@ public:
   };
   void complete_disconnect_watches(
     ObjectContextRef obc,
-    const list<watch_disconnect_t> &to_disconnect);
+    const std::list<watch_disconnect_t> &to_disconnect);
 
   struct OpFinisher {
     virtual ~OpFinisher() {
@@ -590,7 +588,7 @@ public:
   struct OpContext {
     OpRequestRef op;
     osd_reqid_t reqid;
-    vector<OSDOp> *ops;
+    std::vector<OSDOp> *ops;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -604,26 +602,26 @@ public:
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
     bool cache_evict;     ///< true if this is a cache eviction
-    bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
+    bool ignore_cache;    ///< true if IGNORE_CACHE flag is std::set
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
     ObjectCleanRegions clean_regions;
 
     // side effects
-    list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
-    list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
-    list<notify_info_t> notifies;
+    std::list<std::pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
+    std::list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
+    std::list<notify_info_t> notifies;
     struct NotifyAck {
       std::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
-      bufferlist reply_bl;
+      ceph::buffer::list reply_bl;
       explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
-      NotifyAck(uint64_t notify_id, uint64_t cookie, bufferlist& rbl)
+      NotifyAck(uint64_t notify_id, uint64_t cookie, ceph::buffer::list& rbl)
 	: watch_cookie(cookie), notify_id(notify_id) {
-	reply_bl.claim(rbl);
+	reply_bl = std::move(rbl);
       }
     };
-    list<NotifyAck> notify_acks;
+    std::list<NotifyAck> notify_acks;
 
     uint64_t bytes_written, bytes_read;
 
@@ -638,7 +636,7 @@ public:
     int processed_subop_count = 0;
 
     PGTransactionUPtr op_t;
-    vector<pg_log_entry_t> log;
+    std::vector<pg_log_entry_t> log;
     std::optional<pg_hit_set_history_t> updated_hset_history;
 
     interval_set<uint64_t> modified_ranges;
@@ -656,15 +654,15 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
-    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
+    mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > extra_reqids;
     mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
-    list<std::function<void()>> on_applied;
-    list<std::function<void()>> on_committed;
-    list<std::function<void()>> on_finish;
-    list<std::function<void()>> on_success;
+    std::list<std::function<void()>> on_applied;
+    std::list<std::function<void()>> on_committed;
+    std::list<std::function<void()>> on_finish;
+    std::list<std::function<void()>> on_success;
     template <typename F>
     void register_on_finish(F &&f) {
       on_finish.emplace_back(std::forward<F>(f));
@@ -685,8 +683,8 @@ public:
     bool sent_reply = false;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
-    list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-	      pair<bufferlist*, Context*> > > pending_async_reads;
+    std::list<std::pair<boost::tuple<uint64_t, uint64_t, unsigned>,
+	      std::pair<ceph::buffer::list*, Context*> > > pending_async_reads;
     int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(PrimaryLogPG *pg);
@@ -703,7 +701,7 @@ public:
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>* _ops,
+    OpContext(OpRequestRef _op, osd_reqid_t _reqid, std::vector<OSDOp>* _ops,
 	      ObjectContextRef& obc,
 	      PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops),
@@ -727,7 +725,7 @@ public:
       }
     }
     OpContext(OpRequestRef _op, osd_reqid_t _reqid,
-              vector<OSDOp>* _ops, PrimaryLogPG *_pg) :
+              std::vector<OSDOp>* _ops, PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
@@ -749,8 +747,8 @@ public:
       ceph_assert(!op_t);
       if (reply)
 	reply->put();
-      for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-		     pair<bufferlist*, Context*> > >::iterator i =
+      for (std::list<std::pair<boost::tuple<uint64_t, uint64_t, unsigned>,
+		     std::pair<ceph::buffer::list*, Context*> > >::iterator i =
 	     pending_async_reads.begin();
 	   i != pending_async_reads.end();
 	   pending_async_reads.erase(i++)) {
@@ -791,9 +789,9 @@ public:
 
     ObcLockManager lock_manager;
 
-    list<std::function<void()>> on_committed;
-    list<std::function<void()>> on_success;
-    list<std::function<void()>> on_finish;
+    std::list<std::function<void()>> on_committed;
+    std::list<std::function<void()>> on_success;
+    std::list<std::function<void()>> on_finish;
     
     RepGather(
       OpContext *c, ceph_tid_t rt,
@@ -907,7 +905,7 @@ protected:
    */
   void release_object_locks(
     ObcLockManager &lock_manager) {
-    list<pair<ObjectContextRef, list<OpRequestRef> > > to_req;
+    std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > to_req;
     bool requeue_recovery = false;
     bool requeue_snaptrim = false;
     lock_manager.put_locks(
@@ -985,10 +983,10 @@ protected:
     int r = 0);
   struct LogUpdateCtx {
     boost::intrusive_ptr<RepGather> repop;
-    set<pg_shard_t> waiting_on;
+    std::set<pg_shard_t> waiting_on;
   };
   void cancel_log_updates();
-  map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
+  std::map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
 
 
   // hot/cold tracking
@@ -1046,19 +1044,19 @@ protected:
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext> object_contexts;
-  // map from oid.snapdir() to SnapSetContext *
-  map<hobject_t, SnapSetContext*> snapset_contexts;
+  // std::map from oid.snapdir() to SnapSetContext *
+  std::map<hobject_t, SnapSetContext*> snapset_contexts;
   ceph::mutex snapset_contexts_lock =
     ceph::make_mutex("PrimaryLogPG::snapset_contexts_lock");
 
   // debug order that client ops are applied
-  map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
+  std::map<hobject_t, std::map<client_t, ceph_tid_t>> debug_op_order;
 
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_watchers() override;
-  void get_watchers(list<obj_watch_item_t> *ls) override;
-  void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
+  void get_watchers(std::list<obj_watch_item_t> *ls) override;
+  void get_obc_watchers(ObjectContextRef obc, std::list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
 protected:
@@ -1067,7 +1065,7 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    const map<string, bufferlist> *attrs = 0
+    const std::map<std::string, ceph::buffer::list> *attrs = 0
     );
 
   void context_registry_on_change();
@@ -1087,7 +1085,7 @@ protected:
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    const map<string, bufferlist> *attrs = 0,
+    const std::map<std::string, ceph::buffer::list> *attrs = 0,
     bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
@@ -1104,7 +1102,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  map<hobject_t, ObjectContextRef> recovering;
+  std::map<hobject_t, ObjectContextRef> recovering;
 
   /*
    * Backfill
@@ -1120,12 +1118,12 @@ protected:
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
    */
-  set<hobject_t> backfills_in_flight;
-  map<hobject_t, pg_stat_t> pending_backfill_updates;
+  std::set<hobject_t> backfills_in_flight;
+  std::map<hobject_t, pg_stat_t> pending_backfill_updates;
 
-  void dump_recovery_info(Formatter *f) const override {
+  void dump_recovery_info(ceph::Formatter *f) const override {
     f->open_array_section("waiting_on_backfill");
-    for (set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
+    for (std::set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
         p != waiting_on_backfill.end(); ++p)
       f->dump_stream("osd") << *p;
     f->close_section();
@@ -1137,7 +1135,7 @@ protected:
     }
     {
       f->open_array_section("peer_backfill_info");
-      for (map<pg_shard_t, BackfillInterval>::const_iterator pbi =
+      for (std::map<pg_shard_t, BackfillInterval>::const_iterator pbi =
 	     peer_backfill_info.begin();
           pbi != peer_backfill_info.end(); ++pbi) {
         f->dump_stream("osd") << pbi->first;
@@ -1149,7 +1147,7 @@ protected:
     }
     {
       f->open_array_section("backfills_in_flight");
-      for (set<hobject_t>::const_iterator i = backfills_in_flight.begin();
+      for (std::set<hobject_t>::const_iterator i = backfills_in_flight.begin();
 	   i != backfills_in_flight.end();
 	   ++i) {
 	f->dump_stream("object") << *i;
@@ -1158,7 +1156,7 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
+      for (std::map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
 	f->dump_stream("object") << i->first;
@@ -1281,7 +1279,7 @@ protected:
   void do_cache_redirect(OpRequestRef op);
   /**
    * This function attempts to start a promote.  Either it succeeds,
-   * or places op on a wait list.  If op is null, failure means that
+   * or places op on a wait std::list.  If op is null, failure means that
    * this is a noop.  If a future user wants to be able to distinguish
    * these cases, a return value should be added.
    */
@@ -1294,7 +1292,7 @@ protected:
     );
 
   int prepare_transaction(OpContext *ctx);
-  list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
+  std::list<std::pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
   
   // pg on-disk content
@@ -1312,7 +1310,7 @@ protected:
   hobject_t earliest_peer_backfill() const;
   bool all_peer_done() const;
   /**
-   * @param work_started will be set to true if recover_backfill got anywhere
+   * @param work_started will be std::set to true if recover_backfill got anywhere
    * @returns the number of operations started
    */
   uint64_t recover_backfill(uint64_t max, ThreadPool::TPHandle &handle,
@@ -1324,7 +1322,7 @@ protected:
    * @min return at least this many items, unless we are done
    * @max return no more than this many items
    * @bi.begin first item should be >= this value
-   * @bi [out] resulting map of objects to eversion_t's
+   * @bi [out] resulting std::map of objects to eversion_t's
    */
   void scan_range(
     int min, int max, BackfillInterval *bi,
@@ -1339,7 +1337,7 @@ protected:
 
   int prep_backfill_object_push(
     hobject_t oid, eversion_t v, ObjectContextRef obc,
-    vector<pg_shard_t> peers,
+    std::vector<pg_shard_t> peers,
     PGBackend::RecoveryHandle *h);
   void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
@@ -1354,9 +1352,9 @@ protected:
   void recover_got(hobject_t oid, eversion_t v);
 
   // -- copyfrom --
-  map<hobject_t, CopyOpRef> copy_ops;
+  std::map<hobject_t, CopyOpRef> copy_ops;
 
-  int do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp, OSDOp& op,
+  int do_copy_get(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& op,
 		  ObjectContextRef& obc);
   int finish_copy_get();
 
@@ -1391,13 +1389,13 @@ protected:
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
-  void cancel_copy(CopyOpRef cop, bool requeue, vector<ceph_tid_t> *tids);
-  void cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids);
+  void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   friend struct C_Copyfrom;
 
   // -- flush --
-  map<hobject_t, FlushOpRef> flush_ops;
+  std::map<hobject_t, FlushOpRef> flush_ops;
 
   /// start_flush takes ownership of on_flush iff ret == -EINPROGRESS
   int start_flush(
@@ -1406,8 +1404,8 @@ protected:
     std::optional<std::function<void()>> &&on_flush);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
-  void cancel_flush(FlushOpRef fop, bool requeue, vector<ceph_tid_t> *tids);
-  void cancel_flush_ops(bool requeue, vector<ceph_tid_t> *tids);
+  void cancel_flush(FlushOpRef fop, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_flush_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   /// @return false if clone is has been evicted
   bool is_present_clone(hobject_t coid);
@@ -1420,7 +1418,7 @@ protected:
   void scrub_snapshot_metadata(
     ScrubMap &map,
     const std::map<hobject_t,
-                   pair<std::optional<uint32_t>,
+                   std::pair<std::optional<uint32_t>,
                         std::optional<uint32_t>>> &missing_digest) override;
   void _scrub_clear_state() override;
   void _scrub_finish() override;
@@ -1430,21 +1428,21 @@ protected:
                    unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
-  int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
-  int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
+  int do_xattr_cmp_u64(int op, __u64 v1, ceph::buffer::list& xattr);
+  int do_xattr_cmp_str(int op, std::string& v1s, ceph::buffer::list& xattr);
 
   // -- checksum --
-  int do_checksum(OpContext *ctx, OSDOp& osd_op, bufferlist::const_iterator *bl_it);
+  int do_checksum(OpContext *ctx, OSDOp& osd_op, ceph::buffer::list::const_iterator *bl_it);
   int finish_checksum(OSDOp& osd_op, Checksummer::CSumType csum_type,
-                      bufferlist::const_iterator *init_value_bl_it,
-                      const bufferlist &read_bl);
+                      ceph::buffer::list::const_iterator *init_value_bl_it,
+                      const ceph::buffer::list &read_bl);
 
-  friend class C_ChecksumRead;
+  friend struct C_ChecksumRead;
 
   int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
-  int finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl);
+  int finish_extent_cmp(OSDOp& osd_op, const ceph::buffer::list &read_bl);
 
-  friend class C_ExtentCmpRead;
+  friend struct C_ExtentCmpRead;
 
   int do_read(OpContext *ctx, OSDOp& osd_op);
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
@@ -1453,31 +1451,35 @@ protected:
   bool pgls_filter(const PGLSFilter& filter, const hobject_t& sobj);
 
   std::pair<int, std::unique_ptr<const PGLSFilter>> get_pgls_filter(
-    bufferlist::const_iterator& iter);
+    ceph::buffer::list::const_iterator& iter);
 
-  map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
+  std::map<hobject_t, std::list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
-  void cancel_proxy_ops(bool requeue, vector<ceph_tid_t> *tids);
+  void cancel_proxy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   // -- proxyread --
-  map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
+  std::map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
 
   void do_proxy_read(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
-  void cancel_proxy_read(ProxyReadOpRef prdop, vector<ceph_tid_t> *tids);
+  void cancel_proxy_read(ProxyReadOpRef prdop, std::vector<ceph_tid_t> *tids);
 
   friend struct C_ProxyRead;
 
   // -- proxywrite --
-  map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
+  std::map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
 
   void do_proxy_write(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
-  void cancel_proxy_write(ProxyWriteOpRef pwop, vector<ceph_tid_t> *tids);
+  void cancel_proxy_write(ProxyWriteOpRef pwop, std::vector<ceph_tid_t> *tids);
 
   friend struct C_ProxyWrite_Commit;
 
   // -- chunkop --
+  enum class refcount_t {
+    INCREMENT_REF,
+    DECREMENT_REF,
+  };
   void do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing_oid, 
 			   ObjectContextRef obc, bool write_ordered);
   void do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
@@ -1497,30 +1499,32 @@ protected:
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
-  void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
-                         SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset);
+  void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
+			 RefCountCallback* cb);
+  void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
+  void dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
-  friend class C_CopyChunk;
+  friend struct C_CopyChunk;
   friend struct C_ManifestFlush;
   friend struct RefCountCallback;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool,
-	       const map<string,string>& ec_profile,
+	       const std::map<std::string,std::string>& ec_profile,
 	       spg_t p);
   ~PrimaryLogPG() override {}
 
   void do_command(
-    const string_view& prefix,
+    const std::string_view& prefix,
     const cmdmap_t& cmdmap,
-    const bufferlist& idata,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish) override;
+    const ceph::buffer::list& idata,
+    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) override;
 
-  void clear_cache();
-  int get_cache_obj_count() {
+  void clear_cache() override;
+  int get_cache_obj_count() override {
     return object_contexts.get_count();
   }
   unsigned get_pg_shard() const {
@@ -1547,17 +1551,16 @@ public:
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
-  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
+  int do_osd_ops(OpContext *ctx, std::vector<OSDOp>& ops);
 
-  int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
+  int _get_tmap(OpContext *ctx, ceph::buffer::list *header, ceph::buffer::list *vals);
   int do_tmap2omap(OpContext *ctx, unsigned flags);
-  int do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDOp& osd_op);
-  int do_tmapup_slow(OpContext *ctx, bufferlist::const_iterator& bp, OSDOp& osd_op, bufferlist& bl);
+  int do_tmapup(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op);
+  int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
-  hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
 
   uint64_t temp_seq; ///< last id for naming temp objects
@@ -1585,7 +1588,7 @@ private:
     const char *mode,
     bool allow_incomplete_clones,
     std::optional<snapid_t> target,
-    vector<snapid_t>::reverse_iterator *curclone,
+    std::vector<snapid_t>::reverse_iterator *curclone,
     inconsistent_snapset_wrapper &snap_error);
 
 public:
@@ -1660,7 +1663,7 @@ private:
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
 
-    set<hobject_t> in_flight;
+    std::set<hobject_t> in_flight;
     snapid_t snap_to_trim;
 
     explicit Trimming(my_context ctx)
@@ -1892,7 +1895,6 @@ public:
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
-  void wait_for_all_missing(OpRequestRef op);
 
   bool check_laggy(OpRequestRef& op);
   bool check_laggy_requeue(OpRequestRef& op);
@@ -1901,13 +1903,13 @@ public:
   bool is_backfill_target(pg_shard_t osd) const {
     return recovery_state.is_backfill_target(osd);
   }
-  const set<pg_shard_t> &get_backfill_targets() const {
+  const std::set<pg_shard_t> &get_backfill_targets() const {
     return recovery_state.get_backfill_targets();
   }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return recovery_state.is_async_recovery_target(peer);
   }
-  const set<pg_shard_t> &get_async_recovery_targets() const {
+  const std::set<pg_shard_t> &get_async_recovery_targets() const {
     return recovery_state.get_async_recovery_targets();
   }
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
@@ -1930,7 +1932,7 @@ public:
 
   void mark_all_unfound_lost(
     int what,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish);
+    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish);
   eversion_t pick_newest_available(const hobject_t& oid);
 
   void do_update_log_missing(
@@ -1957,23 +1959,23 @@ public:
   void setattr_maybe_cache(
     ObjectContextRef obc,
     PGTransaction *t,
-    const string &key,
-    bufferlist &val);
+    const std::string &key,
+    ceph::buffer::list &val);
   void setattrs_maybe_cache(
     ObjectContextRef obc,
     PGTransaction *t,
-    map<string, bufferlist> &attrs);
+    std::map<std::string, ceph::buffer::list> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     PGTransaction *t,
-    const string &key);
+    const std::string &key);
   int getattr_maybe_cache(
     ObjectContextRef obc,
-    const string &key,
-    bufferlist *val);
+    const std::string &key,
+    ceph::buffer::list *val);
   int getattrs_maybe_cache(
     ObjectContextRef obc,
-    map<string, bufferlist> *out);
+    std::map<std::string, ceph::buffer::list> *out);
 
 public:
   void set_dynamic_perf_stats_queries(

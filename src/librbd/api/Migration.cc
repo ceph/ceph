@@ -8,6 +8,7 @@
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -29,8 +30,8 @@
 #include "librbd/image/DetachParentRequest.h"
 #include "librbd/image/ListWatchersRequest.h"
 #include "librbd/image/RemoveRequest.h"
+#include "librbd/image/Types.h"
 #include "librbd/internal.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 
@@ -835,13 +836,12 @@ int Migration<I>::abort() {
 
     ceph_assert(dst_image_ctx->ignore_migrating);
 
-    ThreadPool *thread_pool;
-    ContextWQ *op_work_queue;
-    ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &op_work_queue);
+    auto asio_engine = dst_image_ctx->asio_engine;
+
     C_SaferCond on_remove;
     auto req = librbd::image::RemoveRequest<>::create(
-      m_dst_io_ctx, dst_image_ctx, false, false, *m_prog_ctx, op_work_queue,
-      &on_remove);
+      m_dst_io_ctx, dst_image_ctx, false, false, *m_prog_ctx,
+      asio_engine->get_work_queue(), &on_remove);
     req->send();
     r = on_remove.wait();
 
@@ -1219,12 +1219,17 @@ int Migration<I>::create_dst_image() {
     }
   }
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &op_work_queue);
-
   ConfigProxy config{m_cct->_conf};
   api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
+
+  uint64_t mirror_image_mode;
+  if (m_image_options.get(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+                          &mirror_image_mode) == 0) {
+    m_mirroring = true;
+    m_mirror_image_mode = static_cast<cls::rbd::MirrorImageMode>(
+      mirror_image_mode);
+    m_image_options.unset(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE);
+  }
 
   int r;
   C_SaferCond on_create;
@@ -1232,8 +1237,9 @@ int Migration<I>::create_dst_image() {
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
-      m_image_options, true /* skip_mirror_enable */,
-      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
+      m_image_options, image::CREATE_FLAG_SKIP_MIRROR_ENABLE,
+      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+      m_src_image_ctx->op_work_queue, &on_create);
     req->send();
   } else {
     r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
@@ -1246,7 +1252,8 @@ int Migration<I>::create_dst_image() {
     auto *req = image::CloneRequest<I>::create(
       config, parent_io_ctx, parent_spec.image_id, "", {}, parent_spec.snap_id,
       m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options,
-      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
+      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "",
+      m_src_image_ctx->op_work_queue, &on_create);
     req->send();
   }
 
@@ -1495,7 +1502,7 @@ int Migration<I>::enable_mirroring(
 
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
-    image_ctx, mirror_image_mode, &ctx);
+    image_ctx, mirror_image_mode, "", false, &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {
@@ -1752,13 +1759,12 @@ int Migration<I>::remove_src_image() {
 
   ceph_assert(m_src_image_ctx->ignore_migrating);
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &op_work_queue);
+  auto asio_engine = m_src_image_ctx->asio_engine;
+
   C_SaferCond on_remove;
   auto req = librbd::image::RemoveRequest<I>::create(
-      m_src_io_ctx, m_src_image_ctx, false, true, *m_prog_ctx, op_work_queue,
-      &on_remove);
+      m_src_io_ctx, m_src_image_ctx, false, true, *m_prog_ctx,
+      asio_engine->get_work_queue(), &on_remove);
   req->send();
   r = on_remove.wait();
 

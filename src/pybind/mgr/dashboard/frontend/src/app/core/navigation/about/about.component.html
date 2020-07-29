@@ -1,60 +1,47 @@
-<div class="modal-header">
-  <button type="button"
-          class="close float-right"
-          aria-label="Close"
-          (click)="modalRef.hide()">
-    <span aria-hidden="true">&times;</span>
-  </button>
-</div>
-<div class="modal-body">
-  <h2>
-    <img src="assets/Ceph_Logo_Stacked_RGB_120411_fa_348x348.png"
+<div class="about-container">
+  <div class="modal-header">
+    <button type="button"
+            class="close float-right"
+            aria-label="Close"
+            (click)="activeModal.close()">
+      <span aria-hidden="true">&times;</span>
+    </button>
+  </div>
+  <div class="modal-body">
+    <img src="assets/Ceph_Logo_Standard_RGB_Reversed_120411_fa.png"
          class="ceph-logo"
          alt="{{ projectConstants.organization }}">
-    {{ projectConstants.organization }}
-  </h2>
-  <h3>
-    <strong>{{ projectConstants.projectName }}</strong>
-  </h3>
-  <div class="product-versions">
-    <strong>Version</strong>
+    <h3>
+      <strong>{{ projectConstants.projectName }}</strong>
+    </h3>
+    <div class="product-versions">
+      <strong>Version</strong>
+      <br>
+      {{ versionNumber }}
+      {{ versionHash }}
+      <br>
+      {{ versionName }}
+    </div>
     <br>
-    {{ versionNumber }}
-    {{ versionHash }}
-    <br>
-    {{ versionName }}
+    <dl>
+      <dt>Ceph Manager</dt>
+      <dd>{{ hostAddr }}</dd>
+      <dt>User</dt>
+      <dd>{{ modalVariables.user }}</dd>
+      <dt>User Role</dt>
+      <dd>{{ modalVariables.role }}</dd>
+      <dt>Browser</dt>
+      <dd>{{ modalVariables.browserName }}</dd>
+      <dt>Browser Version</dt>
+      <dd>{{ modalVariables.browserVersion }}</dd>
+      <dt>Browser OS</dt>
+      <dd>{{ modalVariables.browserOS }}</dd>
+    </dl>
   </div>
-  <br>
-  <ul class="list-unstyled">
-    <li class="row">
-      <strong class="col-6 col-sm-4">Ceph Manager</strong>
-      <span class="col-4 col-sm-4">{{ hostAddr }}</span>
-    </li>
-    <li class="row">
-      <strong class="col-6 col-sm-4">User</strong>
-      <span class="col-4 col-sm-4">{{ modalVariables.user }}</span>
-    </li>
-    <li class="row">
-      <strong class="col-6 col-sm-4">User Role</strong>
-      <span class="col-4 col-sm-4">{{ modalVariables.role }}</span>
-    </li>
-    <li class="row">
-      <strong class="col-6 col-sm-4">Browser</strong>
-      <span class="col-4 col-sm-4">{{ modalVariables.browserName }}</span>
-    </li>
-    <li class="row">
-      <strong class="col-6 col-sm-4">Browser Version</strong>
-      <span class="col-4 col-sm-4">{{ modalVariables.browserVersion }}</span>
-    </li>
-    <li class="row">
-      <strong class="col-6 col-sm-4">Browser OS</strong>
-      <span class="col-4 col-sm-4">{{ modalVariables.browserOS }}</span>
-    </li>
-  </ul>
-</div>
-<div class="modal-footer">
-  <div class="text-left">
-    {{ copyright }}
-    {{ projectConstants.license }}
+  <div class="modal-footer">
+    <div class="text-left">
+      {{ copyright }}
+      {{ projectConstants.license }}
+    </div>
   </div>
 </div>

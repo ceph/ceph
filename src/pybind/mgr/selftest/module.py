@@ -4,7 +4,6 @@ import threading
 import random
 import json
 import errno
-import six
 
 
 class Module(MgrModule):
@@ -173,7 +172,7 @@ class Module(MgrModule):
             return -1, "", "Failed to decode JSON input: {}".format(e)
 
         try:
-            for check, info in six.iteritems(checks):
+            for check, info in checks.items():
                 self._health[check] = {
                     "severity": str(info["severity"]),
                     "summary": str(info["summary"]),
@@ -432,11 +431,11 @@ class Module(MgrModule):
         import orchestrator
         if what == 'OrchestratorError':
             c = orchestrator.TrivialReadCompletion(result=None)
-            c.fail(orchestrator.OrchestratorError('hello', 'world'))
+            c.fail(orchestrator.OrchestratorError('hello, world'))
             return c
         elif what == "ZeroDivisionError":
             c = orchestrator.TrivialReadCompletion(result=None)
-            c.fail(ZeroDivisionError('hello', 'world'))
+            c.fail(ZeroDivisionError('hello, world'))
             return c
         assert False, repr(what)
 

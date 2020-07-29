@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title|Example: Create Pool@@formTitle"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
 
@@ -23,8 +23,8 @@
           </div>
         </div>
         <div *ngIf="advancedEnabled">
-          <h2 class="page-header"
-              i18n>Advanced configuration options</h2>
+          <h3 class="page-header"
+              i18n>Advanced configuration options</h3>
           <cd-config-option [optionNames]="advancedOptions"
                             [optionsForm]="osdPgScrubForm"
                             [optionsFormDir]="formDir"
@@ -33,14 +33,12 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button *ngIf="permissions.configOpt.update"
-                            (submitAction)="submitAction()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="osdPgScrubForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button [back]="bsModalRef.hide">
-          </cd-back-button>
-        </div>
+        <cd-submit-button *ngIf="permissions.configOpt.update"
+                          (submitAction)="submitAction()"
+                          i18n="form action button|Example: Create Pool@@formActionButton"
+                          [form]="osdPgScrubForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+        <cd-back-button [back]="activeModal.close">
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

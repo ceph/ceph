@@ -101,9 +101,10 @@ public:
     return m_global_image_id;
   }
 
-  void start(Context *on_finish = nullptr, bool manual = false);
+  void start(Context *on_finish = nullptr, bool manual = false,
+             bool restart = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
-	    int r = 0, const std::string& desc = "");
+            bool restart = false);
   void restart(Context *on_finish = nullptr);
   void flush();
 
@@ -139,11 +140,11 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail(int r, const std::string &desc);
-  virtual bool on_start_interrupted();
-  virtual bool on_start_interrupted(ceph::mutex& lock);
+  void on_start_fail(int r, const std::string &desc);
+  bool on_start_interrupted();
+  bool on_start_interrupted(ceph::mutex& lock);
 
-  virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
+  void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
   bool on_replay_interrupted();
 
@@ -205,6 +206,7 @@ private:
   bool m_finished = false;
   bool m_delete_requested = false;
   bool m_resync_requested = false;
+  bool m_restart_requested = false;
 
   image_replayer::StateBuilder<ImageCtxT>* m_state_builder = nullptr;
   image_replayer::Replayer* m_replayer = nullptr;
@@ -221,6 +223,8 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
 
+  Context* m_update_status_task = nullptr;
+
   static std::string to_string(const State state);
 
   bool is_stopped_() const {
@@ -232,6 +236,10 @@ private:
   bool is_replaying_() const {
     return (m_state == STATE_REPLAYING);
   }
+
+  void schedule_update_mirror_image_replay_status();
+  void handle_update_mirror_image_replay_status(int r);
+  void cancel_update_mirror_image_replay_status();
 
   void update_mirror_image_status(bool force, const OptionalState &state);
   void set_mirror_image_status_update(bool force, const OptionalState &state);
@@ -250,6 +258,7 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
 };
 
 } // namespace mirror

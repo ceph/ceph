@@ -12,11 +12,14 @@
 
 namespace librbd {
 namespace cache {
+class ImageWritebackInterface;
 namespace rwl {
 
 class SyncPointLogEntry;
 class GenericWriteLogEntry;
 class WriteLogEntry;
+
+typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
 
 class GenericLogEntry {
 public:
@@ -30,6 +33,28 @@ public:
   virtual ~GenericLogEntry() { };
   GenericLogEntry(const GenericLogEntry&) = delete;
   GenericLogEntry &operator=(const GenericLogEntry&) = delete;
+  virtual bool can_writeback() const {
+    return false;
+  }
+  virtual bool can_retire() const {
+    return false;
+  }
+  virtual void set_flushed(bool flushed) {
+    ceph_assert(false);
+  }
+  virtual unsigned int write_bytes() const {
+    return 0;
+  };
+  virtual unsigned int bytes_dirty() const {
+    return 0;
+  };
+  virtual std::shared_ptr<SyncPointLogEntry> get_sync_point_entry() {
+    return nullptr;
+  }
+  virtual void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                         Context *ctx) {
+    ceph_assert(false);
+  };
   virtual std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericLogEntry &entry);
@@ -55,6 +80,9 @@ public:
   ~SyncPointLogEntry() override {};
   SyncPointLogEntry(const SyncPointLogEntry&) = delete;
   SyncPointLogEntry &operator=(const SyncPointLogEntry&) = delete;
+  bool can_retire() const override {
+    return this->completed;
+  }
   std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const SyncPointLogEntry &entry);
@@ -63,8 +91,6 @@ public:
 class GenericWriteLogEntry : public GenericLogEntry {
 public:
   uint32_t referring_map_entries = 0;
-  bool flushing = false;
-  bool flushed = false; /* or invalidated */
   std::shared_ptr<SyncPointLogEntry> sync_point_entry;
   GenericWriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
                        const uint64_t image_offset_bytes, const uint64_t write_bytes)
@@ -74,11 +100,11 @@ public:
   ~GenericWriteLogEntry() override {};
   GenericWriteLogEntry(const GenericWriteLogEntry&) = delete;
   GenericWriteLogEntry &operator=(const GenericWriteLogEntry&) = delete;
-  inline unsigned int write_bytes() {
+  unsigned int write_bytes() const override {
     /* The valid bytes in this ops data buffer. Discard and WS override. */
     return ram_entry.write_bytes;
   };
-  virtual inline unsigned int bytes_dirty() {
+  unsigned int bytes_dirty() const override {
     /* The bytes in the image this op makes dirty. Discard and WS override. */
     return write_bytes();
   };
@@ -90,9 +116,23 @@ public:
   }
   void inc_map_ref() { referring_map_entries++; }
   void dec_map_ref() { referring_map_entries--; }
+  bool can_writeback() const override;
+  std::shared_ptr<SyncPointLogEntry> get_sync_point_entry() override {
+    return sync_point_entry;
+  }
+  virtual void copy_pmem_bl(bufferlist *out_bl) = 0;
+  void set_flushed(bool flushed) override {
+    m_flushed = flushed;
+  }
+  bool get_flushed() const {
+    return m_flushed;
+  }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericWriteLogEntry &entry);
+
+private:
+  bool m_flushed = false; /* or invalidated */
 };
 
 class WriteLogEntry : public GenericWriteLogEntry {
@@ -131,14 +171,93 @@ public:
   void init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
   BlockExtent block_extent();
-  unsigned int reader_count();
+  unsigned int reader_count() const;
   /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */
   buffer::list &get_pmem_bl();
   /* Constructs a new bl containing copies of pmem_bp */
-  void copy_pmem_bl(bufferlist *out_bl);
+  void copy_pmem_bl(bufferlist *out_bl) override;
+  void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                 Context *ctx) override;
+  bool can_retire() const override {
+    return (this->completed && this->get_flushed() && (0 == reader_count()));
+  }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const WriteLogEntry &entry);
+};
+
+class DiscardLogEntry : public GenericWriteLogEntry {
+public:
+  DiscardLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
+                  const uint64_t image_offset_bytes, const uint64_t write_bytes,
+                  uint32_t discard_granularity_bytes)
+    : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
+      m_discard_granularity_bytes(discard_granularity_bytes) {
+    ram_entry.discard = 1;
+  };
+  DiscardLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
+    : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
+    ram_entry.discard = 1;
+  };
+  DiscardLogEntry(const DiscardLogEntry&) = delete;
+  DiscardLogEntry &operator=(const DiscardLogEntry&) = delete;
+  unsigned int write_bytes() const override {
+    /* The valid bytes in this ops data buffer. */
+    return 0;
+  };
+  unsigned int bytes_dirty() const override {
+    /* The bytes in the image this op makes dirty. */
+    return ram_entry.write_bytes;
+  };
+  bool can_retire() const override {
+    return this->completed;
+  }
+  void copy_pmem_bl(bufferlist *out_bl) override {
+    ceph_assert(false);
+  }
+  void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                 Context *ctx) override;
+  void init(uint64_t current_sync_gen, bool persist_on_flush, uint64_t last_op_sequence_num);
+  std::ostream &format(std::ostream &os) const;
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const DiscardLogEntry &entry);
+private:
+  uint32_t m_discard_granularity_bytes;
+};
+
+class WriteSameLogEntry : public WriteLogEntry {
+protected:
+  void init_bl(buffer::ptr &bp, buffer::list &bl) override;
+
+public:
+  WriteSameLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
+                    const uint64_t image_offset_bytes, const uint64_t write_bytes,
+                    const uint32_t data_length)
+    : WriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes) {
+    ram_entry.writesame = 1;
+    ram_entry.ws_datalen = data_length;
+  };
+  WriteSameLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes,
+                    const uint32_t data_length)
+    : WriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
+    ram_entry.writesame = 1;
+    ram_entry.ws_datalen = data_length;
+  };
+  WriteSameLogEntry(const WriteSameLogEntry&) = delete;
+  WriteSameLogEntry &operator=(const WriteSameLogEntry&) = delete;
+  unsigned int write_bytes() const override {
+    /* The valid bytes in this ops data buffer. */
+    return ram_entry.ws_datalen;
+  };
+  unsigned int bytes_dirty() const override {
+    /* The bytes in the image this op makes dirty. */
+    return ram_entry.write_bytes;
+  };
+  void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                 Context *ctx) override;
+  std::ostream &format(std::ostream &os) const;
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const WriteSameLogEntry &entry);
 };
 
 } // namespace rwl

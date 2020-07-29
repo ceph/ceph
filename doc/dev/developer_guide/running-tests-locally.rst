@@ -36,6 +36,8 @@ This means the cluster is running.
 Step 3 - run s3-tests
 ^^^^^^^^^^^^^^^^^^^^^
 
+.. highlight:: console
+
 To run the s3tests suite do the following::
 
    $ ../qa/workunits/rgw/run-s3tests.sh
@@ -50,16 +52,11 @@ Running your first test
 The Python tests in Ceph repository can be executed on your local machine
 using `vstart_runner.py`_. To do that, you'd need `teuthology`_ installed::
 
-    $ git clone https://github.com/ceph/teuthology
-    $ cd teuthology/
-    $ virtualenv -p python2.7 ./venv
+    $ virtualenv --python=python3 venv
     $ source venv/bin/activate
-    $ pip install --upgrade pip
-    $ pip install -r requirements.txt
-    $ python setup.py develop
+    $ pip install 'setuptools >= 12'
+    $ pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
     $ deactivate
-
-.. note:: The pip command above is pip2, not pip3; run ``pip --version``.
 
 The above steps installs teuthology in a virtual environment. Before running
 a test locally, build Ceph successfully from the source (refer
@@ -73,23 +70,19 @@ To run a specific test, say `test_reconnect_timeout`_ from
 `TestClientRecovery`_ in ``qa/tasks/cephfs/test_client_recovery``, you can
 do::
 
-    $ python2 ../qa/tasks/vstart_runner.py tasks.cephfs.test_client_recovery.TestClientRecovery.test_reconnect_timeout
+    $ python ../qa/tasks/vstart_runner.py tasks.cephfs.test_client_recovery.TestClientRecovery.test_reconnect_timeout
 
 The above command runs vstart_runner.py and passes the test to be executed as
 an argument to vstart_runner.py. In a similar way, you can also run the group
 of tests in the following manner::
 
     $ # run all tests in class TestClientRecovery
-    $ python2 ../qa/tasks/vstart_runner.py tasks.cephfs.test_client_recovery.TestClientRecovery
+    $ python ../qa/tasks/vstart_runner.py tasks.cephfs.test_client_recovery.TestClientRecovery
     $ # run  all tests in test_client_recovery.py
-    $ python2 ../qa/tasks/vstart_runner.py tasks.cephfs.test_client_recovery
+    $ python ../qa/tasks/vstart_runner.py tasks.cephfs.test_client_recovery
 
 Based on the argument passed, vstart_runner.py collects tests and executes as
 it would execute a single test.
-
-.. note:: vstart_runner.py as well as most tests in ``qa/`` are only
-          compatible with ``python2``. Therefore, use ``python2`` to run the
-          tests locally.
 
 vstart_runner.py can take the following options -
 
@@ -102,6 +95,8 @@ vstart_runner.py can take the following options -
 --teardown                  tears Ceph cluster down after test(s) has finished
                             runnng
 --kclient                   use the kernel cephfs client instead of FUSE
+--brxnet=<net/mask>         specify a new net/mask for the mount clients' network
+                            namespace container (Default: 192.168.0.0/16)
 
 .. note:: If using the FUSE client, ensure that the fuse package is installed
           and enabled on the system and that ``user_allow_other`` is added

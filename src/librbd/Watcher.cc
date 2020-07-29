@@ -5,10 +5,10 @@
 #include "librbd/watcher/RewatchRequest.h"
 #include "librbd/Utils.h"
 #include "librbd/TaskFinisher.h"
+#include "librbd/asio/ContextWQ.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -16,6 +16,8 @@
 #define dout_subsys ceph_subsys_rbd
 
 namespace librbd {
+
+using namespace boost::placeholders;
 
 using namespace watcher;
 
@@ -87,11 +89,12 @@ void Watcher::C_NotifyAck::finish(int r) {
 #define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
                            << ": "
 
-Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
+Watcher::Watcher(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
                           const string& oid)
   : m_ioctx(ioctx), m_work_queue(work_queue), m_oid(oid),
     m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_watch_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::Watcher::m_watch_lock", this))),
+    m_watch_lock(ceph::make_shared_mutex(
+      util::unique_lock_name("librbd::Watcher::m_watch_lock", this))),
     m_watch_handle(0), m_notifier(work_queue, ioctx, oid),
     m_watch_state(WATCH_STATE_IDLE), m_watch_ctx(*this) {
 }
@@ -324,7 +327,7 @@ void Watcher::handle_rewatch_callback(int r) {
     if (m_unregister_watch_ctx != nullptr) {
       m_watch_state = WATCH_STATE_IDLE;
       std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
-    } else if (r == -ENOENT) {
+    } else if (r == -EBLACKLISTED || r == -ENOENT) {
       m_watch_state = WATCH_STATE_IDLE;
     } else if (r < 0 || m_watch_error) {
       watch_error = true;

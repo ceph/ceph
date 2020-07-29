@@ -19,6 +19,7 @@ export class Copy2ClipboardButtonDirective implements OnInit {
     const iElement = this.renderer.createElement('i');
     this.renderer.addClass(iElement, 'fa');
     this.renderer.addClass(iElement, 'fa-clipboard');
+    this.renderer.setAttribute(iElement, 'title', $localize`Copy to clipboard`);
     this.renderer.appendChild(this.elementRef.nativeElement, iElement);
   }
 
@@ -29,16 +30,15 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   @HostListener('click')
   onClick() {
     try {
-      // Create the input to hold our text.
-      const tmpInputElement = document.createElement('input');
-      tmpInputElement.value = this.getInputElement().value;
-      document.body.appendChild(tmpInputElement);
-      // Copy text to clipboard.
-      tmpInputElement.select();
-      document.execCommand('copy');
-      // Finally remove the element.
-      document.body.removeChild(tmpInputElement);
-
+      // Checking if we have the clipboard-write permission
+      navigator.permissions
+        .query({ name: 'clipboard-write' as PermissionName })
+        .then((result: any) => {
+          if (result.state === 'granted' || result.state === 'prompt') {
+            // Copy text to clipboard.
+            navigator.clipboard.writeText(this.getInputElement().value);
+          }
+        });
       this.toastr.success('Copied text to the clipboard successfully.');
     } catch (err) {
       this.toastr.error('Failed to copy text to the clipboard.');

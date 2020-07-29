@@ -104,9 +104,9 @@ def start_rgw(ctx, config, clients):
                 ])
 
 
-        if client_config.get('dns-name'):
+        if client_config.get('dns-name') is not None:
             rgw_cmd.extend(['--rgw-dns-name', endpoint.dns_name])
-        if client_config.get('dns-s3website-name'):
+        if client_config.get('dns-s3website-name') is not None:
             rgw_cmd.extend(['--rgw-dns-s3website-name', endpoint.website_dns_name])
 
 
@@ -132,10 +132,11 @@ def start_rgw(ctx, config, clients):
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
             ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
-            log.info("Restrict access to token file")
-            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
+            log.info("Restrict access to token file")
+            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
             rgw_cmd.extend([
                 '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
@@ -222,9 +223,8 @@ def assign_endpoints(ctx, config, default_cert):
             dns_name += remote.hostname
 
         website_dns_name = client_config.get('dns-s3website-name')
-        if website_dns_name:
-            if len(website_dns_name) == 0 or website_dns_name.endswith('.'):
-                website_dns_name += remote.hostname
+        if website_dns_name is not None and (len(website_dns_name) == 0 or website_dns_name.endswith('.')):
+            website_dns_name += remote.hostname
 
         role_endpoints[role] = RGWEndpoint(remote.hostname, port, ssl_certificate, dns_name, website_dns_name)
 

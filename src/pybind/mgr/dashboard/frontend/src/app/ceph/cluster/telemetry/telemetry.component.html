@@ -1,0 +1,303 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <ng-container [ngSwitch]="step">
+    <!-- Configuration step -->
+    <div *ngSwitchCase="1">
+      <form name="form"
+            #formDir="ngForm"
+            [formGroup]="configForm"
+            novalidate>
+        <div class="card">
+          <div class="card-header"
+               i18n>Step {{ step }} of 2: Telemetry report configuration</div>
+          <div class="card-body">
+            <p i18n>The telemetry module sends anonymous data about this Ceph cluster back to the Ceph developers
+              to help understand how Ceph is used and what problems users may be experiencing.<br/>
+              This data is visualized on <a href="https://telemetry-public.ceph.com/">public dashboards</a>
+              that allow the community to quickly see summary statistics on how many clusters are reporting,
+              their total capacity and OSD count, and version distribution trends.<br/><br/>
+              The data being reported does <b>not</b> contain any sensitive data like pool names, object names, object contents,
+              hostnames, or device serial numbers. It contains counters and statistics on how the cluster has been
+              deployed, the version of Ceph, the distribution of the hosts and other parameters which help the project
+              to gain a better understanding of the way Ceph is used. The data is sent secured to {{ sendToUrl }} and
+              {{ sendToDeviceUrl }} (device report).</p>
+            <div *ngIf="moduleEnabled">
+              The plugin is already <b>enabled</b>. Click <b>Deactivate</b> to disable it.&nbsp;
+              <button type="button"
+                      class="btn btn-light"
+                      (click)="disableModule('The Telemetry module has been disabled successfully.')"
+                      i18n>Deactivate</button>
+            </div>
+            <legend i18n>Channels</legend>
+            <p i18n>The telemetry report is broken down into several "channels", each with a different type of information that can
+              be configured below.</p>
+
+            <!-- Channel basic -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="channel_basic">
+                <ng-container i18n>Basic</ng-container>
+                <cd-helper>
+                  <ng-container i18n>Includes basic information about the cluster:</ng-container>
+                  <ul>
+                    <li i18n>Capacity of the cluster</li>
+                    <li i18n>Number of monitors, managers, OSDs, MDSs, object gateways, or other daemons</li>
+                    <li i18n>Software version currently being used</li>
+                    <li i18n>Number and types of RADOS pools and CephFS file systems</li>
+                    <li i18n>Names of configuration options that have been changed from their default (but not their values)</li>
+                  </ul>
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="channel_basic"
+                         formControlName="channel_basic">
+                  <label class="custom-control-label"
+                         for="channel_basic"></label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Channel crash -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="channel_crash">
+                <ng-container i18n>Crash</ng-container>
+                <cd-helper>
+                  <ng-container i18n>Includes information about daemon crashes:</ng-container>
+                  <ul>
+                    <li i18n>Type of daemon</li>
+                    <li i18n>Version of the daemon</li>
+                    <li i18n>Operating system (OS distribution, kernel version)</li>
+                    <li i18n>Stack trace identifying where in the Ceph code the crash occurred</li>
+                  </ul>
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="channel_crash"
+                         formControlName="channel_crash">
+                  <label class="custom-control-label"
+                         for="channel_crash"></label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Channel device -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="channel_device">
+                <ng-container i18n>Device</ng-container>
+                <cd-helper i18n-html
+                           html="Includes information about device metrics like anonymized SMART metrics.">
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="channel_device"
+                         formControlName="channel_device">
+                  <label class="custom-control-label"
+                         for="channel_device"></label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Channel ident -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="channel_ident">
+                <ng-container i18n>Ident</ng-container>
+                <cd-helper>
+                  <ng-container i18n>Includes user-provided identifying information about the cluster:</ng-container>
+                  <ul>
+                    <li>Cluster description</li>
+                    <li>Contact email address</li>
+                  </ul>
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="channel_ident"
+                         formControlName="channel_ident">
+                  <label class="custom-control-label"
+                         for="channel_ident"></label>
+                </div>
+              </div>
+            </div>
+            <legend>
+              <ng-container i18n>Contact Information</ng-container>
+              <cd-helper i18n>Submitting any contact information is completely optional and disabled by default.</cd-helper>
+            </legend>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="contact"
+                     i18n>Contact</label>
+              <div class="cd-col-form-input">
+                <input id="contact"
+                       class="form-control"
+                       type="text"
+                       formControlName="contact"
+                       placeholder="Example User <user@example.com>">
+              </div>
+            </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="description"
+                     i18n>Description</label>
+              <div class="cd-col-form-input">
+                <input id="description"
+                       class="form-control"
+                       type="text"
+                       formControlName="description"
+                       placeholder="My first Ceph cluster"
+                       i18n-placeholder>
+              </div>
+            </div>
+            <legend i18n>Advanced Settings</legend>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="interval">
+                <ng-container i18n>Interval</ng-container>
+                <cd-helper i18n>The module compiles and sends a new report every 24 hours by default. You can
+                  adjust this interval by setting a different number of hours.</cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="interval"
+                       class="form-control"
+                       type="number"
+                       formControlName="interval">
+                <span class="invalid-feedback"
+                      *ngIf="configForm.showError('interval', formDir, 'min')"
+                      i18n>The entered value is too low! It must be greater or equal to 8.</span>
+              </div>
+            </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="proxy">
+                <ng-container i18n>Proxy</ng-container>
+                <cd-helper>
+                  <p i18n>If the cluster cannot directly connect to the configured telemetry endpoint
+                    (default telemetry.ceph.com), you can configure a HTTP/HTTPS proxy server by e.g. adding
+                    https://10.0.0.1:8080</p>
+                  <p i18n>You can also include a user:pass if needed e.g. https://ceph:telemetry@10.0.0.1:8080</p>
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="proxy"
+                       class="form-control"
+                       type="text"
+                       formControlName="proxy"
+                       placeholder="https://10.0.0.1:8080">
+              </div>
+            </div>
+            <br />
+            <p i18n><b>Note:</b> By clicking 'Next' you will first see a preview of the report content before you
+              can activate the automatic submission of your data.</p>
+          </div>
+          <div class="card-footer">
+            <div class="button-group text-right">
+              <button type="button"
+                      class="btn btn-light"
+                      (click)="next()">
+                <ng-container i18n>Next</ng-container>
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Preview step -->
+    <div *ngSwitchCase="2">
+      <form name="previewForm"
+            #frm="ngForm"
+            [formGroup]="previewForm"
+            novalidate>
+        <div class="card">
+          <div class="card-header"
+               i18n>Step {{ step }} of 2: Telemetry report preview</div>
+          <div class="card-body">
+            <!-- Telemetry report ID -->
+            <div class="form-group row">
+              <label i18n
+                     for="reportId"
+                     class="cd-col-form-label">Report ID</label>
+              <div class="cd-col-form-input">
+                <input class="form-control"
+                       type="text"
+                       id="reportId"
+                       formControlName="reportId"
+                       readonly>
+              </div>
+            </div>
+
+            <!-- Telemetry report -->
+            <div class="form-group row">
+              <label i18n
+                     for="report"
+                     class="cd-col-form-label">Report preview</label>
+              <div class="cd-col-form-input">
+                <textarea class="form-control"
+                          id="report"
+                          formControlName="report"
+                          rows="15"
+                          readonly></textarea>
+              </div>
+            </div>
+            <div class="form-group row">
+              <div class="cd-col-form-offset">
+                <button type="button"
+                        class="btn btn-light mr-2"
+                        title="Download"
+                        (click)="download(report, 'telemetry_report.json')"
+                        i18n-title>
+                  <i class="fa fa-download"></i>
+                </button>
+                <button type="button"
+                        class="btn btn-light"
+                        cdCopy2ClipboardButton="report">
+                </button>
+              </div>
+            </div>
+
+            <!-- License agreement -->
+            <div class="form-group row">
+              <div class="cd-col-form-offset">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="licenseAgrmt"
+                         name="licenseAgrmt"
+                         formControlName="licenseAgrmt">
+                  <label class="custom-control-label"
+                         for="licenseAgrmt"
+                         i18n>I agree to my telemetry data being submitted under the Community Data License Agreement - Sharing - Version 1.0 (<a href="https://cdla.io/sharing-1-0/">https://cdla.io/sharing-1-0/</a>)</label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="button-group text-right">
+              <cd-submit-button (submitAction)="onSubmit()"
+                                [form]="previewForm">
+                <ng-container i18n>Save</ng-container>
+              </cd-submit-button>
+              <button type="button"
+                      class="btn btn-light"
+                      (click)="back()"
+                      i18n>Back</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

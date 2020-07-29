@@ -14,12 +14,14 @@
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/rwl/ImageCacheState.h"
 #include "librbd/cache/rwl/LogEntry.h"
 #include "librbd/cache/rwl/Types.h"
 #include <map>
 #include <vector>
 
+#undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::ReplicatedWriteLog: " << this << " " \
@@ -42,6 +44,9 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::Imag
     m_image_ctx(image_ctx),
     m_log_pool_config_size(DEFAULT_POOL_SIZE),
     m_image_writeback(image_ctx), m_write_log_guard(image_ctx.cct),
+    m_log_retire_lock(ceph::make_mutex(util::unique_lock_name(
+      "librbd::cache::ReplicatedWriteLog::m_log_retire_lock", this))),
+    m_entry_reader_lock("librbd::cache::ReplicatedWriteLog::m_entry_reader_lock"),
     m_deferred_dispatch_lock(ceph::make_mutex(util::unique_lock_name(
       "librbd::cache::ReplicatedWriteLog::m_deferred_dispatch_lock", this))),
     m_log_append_lock(ceph::make_mutex(util::unique_lock_name(
@@ -50,6 +55,7 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::Imag
       "librbd::cache::ReplicatedWriteLog::m_lock", this))),
     m_blockguard_lock(ceph::make_mutex(util::unique_lock_name(
       "librbd::cache::ReplicatedWriteLog::m_blockguard_lock", this))),
+    m_blocks_to_log_entries(image_ctx.cct),
     m_thread_pool(image_ctx.cct, "librbd::cache::ReplicatedWriteLog::thread_pool", "tp_rwl",
                   4,
                   ""),
@@ -69,6 +75,11 @@ ReplicatedWriteLog<I>::~ReplicatedWriteLog() {
     std::lock_guard locker(m_lock);
     m_timer->cancel_event(m_timer_ctx);
     m_thread_pool.stop();
+    ceph_assert(m_deferred_ios.size() == 0);
+    ceph_assert(m_ops_to_flush.size() == 0);
+    ceph_assert(m_ops_to_append.size() == 0);
+    ceph_assert(m_flush_ops_in_flight == 0);
+
     m_log_pool = nullptr;
     delete m_cache_state;
     m_cache_state = nullptr;
@@ -89,6 +100,24 @@ void ReplicatedWriteLog<I>::perf_start(std::string name) {
     16,                              ///< Ranges into the mS
   };
 
+  // Syncpoint logentry number x-axis configuration for op histograms
+  PerfHistogramCommon::axis_config_d sp_logentry_number_config{
+    "logentry number",
+    PerfHistogramCommon::SCALE_LINEAR, // log entry number in linear scale
+    0,                                 // Start at 0
+    1,                                 // Quantization unit is 1
+    260,                               // Up to 260 > (MAX_WRITES_PER_SYNC_POINT)
+  };
+
+  // Syncpoint bytes number y-axis configuration for op histogram
+  PerfHistogramCommon::axis_config_d sp_bytes_number_config{
+    "Number of SyncPoint",
+    PerfHistogramCommon::SCALE_LOG2,   // Request size in logarithmic scale
+    0,                                 // Start at 0
+    512,                               // Quantization unit is 512
+    17,                                // Writes up to 8M >= MAX_BYTES_PER_SYNC_POINT
+  };
+
   // Op size axis configuration for op histogram y axis, values are in bytes
   PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
     "Request size (bytes)",
@@ -103,7 +132,7 @@ void ReplicatedWriteLog<I>::perf_start(std::string name) {
     "Number of items",
     PerfHistogramCommon::SCALE_LINEAR, ///< Request size in linear scale
     0,                                 ///< Start at 0
-    1,                                 ///< Quantization unit is 512 bytes
+    1,                                 ///< Quantization unit is 1
     32,                                ///< Writes up to >32k
   };
 
@@ -116,6 +145,11 @@ void ReplicatedWriteLog<I>::perf_start(std::string name) {
   plb.add_time_avg(l_librbd_rwl_rd_hit_latency, "hit_rd_latency", "Latency of read hits");
 
   plb.add_u64_counter(l_librbd_rwl_rd_part_hit_req, "part_hit_rd", "reads partially hitting RWL");
+
+  plb.add_u64_counter_histogram(
+    l_librbd_rwl_syncpoint_hist, "syncpoint_logentry_bytes_histogram",
+    sp_logentry_number_config, sp_bytes_number_config,
+    "Histogram of syncpoint's logentry numbers vs bytes number");
 
   plb.add_u64_counter(l_librbd_rwl_wr_req, "wr", "Writes");
   plb.add_u64_counter(l_librbd_rwl_wr_req_def, "wr_def", "Writes deferred for resources");
@@ -297,6 +331,203 @@ void ReplicatedWriteLog<I>::arm_periodic_stats() {
   }
 }
 
+/*
+ * Loads the log entries from an existing log.
+ *
+ * Creates the in-memory structures to represent the state of the
+ * re-opened log.
+ *
+ * Finds the last appended sync point, and any sync points referred to
+ * in log entries, but missing from the log. These missing sync points
+ * are created and scheduled for append. Some rudimentary consistency
+ * checking is done.
+ *
+ * Rebuilds the m_blocks_to_log_entries map, to make log entries
+ * readable.
+ *
+ * Places all writes on the dirty entries list, which causes them all
+ * to be flushed.
+ *
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::load_existing_entries(DeferredContexts &later) {
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+  struct WriteLogPmemEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
+  uint64_t entry_index = m_first_valid_entry;
+  /* The map below allows us to find sync point log entries by sync
+   * gen number, which is necessary so write entries can be linked to
+   * their sync points. */
+  std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
+  /* The map below tracks sync points referred to in writes but not
+   * appearing in the sync_point_entries map.  We'll use this to
+   * determine which sync points are missing and need to be
+   * created. */
+  std::map<uint64_t, bool> missing_sync_points;
+
+  /*
+   * Read the existing log entries. Construct an in-memory log entry
+   * object of the appropriate type for each. Add these to the global
+   * log entries list.
+   *
+   * Write entries will not link to their sync points yet. We'll do
+   * that in the next pass. Here we'll accumulate a map of sync point
+   * gen numbers that are referred to in writes but do not appearing in
+   * the log.
+   */
+  while (entry_index != m_first_free_entry) {
+    WriteLogPmemEntry *pmem_entry = &pmem_log_entries[entry_index];
+    std::shared_ptr<GenericLogEntry> log_entry = nullptr;
+    bool writer = pmem_entry->is_writer();
+
+    ceph_assert(pmem_entry->entry_index == entry_index);
+    if (pmem_entry->is_sync_point()) {
+      ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
+                                 << " is a sync point. pmem_entry=[" << *pmem_entry << "]" << dendl;
+      auto sync_point_entry = std::make_shared<SyncPointLogEntry>(pmem_entry->sync_gen_number);
+      log_entry = sync_point_entry;
+      sync_point_entries[pmem_entry->sync_gen_number] = sync_point_entry;
+      missing_sync_points.erase(pmem_entry->sync_gen_number);
+      m_current_sync_gen = pmem_entry->sync_gen_number;
+    } else if (pmem_entry->is_write()) {
+      ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
+                                 << " is a write. pmem_entry=[" << *pmem_entry << "]" << dendl;
+      auto write_entry =
+        std::make_shared<WriteLogEntry>(nullptr, pmem_entry->image_offset_bytes, pmem_entry->write_bytes);
+      write_entry->pmem_buffer = D_RW(pmem_entry->write_data);
+      log_entry = write_entry;
+    } else if (pmem_entry->is_writesame()) {
+      ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
+                                 << " is a write same. pmem_entry=[" << *pmem_entry << "]" << dendl;
+      auto ws_entry =
+        std::make_shared<WriteSameLogEntry>(nullptr, pmem_entry->image_offset_bytes,
+                                            pmem_entry->write_bytes, pmem_entry->ws_datalen);
+      ws_entry->pmem_buffer = D_RW(pmem_entry->write_data);
+      log_entry = ws_entry;
+    } else if (pmem_entry->is_discard()) {
+      ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
+                                 << " is a discard. pmem_entry=[" << *pmem_entry << "]" << dendl;
+      auto discard_entry =
+        std::make_shared<DiscardLogEntry>(nullptr, pmem_entry->image_offset_bytes, pmem_entry->write_bytes,
+                                          m_discard_granularity_bytes);
+      log_entry = discard_entry;
+    } else {
+      lderr(m_image_ctx.cct) << "Unexpected entry type in entry " << entry_index
+                             << ", pmem_entry=[" << *pmem_entry << "]" << dendl;
+    }
+
+    if (writer) {
+      ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
+                                 << " writes. pmem_entry=[" << *pmem_entry << "]" << dendl;
+      if (!sync_point_entries[pmem_entry->sync_gen_number]) {
+        missing_sync_points[pmem_entry->sync_gen_number] = true;
+      }
+    }
+
+    log_entry->ram_entry = *pmem_entry;
+    log_entry->pmem_entry = pmem_entry;
+    log_entry->log_entry_index = entry_index;
+    log_entry->completed = true;
+
+    m_log_entries.push_back(log_entry);
+
+    entry_index = (entry_index + 1) % m_total_log_entries;
+  }
+
+  /* Create missing sync points. These must not be appended until the
+   * entry reload is complete and the write map is up to
+   * date. Currently this is handled by the deferred contexts object
+   * passed to new_sync_point(). These contexts won't be completed
+   * until this function returns.  */
+  for (auto &kv : missing_sync_points) {
+    ldout(m_image_ctx.cct, 5) << "Adding sync point " << kv.first << dendl;
+    if (0 == m_current_sync_gen) {
+      /* The unlikely case where the log contains writing entries, but no sync
+       * points (e.g. because they were all retired) */
+      m_current_sync_gen = kv.first-1;
+    }
+    ceph_assert(kv.first == m_current_sync_gen+1);
+    init_flush_new_sync_point(later);
+    ceph_assert(kv.first == m_current_sync_gen);
+    sync_point_entries[kv.first] = m_current_sync_point->log_entry;;
+  }
+
+  /*
+   * Iterate over the log entries again (this time via the global
+   * entries list), connecting write entries to their sync points and
+   * updating the sync point stats.
+   *
+   * Add writes to the write log map.
+   */
+  std::shared_ptr<SyncPointLogEntry> previous_sync_point_entry = nullptr;
+  for (auto &log_entry : m_log_entries)  {
+    if ((log_entry->write_bytes() > 0) || (log_entry->bytes_dirty() > 0)) {
+      /* This entry is one of the types that write */
+      auto gen_write_entry = static_pointer_cast<GenericWriteLogEntry>(log_entry);
+      if (gen_write_entry) {
+        auto sync_point_entry = sync_point_entries[gen_write_entry->ram_entry.sync_gen_number];
+        if (!sync_point_entry) {
+          lderr(m_image_ctx.cct) << "Sync point missing for entry=[" << *gen_write_entry << "]" << dendl;
+          ceph_assert(false);
+        } else {
+          gen_write_entry->sync_point_entry = sync_point_entry;
+          sync_point_entry->writes++;
+          sync_point_entry->bytes += gen_write_entry->ram_entry.write_bytes;
+          sync_point_entry->writes_completed++;
+          m_blocks_to_log_entries.add_log_entry(gen_write_entry);
+          /* This entry is only dirty if its sync gen number is > the flushed
+           * sync gen number from the root object. */
+          if (gen_write_entry->ram_entry.sync_gen_number > m_flushed_sync_gen) {
+            m_dirty_log_entries.push_back(log_entry);
+            m_bytes_dirty += gen_write_entry->bytes_dirty();
+          } else {
+            gen_write_entry->set_flushed(true);
+            sync_point_entry->writes_flushed++;
+          }
+          if (log_entry->write_bytes() == log_entry->bytes_dirty()) {
+            /* This entry is a basic write */
+            uint64_t bytes_allocated = MIN_WRITE_ALLOC_SIZE;
+            if (gen_write_entry->ram_entry.write_bytes > bytes_allocated) {
+              bytes_allocated = gen_write_entry->ram_entry.write_bytes;
+            }
+            m_bytes_allocated += bytes_allocated;
+            m_bytes_cached += gen_write_entry->ram_entry.write_bytes;
+          }
+        }
+      }
+    } else {
+      /* This entry is sync point entry */
+      auto sync_point_entry = static_pointer_cast<SyncPointLogEntry>(log_entry);
+      if (sync_point_entry) {
+        if (previous_sync_point_entry) {
+          previous_sync_point_entry->next_sync_point_entry = sync_point_entry;
+          if (previous_sync_point_entry->ram_entry.sync_gen_number > m_flushed_sync_gen) {
+            sync_point_entry->prior_sync_point_flushed = false;
+            ceph_assert(!previous_sync_point_entry->prior_sync_point_flushed ||
+                        (0 == previous_sync_point_entry->writes) ||
+                        (previous_sync_point_entry->writes >= previous_sync_point_entry->writes_flushed));
+          } else {
+            sync_point_entry->prior_sync_point_flushed = true;
+            ceph_assert(previous_sync_point_entry->prior_sync_point_flushed);
+            ceph_assert(previous_sync_point_entry->writes == previous_sync_point_entry->writes_flushed);
+          }
+          previous_sync_point_entry = sync_point_entry;
+        } else {
+          /* There are no previous sync points, so we'll consider them flushed */
+          sync_point_entry->prior_sync_point_flushed = true;
+        }
+        ldout(m_image_ctx.cct, 10) << "Loaded to sync point=[" << *sync_point_entry << dendl;
+      }
+    }
+  }
+  if (0 == m_current_sync_gen) {
+    /* If a re-opened log was completely flushed, we'll have found no sync point entries here,
+     * and not advanced m_current_sync_gen. Here we ensure it starts past the last flushed sync
+     * point recorded in the log. */
+    m_current_sync_gen = m_flushed_sync_gen;
+  }
+}
+
 template <typename I>
 void ReplicatedWriteLog<I>::rwl_init(Context *on_finish, DeferredContexts &later) {
   CephContext *cct = m_image_ctx.cct;
@@ -399,7 +630,51 @@ void ReplicatedWriteLog<I>::rwl_init(Context *on_finish, DeferredContexts &later
     } TX_FINALLY {
     } TX_END;
   } else {
-    // TODO: load existed cache. This will be covered in later PR.
+    m_cache_state->present = true;
+    /* Open existing pool */
+    if ((m_log_pool =
+         pmemobj_open(m_log_pool_name.c_str(),
+                      m_rwl_pool_layout_name)) == NULL) {
+      lderr(cct) << "failed to open pool (" << m_log_pool_name << "): "
+                 << pmemobj_errormsg() << dendl;
+      on_finish->complete(-errno);
+      return;
+    }
+    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+    if (D_RO(pool_root)->header.layout_version != RWL_POOL_VERSION) {
+      // TODO: will handle upgrading version in the future
+      lderr(cct) << "Pool layout version is " << D_RO(pool_root)->header.layout_version
+                 << " expected " << RWL_POOL_VERSION << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+    if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
+      lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size
+                 << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+    m_log_pool_actual_size = D_RO(pool_root)->pool_size;
+    m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
+    m_total_log_entries = D_RO(pool_root)->num_log_entries;
+    m_first_free_entry = D_RO(pool_root)->first_free_entry;
+    m_first_valid_entry = D_RO(pool_root)->first_valid_entry;
+    if (m_first_free_entry < m_first_valid_entry) {
+      /* Valid entries wrap around the end of the ring, so first_free is lower
+       * than first_valid.  If first_valid was == first_free+1, the entry at
+       * first_free would be empty. The last entry is never used, so in
+       * that case there would be zero free log entries. */
+      m_free_log_entries = m_total_log_entries - (m_first_valid_entry - m_first_free_entry) -1;
+    } else {
+      /* first_valid is <= first_free. If they are == we have zero valid log
+       * entries, and n-1 free log entries */
+      m_free_log_entries = m_total_log_entries - (m_first_free_entry - m_first_valid_entry) -1;
+    }
+    size_t effective_pool_size = (size_t)(m_log_pool_config_size * USABLE_SIZE);
+    m_bytes_allocated_cap = effective_pool_size;
+    load_existing_entries(later);
+    m_cache_state->clean = m_dirty_log_entries.empty();
+    m_cache_state->empty = m_log_entries.empty();
   }
 
   ldout(cct,1) << "pool " << m_log_pool_name << " has " << m_total_log_entries
@@ -413,11 +688,11 @@ void ReplicatedWriteLog<I>::rwl_init(Context *on_finish, DeferredContexts &later
     m_cache_state->empty = true;
   }
 
-  // TODO: Will init sync point, this will be covered in later PR.
-  //  init_flush_new_sync_point(later);
-  ++m_current_sync_gen;
-  m_current_sync_point = std::make_shared<SyncPoint>(m_current_sync_gen,
-                                                     this->m_image_ctx.cct);
+  /* Start the sync point following the last one seen in the
+   * log. Flush the last sync point created during the loading of the
+   * existing log entries. */
+  init_flush_new_sync_point(later);
+  ldout(cct,20) << "new sync point = [" << m_current_sync_point << "]" << dendl;
 
   m_initialized = true;
   // Start the thread
@@ -426,14 +701,14 @@ void ReplicatedWriteLog<I>::rwl_init(Context *on_finish, DeferredContexts &later
   m_periodic_stats_enabled = m_cache_state->log_periodic_stats;
   /* Do these after we drop lock */
   later.add(new LambdaContext([this](int r) {
-        if (m_periodic_stats_enabled) {
-          /* Log stats for the first time */
-          periodic_stats();
-          /* Arm periodic stats logging for the first time */
-          std::lock_guard timer_locker(*m_timer_lock);
-          arm_periodic_stats();
-        }
-      }));
+    if (m_periodic_stats_enabled) {
+      /* Log stats for the first time */
+      periodic_stats();
+      /* Arm periodic stats logging for the first time */
+      std::lock_guard timer_locker(*m_timer_lock);
+      arm_periodic_stats();
+    }
+  }));
   m_image_ctx.op_work_queue->queue(on_finish, 0);
 }
 
@@ -465,30 +740,220 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 
 template <typename I>
 void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
-  // Here we only close pmem pool file and remove the pool file.
-  // TODO: We'll continue to update this part in later PRs.
-  if (m_log_pool) {
-    ldout(m_image_ctx.cct, 6) << "closing pmem pool" << dendl;
-    pmemobj_close(m_log_pool);
-  }
-  if (m_log_is_poolset) {
-    ldout(m_image_ctx.cct, 5) << "Not removing poolset " << m_log_pool_name << dendl;
-  } else {
-    ldout(m_image_ctx.cct, 5) << "Removing empty pool file: "
-                              << m_log_pool_name << dendl;
-    if (remove(m_log_pool_name.c_str()) != 0) {
-      lderr(m_image_ctx.cct) << "failed to remove empty pool \""
-	                     << m_log_pool_name << "\": "
-                             << pmemobj_errormsg() << dendl;
-    }
-  }
-  on_finish->complete(0);
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  ldout(cct,5) << "image name: " << m_image_ctx.name << " id: " << m_image_ctx.id << dendl;
+
+  Context *ctx = new LambdaContext(
+    [this, on_finish](int r) {
+      ldout(m_image_ctx.cct, 6) << "shutdown complete" << dendl;
+      m_image_ctx.op_work_queue->queue(on_finish, r);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      bool periodic_stats_enabled = m_periodic_stats_enabled;
+      m_periodic_stats_enabled = false;
+
+      if (periodic_stats_enabled) {
+        /* Log stats one last time if they were enabled */
+        periodic_stats();
+      }
+      {
+        std::lock_guard locker(m_lock);
+        ceph_assert(m_dirty_log_entries.size() == 0);
+        m_wake_up_enabled = false;
+        m_cache_state->clean = true;
+        m_log_entries.clear();
+        if (m_log_pool) {
+          ldout(m_image_ctx.cct, 6) << "closing pmem pool" << dendl;
+          pmemobj_close(m_log_pool);
+        }
+        if (m_cache_state->clean) {
+          if (m_log_is_poolset) {
+            ldout(m_image_ctx.cct, 5) << "Not removing poolset " << m_log_pool_name << dendl;
+          } else {
+            ldout(m_image_ctx.cct, 5) << "Removing empty pool file: " << m_log_pool_name << dendl;
+            if (remove(m_log_pool_name.c_str()) != 0) {
+              lderr(m_image_ctx.cct) << "failed to remove empty pool \"" << m_log_pool_name << "\": "
+                                     << pmemobj_errormsg() << dendl;
+            } else {
+              m_cache_state->clean = true;
+              m_cache_state->empty = true;
+              m_cache_state->present = false;
+            }
+          }
+        } else {
+          if (m_log_is_poolset) {
+            ldout(m_image_ctx.cct, 5) << "Not removing poolset " << m_log_pool_name << dendl;
+          } else {
+            ldout(m_image_ctx.cct, 5) << "Not removing pool file: " << m_log_pool_name << dendl;
+          }
+        }
+        if (m_perfcounter) {
+          perf_stop();
+        }
+      }
+      update_image_cache_state(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      {
+        /* Sync with process_writeback_dirty_entries() */
+        RWLock::WLocker entry_reader_wlocker(m_entry_reader_lock);
+        m_shutting_down = true;
+        /* Flush all writes to OSDs (unless disabled) and wait for all
+           in-progress flush writes to complete */
+        ldout(m_image_ctx.cct, 6) << "flushing" << dendl;
+        if (m_periodic_stats_enabled) {
+          periodic_stats();
+        }
+      }
+      flush_dirty_entries(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
+      // Wait for in progress IOs to complete
+      next_ctx = util::create_async_context_callback(m_image_ctx, next_ctx);
+      m_async_op_tracker.wait_for_ops(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      ldout(m_image_ctx.cct, 6) << "Done internal_flush in shutdown" << dendl;
+      m_work_queue.queue(ctx, r);
+    });
+  /* Complete all in-flight writes before shutting down */
+  ldout(m_image_ctx.cct, 6) << "internal_flush in shutdown" << dendl;
+  internal_flush(false, ctx);
 }
 
 template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents&& image_extents,
                                      ceph::bufferlist* bl,
                                      int fadvise_flags, Context *on_finish) {
+  // TODO: handle writesame and discard case in later PRs
+  CephContext *cct = m_image_ctx.cct;
+  utime_t now = ceph_clock_now();
+  C_ReadRequest *read_ctx = new C_ReadRequest(cct, now, m_perfcounter, bl, on_finish);
+  ldout(cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
+                 << "image_extents=" << image_extents << ", "
+                 << "bl=" << bl << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  ceph_assert(m_initialized);
+  bl->clear();
+  m_perfcounter->inc(l_librbd_rwl_rd_req, 1);
+
+  /*
+   * The strategy here is to look up all the WriteLogMapEntries that overlap
+   * this read, and iterate through those to separate this read into hits and
+   * misses. A new Extents object is produced here with Extents for each miss
+   * region. The miss Extents is then passed on to the read cache below RWL. We
+   * also produce an ImageExtentBufs for all the extents (hit or miss) in this
+   * read. When the read from the lower cache layer completes, we iterate
+   * through the ImageExtentBufs and insert buffers for each cache hit at the
+   * appropriate spot in the bufferlist returned from below for the miss
+   * read. The buffers we insert here refer directly to regions of various
+   * write log entry data buffers.
+   *
+   * Locking: These buffer objects hold a reference on the write log entries
+   * they refer to. Log entries can't be retired until there are no references.
+   * The GenericWriteLogEntry references are released by the buffer destructor.
+   */
+  for (auto &extent : image_extents) {
+    uint64_t extent_offset = 0;
+    RWLock::RLocker entry_reader_locker(m_entry_reader_lock);
+    WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(block_extent(extent));
+    for (auto &map_entry : map_entries) {
+      Extent entry_image_extent(rwl::image_extent(map_entry.block_extent));
+      /* If this map entry starts after the current image extent offset ... */
+      if (entry_image_extent.first > extent.first + extent_offset) {
+        /* ... add range before map_entry to miss extents */
+        uint64_t miss_extent_start = extent.first + extent_offset;
+        uint64_t miss_extent_length = entry_image_extent.first - miss_extent_start;
+        Extent miss_extent(miss_extent_start, miss_extent_length);
+        read_ctx->miss_extents.push_back(miss_extent);
+        /* Add miss range to read extents */
+        ImageExtentBuf miss_extent_buf(miss_extent);
+        read_ctx->read_extents.push_back(miss_extent_buf);
+        extent_offset += miss_extent_length;
+      }
+      ceph_assert(entry_image_extent.first <= extent.first + extent_offset);
+      uint64_t entry_offset = 0;
+      /* If this map entry starts before the current image extent offset ... */
+      if (entry_image_extent.first < extent.first + extent_offset) {
+        /* ... compute offset into log entry for this read extent */
+        entry_offset = (extent.first + extent_offset) - entry_image_extent.first;
+      }
+      /* This read hit ends at the end of the extent or the end of the log
+         entry, whichever is less. */
+      uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
+                                      extent.second - extent_offset);
+      Extent hit_extent(entry_image_extent.first, entry_hit_length);
+      if (0 == map_entry.log_entry->write_bytes() && 0 < map_entry.log_entry->bytes_dirty()) {
+        /* discard log entry */
+        auto discard_entry = map_entry.log_entry;
+        ldout(cct, 20) << "read hit on discard entry: log_entry=" << *discard_entry << dendl;
+        /* Discards read as zero, so we'll construct a bufferlist of zeros */
+        bufferlist zero_bl;
+        zero_bl.append_zero(entry_hit_length);
+        /* Add hit extent to read extents */
+        ImageExtentBuf hit_extent_buf(hit_extent, zero_bl);
+        read_ctx->read_extents.push_back(hit_extent_buf);
+      } else {
+        /* write and writesame log entry */
+        /* Offset of the map entry into the log entry's buffer */
+        uint64_t map_entry_buffer_offset = entry_image_extent.first - map_entry.log_entry->ram_entry.image_offset_bytes;
+        /* Offset into the log entry buffer of this read hit */
+        uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
+        /* Create buffer object referring to pmem pool for this read hit */
+        auto write_entry = map_entry.log_entry;
+
+        /* Make a bl for this hit extent. This will add references to the write_entry->pmem_bp */
+        buffer::list hit_bl;
+
+        buffer::list entry_bl_copy;
+        write_entry->copy_pmem_bl(&entry_bl_copy);
+        entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
+
+        ceph_assert(hit_bl.length() == entry_hit_length);
+
+        /* Add hit extent to read extents */
+        ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
+        read_ctx->read_extents.push_back(hit_extent_buf);
+      }
+      /* Exclude RWL hit range from buffer and extent */
+      extent_offset += entry_hit_length;
+      ldout(cct, 20) << map_entry << dendl;
+    }
+    /* If the last map entry didn't consume the entire image extent ... */
+    if (extent.second > extent_offset) {
+      /* ... add the rest of this extent to miss extents */
+      uint64_t miss_extent_start = extent.first + extent_offset;
+      uint64_t miss_extent_length = extent.second - extent_offset;
+      Extent miss_extent(miss_extent_start, miss_extent_length);
+      read_ctx->miss_extents.push_back(miss_extent);
+      /* Add miss range to read extents */
+      ImageExtentBuf miss_extent_buf(miss_extent);
+      read_ctx->read_extents.push_back(miss_extent_buf);
+      extent_offset += miss_extent_length;
+    }
+  }
+
+  ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents << ", "
+                 << "miss_bl=" << read_ctx->miss_bl << dendl;
+
+  if (read_ctx->miss_extents.empty()) {
+    /* All of this read comes from RWL */
+    read_ctx->complete(0);
+  } else {
+    /* Pass the read misses on to the layer below RWL */
+    m_image_writeback.aio_read(std::move(read_ctx->miss_extents), &read_ctx->miss_bl, fadvise_flags, read_ctx);
+  }
 }
 
 template <typename I>
@@ -518,23 +983,143 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
       alloc_and_dispatch_io_req(write_req);
     });
 
-  detain_guarded_request(write_req, guarded_ctx);
+  detain_guarded_request(write_req, guarded_ctx, false);
 }
 
 template <typename I>
 void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
                                         uint32_t discard_granularity_bytes,
-					Context *on_finish) {
+                                        Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << dendl;
+
+  utime_t now = ceph_clock_now();
+  m_perfcounter->inc(l_librbd_rwl_discard, 1);
+  Extents discard_extents = {{offset, length}};
+  m_discard_granularity_bytes = discard_granularity_bytes;
+
+  ceph_assert(m_initialized);
+
+  auto *discard_req =
+    new C_DiscardRequestT(*this, now, std::move(discard_extents), discard_granularity_bytes,
+                          m_lock, m_perfcounter, on_finish);
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, discard_req](GuardedRequestFunctionContext &guard_ctx) {
+      discard_req->blockguard_acquired(guard_ctx);
+      alloc_and_dispatch_io_req(discard_req);
+    });
+
+  detain_guarded_request(discard_req, guarded_ctx, false);
 }
 
+/**
+ * Aio_flush completes when all previously completed writes are
+ * flushed to persistent cache. We make a best-effort attempt to also
+ * defer until all in-progress writes complete, but we may not know
+ * about all of the writes the application considers in-progress yet,
+ * due to uncertainty in the IO submission workq (multiple WQ threads
+ * may allow out-of-order submission).
+ *
+ * This flush operation will not wait for writes deferred for overlap
+ * in the block guard.
+ */
 template <typename I>
-void ReplicatedWriteLog<I>::aio_flush(Context *on_finish) {
+void ReplicatedWriteLog<I>::aio_flush(io::FlushSource flush_source, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "on_finish=" << on_finish << " flush_source=" << flush_source << dendl;
+
+  if (io::FLUSH_SOURCE_SHUTDOWN == flush_source || io::FLUSH_SOURCE_INTERNAL == flush_source) {
+    internal_flush(false, on_finish);
+    return;
+  }
+  m_perfcounter->inc(l_librbd_rwl_aio_flush, 1);
+
+  /* May be called even if initialization fails */
+  if (!m_initialized) {
+    ldout(cct, 05) << "never initialized" << dendl;
+    /* Deadlock if completed here */
+    m_image_ctx.op_work_queue->queue(on_finish, 0);
+    return;
+  }
+
+  {
+    std::shared_lock image_locker(m_image_ctx.image_lock);
+    if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+      on_finish->complete(-EROFS);
+      return;
+    }
+  }
+
+  auto flush_req = make_flush_req(on_finish);
+
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, flush_req](GuardedRequestFunctionContext &guard_ctx) {
+      ldout(m_image_ctx.cct, 20) << "flush_req=" << flush_req << " cell=" << guard_ctx.cell << dendl;
+      ceph_assert(guard_ctx.cell);
+      flush_req->detained = guard_ctx.state.detained;
+      /* We don't call flush_req->set_cell(), because the block guard will be released here */
+      {
+        DeferredContexts post_unlock; /* Do these when the lock below is released */
+        std::lock_guard locker(m_lock);
+
+        if (!m_persist_on_flush && m_persist_on_write_until_flush) {
+          m_persist_on_flush = true;
+          ldout(m_image_ctx.cct, 5) << "now persisting on flush" << dendl;
+        }
+
+        /*
+         * Create a new sync point if there have been writes since the last
+         * one.
+         *
+         * We do not flush the caches below the RWL here.
+         */
+        flush_new_sync_point_if_needed(flush_req, post_unlock);
+      }
+
+      release_guarded_request(guard_ctx.cell);
+    });
+
+  detain_guarded_request(flush_req, guarded_ctx, true);
 }
 
 template <typename I>
 void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
                                           bufferlist&& bl, int fadvise_flags,
                                           Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "aio_writesame" << dendl;
+
+  utime_t now = ceph_clock_now();
+  Extents ws_extents = {{offset, length}};
+  m_perfcounter->inc(l_librbd_rwl_ws, 1);
+  ceph_assert(m_initialized);
+
+  /* A write same request is also a write request. The key difference is the
+   * write same data buffer is shorter than the extent of the request. The full
+   * extent will be used in the block guard, and appear in
+   * m_blocks_to_log_entries_map. The data buffer allocated for the WS is only
+   * as long as the length of the bl here, which is the pattern that's repeated
+   * in the image for the entire length of this WS. Read hits and flushing of
+   * write sames are different than normal writes. */
+  auto *ws_req =
+    new C_WriteSameRequestT(*this, now, std::move(ws_extents), std::move(bl),
+                            fadvise_flags, m_lock, m_perfcounter, on_finish);
+  m_perfcounter->inc(l_librbd_rwl_ws_bytes, ws_req->image_extents_summary.total_bytes);
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, ws_req](GuardedRequestFunctionContext &guard_ctx) {
+      ws_req->blockguard_acquired(guard_ctx);
+      alloc_and_dispatch_io_req(ws_req);
+    });
+
+  detain_guarded_request(ws_req, guarded_ctx, false);
 }
 
 template <typename I>
@@ -544,19 +1129,77 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
                                                   uint64_t *mismatch_offset,
                                                   int fadvise_flags,
                                                   Context *on_finish) {
-}
+  ldout(m_image_ctx.cct, 20) << dendl;
 
-template <typename I>
-void ReplicatedWriteLog<I>::wake_up() {
-  //TODO: handle the task to flush data from cache device to OSD
+  utime_t now = ceph_clock_now();
+  m_perfcounter->inc(l_librbd_rwl_cmp, 1);
+  ceph_assert(m_initialized);
+
+  /* A compare and write request is also a write request. We only allocate
+   * resources and dispatch this write request if the compare phase
+   * succeeds. */
+  auto *cw_req =
+    new C_CompAndWriteRequestT(*this, now, std::move(image_extents), std::move(cmp_bl), std::move(bl),
+                               mismatch_offset, fadvise_flags, m_lock, m_perfcounter, on_finish);
+  m_perfcounter->inc(l_librbd_rwl_cmp_bytes, cw_req->image_extents_summary.total_bytes);
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, cw_req](GuardedRequestFunctionContext &guard_ctx) {
+      cw_req->blockguard_acquired(guard_ctx);
+
+      auto read_complete_ctx = new LambdaContext(
+        [this, cw_req](int r) {
+          ldout(m_image_ctx.cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
+                                     << "cw_req=" << cw_req << dendl;
+
+          /* Compare read_bl to cmp_bl to determine if this will produce a write */
+          if (cw_req->cmp_bl.contents_equal(cw_req->read_bl)) {
+            /* Compare phase succeeds. Begin write */
+            ldout(m_image_ctx.cct, 5) << " cw_req=" << cw_req << " compare matched" << dendl;
+            cw_req->compare_succeeded = true;
+            *cw_req->mismatch_offset = 0;
+            /* Continue with this request as a write. Blockguard release and
+             * user request completion handled as if this were a plain
+             * write. */
+            alloc_and_dispatch_io_req(cw_req);
+          } else {
+            /* Compare phase fails. Comp-and write ends now. */
+            ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " compare failed" << dendl;
+            /* Bufferlist doesn't tell us where they differed, so we'll have to determine that here */
+            ceph_assert(cw_req->read_bl.length() == cw_req->cmp_bl.length());
+            uint64_t bl_index = 0;
+            for (bl_index = 0; bl_index < cw_req->cmp_bl.length(); bl_index++) {
+              if (cw_req->cmp_bl[bl_index] != cw_req->read_bl[bl_index]) {
+                ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " mismatch at " << bl_index << dendl;
+                break;
+              }
+            }
+            cw_req->compare_succeeded = false;
+            *cw_req->mismatch_offset = bl_index;
+            cw_req->complete_user_request(-EILSEQ);
+            cw_req->release_cell();
+            cw_req->complete(0);
+          }
+        });
+
+      /* Read phase of comp-and-write must read through RWL */
+      Extents image_extents_copy = cw_req->image_extents;
+      aio_read(std::move(image_extents_copy), &cw_req->read_bl, cw_req->fadvise_flags, read_complete_ctx);
+    });
+
+  detain_guarded_request(cw_req, guarded_ctx, false);
 }
 
 template <typename I>
 void ReplicatedWriteLog<I>::flush(Context *on_finish) {
+  internal_flush(false, on_finish);
 }
 
 template <typename I>
 void ReplicatedWriteLog<I>::invalidate(Context *on_finish) {
+  internal_flush(true, on_finish);
 }
 
 template <typename I>
@@ -615,10 +1258,17 @@ BlockGuardCell* ReplicatedWriteLog<I>::detain_guarded_request_barrier_helper(
 
 template <typename I>
 void ReplicatedWriteLog<I>::detain_guarded_request(
-  C_BlockIORequestT *request, GuardedRequestFunctionContext *guarded_ctx)
+  C_BlockIORequestT *request,
+  GuardedRequestFunctionContext *guarded_ctx,
+  bool is_barrier)
 {
-  //TODO: add is_barrier for flush request in later PRs
-  auto req = GuardedRequest(request->image_extents_summary.block_extent(), guarded_ctx);
+  BlockExtent extent;
+  if (request) {
+    extent = request->image_extents_summary.block_extent();
+  } else {
+    extent = block_extent(whole_volume_extent());
+  }
+  auto req = GuardedRequest(extent, guarded_ctx, is_barrier);
   BlockGuardCell *cell = nullptr;
 
   ldout(m_image_ctx.cct, 20) << dendl;
@@ -714,7 +1364,7 @@ void ReplicatedWriteLog<I>::append_scheduled_ops(void)
         ops.splice(ops.end(), m_ops_to_append, m_ops_to_append.begin(), last_in_batch);
         ops_remain = true; /* Always check again before leaving */
         ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", "
-	                           << m_ops_to_append.size() << " remain" << dendl;
+                                   << m_ops_to_append.size() << " remain" << dendl;
       } else {
         ops_remain = false;
         if (appending) {
@@ -787,6 +1437,14 @@ void ReplicatedWriteLog<I>::schedule_append(GenericLogOperationsVector &ops)
   schedule_append(to_append);
 }
 
+template <typename I>
+void ReplicatedWriteLog<I>::schedule_append(GenericLogOperationSharedPtr op)
+{
+  GenericLogOperations to_append { op };
+
+  schedule_append(to_append);
+}
+
 const unsigned long int ops_flushed_together = 4;
 /*
  * Performs the pmem buffer flush on all scheduled ops, then schedules
@@ -813,7 +1471,7 @@ void ReplicatedWriteLog<I>::flush_then_append_scheduled_ops(void)
         ops.splice(ops.end(), m_ops_to_flush, m_ops_to_flush.begin(), last_in_batch);
         ops_remain = !m_ops_to_flush.empty();
         ldout(m_image_ctx.cct, 20) << "flushing " << ops.size() << ", "
-	                           << m_ops_to_flush.size() << " remain" << dendl;
+                                   << m_ops_to_flush.size() << " remain" << dendl;
       } else {
         ops_remain = false;
       }
@@ -942,9 +1600,9 @@ void ReplicatedWriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops
 
   ldout(m_image_ctx.cct, 20) << "entry count=" << ops.size() << " "
                              << "start address="
-			     << ops.front()->get_log_entry()->pmem_entry << " "
+                             << ops.front()->get_log_entry()->pmem_entry << " "
                              << "bytes="
-			     << ops.size() * sizeof(*(ops.front()->get_log_entry()->pmem_entry))
+                             << ops.size() * sizeof(*(ops.front()->get_log_entry()->pmem_entry))
                              << dendl;
   pmemobj_flush(m_log_pool,
                 ops.front()->get_log_entry()->pmem_entry,
@@ -1000,7 +1658,7 @@ int ReplicatedWriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
     ldout(m_image_ctx.cct, 20) << "APPENDING: index="
                                << operation->get_log_entry()->log_entry_index << " "
                                << "pmem_entry=[" << *operation->get_log_entry()->pmem_entry
-			       << "]" << dendl;
+                               << "]" << dendl;
     entries_to_flush.push_back(operation);
   }
   flush_op_log_entries(entries_to_flush);
@@ -1057,17 +1715,19 @@ void ReplicatedWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     utime_t now = ceph_clock_now();
     auto log_entry = op->get_log_entry();
     log_entry->completed = true;
-    if (op->reserved_allocated()) {
+    if (op->is_writing_op()) {
       op->mark_log_entry_completed();
       dirty_entries.push_back(log_entry);
+    }
+    if (op->reserved_allocated()) {
       published_reserves++;
     }
     op->complete(result);
     m_perfcounter->tinc(l_librbd_rwl_log_op_dis_to_app_t,
-	                op->log_append_time - op->dispatch_time);
+                        op->log_append_time - op->dispatch_time);
     m_perfcounter->tinc(l_librbd_rwl_log_op_dis_to_cmp_t, now - op->dispatch_time);
     m_perfcounter->hinc(l_librbd_rwl_log_op_dis_to_cmp_t_hist,
-	                utime_t(now - op->dispatch_time).to_nsec(),
+                        utime_t(now - op->dispatch_time).to_nsec(),
                         log_entry->ram_entry.write_bytes);
     utime_t app_lat = op->log_append_comp_time - op->log_append_time;
     m_perfcounter->tinc(l_librbd_rwl_log_op_app_to_appc_t, app_lat);
@@ -1259,7 +1919,7 @@ bool ReplicatedWriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
       if (!req->has_io_waited_for_buffers()) {
         req->set_io_waited_for_entries(true);
         ldout(m_image_ctx.cct, 1) << "Waiting for allocation cap (cap="
-	                          << m_bytes_allocated_cap
+                                  << m_bytes_allocated_cap
                                   << ", allocated=" << m_bytes_allocated
                                   << ") in write [" << *req << "]" << dendl;
       }
@@ -1331,6 +1991,766 @@ bool ReplicatedWriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   req->set_allocated(alloc_succeeds);
 
   return alloc_succeeds;
+}
+
+template <typename I>
+C_FlushRequest<ReplicatedWriteLog<I>>* ReplicatedWriteLog<I>::make_flush_req(Context *on_finish) {
+  utime_t flush_begins = ceph_clock_now();
+  bufferlist bl;
+  auto *flush_req =
+    new C_FlushRequestT(*this, flush_begins, Extents({whole_volume_extent()}),
+                        std::move(bl), 0, m_lock, m_perfcounter, on_finish);
+
+  return flush_req;
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::wake_up() {
+  CephContext *cct = m_image_ctx.cct;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  if (!m_wake_up_enabled) {
+    // wake_up is disabled during shutdown after flushing completes
+    ldout(m_image_ctx.cct, 6) << "deferred processing disabled" << dendl;
+    return;
+  }
+
+  if (m_wake_up_requested && m_wake_up_scheduled) {
+    return;
+  }
+
+  ldout(cct, 20) << dendl;
+
+  /* Wake-up can be requested while it's already scheduled */
+  m_wake_up_requested = true;
+
+  /* Wake-up cannot be scheduled if it's already scheduled */
+  if (m_wake_up_scheduled) {
+    return;
+  }
+  m_wake_up_scheduled = true;
+  m_async_process_work++;
+  m_async_op_tracker.start_op();
+  m_work_queue.queue(new LambdaContext(
+    [this](int r) {
+      process_work();
+      m_async_op_tracker.finish_op();
+      m_async_process_work--;
+    }), 0);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::process_work() {
+  CephContext *cct = m_image_ctx.cct;
+  int max_iterations = 4;
+  bool wake_up_requested = false;
+  uint64_t aggressive_high_water_bytes = m_bytes_allocated_cap * AGGRESSIVE_RETIRE_HIGH_WATER;
+  uint64_t high_water_bytes = m_bytes_allocated_cap * RETIRE_HIGH_WATER;
+  uint64_t low_water_bytes = m_bytes_allocated_cap * RETIRE_LOW_WATER;
+  uint64_t aggressive_high_water_entries = m_total_log_entries * AGGRESSIVE_RETIRE_HIGH_WATER;
+  uint64_t high_water_entries = m_total_log_entries * RETIRE_HIGH_WATER;
+  uint64_t low_water_entries = m_total_log_entries * RETIRE_LOW_WATER;
+
+  ldout(cct, 20) << dendl;
+
+  do {
+    {
+      std::lock_guard locker(m_lock);
+      m_wake_up_requested = false;
+    }
+    if (m_alloc_failed_since_retire || m_invalidating ||
+        m_bytes_allocated > high_water_bytes ||
+        (m_log_entries.size() > high_water_entries)) {
+      int retired = 0;
+      utime_t started = ceph_clock_now();
+      ldout(m_image_ctx.cct, 10) << "alloc_fail=" << m_alloc_failed_since_retire
+                                 << ", allocated > high_water="
+                                 << (m_bytes_allocated > high_water_bytes)
+                                 << ", allocated_entries > high_water="
+                                 << (m_log_entries.size() > high_water_entries)
+                                 << dendl;
+      while (m_alloc_failed_since_retire || m_invalidating ||
+            (m_bytes_allocated > high_water_bytes) ||
+            (m_log_entries.size() > high_water_entries) ||
+            (((m_bytes_allocated > low_water_bytes) || (m_log_entries.size() > low_water_entries)) &&
+            (utime_t(ceph_clock_now() - started).to_msec() < RETIRE_BATCH_TIME_LIMIT_MS))) {
+        if (!retire_entries((m_shutting_down || m_invalidating ||
+           (m_bytes_allocated > aggressive_high_water_bytes) ||
+           (m_log_entries.size() > aggressive_high_water_entries))
+            ? MAX_ALLOC_PER_TRANSACTION
+            : MAX_FREE_PER_TRANSACTION)) {
+          break;
+        }
+        retired++;
+        dispatch_deferred_writes();
+        process_writeback_dirty_entries();
+      }
+      ldout(m_image_ctx.cct, 10) << "Retired " << retired << " times" << dendl;
+    }
+    dispatch_deferred_writes();
+    process_writeback_dirty_entries();
+
+    {
+      std::lock_guard locker(m_lock);
+      wake_up_requested = m_wake_up_requested;
+    }
+  } while (wake_up_requested && --max_iterations > 0);
+
+  {
+    std::lock_guard locker(m_lock);
+    m_wake_up_scheduled = false;
+    /* Reschedule if it's still requested */
+    if (m_wake_up_requested) {
+      wake_up();
+    }
+  }
+}
+
+template <typename I>
+bool ReplicatedWriteLog<I>::can_flush_entry(std::shared_ptr<GenericLogEntry> log_entry) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "" << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  if (m_invalidating) {
+    return true;
+  }
+
+  /* For OWB we can flush entries with the same sync gen number (write between
+   * aio_flush() calls) concurrently. Here we'll consider an entry flushable if
+   * its sync gen number is <= the lowest sync gen number carried by all the
+   * entries currently flushing.
+   *
+   * If the entry considered here bears a sync gen number lower than a
+   * previously flushed entry, the application had to have submitted the write
+   * bearing the higher gen number before the write with the lower gen number
+   * completed. So, flushing these concurrently is OK.
+   *
+   * If the entry considered here bears a sync gen number higher than a
+   * currently flushing entry, the write with the lower gen number may have
+   * completed to the application before the write with the higher sync gen
+   * number was submitted, and the application may rely on that completion
+   * order for volume consistency. In this case the entry will not be
+   * considered flushable until all the entries bearing lower sync gen numbers
+   * finish flushing.
+   */
+
+  if (m_flush_ops_in_flight &&
+      (log_entry->ram_entry.sync_gen_number > m_lowest_flushing_sync_gen)) {
+    return false;
+  }
+
+  return (log_entry->can_writeback() &&
+         (m_flush_ops_in_flight <= IN_FLIGHT_FLUSH_WRITE_LIMIT) &&
+         (m_flush_bytes_in_flight <= IN_FLIGHT_FLUSH_BYTES_LIMIT));
+}
+
+template <typename I>
+Context* ReplicatedWriteLog<I>::construct_flush_entry_ctx(std::shared_ptr<GenericLogEntry> log_entry) {
+  CephContext *cct = m_image_ctx.cct;
+  bool invalidating = m_invalidating; // snapshot so we behave consistently
+
+  ldout(cct, 20) << "" << dendl;
+  ceph_assert(m_entry_reader_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  if (!m_flush_ops_in_flight ||
+      (log_entry->ram_entry.sync_gen_number < m_lowest_flushing_sync_gen)) {
+    m_lowest_flushing_sync_gen = log_entry->ram_entry.sync_gen_number;
+  }
+  m_flush_ops_in_flight += 1;
+  /* For write same this is the bytes affected bt the flush op, not the bytes transferred */
+  m_flush_bytes_in_flight += log_entry->ram_entry.write_bytes;
+
+  /* Flush write completion action */
+  Context *ctx = new LambdaContext(
+    [this, log_entry, invalidating](int r) {
+      {
+        std::lock_guard locker(m_lock);
+        if (r < 0) {
+          lderr(m_image_ctx.cct) << "failed to flush log entry"
+                                 << cpp_strerror(r) << dendl;
+          m_dirty_log_entries.push_front(log_entry);
+        } else {
+          ceph_assert(m_bytes_dirty >= log_entry->bytes_dirty());
+          log_entry->set_flushed(true);
+          m_bytes_dirty -= log_entry->bytes_dirty();
+          sync_point_writer_flushed(log_entry->get_sync_point_entry());
+          ldout(m_image_ctx.cct, 20) << "flushed: " << log_entry
+                                     << " invalidating=" << invalidating
+                                     << dendl;
+        }
+        m_flush_ops_in_flight -= 1;
+        m_flush_bytes_in_flight -= log_entry->ram_entry.write_bytes;
+        wake_up();
+      }
+    });
+  /* Flush through lower cache before completing */
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+        lderr(m_image_ctx.cct) << "failed to flush log entry"
+                               << cpp_strerror(r) << dendl;
+        ctx->complete(r);
+      } else {
+        m_image_writeback.aio_flush(io::FLUSH_SOURCE_WRITEBACK, ctx);
+      }
+    });
+
+  if (invalidating) {
+    return ctx;
+  }
+  return new LambdaContext(
+    [this, log_entry, ctx](int r) {
+      m_image_ctx.op_work_queue->queue(new LambdaContext(
+        [this, log_entry, ctx](int r) {
+          ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                     << " " << *log_entry << dendl;
+          log_entry->writeback(m_image_writeback, ctx);
+        }), 0);
+    });
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::process_writeback_dirty_entries() {
+  CephContext *cct = m_image_ctx.cct;
+  bool all_clean = false;
+  int flushed = 0;
+
+  ldout(cct, 20) << "Look for dirty entries" << dendl;
+  {
+    DeferredContexts post_unlock;
+    std::shared_lock entry_reader_locker(m_entry_reader_lock);
+    while (flushed < IN_FLIGHT_FLUSH_WRITE_LIMIT) {
+      std::lock_guard locker(m_lock);
+      if (m_shutting_down) {
+        ldout(cct, 5) << "Flush during shutdown supressed" << dendl;
+        /* Do flush complete only when all flush ops are finished */
+        all_clean = !m_flush_ops_in_flight;
+        break;
+      }
+      if (m_dirty_log_entries.empty()) {
+        ldout(cct, 20) << "Nothing new to flush" << dendl;
+        /* Do flush complete only when all flush ops are finished */
+        all_clean = !m_flush_ops_in_flight;
+        break;
+      }
+      auto candidate = m_dirty_log_entries.front();
+      bool flushable = can_flush_entry(candidate);
+      if (flushable) {
+        post_unlock.add(construct_flush_entry_ctx(candidate));
+        flushed++;
+        m_dirty_log_entries.pop_front();
+      } else {
+        ldout(cct, 20) << "Next dirty entry isn't flushable yet" << dendl;
+        break;
+      }
+    }
+  }
+
+  if (all_clean) {
+    /* All flushing complete, drain outside lock */
+    Contexts flush_contexts;
+    {
+      std::lock_guard locker(m_lock);
+      flush_contexts.swap(m_flush_complete_contexts);
+    }
+    finish_contexts(m_image_ctx.cct, flush_contexts, 0);
+  }
+}
+
+/**
+ * Update/persist the last flushed sync point in the log
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::persist_last_flushed_sync_gen()
+{
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+  uint64_t flushed_sync_gen;
+
+  std::lock_guard append_locker(m_log_append_lock);
+  {
+    std::lock_guard locker(m_lock);
+    flushed_sync_gen = m_flushed_sync_gen;
+  }
+
+  if (D_RO(pool_root)->flushed_sync_gen < flushed_sync_gen) {
+    ldout(m_image_ctx.cct, 15) << "flushed_sync_gen in log updated from "
+                               << D_RO(pool_root)->flushed_sync_gen << " to "
+                               << flushed_sync_gen << dendl;
+    TX_BEGIN(m_log_pool) {
+      D_RW(pool_root)->flushed_sync_gen = flushed_sync_gen;
+    } TX_ONCOMMIT {
+    } TX_ONABORT {
+      lderr(m_image_ctx.cct) << "failed to commit update of flushed sync point" << dendl;
+      ceph_assert(false);
+    } TX_FINALLY {
+    } TX_END;
+  }
+}
+
+/* Returns true if the specified SyncPointLogEntry is considered flushed, and
+ * the log will be updated to reflect this. */
+template <typename I>
+bool ReplicatedWriteLog<I>::handle_flushed_sync_point(std::shared_ptr<SyncPointLogEntry> log_entry)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(log_entry);
+
+  if ((log_entry->writes_flushed == log_entry->writes) &&
+      log_entry->completed && log_entry->prior_sync_point_flushed &&
+      log_entry->next_sync_point_entry) {
+    ldout(m_image_ctx.cct, 20) << "All writes flushed up to sync point="
+                               << *log_entry << dendl;
+    log_entry->next_sync_point_entry->prior_sync_point_flushed = true;
+    /* Don't move the flushed sync gen num backwards. */
+    if (m_flushed_sync_gen < log_entry->ram_entry.sync_gen_number) {
+      m_flushed_sync_gen = log_entry->ram_entry.sync_gen_number;
+    }
+    m_async_op_tracker.start_op();
+    m_work_queue.queue(new LambdaContext(
+      [this, log_entry](int r) {
+        bool handled_by_next;
+        {
+          std::lock_guard locker(m_lock);
+          handled_by_next = handle_flushed_sync_point(log_entry->next_sync_point_entry);
+        }
+        if (!handled_by_next) {
+          persist_last_flushed_sync_gen();
+        }
+        m_async_op_tracker.finish_op();
+      }));
+    return true;
+  }
+  return false;
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::sync_point_writer_flushed(std::shared_ptr<SyncPointLogEntry> log_entry)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(log_entry);
+  log_entry->writes_flushed++;
+
+  /* If this entry might be completely flushed, look closer */
+  if ((log_entry->writes_flushed == log_entry->writes) && log_entry->completed) {
+    ldout(m_image_ctx.cct, 15) << "All writes flushed for sync point="
+                               << *log_entry << dendl;
+    handle_flushed_sync_point(log_entry);
+  }
+}
+
+/* Make a new sync point and flush the previous during initialization, when there may or may
+ * not be a previous sync point */
+template <typename I>
+void ReplicatedWriteLog<I>::init_flush_new_sync_point(DeferredContexts &later) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(!m_initialized); /* Don't use this after init */
+
+  if (!m_current_sync_point) {
+    /* First sync point since start */
+    new_sync_point(later);
+  } else {
+    flush_new_sync_point(nullptr, later);
+  }
+}
+
+/**
+ * Begin a new sync point
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::new_sync_point(DeferredContexts &later) {
+  CephContext *cct = m_image_ctx.cct;
+  std::shared_ptr<SyncPoint> old_sync_point = m_current_sync_point;
+  std::shared_ptr<SyncPoint> new_sync_point;
+  ldout(cct, 20) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  /* The first time this is called, if this is a newly created log,
+   * this makes the first sync gen number we'll use 1. On the first
+   * call for a re-opened log m_current_sync_gen will be the highest
+   * gen number from all the sync point entries found in the re-opened
+   * log, and this advances to the next sync gen number. */
+  ++m_current_sync_gen;
+
+  new_sync_point = std::make_shared<SyncPoint>(m_current_sync_gen, cct);
+  m_current_sync_point = new_sync_point;
+
+  /* If this log has been re-opened, old_sync_point will initially be
+   * nullptr, but m_current_sync_gen may not be zero. */
+  if (old_sync_point) {
+    new_sync_point->setup_earlier_sync_point(old_sync_point, m_last_op_sequence_num);
+    m_perfcounter->hinc(l_librbd_rwl_syncpoint_hist,
+                        old_sync_point->log_entry->writes,
+                        old_sync_point->log_entry->bytes);
+    /* This sync point will acquire no more sub-ops. Activation needs
+     * to acquire m_lock, so defer to later*/
+    later.add(new LambdaContext(
+      [this, old_sync_point](int r) {
+        old_sync_point->prior_persisted_gather_activate();
+      }));
+  }
+
+  new_sync_point->prior_persisted_gather_set_finisher();
+
+  if (old_sync_point) {
+    ldout(cct,6) << "new sync point = [" << *m_current_sync_point
+                 << "], prior = [" << *old_sync_point << "]" << dendl;
+  } else {
+    ldout(cct,6) << "first sync point = [" << *m_current_sync_point
+                 << "]" << dendl;
+  }
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::flush_new_sync_point(C_FlushRequestT *flush_req,
+                                                 DeferredContexts &later) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  if (!flush_req) {
+    m_async_null_flush_finish++;
+    m_async_op_tracker.start_op();
+    Context *flush_ctx = new LambdaContext([this](int r) {
+      m_async_null_flush_finish--;
+      m_async_op_tracker.finish_op();
+    });
+    flush_req = make_flush_req(flush_ctx);
+    flush_req->internal = true;
+  }
+
+  /* Add a new sync point. */
+  new_sync_point(later);
+  std::shared_ptr<SyncPoint> to_append = m_current_sync_point->earlier_sync_point;
+  ceph_assert(to_append);
+
+  /* This flush request will append/persist the (now) previous sync point */
+  flush_req->to_append = to_append;
+
+  /* When the m_sync_point_persist Gather completes this sync point can be
+   * appended.  The only sub for this Gather is the finisher Context for
+   * m_prior_log_entries_persisted, which records the result of the Gather in
+   * the sync point, and completes. TODO: Do we still need both of these
+   * Gathers?*/
+  Context * ctx = new LambdaContext([this, flush_req](int r) {
+    ldout(m_image_ctx.cct, 20) << "Flush req=" << flush_req
+                               << " sync point =" << flush_req->to_append
+                               << ". Ready to persist." << dendl;
+    alloc_and_dispatch_io_req(flush_req);
+  });
+  to_append->persist_gather_set_finisher(ctx);
+
+  /* The m_sync_point_persist Gather has all the subs it will ever have, and
+   * now has its finisher. If the sub is already complete, activation will
+   * complete the Gather. The finisher will acquire m_lock, so we'll activate
+   * this when we release m_lock.*/
+  later.add(new LambdaContext([this, to_append](int r) {
+    to_append->persist_gather_activate();
+  }));
+
+  /* The flush request completes when the sync point persists */
+  to_append->add_in_on_persisted_ctxs(flush_req);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::flush_new_sync_point_if_needed(C_FlushRequestT *flush_req,
+                                                           DeferredContexts &later) {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  /* If there have been writes since the last sync point ... */
+  if (m_current_sync_point->log_entry->writes) {
+    flush_new_sync_point(flush_req, later);
+  } else {
+    /* There have been no writes to the current sync point. */
+    if (m_current_sync_point->earlier_sync_point) {
+      /* If previous sync point hasn't completed, complete this flush
+       * with the earlier sync point. No alloc or dispatch needed. */
+      m_current_sync_point->earlier_sync_point->on_sync_point_persisted.push_back(flush_req);
+    } else {
+      /* The previous sync point has already completed and been
+       * appended. The current sync point has no writes, so this flush
+       * has nothing to wait for. This flush completes now. */
+      later.add(flush_req);
+    }
+  }
+}
+
+/*
+ * RWL internal flush - will actually flush the RWL.
+ *
+ * User flushes should arrive at aio_flush(), and only flush prior
+ * writes to all log replicas.
+ *
+ * Librbd internal flushes will arrive at flush(invalidate=false,
+ * discard=false), and traverse the block guard to ensure in-flight writes are
+ * flushed.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::flush_dirty_entries(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  bool all_clean;
+  bool flushing;
+  bool stop_flushing;
+
+  {
+    std::lock_guard locker(m_lock);
+    flushing = (0 != m_flush_ops_in_flight);
+    all_clean = m_dirty_log_entries.empty();
+    stop_flushing = (m_shutting_down);
+  }
+
+  if (!flushing && (all_clean || stop_flushing)) {
+    /* Complete without holding m_lock */
+    if (all_clean) {
+      ldout(cct, 20) << "no dirty entries" << dendl;
+    } else {
+      ldout(cct, 5) << "flush during shutdown suppressed" << dendl;
+    }
+    on_finish->complete(0);
+  } else {
+    if (all_clean) {
+      ldout(cct, 5) << "flush ops still in progress" << dendl;
+    } else {
+      ldout(cct, 20) << "dirty entries remain" << dendl;
+    }
+    std::lock_guard locker(m_lock);
+    /* on_finish can't be completed yet */
+    m_flush_complete_contexts.push_back(new LambdaContext(
+      [this, on_finish](int r) {
+        flush_dirty_entries(on_finish);
+      }));
+    wake_up();
+  }
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
+  ldout(m_image_ctx.cct, 20) << "invalidate=" << invalidate << dendl;
+
+  if (m_perfcounter) {
+    if (invalidate) {
+      m_perfcounter->inc(l_librbd_rwl_invalidate_cache, 1);
+    } else {
+      m_perfcounter->inc(l_librbd_rwl_flush, 1);
+    }
+  }
+
+  /* May be called even if initialization fails */
+  if (!m_initialized) {
+    ldout(m_image_ctx.cct, 05) << "never initialized" << dendl;
+    /* Deadlock if completed here */
+    m_image_ctx.op_work_queue->queue(on_finish, 0);
+    return;
+  }
+
+  /* Flush/invalidate must pass through block guard to ensure all layers of
+   * cache are consistently flush/invalidated. This ensures no in-flight write leaves
+   * some layers with valid regions, which may later produce inconsistent read
+   * results. */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext(
+      [this, on_finish, invalidate](GuardedRequestFunctionContext &guard_ctx) {
+        DeferredContexts on_exit;
+        ldout(m_image_ctx.cct, 20) << "cell=" << guard_ctx.cell << dendl;
+        ceph_assert(guard_ctx.cell);
+
+        Context *ctx = new LambdaContext(
+          [this, cell=guard_ctx.cell, invalidate, on_finish](int r) {
+            std::lock_guard locker(m_lock);
+            m_invalidating = false;
+            ldout(m_image_ctx.cct, 6) << "Done flush/invalidating (invalidate="
+                                      << invalidate << ")" << dendl;
+            if (m_log_entries.size()) {
+              ldout(m_image_ctx.cct, 1) << "m_log_entries.size()="
+                                        << m_log_entries.size() << ", "
+                                        << "front()=" << *m_log_entries.front()
+                                        << dendl;
+            }
+            if (invalidate) {
+              ceph_assert(m_log_entries.size() == 0);
+            }
+            ceph_assert(m_dirty_log_entries.size() == 0);
+            m_image_ctx.op_work_queue->queue(on_finish, r);
+            release_guarded_request(cell);
+            });
+        ctx = new LambdaContext(
+          [this, ctx, invalidate](int r) {
+            Context *next_ctx = ctx;
+            if (r < 0) {
+              /* Override on_finish status with this error */
+              next_ctx = new LambdaContext([r, ctx](int _r) {
+                ctx->complete(r);
+              });
+            }
+            if (invalidate) {
+              {
+                std::lock_guard locker(m_lock);
+                ceph_assert(m_dirty_log_entries.size() == 0);
+                ceph_assert(!m_invalidating);
+                ldout(m_image_ctx.cct, 6) << "Invalidating" << dendl;
+                m_invalidating = true;
+              }
+              /* Discards all RWL entries */
+              while (retire_entries(MAX_ALLOC_PER_TRANSACTION)) { }
+              next_ctx->complete(0);
+            } else {
+              {
+                std::lock_guard locker(m_lock);
+                ceph_assert(m_dirty_log_entries.size() == 0);
+                ceph_assert(!m_invalidating);
+              }
+              m_image_writeback.aio_flush(io::FLUSH_SOURCE_WRITEBACK, next_ctx);
+            }
+          });
+        ctx = new LambdaContext(
+          [this, ctx](int r) {
+            flush_dirty_entries(ctx);
+          });
+        std::lock_guard locker(m_lock);
+        /* Even if we're throwing everything away, but we want the last entry to
+         * be a sync point so we can cleanly resume.
+         *
+         * Also, the blockguard only guarantees the replication of this op
+         * can't overlap with prior ops. It doesn't guarantee those are all
+         * completed and eligible for flush & retire, which we require here.
+         */
+        auto flush_req = make_flush_req(ctx);
+        flush_new_sync_point_if_needed(flush_req, on_exit);
+      });
+  detain_guarded_request(nullptr, guarded_ctx, true);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::add_into_log_map(GenericWriteLogEntries &log_entries) {
+  m_blocks_to_log_entries.add_log_entries(log_entries);
+}
+
+template <typename I>
+bool ReplicatedWriteLog<I>::can_retire_entry(std::shared_ptr<GenericLogEntry> log_entry) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  return log_entry->can_retire();
+}
+
+/**
+ * Retire up to MAX_ALLOC_PER_TRANSACTION of the oldest log entries
+ * that are eligible to be retired. Returns true if anything was
+ * retired.
+ */
+template <typename I>
+bool ReplicatedWriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
+  CephContext *cct = m_image_ctx.cct;
+  GenericLogEntriesVector retiring_entries;
+  uint32_t initial_first_valid_entry;
+  uint32_t first_valid_entry;
+
+  std::lock_guard retire_locker(m_log_retire_lock);
+  ldout(cct, 20) << "Look for entries to retire" << dendl;
+  {
+    /* Entry readers can't be added while we hold m_entry_reader_lock */
+    RWLock::WLocker entry_reader_locker(m_entry_reader_lock);
+    std::lock_guard locker(m_lock);
+    initial_first_valid_entry = m_first_valid_entry;
+    first_valid_entry = m_first_valid_entry;
+    auto entry = m_log_entries.front();
+    while (!m_log_entries.empty() &&
+           retiring_entries.size() < frees_per_tx &&
+           can_retire_entry(entry)) {
+      if (entry->log_entry_index != first_valid_entry) {
+        lderr(cct) << "Retiring entry index (" << entry->log_entry_index
+                   << ") and first valid log entry index (" << first_valid_entry
+                   << ") must be ==." << dendl;
+      }
+      ceph_assert(entry->log_entry_index == first_valid_entry);
+      first_valid_entry = (first_valid_entry + 1) % m_total_log_entries;
+      m_log_entries.pop_front();
+      retiring_entries.push_back(entry);
+      /* Remove entry from map so there will be no more readers */
+      if ((entry->write_bytes() > 0) || (entry->bytes_dirty() > 0)) {
+        auto gen_write_entry = static_pointer_cast<GenericWriteLogEntry>(entry);
+        if (gen_write_entry) {
+          m_blocks_to_log_entries.remove_log_entry(gen_write_entry);
+        }
+      }
+      entry = m_log_entries.front();
+    }
+  }
+
+  if (retiring_entries.size()) {
+    ldout(cct, 20) << "Retiring " << retiring_entries.size() << " entries" << dendl;
+    TOID(struct WriteLogPoolRoot) pool_root;
+    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
+
+    utime_t tx_start;
+    utime_t tx_end;
+    /* Advance first valid entry and release buffers */
+    {
+      uint64_t flushed_sync_gen;
+      std::lock_guard append_locker(m_log_append_lock);
+      {
+        std::lock_guard locker(m_lock);
+        flushed_sync_gen = m_flushed_sync_gen;
+      }
+
+      tx_start = ceph_clock_now();
+      TX_BEGIN(m_log_pool) {
+        if (D_RO(pool_root)->flushed_sync_gen < flushed_sync_gen) {
+          ldout(m_image_ctx.cct, 20) << "flushed_sync_gen in log updated from "
+                                     << D_RO(pool_root)->flushed_sync_gen << " to "
+                                     << flushed_sync_gen << dendl;
+          D_RW(pool_root)->flushed_sync_gen = flushed_sync_gen;
+        }
+        D_RW(pool_root)->first_valid_entry = first_valid_entry;
+        for (auto &entry: retiring_entries) {
+          if (entry->write_bytes()) {
+            ldout(cct, 20) << "Freeing " << entry->ram_entry.write_data.oid.pool_uuid_lo
+                           << "." << entry->ram_entry.write_data.oid.off << dendl;
+            TX_FREE(entry->ram_entry.write_data);
+          } else {
+            ldout(cct, 20) << "Retiring non-write: " << *entry << dendl;
+          }
+        }
+      } TX_ONCOMMIT {
+      } TX_ONABORT {
+        lderr(cct) << "failed to commit free of" << retiring_entries.size() << " log entries (" << m_log_pool_name << ")" << dendl;
+        ceph_assert(false);
+      } TX_FINALLY {
+      } TX_END;
+      tx_end = ceph_clock_now();
+    }
+    m_perfcounter->tinc(l_librbd_rwl_retire_tx_t, tx_end - tx_start);
+    m_perfcounter->hinc(l_librbd_rwl_retire_tx_t_hist, utime_t(tx_end - tx_start).to_nsec(), retiring_entries.size());
+
+    /* Update runtime copy of first_valid, and free entries counts */
+    {
+      std::lock_guard locker(m_lock);
+
+      ceph_assert(m_first_valid_entry == initial_first_valid_entry);
+      m_first_valid_entry = first_valid_entry;
+      m_free_log_entries += retiring_entries.size();
+      for (auto &entry: retiring_entries) {
+        if (entry->write_bytes()) {
+          ceph_assert(m_bytes_cached >= entry->write_bytes());
+          m_bytes_cached -= entry->write_bytes();
+          uint64_t entry_allocation_size = entry->write_bytes();
+          if (entry_allocation_size < MIN_WRITE_ALLOC_SIZE) {
+            entry_allocation_size = MIN_WRITE_ALLOC_SIZE;
+          }
+          ceph_assert(m_bytes_allocated >= entry_allocation_size);
+          m_bytes_allocated -= entry_allocation_size;
+        }
+      }
+      m_alloc_failed_since_retire = false;
+      wake_up();
+    }
+  } else {
+    ldout(cct, 20) << "Nothing to retire" << dendl;
+    return false;
+  }
+  return true;
 }
 
 } // namespace cache

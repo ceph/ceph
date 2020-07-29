@@ -17,7 +17,10 @@
 #include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
-namespace librbd { class ImageCtx; }
+namespace librbd {
+class ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -116,12 +119,13 @@ private:
   public:
     typedef librbd::ManagedLock<ImageCtxT> Parent;
 
-    LeaderLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+    LeaderLock(librados::IoCtx& ioctx, librbd::AsioEngine& asio_engine,
                const std::string& oid, LeaderWatcher *watcher,
                bool blacklist_on_break_lock,
                uint32_t blacklist_expire_seconds)
-      : Parent(ioctx, work_queue, oid, watcher, librbd::managed_lock::EXCLUSIVE,
-               blacklist_on_break_lock, blacklist_expire_seconds),
+      : Parent(ioctx, asio_engine, oid, watcher,
+               librbd::managed_lock::EXCLUSIVE, blacklist_on_break_lock,
+               blacklist_expire_seconds),
         watcher(watcher) {
     }
 

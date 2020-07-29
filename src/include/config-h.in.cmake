@@ -75,6 +75,9 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
+/* Defined if you have libzbc */
+#cmakedefine HAVE_LIBZBC
+
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
 
@@ -86,6 +89,12 @@
 
 /* Define if you have fuse */
 #cmakedefine HAVE_LIBFUSE
+
+/* Define version major */
+#define CEPH_FUSE_MAJOR_VERSION @FUSE_MAJOR_VERSION@
+
+/* Define version minor */
+#define CEPH_FUSE_MINOR_VERSION @FUSE_MINOR_VERSION@
 
 /* Define to 1 if you have libxfs */
 #cmakedefine HAVE_LIBXFS 1
@@ -309,6 +318,9 @@
 
 #cmakedefine MGR_PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
 
+/* the default value of "mgr_disabled_module" option */
+#cmakedefine MGR_DISABLED_MODULES "@MGR_DISABLED_MODULES@"
+
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
 
@@ -344,5 +356,11 @@
 
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
+
+/* Shared library extension, such as .so, .dll or .dylib */
+#cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"
+
+/* libexec directory path */
+#cmakedefine CMAKE_INSTALL_LIBEXECDIR "@CMAKE_INSTALL_LIBEXECDIR@"
 
 #endif /* CONFIG_H */

@@ -11,11 +11,13 @@
 #include "common/TextTable.h"
 #include <iostream>
 #include <boost/program_options.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 namespace rbd {
 namespace action {
 namespace snap {
+
+using namespace boost::placeholders;
 
 static const std::string ALL_NAME("all");
 
@@ -199,8 +201,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
                       << "peer_uuids:[" << mirror_snap.mirror_peer_uuids << "]";
           if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
               mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
-            oss  << mirror_snap.primary_mirror_uuid << ":"
-                 << mirror_snap.primary_snap_id << " ";
+            oss << " " << mirror_snap.primary_mirror_uuid << ":"
+                << mirror_snap.primary_snap_id << " ";
             if (!mirror_snap.complete) {
               if (info.num_objs > 0) {
                 auto progress = std::min<uint64_t>(
@@ -232,12 +234,18 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
   return 0;
 }
 
-int do_add_snap(librbd::Image& image, const char *snapname)
+int do_add_snap(librbd::Image& image, const char *snapname,
+                uint32_t flags, bool no_progress)
 {
-  int r = image.snap_create(snapname);
-  if (r < 0)
+  utils::ProgressContext pc("Creating snap", no_progress);
+  
+  int r = image.snap_create2(snapname, flags, pc);
+  if (r < 0) {
+    pc.fail();
     return r;
+  }
 
+  pc.finish();
   return 0;
 }
 
@@ -417,6 +425,8 @@ int execute_list(const po::variables_map &vm,
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_create_options(options);
+  at::add_no_progress_option(options);
 }
 
 int execute_create(const po::variables_map &vm,
@@ -434,6 +444,12 @@ int execute_create(const po::variables_map &vm,
     return r;
   }
 
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -443,7 +459,8 @@ int execute_create(const po::variables_map &vm,
     return r;
   }
 
-  r = do_add_snap(image, snap_name.c_str());
+  r = do_add_snap(image, snap_name.c_str(), flags,
+                  vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     cerr << "rbd: failed to create snapshot: " << cpp_strerror(r)
          << std::endl;

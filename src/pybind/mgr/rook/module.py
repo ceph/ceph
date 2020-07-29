@@ -2,6 +2,7 @@ import datetime
 import threading
 import functools
 import os
+import json
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
@@ -232,16 +233,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for host_name, host_devs in devs.items():
             devs = []
             for d in host_devs:
-                dev = inventory.Device(
-                    path='/dev/' + d['name'],
-                    sys_api=dict(
-                        rotational='1' if d['rotational'] else '0',
-                        size=d['size']
-                    ),
-                    available=d['empty'],
-                    rejected_reasons=[] if d['empty'] else ['not empty'],
-                )
-                devs.append(dev)
+                if 'cephVolumeData' in d and d['cephVolumeData']:
+                    devs.append(inventory.Device.from_json(json.loads(d['cephVolumeData'])))
+                else:
+                    devs.append(inventory.Device(
+                        path = '/dev/' + d['name'],
+                        sys_api = dict(
+                            rotational = '1' if d['rotational'] else '0',
+                            size = d['size']
+                            ),
+                        available = False,
+                        rejected_reasons=['device data coming from ceph-volume not provided'],
+                    ))
 
             result.append(orchestrator.InventoryHost(host_name, inventory.Devices(devs)))
 
@@ -457,7 +460,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._service_add_decorate('RGW', spec,
                                           self.rook_cluster.apply_objectstore)
 
-
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
         num = spec.placement.count
@@ -491,8 +493,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
-            all_hosts = [h.hostname for h in all_hosts_]
-            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts_)
 
             assert len(matching_hosts) == 1
 
@@ -511,13 +512,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                         matching_hosts,
                         targets),
                 mgr=self,
-                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),
-                calc_percent=lambda: has_osds(all_hosts)
+                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, matching_hosts),
+                calc_percent=lambda: has_osds(matching_hosts)
             )
 
         @deferred_read
-        def has_osds(all_hosts):
-            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+        def has_osds(matching_hosts):
 
             # Find OSD pods on this host
             pod_osd_ids = set()

@@ -18,6 +18,7 @@
 #include "FSCommands.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
+#include "mds/cephfs_features.h"
 
 using TOPNSPC::common::cmd_getval;
 
@@ -276,10 +277,10 @@ class FsNewHandler : public FileSystemCommandHandler
     }
     mon->osdmon()->do_application_enable(data,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name);
+					 "data", fs_name, true);
     mon->osdmon()->do_application_enable(metadata,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "metadata", fs_name);
+					 "metadata", fs_name, true);
     mon->osdmon()->do_set_pool_opt(metadata,
 				   pool_opts_t::RECOVERY_PRIORITY,
 				   static_cast<int64_t>(5));
@@ -651,6 +652,79 @@ public:
   }
 };
 
+class RequiredClientFeaturesHandler : public FileSystemCommandHandler
+{
+  public:
+    RequiredClientFeaturesHandler()
+      : FileSystemCommandHandler("fs required_client_features")
+    {
+    }
+
+    int handle(
+	Monitor *mon,
+	FSMap &fsmap,
+	MonOpRequestRef op,
+	const cmdmap_t& cmdmap,
+	std::stringstream &ss) override
+    {
+      std::string fs_name;
+      if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+	ss << "Missing filesystem name";
+	return -EINVAL;
+      }
+      auto fs = fsmap.get_filesystem(fs_name);
+      if (fs == nullptr) {
+	ss << "Not found: '" << fs_name << "'";
+	return -ENOENT;
+      }
+      string subop;
+      if (!cmd_getval(cmdmap, "subop", subop) ||
+	  (subop != "add" && subop != "rm")) {
+	ss << "Must either add or rm a feature; " << subop << " is not recognized";
+	return -EINVAL;
+      }
+      string val;
+      if (!cmd_getval(cmdmap, "val", val) || val.empty()) {
+	ss << "Missing feature id/name";
+	return -EINVAL;
+      }
+
+      int feature = cephfs_feature_from_name(val);
+      if (feature < 0) {
+	string err;
+	feature = strict_strtol(val.c_str(), 10, &err);
+	if (err.length()) {
+	  ss << "Invalid feature name: " << val;
+	  return -EINVAL;
+	}
+	if (feature < 0 || feature > CEPHFS_FEATURE_MAX) {
+	  ss << "Invalid feature id: " << feature;
+	  return -EINVAL;
+	}
+      }
+
+      if (subop == "add") {
+	fsmap.modify_filesystem(
+	    fs->fscid,
+	    [feature](std::shared_ptr<Filesystem> fs)
+	{
+	  fs->mds_map.add_required_client_feature(feature);
+	});
+	ss << "added feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+      } else {
+	fsmap.modify_filesystem(
+	    fs->fscid,
+	    [feature](std::shared_ptr<Filesystem> fs)
+	{
+	  fs->mds_map.remove_required_client_feature(feature);
+	});
+	ss << "removed feature '" << cephfs_feature_name(feature) << "' to required_client_features";
+      }
+      return 0;
+   }
+};
+
+
 class AddDataPoolHandler : public FileSystemCommandHandler
 {
   public:
@@ -715,7 +789,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     }
     mon->osdmon()->do_application_enable(poolid,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name);
+					 "data", fs_name, true);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
@@ -988,6 +1062,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   handlers.push_back(std::make_shared<SetHandler>());
   handlers.push_back(std::make_shared<FailHandler>());
   handlers.push_back(std::make_shared<FlagSetHandler>());
+  handlers.push_back(std::make_shared<RequiredClientFeaturesHandler>());
   handlers.push_back(std::make_shared<AddDataPoolHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());
   handlers.push_back(std::make_shared<FsNewHandler>(paxos));

@@ -5,14 +5,15 @@
 #include "include/interval_set.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd/object_map_types.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Io.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -94,7 +95,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
     bufferlist bl;
     bl.append(std::string(len, '1'));
 
-    int r = image_ctx->io_work_queue->write(off, len, std::move(bl), 0);
+    int r = api::Io<>::write(*image_ctx, off, len, std::move(bl), 0);
     ASSERT_EQ(static_cast<int>(len), r);
 
     interval_set<uint64_t> w;
@@ -112,8 +113,9 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
-  ThreadPool *m_thread_pool;
-  ContextWQ *m_work_queue;
+
+  std::shared_ptr<librbd::AsioEngine> m_asio_engine;
+  asio::ContextWQ *m_work_queue;
 
   SnapMap m_snap_map;
   std::vector<librados::snap_t> m_src_snap_ids;
@@ -133,8 +135,9 @@ public:
     ASSERT_EQ(0, create_image_pp(rbd, m_ioctx, dst_image_name, m_image_size));
     ASSERT_EQ(0, open_image(dst_image_name, &m_dst_image_ctx));
 
-    librbd::ImageCtx::get_thread_pool_instance(m_src_image_ctx->cct,
-                                               &m_thread_pool, &m_work_queue);
+    m_asio_engine = std::make_shared<librbd::AsioEngine>(
+      m_src_image_ctx->md_ctx);
+    m_work_queue = m_asio_engine->get_work_queue();
   }
 
   bool is_fast_diff(librbd::MockImageCtx &mock_image_ctx) {
@@ -211,7 +214,7 @@ public:
     expect_get_object_name(mock_dst_image_ctx);
     return new MockObjectCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
                                      src_snap_id_start, dst_snap_id_start,
-                                     m_snap_map, 0, false, on_finish);
+                                     m_snap_map, 0, false, nullptr, on_finish);
   }
 
   void expect_set_snap_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
@@ -222,7 +225,8 @@ public:
   void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx, uint64_t offset,
                           uint64_t length, int r) {
 
-    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _));
+    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _,
+                                                        _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -305,8 +309,9 @@ public:
 
   int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
                   librados::snap_t *snap_id) {
+    NoOpProgressContext prog_ctx;
     int r = image_ctx->operations->snap_create(
-        cls::rbd::UserSnapshotNamespace(), snap_name);
+        cls::rbd::UserSnapshotNamespace(), snap_name, 0, prog_ctx);
     if (r < 0) {
       return r;
     }
@@ -376,13 +381,13 @@ public:
 
     bufferlist bl;
     bl.append(std::string(object_size, '1'));
-    r = m_src_image_ctx->io_work_queue->read(
-      0, object_size, librbd::io::ReadResult{&bl}, 0);
+    r = api::Io<>::read(*m_src_image_ctx, 0, object_size,
+                        librbd::io::ReadResult{&bl}, 0);
     if (r < 0) {
       return r;
     }
 
-    r = m_dst_image_ctx->io_work_queue->write(0, object_size, std::move(bl), 0);
+    r = api::Io<>::write(*m_dst_image_ctx, 0, object_size, std::move(bl), 0);
     if (r < 0) {
       return r;
     }
@@ -427,16 +432,16 @@ public:
 
       bufferlist src_bl;
       src_bl.append(std::string(object_size, '1'));
-      r = m_src_image_ctx->io_work_queue->read(
-        0, object_size, librbd::io::ReadResult{&src_bl}, 0);
+      r = api::Io<>::read(
+        *m_src_image_ctx, 0, object_size, librbd::io::ReadResult{&src_bl}, 0);
       if (r < 0) {
         return r;
       }
 
       bufferlist dst_bl;
       dst_bl.append(std::string(object_size, '1'));
-      r = m_dst_image_ctx->io_work_queue->read(
-        0, object_size, librbd::io::ReadResult{&dst_bl}, 0);
+      r = api::Io<>::read(
+        *m_dst_image_ctx, 0, object_size, librbd::io::ReadResult{&dst_bl}, 0);
       if (r < 0) {
         return r;
       }
@@ -793,8 +798,8 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
 
   // trim the object
   uint64_t trim_offset = rand() % one.range_end();
-  ASSERT_LE(0, m_src_image_ctx->io_work_queue->discard(
-    trim_offset, one.range_end() - trim_offset,
+  ASSERT_LE(0, api::Io<>::discard(
+    *m_src_image_ctx, trim_offset, one.range_end() - trim_offset,
     m_src_image_ctx->discard_granularity_bytes));
   ASSERT_EQ(0, create_snap("copy"));
 
@@ -849,8 +854,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
 
   // remove the object
   uint64_t object_size = 1 << m_src_image_ctx->order;
-  ASSERT_LE(0, m_src_image_ctx->io_work_queue->discard(
-    0, object_size, m_src_image_ctx->discard_granularity_bytes));
+  ASSERT_LE(0, api::Io<>::discard(
+    *m_src_image_ctx, 0, object_size,
+    m_src_image_ctx->discard_granularity_bytes));
   ASSERT_EQ(0, create_snap("copy"));
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);

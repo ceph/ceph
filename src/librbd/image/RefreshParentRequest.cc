@@ -5,12 +5,11 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/asio/ContextWQ.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -140,12 +139,11 @@ void RefreshParentRequest<I>::send_open_parent() {
     m_parent_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
   }
 
-  using klass = RefreshParentRequest<I>;
-  Context *ctx = create_async_context_callback(
+  auto ctx = create_async_context_callback(
     m_child_image_ctx, create_context_callback<
-      klass, &klass::handle_open_parent, false>(this));
-  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, flags, ctx);
-  req->send();
+      RefreshParentRequest<I>,
+      &RefreshParentRequest<I>::handle_open_parent, false>(this));
+  m_parent_image_ctx->state->open(flags, ctx);
 }
 
 template <typename I>
@@ -159,7 +157,6 @@ Context *RefreshParentRequest<I>::handle_open_parent(int *result) {
                << dendl;
 
     // image already closed by open state machine
-    delete m_parent_image_ctx;
     m_parent_image_ctx = nullptr;
   }
 
@@ -173,12 +170,11 @@ void RefreshParentRequest<I>::send_close_parent() {
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  using klass = RefreshParentRequest<I>;
-  Context *ctx = create_async_context_callback(
+  auto ctx = create_async_context_callback(
     m_child_image_ctx, create_context_callback<
-      klass, &klass::handle_close_parent, false>(this));
-  CloseRequest<I> *req = CloseRequest<I>::create(m_parent_image_ctx, ctx);
-  req->send();
+      RefreshParentRequest<I>,
+      &RefreshParentRequest<I>::handle_close_parent, false>(this));
+  m_parent_image_ctx->state->close(ctx);
 }
 
 template <typename I>
@@ -186,7 +182,6 @@ Context *RefreshParentRequest<I>::handle_close_parent(int *result) {
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
 
-  delete m_parent_image_ctx;
   m_parent_image_ctx = nullptr;
 
   if (*result < 0) {

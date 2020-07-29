@@ -281,7 +281,6 @@ protected:
   bool range_parsed;
   bool skip_manifest;
   bool skip_decrypt{false};
-  rgw_obj obj;
   utime_t gc_invalidate_time;
   bool is_slo;
   string lo_etag;
@@ -620,7 +619,7 @@ protected:
   virtual void send_response() override = 0;
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
-  parse_path(const boost::string_ref& path);
+  parse_path(const std::string_view& path);
   
   std::pair<std::string, std::string>
   handle_upload_path(struct req_state *s);
@@ -629,12 +628,12 @@ protected:
 				     const rgw_obj& obj,
 				     std::map<std::string, ceph::bufferlist>& battrs,
                                      ACLOwner& bucket_owner /* out */);
-  int handle_file(boost::string_ref path,
+  int handle_file(std::string_view path,
                   size_t size,
                   AlignedStreamGetter& body);
 
   int handle_dir_verify_permission();
-  int handle_dir(boost::string_ref path);
+  int handle_dir(std::string_view path);
 
 public:
   RGWBulkUploadOp()
@@ -825,7 +824,6 @@ public:
 
 class RGWListBucket : public RGWOp {
 protected:
-  rgw::sal::RGWBucket* bucket;
   string prefix;
   rgw_obj_key marker; 
   rgw_obj_key next_marker; 
@@ -847,17 +845,15 @@ protected:
   int parse_max_keys();
 
 public:
-  RGWListBucket() : bucket(nullptr), list_versions(false), max(0),
+  RGWListBucket() : list_versions(false), max(0),
                     default_max(0), is_truncated(false),
 		    allow_unordered(false), shard_id(-1) {}
-  ~RGWListBucket() { delete bucket; }
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
 
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
-    bucket = new rgw::sal::RGWRadosBucket(store, *s->user, s->bucket);
   }
   virtual int get_params() = 0;
   void send_response() override = 0;
@@ -987,12 +983,9 @@ public:
 
 class RGWStatBucket : public RGWOp {
 protected:
-  rgw::sal::RGWBucket* bucket;
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
 
 public:
-  RGWStatBucket() : bucket(nullptr) {}
-  ~RGWStatBucket() override { delete bucket; }
-
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
@@ -1433,17 +1426,15 @@ protected:
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
   map<string, buffer::list> attrs;
-  string src_tenant_name, src_bucket_name;
-  rgw_bucket src_bucket;
-  rgw_obj_key src_object;
-  string dest_tenant_name, dest_bucket_name;
-  rgw_bucket dest_bucket;
-  string dest_object;
+  string src_tenant_name, src_bucket_name, src_obj_name;
+  std::unique_ptr<rgw::sal::RGWBucket> src_bucket;
+  std::unique_ptr<rgw::sal::RGWObject> src_object;
+  string dest_tenant_name, dest_bucket_name, dest_obj_name;
+  std::unique_ptr<rgw::sal::RGWBucket> dest_bucket;
+  std::unique_ptr<rgw::sal::RGWObject> dest_object;
   ceph::real_time src_mtime;
   ceph::real_time mtime;
   RGWRados::AttrsMod attrs_mod;
-  RGWBucketInfo src_bucket_info;
-  RGWBucketInfo dest_bucket_info;
   string source_zone;
   string etag;
 
@@ -1476,7 +1467,7 @@ public:
     copy_if_newer = false;
   }
 
-  static bool parse_copy_location(const boost::string_view& src,
+  static bool parse_copy_location(const std::string_view& src,
                                   string& bucket_name,
                                   rgw_obj_key& object);
 
@@ -1717,6 +1708,7 @@ class RGWInitMultipart : public RGWOp {
 protected:
   string upload_id;
   RGWAccessControlPolicy policy;
+  ceph::real_time mtime;
 
 public:
   RGWInitMultipart() {}
@@ -1829,6 +1821,13 @@ public:
 struct RGWMultipartUploadEntry {
   rgw_bucket_dir_entry obj;
   RGWMPObj mp;
+
+  friend std::ostream& operator<<(std::ostream& out,
+				  const RGWMultipartUploadEntry& e) {
+    constexpr char quote = '"';
+    return out << "RGWMultipartUploadEntry{ obj.key=" <<
+      quote << e.obj.key << quote << " mp=" << e.mp << " }";
+  }
 };
 
 class RGWListBucketMultiparts : public RGWOp {
@@ -1919,7 +1918,7 @@ public:
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   bufferlist data;
-  rgw_bucket bucket;
+  rgw::sal::RGWBucket* bucket;
   bool quiet;
   bool status_dumped;
   bool acl_allowed = false;

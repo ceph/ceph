@@ -14,7 +14,9 @@ virtual machines quickly, because the client doesn't have to download an entire
 image each time it spins up a new virtual machine.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                       QEMU                        |
             +---------------------------------------------------+
             |                      librbd                       |

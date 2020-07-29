@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -27,7 +27,7 @@ export class RbdTrashRestoreModalComponent implements OnInit {
 
   constructor(
     private rbdService: RbdService,
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private fb: CdFormBuilder,
     private taskWrapper: TaskWrapperService
   ) {}
@@ -51,14 +51,13 @@ export class RbdTrashRestoreModalComponent implements OnInit {
         }),
         call: this.rbdService.restoreTrash(imageSpec, name)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.restoreForm.setErrors({ cdSubmitButton: true });
         },
-        () => {
-          this.modalRef.hide();
+        complete: () => {
+          this.activeModal.close();
         }
-      );
+      });
   }
 }

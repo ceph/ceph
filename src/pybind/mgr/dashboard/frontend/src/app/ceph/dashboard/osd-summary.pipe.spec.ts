@@ -1,16 +1,17 @@
 import { TestBed } from '@angular/core/testing';
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { OsdSummaryPipe } from './osd-summary.pipe';
 
 describe('OsdSummaryPipe', () => {
   let pipe: OsdSummaryPipe;
 
   configureTestBed({
-    providers: [OsdSummaryPipe, i18nProviders]
+    providers: [OsdSummaryPipe]
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(OsdSummaryPipe);
+    pipe = TestBed.inject(OsdSummaryPipe);
   });
 
   it('create an instance', () => {

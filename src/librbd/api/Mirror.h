@@ -9,13 +9,12 @@
 #include <string>
 #include <vector>
 
-class ContextWQ;
-
 struct Context;
 
 namespace librbd {
 
 struct ImageCtx;
+namespace asio { struct ContextWQ; }
 
 namespace api {
 
@@ -95,11 +94,11 @@ struct Mirror {
                              mirror_image_info_t *mirror_image_info,
                              Context *on_finish);
   static int image_get_info(librados::IoCtx& io_ctx,
-                            ContextWQ *op_work_queue,
+                            asio::ContextWQ *op_work_queue,
                             const std::string &image_id,
                             mirror_image_info_t *mirror_image_info);
   static void image_get_info(librados::IoCtx& io_ctx,
-                             ContextWQ *op_work_queue,
+                             asio::ContextWQ *op_work_queue,
                              const std::string &image_id,
                              mirror_image_info_t *mirror_image_info,
                              Context *on_finish);
@@ -113,7 +112,8 @@ struct Mirror {
                                       Context *on_finish);
   static int image_get_instance_id(ImageCtxT *ictx, std::string *instance_id);
 
-  static int image_snapshot_create(ImageCtxT *ictx, uint64_t *snap_id);
+  static int image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
+                                   uint64_t *snap_id);
 };
 
 } // namespace api

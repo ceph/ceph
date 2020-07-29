@@ -2,13 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
+#include "include/ceph_fuse.h"
 #include "FuseStore.h"
 #include "os/ObjectStore.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 
-#define FUSE_USE_VERSION 30
-#include <fuse.h>
+#include <fuse_lowlevel.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -40,7 +40,9 @@ using ceph::bufferptr;
 struct fs_info {
   struct fuse_args args;
   struct fuse *f;
+#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   struct fuse_chan *ch;
+#endif
   char *mountpoint;
 };
 
@@ -60,7 +62,7 @@ int FuseStore::open_file(string p, struct fuse_file_info *fi,
   }
   OpenFile *o = new OpenFile;
   o->path = p;
-  o->bl.claim(bl);
+  o->bl = std::move(bl);
   open_files[p] = o;
   fi->fh = reinterpret_cast<uint64_t>(o);
   ++o->ref;
@@ -238,7 +240,11 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
 }
 
 
-static int os_getattr(const char *path, struct stat *stbuf)
+static int os_getattr(const char *path, struct stat *stbuf
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+                      , struct fuse_file_info *fi
+#endif
+                      )
 {
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
@@ -395,7 +401,11 @@ static int os_readdir(const char *path,
 		      void *buf,
 		      fuse_fill_dir_t filler,
 		      off_t offset,
-		      struct fuse_file_info *fi)
+		      struct fuse_file_info *fi
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+                      , enum fuse_readdir_flags
+#endif
+                      )
 {
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
@@ -420,11 +430,11 @@ static int os_readdir(const char *path,
   switch (t) {
   case FN_ROOT:
     {
-      filler(buf, "type", NULL, 0);
+      filler_compat(filler, buf, "type", NULL, 0);
       vector<coll_t> cls;
       fs->store->list_collections(cls);
       for (auto c : cls) {
-	int r = filler(buf, stringify(c).c_str(), NULL, 0);
+	int r = filler_compat(filler, buf, stringify(c).c_str(), NULL, 0);
 	if (r > 0)
 	  break;
       }
@@ -436,28 +446,28 @@ static int os_readdir(const char *path,
       if (!ch) {
 	return -ENOENT;
       }
-      filler(buf, "bitwise_hash_start", NULL, 0);
+      filler_compat(filler, buf, "bitwise_hash_start", NULL, 0);
       if (fs->store->collection_bits(ch) >= 0) {
-	filler(buf, "bitwise_hash_end", NULL, 0);
-	filler(buf, "bitwise_hash_bits", NULL, 0);
+	filler_compat(filler, buf, "bitwise_hash_end", NULL, 0);
+	filler_compat(filler, buf, "bitwise_hash_bits", NULL, 0);
       }
-      filler(buf, "all", NULL, 0);
-      filler(buf, "by_bitwise_hash", NULL, 0);
+      filler_compat(filler, buf, "all", NULL, 0);
+      filler_compat(filler, buf, "by_bitwise_hash", NULL, 0);
       spg_t pgid;
       if (cid.is_pg(&pgid) &&
 	  fs->store->exists(ch, pgid.make_pgmeta_oid())) {
-	filler(buf, "pgmeta", NULL, 0);
+	filler_compat(filler, buf, "pgmeta", NULL, 0);
       }
     }
     break;
 
   case FN_OBJECT:
     {
-      filler(buf, "bitwise_hash", NULL, 0);
-      filler(buf, "data", NULL, 0);
-      filler(buf, "omap", NULL, 0);
-      filler(buf, "attr", NULL, 0);
-      filler(buf, "omap_header", NULL, 0);
+      filler_compat(filler, buf, "bitwise_hash", NULL, 0);
+      filler_compat(filler, buf, "data", NULL, 0);
+      filler_compat(filler, buf, "omap", NULL, 0);
+      filler_compat(filler, buf, "attr", NULL, 0);
+      filler_compat(filler, buf, "omap_header", NULL, 0);
     }
     break;
 
@@ -512,7 +522,7 @@ static int os_readdir(const char *path,
 	  uint64_t cur_off = ((uint64_t)bitwise_hash << hash_shift) |
 	    (uint64_t)hashoff;
 	  string s = stringify(p);
-	  r = filler(buf, s.c_str(), NULL, cur_off);
+	  r = filler_compat(filler, buf, s.c_str(), NULL, cur_off);
 	  if (r)
 	    break;
 	}
@@ -535,7 +545,7 @@ static int os_readdir(const char *path,
 	  continue;
 	}
 	++offset;
-	int r = filler(buf, k.c_str(), NULL, offset);
+	int r = filler_compat(filler, buf, k.c_str(), NULL, offset);
 	if (r)
 	  break;
       }
@@ -553,7 +563,7 @@ static int os_readdir(const char *path,
 	  continue;
 	}
 	++offset;
-	int r = filler(buf, a.first.c_str(), NULL, offset);
+	int r = filler_compat(filler, buf, a.first.c_str(), NULL, offset);
 	if (r)
 	  break;
       }
@@ -720,7 +730,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   if (pbl) {
     FuseStore::OpenFile *o = new FuseStore::OpenFile;
-    o->bl.claim(*pbl);
+    o->bl = std::move(*pbl);
     fi->fh = reinterpret_cast<uint64_t>(o);
   }
   return 0;
@@ -790,7 +800,11 @@ static int os_mkdir(const char *path, mode_t mode)
   return 0;
 }
 
-static int os_chmod(const char *path, mode_t mode)
+static int os_chmod(const char *path, mode_t mode
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+                    , struct fuse_file_info *fi
+#endif
+                    )
 {
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
@@ -863,7 +877,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   if (pbl) {
     FuseStore::OpenFile *o = new FuseStore::OpenFile;
-    o->bl.claim(*pbl);
+    o->bl = std::move(*pbl);
     o->dirty = true;
     fi->fh = reinterpret_cast<uint64_t>(o);
   }
@@ -1061,7 +1075,11 @@ static int os_unlink(const char *path)
   return 0;
 }
 
-static int os_truncate(const char *path, off_t size)
+static int os_truncate(const char *path, off_t size
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+                       , struct fuse_file_info *fi
+#endif
+                       )
 {
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
@@ -1127,7 +1145,9 @@ static int os_statfs(const char *path, struct statvfs *stbuf)
 static struct fuse_operations fs_oper = {
   getattr: os_getattr,
   readlink: 0,
+#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   getdir: 0,
+#endif
   mknod: 0,
   mkdir: os_mkdir,
   unlink: os_unlink,
@@ -1138,7 +1158,9 @@ static struct fuse_operations fs_oper = {
   chmod: os_chmod,
   chown: 0,
   truncate: os_truncate,
+#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   utime: 0,
+#endif
   open: os_open,
   read: os_read,
   write: os_write,
@@ -1187,16 +1209,38 @@ int FuseStore::start()
     "-d", // debug
   };
   int c = 3;
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  int rc;
+  struct fuse_cmdline_opts opts = {};
+#endif
   auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
   fuse_args a = FUSE_ARGS_INIT(c, (char**)v);
   info->args = a;
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  if (fuse_parse_cmdline(&info->args, &opts) == -1) {
+#else
   if (fuse_parse_cmdline(&info->args, &info->mountpoint, NULL, NULL) == -1) {
+#endif
     derr << __func__ << " failed to parse args" << dendl;
     return -EINVAL;
   }
 
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  info->mountpoint = opts.mountpoint;
+  info->f = fuse_new(&info->args, &fs_oper, sizeof(fs_oper), (void*)this);
+  if (!info->f) {
+    derr << __func__ << " fuse_new failed" << dendl;
+    return -EIO;
+  }
+
+  rc = fuse_mount(info->f, info->mountpoint);
+  if (rc != 0) {
+    derr << __func__ << " fuse_mount failed" << dendl;
+    return -EIO;
+  }
+#else
   info->ch = fuse_mount(info->mountpoint, &info->args);
   if (!info->ch) {
     derr << __func__ << " fuse_mount failed" << dendl;
@@ -1210,6 +1254,7 @@ int FuseStore::start()
     derr << __func__ << " fuse_new failed" << dendl;
     return -EIO;
   }
+#endif
 
   fuse_thread.create("fusestore");
   dout(10) << __func__ << " done" << dendl;
@@ -1229,7 +1274,11 @@ int FuseStore::loop()
 int FuseStore::stop()
 {
   dout(10) << __func__ << " enter" << dendl;
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  fuse_unmount(info->f);
+#else
   fuse_unmount(info->mountpoint, info->ch);
+#endif
   fuse_thread.join();
   fuse_destroy(info->f);
   dout(10) << __func__ << " exit" << dendl;

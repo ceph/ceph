@@ -9,13 +9,14 @@ import logging
 import sys
 from threading import Lock, Condition, Event
 from typing import no_type_check
+from functools import wraps
 if sys.version_info >= (3, 3):
     from threading import Timer
 else:
     from threading import _Timer as Timer
 
 try:
-    from typing import Tuple
+    from typing import Tuple, Any, Callable
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
 
@@ -627,3 +628,24 @@ def to_pretty_timedelta(n):
     if n < datetime.timedelta(days=365*2):
         return str(n.days // 30) + 'M'
     return str(n.days // 365) + 'y'
+
+
+def profile_method(skip_attribute=False):
+    """
+    Decorator for methods of the Module class. Logs the name of the given
+    function f with the time it takes to execute it.
+    """
+    def outer(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            self = args[0]
+            t = time.time()
+            self.log.debug('Starting method {}.'.format(f.__name__))
+            result = f(*args, **kwargs)
+            duration = time.time() - t
+            if not skip_attribute:
+                wrapper._execution_duration = duration  # type: ignore
+            self.log.debug('Method {} ran {:.3f} seconds.'.format(f.__name__, duration))
+            return result
+        return wrapper
+    return outer

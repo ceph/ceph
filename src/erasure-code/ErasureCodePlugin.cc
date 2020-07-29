@@ -16,22 +16,18 @@
  */
 
 #include <errno.h>
-#include <dlfcn.h>
 
 #include "ceph_ver.h"
 #include "ErasureCodePlugin.h"
 #include "common/errno.h"
+#include "include/dlfcn_compat.h"
 #include "include/str_list.h"
 #include "include/ceph_assert.h"
 
 using namespace std;
 
 #define PLUGIN_PREFIX "libec_"
-#if defined(__APPLE__)
-#define PLUGIN_SUFFIX ".dylib"
-#else
-#define PLUGIN_SUFFIX ".so"
-#endif
+#define PLUGIN_SUFFIX SHARED_LIB_SUFFIX
 #define PLUGIN_INIT_FUNCTION "__erasure_code_init"
 #define PLUGIN_VERSION_FUNCTION "__erasure_code_version"
 

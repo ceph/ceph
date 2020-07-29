@@ -5,6 +5,10 @@
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
+#include "HybridAllocator.h"
+#ifdef HAVE_LIBZBC
+#include "ZonedAllocator.h"
+#endif
 #include "common/debug.h"
 #include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore
@@ -18,6 +22,7 @@ using ceph::Formatter;
 class Allocator::SocketHook : public AdminSocketHook {
   Allocator *alloc;
 
+  friend class Allocator;
   std::string name;
 public:
   explicit SocketHook(Allocator *alloc,
@@ -105,6 +110,9 @@ Allocator::~Allocator()
   delete asok_hook;
 }
 
+const string& Allocator::get_name() const {
+  return asok_hook->name;
+}
 
 Allocator *Allocator::create(CephContext* cct, string type,
                              int64_t size, int64_t block_size, const std::string& name)
@@ -116,6 +124,14 @@ Allocator *Allocator::create(CephContext* cct, string type,
     alloc = new BitmapAllocator(cct, size, block_size, name);
   } else if (type == "avl") {
     return new AvlAllocator(cct, size, block_size, name);
+  } else if (type == "hybrid") {
+    return new HybridAllocator(cct, size, block_size,
+      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+      name);
+#ifdef HAVE_LIBZBC
+  } else if (type == "zoned") {
+    return new ZonedAllocator(cct, size, block_size, name);
+#endif
   }
   if (alloc == nullptr) {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "

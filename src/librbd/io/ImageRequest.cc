@@ -7,17 +7,17 @@
 #include "librbd/Journal.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
 #include "common/perf_counters.h"
-#include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 #include <algorithm>
 #include <functional>
@@ -42,7 +42,7 @@ struct C_RBD_Readahead : public Context {
   uint64_t length;
 
   bufferlist read_data;
-  io::ExtentMap extent_map;
+  io::Extents extent_map;
 
   C_RBD_Readahead(I *ictx, uint64_t object_no, uint64_t offset, uint64_t length)
     : ictx(ictx), object_no(object_no), offset(offset), length(length) {
@@ -264,6 +264,15 @@ int ImageRequest<I>::clip_request() {
 }
 
 template <typename I>
+uint64_t ImageRequest<I>::get_total_length() const {
+  uint64_t total_bytes = 0;
+  for (auto& image_extent : this->m_image_extents) {
+    total_bytes += image_extent.second;
+  }
+  return total_bytes;
+}
+
+template <typename I>
 void ImageRequest<I>::update_timestamp() {
   bool modify = (get_aio_type() != AIO_TYPE_READ);
   uint64_t update_interval;
@@ -340,6 +349,17 @@ int ImageReadRequest<I>::clip_request() {
   }
   this->m_aio_comp->read_result.set_clip_length(buffer_length);
   return 0;
+}
+
+template <typename I>
+bool ImageReadRequest<I>::finish_request_early() {
+  auto total_bytes = this->get_total_length();
+  if (total_bytes == 0) {
+    auto *aio_comp = this->m_aio_comp;
+    aio_comp->set_request_count(0);
+    return true;
+  }
+  return false;
 }
 
 template <typename I>
@@ -420,10 +440,7 @@ bool AbstractImageWriteRequest<I>::finish_request_early() {
       return true;
     }
   }
-  uint64_t total_bytes = 0;
-  for (auto& image_extent : this->m_image_extents) {
-    total_bytes += image_extent.second;
-  }
+  auto total_bytes = this->get_total_length();
   if (total_bytes == 0) {
     aio_comp->set_request_count(0);
     return true;
@@ -717,7 +734,11 @@ void ImageFlushRequest<I>::send_request() {
     });
 
   // ensure all in-flight IOs are settled if non-user flush request
-  aio_comp->async_op.flush(ctx);
+  if (m_flush_source == FLUSH_SOURCE_WRITEBACK) {
+    ctx->complete(0);
+  } else {
+    aio_comp->async_op.flush(ctx);
+  }
 
   // might be flushing during image shutdown
   if (image_ctx.perfcounter != nullptr) {
@@ -733,7 +754,7 @@ void ImageFlushRequest<I>::send_image_cache_request() {
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
   C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-  image_ctx.image_cache->aio_flush(req_comp);
+  image_ctx.image_cache->aio_flush(librbd::io::FLUSH_SOURCE_USER, req_comp);
 }
 
 template <typename I>

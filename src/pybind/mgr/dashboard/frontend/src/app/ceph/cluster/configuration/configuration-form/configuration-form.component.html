@@ -1,4 +1,5 @@
-<div class="cd-col-form">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="configForm"
         #formDir="ngForm"
         [formGroup]="configForm"
@@ -93,8 +94,8 @@
 
         <!-- Values -->
         <div formGroupName="values">
-          <h2 i18n
-              class="cd-header">Values</h2>
+          <h3 i18n
+              class="cd-header">Values</h3>
           <ng-container *ngFor="let section of availSections">
             <div class="form-group row"
                  *ngIf="type === 'bool'">
@@ -149,7 +150,7 @@
       </div>
       <!-- Footer -->
       <div class="card-footer">
-        <div class="button-group text-right">
+        <div class="text-right">
           <cd-submit-button [form]="formDir"
                             (submitAction)="submit()">
             <span i18n>Save</span>

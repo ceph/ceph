@@ -3,11 +3,8 @@ import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { PopoverModule } from 'ngx-bootstrap/popover';
-import { TabsModule } from 'ngx-bootstrap/tabs';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { SharedModule } from '../../shared/shared.module';
@@ -23,13 +20,11 @@ import { PoolListComponent } from './pool-list/pool-list.component';
   imports: [
     CephSharedModule,
     CommonModule,
-    TabsModule,
-    PopoverModule.forRoot(),
+    NgbNavModule,
     SharedModule,
     RouterModule,
     ReactiveFormsModule,
-    BsDropdownModule,
-    TooltipModule.forRoot(),
+    NgbTooltipModule,
     BlockModule,
     NgBootstrapFormValidationModule
   ],
@@ -40,8 +35,7 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     ErasureCodeProfileFormModalComponent,
     CrushRuleFormModalComponent,
     PoolDetailsComponent
-  ],
-  entryComponents: [CrushRuleFormModalComponent, ErasureCodeProfileFormModalComponent]
+  ]
 })
 export class PoolModule {}
 

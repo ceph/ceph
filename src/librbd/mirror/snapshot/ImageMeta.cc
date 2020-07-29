@@ -142,7 +142,8 @@ void ImageMeta<I>::notify_update(Context* on_finish) {
   // open a non-primary image read/write and therefore cannot re-use
   // the ImageWatcher to send the notification
   bufferlist bl;
-  encode(watch_notify::NotifyMessage(watch_notify::HeaderUpdatePayload()), bl);
+  encode(watch_notify::NotifyMessage(new watch_notify::HeaderUpdatePayload()),
+         bl);
 
   m_out_bl.clear();
   auto ctx = new LambdaContext([this, on_finish](int r) {

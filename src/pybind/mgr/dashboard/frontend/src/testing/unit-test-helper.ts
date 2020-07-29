@@ -1,16 +1,20 @@
-import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { DebugElement, Type } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
+import { configureTestSuite } from 'ng-bullet';
 
+import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
 import { CdTableAction } from '../app/shared/models/cd-table-action';
 import { CdTableSelection } from '../app/shared/models/cd-table-selection';
+import { CrushNode } from '../app/shared/models/crush-node';
+import { CrushRule, CrushRuleConfig } from '../app/shared/models/crush-rule';
 import { Permission } from '../app/shared/models/permissions';
 import {
   AlertmanagerAlert,
@@ -18,29 +22,19 @@ import {
   AlertmanagerNotificationAlert,
   PrometheusRule
 } from '../app/shared/models/prometheus-alerts';
-import { _DEV_ } from '../unit-test-configuration';
 
-export function configureTestBed(configuration: any, useOldMethod?: boolean) {
-  if (_DEV_ && !useOldMethod) {
-    const resetTestingModule = TestBed.resetTestingModule;
-    beforeAll((done) =>
-      (async () => {
-        TestBed.resetTestingModule();
-        TestBed.configureTestingModule(configuration);
-        // prevent Angular from resetting testing module
-        TestBed.resetTestingModule = () => TestBed;
-      })()
-        .then(done)
-        .catch(done.fail)
-    );
-    afterAll(() => {
-      TestBed.resetTestingModule = resetTestingModule;
-    });
-  } else {
-    beforeEach(async(() => {
+export function configureTestBed(configuration: any, entryComponents?: any) {
+  configureTestSuite(() => {
+    if (entryComponents) {
+      // Declare entryComponents without having to add them to a module
+      // This is needed since Jest doesn't yet support not declaring entryComponents
+      TestBed.configureTestingModule(configuration).overrideModule(BrowserDynamicTestingModule, {
+        set: { entryComponents: entryComponents }
+      });
+    } else {
       TestBed.configureTestingModule(configuration);
-    }));
-  }
+    }
+  });
 }
 
 export class PermissionHelper {
@@ -185,21 +179,18 @@ export class FormHelper {
 }
 
 /**
- * Use this to mock 'ModalService.show' to make the embedded component with it's fixture usable
+ * Use this to mock 'modalService.open' to make the embedded component with it's fixture usable
  * in tests. The function gives back all needed parts including the modal reference.
  *
  * Please make sure to call this function *inside* your mock and return the reference at the end.
  */
 export function modalServiceShow(componentClass: Type<any>, modalConfig: any) {
-  const ref = new BsModalRef();
-  const fixture = TestBed.createComponent(componentClass);
-  let component = fixture.componentInstance;
-  if (modalConfig.initialState) {
-    component = Object.assign(component, modalConfig.initialState);
+  const modal: NgbModal = TestBed.inject(NgbModal);
+  const modalRef = modal.open(componentClass);
+  if (modalConfig) {
+    Object.assign(modalRef.componentInstance, modalConfig);
   }
-  fixture.detectChanges();
-  ref.content = component;
-  return { ref, fixture, component };
+  return modalRef;
 }
 
 export class FixtureHelper {
@@ -347,24 +338,6 @@ export class PrometheusHelper {
   }
 }
 
-const XLIFF = `<?xml version="1.0" encoding="UTF-8" ?>
-<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
-  <file source-language="en" datatype="plaintext" original="ng2.template">
-    <body>
-    </body>
-  </file>
-</xliff>
-`;
-
-const i18nProviders = [
-  { provide: TRANSLATIONS_FORMAT, useValue: 'xlf' },
-  { provide: TRANSLATIONS, useValue: XLIFF },
-  { provide: LOCALE_ID, useValue: 'en' },
-  I18n
-];
-
-export { i18nProviders };
-
 export function expectItemTasks(item: any, executing: string, percentage?: number) {
   if (executing) {
     executing = executing + '...';
@@ -373,4 +346,236 @@ export function expectItemTasks(item: any, executing: string, percentage?: numbe
     }
   }
   expect(item.cdExecuting).toBe(executing);
+}
+
+export class IscsiHelper {
+  static validateUser(formHelper: FormHelper, fieldName: string) {
+    formHelper.expectErrorChange(fieldName, 'short', 'pattern');
+    formHelper.expectValidChange(fieldName, 'thisIsCorrect');
+    formHelper.expectErrorChange(fieldName, '##?badChars?##', 'pattern');
+    formHelper.expectErrorChange(
+      fieldName,
+      'thisUsernameIsWayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyTooBig',
+      'pattern'
+    );
+  }
+
+  static validatePassword(formHelper: FormHelper, fieldName: string) {
+    formHelper.expectErrorChange(fieldName, 'short', 'pattern');
+    formHelper.expectValidChange(fieldName, 'thisIsCorrect');
+    formHelper.expectErrorChange(fieldName, '##?badChars?##', 'pattern');
+    formHelper.expectErrorChange(fieldName, 'thisPasswordIsWayTooBig', 'pattern');
+  }
+}
+
+export class Mocks {
+  static getCrushNode(
+    name: string,
+    id: number,
+    type: string,
+    type_id: number,
+    children?: number[],
+    device_class?: string
+  ): CrushNode {
+    return { name, type, type_id, id, children, device_class };
+  }
+
+  /**
+   * Create the following test crush map:
+   * > default
+   * --> ssd-host
+   * ----> 3x osd with ssd
+   * --> mix-host
+   * ----> hdd-rack
+   * ------> 2x osd-rack with hdd
+   * ----> ssd-rack
+   * ------> 2x osd-rack with ssd
+   */
+  static getCrushMap(): CrushNode[] {
+    return [
+      // Root node
+      this.getCrushNode('default', -1, 'root', 11, [-2, -3]),
+      // SSD host
+      this.getCrushNode('ssd-host', -2, 'host', 1, [1, 0, 2]),
+      this.getCrushNode('osd.0', 0, 'osd', 0, undefined, 'ssd'),
+      this.getCrushNode('osd.1', 1, 'osd', 0, undefined, 'ssd'),
+      this.getCrushNode('osd.2', 2, 'osd', 0, undefined, 'ssd'),
+      // SSD and HDD mixed devices host
+      this.getCrushNode('mix-host', -3, 'host', 1, [-4, -5]),
+      // HDD rack
+      this.getCrushNode('hdd-rack', -4, 'rack', 3, [3, 4]),
+      this.getCrushNode('osd2.0', 3, 'osd-rack', 0, undefined, 'hdd'),
+      this.getCrushNode('osd2.1', 4, 'osd-rack', 0, undefined, 'hdd'),
+      // SSD rack
+      this.getCrushNode('ssd-rack', -5, 'rack', 3, [5, 6]),
+      this.getCrushNode('osd3.0', 5, 'osd-rack', 0, undefined, 'ssd'),
+      this.getCrushNode('osd3.1', 6, 'osd-rack', 0, undefined, 'ssd')
+    ];
+  }
+
+  /**
+   * Generates an simple crush map with multiple hosts that have OSDs with either ssd or hdd OSDs.
+   * Hosts with zero or even numbers at the end have SSD OSDs the other hosts have hdd OSDs.
+   *
+   * Host names follow the following naming convention:
+   * host.$index
+   * $index represents a number count started at 0 (like an index within an array) (same for OSDs)
+   *
+   * OSD names follow the following naming convention:
+   * osd.$hostIndex.$osdIndex
+   *
+   * The following crush map will be generated with the set defaults:
+   * > default
+   * --> host.0 (has only ssd OSDs)
+   * ----> osd.0.0
+   * ----> osd.0.1
+   * ----> osd.0.2
+   * ----> osd.0.3
+   * --> host.1 (has only hdd OSDs)
+   * ----> osd.1.0
+   * ----> osd.1.1
+   * ----> osd.1.2
+   * ----> osd.1.3
+   */
+  static generateSimpleCrushMap(hosts: number = 2, osds: number = 4): CrushNode[] {
+    const nodes = [];
+    const createOsdLeafs = (hostSuffix: number): number[] => {
+      let osdId = 0;
+      const osdIds = [];
+      const osdsInUse = hostSuffix * osds;
+      for (let o = 0; o < osds; o++) {
+        osdIds.push(osdId);
+        nodes.push(
+          this.getCrushNode(
+            `osd.${hostSuffix}.${osdId}`,
+            osdId + osdsInUse,
+            'osd',
+            0,
+            undefined,
+            hostSuffix % 2 === 0 ? 'ssd' : 'hdd'
+          )
+        );
+        osdId++;
+      }
+      return osdIds;
+    };
+    const createHostBuckets = (): number[] => {
+      let hostId = -2;
+      const hostIds = [];
+      for (let h = 0; h < hosts; h++) {
+        const hostSuffix = hostId * -1 - 2;
+        hostIds.push(hostId);
+        nodes.push(
+          this.getCrushNode(`host.${hostSuffix}`, hostId, 'host', 1, createOsdLeafs(hostSuffix))
+        );
+        hostId--;
+      }
+      return hostIds;
+    };
+    nodes.push(this.getCrushNode('default', -1, 'root', 11, createHostBuckets()));
+    return nodes;
+  }
+
+  static getCrushRuleConfig(
+    name: string,
+    root: string,
+    failure_domain: string,
+    device_class?: string
+  ): CrushRuleConfig {
+    return {
+      name,
+      root,
+      failure_domain,
+      device_class
+    };
+  }
+
+  static getCrushRule({
+    id = 0,
+    name = 'somePoolName',
+    min = 1,
+    max = 10,
+    type = 'replicated',
+    failureDomain = 'osd',
+    itemName = 'default' // This string also sets the device type - "default~ssd" <- ssd usage only
+  }: {
+    max?: number;
+    min?: number;
+    id?: number;
+    name?: string;
+    type?: string;
+    failureDomain?: string;
+    itemName?: string;
+  }): CrushRule {
+    const typeNumber = type === 'erasure' ? 3 : 1;
+    const rule = new CrushRule();
+    rule.max_size = max;
+    rule.min_size = min;
+    rule.rule_id = id;
+    rule.ruleset = typeNumber;
+    rule.rule_name = name;
+    rule.steps = [
+      {
+        item_name: itemName,
+        item: -1,
+        op: 'take'
+      },
+      {
+        num: 0,
+        type: failureDomain,
+        op: 'choose_firstn'
+      },
+      {
+        op: 'emit'
+      }
+    ];
+    return rule;
+  }
+
+  static getInventoryDevice(
+    hostname: string,
+    uid: string,
+    path = 'sda',
+    available = false
+  ): InventoryDevice {
+    return {
+      hostname,
+      uid,
+      path,
+      available,
+      sys_api: {
+        vendor: 'AAA',
+        model: 'aaa',
+        size: 1024,
+        rotational: 'false',
+        human_readable_size: '1 KB'
+      },
+      rejected_reasons: [''],
+      device_id: 'AAA-aaa-id0',
+      human_readable_type: 'nvme/ssd',
+      osd_ids: []
+    };
+  }
+}
+
+export class TabHelper {
+  static getNgbNav(fixture: ComponentFixture<any>) {
+    const debugElem: DebugElement = fixture.debugElement;
+    return debugElem.query(By.directive(NgbNav)).injector.get(NgbNav);
+  }
+
+  static getNgbNavItems(fixture: ComponentFixture<any>) {
+    const debugElems = this.getNgbNavItemsDebugElems(fixture);
+    return debugElems.map((de) => de.injector.get(NgbNavItem));
+  }
+
+  static getTextContents(fixture: ComponentFixture<any>) {
+    const debugElems = this.getNgbNavItemsDebugElems(fixture);
+    return debugElems.map((de) => de.nativeElement.textContent);
+  }
+
+  private static getNgbNavItemsDebugElems(fixture: ComponentFixture<any>) {
+    const debugElem: DebugElement = fixture.debugElement;
+    return debugElem.queryAll(By.directive(NgbNavItem));
+  }
 }

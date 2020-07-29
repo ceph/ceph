@@ -94,6 +94,21 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "pg_autoscaler",
       "telemetry",
     }
+  },
+  {
+    CEPH_RELEASE_PACIFIC, {
+      "crash",
+      "status",
+      "progress",
+      "balancer",
+      "devicehealth",
+      "orchestrator",
+      "rbd_support",
+      "osd_support",
+      "volumes",
+      "pg_autoscaler",
+      "telemetry",
+    }
   }
 };
 
@@ -816,6 +831,15 @@ void MgrMonitor::tick()
     propose = true;
   }
 
+  // obsolete modules?
+  if (mon->monmap->min_mon_release >= ceph_release_t::octopus &&
+      pending_map.module_enabled("orchestrator_cli")) {
+    dout(10) << " disabling obsolete/renamed 'orchestrator_cli'" << dendl;
+    // we don't need to enable 'orchestrator' because it's now always-on
+    pending_map.modules.erase("orchestrator_cli");
+    propose = true;
+  }
+
   if (propose) {
     propose_pending();
   }
@@ -1184,8 +1208,8 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = 0;
       goto out;
     }
-    if (!pending_map.any_supports_module(module)) {
-      ss << "module '" << module << "' does not exist";
+    if (!pending_map.modules.count(module)) {
+      ss << "module '" << module << "' is not enabled";
     }
     pending_map.modules.erase(module);
   } else {

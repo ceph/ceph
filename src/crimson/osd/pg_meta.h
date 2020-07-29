@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <tuple>
 #include <seastar/core/future.hh>
 #include "osd/osd_types.h"
 
@@ -18,5 +19,5 @@ class PGMeta
 public:
   PGMeta(crimson::os::FuturizedStore *store, spg_t pgid);
   seastar::future<epoch_t> get_epoch();
-  seastar::future<pg_info_t, PastIntervals> load();
+  seastar::future<std::tuple<pg_info_t, PastIntervals>> load();
 };

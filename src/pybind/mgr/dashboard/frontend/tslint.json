@@ -7,9 +7,12 @@
     "class-name": true,
     "comment-format": [true, "check-space"],
     "curly": true,
+    "deprecation": {
+      "severity": "error"
+    },
     "eofline": true,
     "forin": true,
-    "import-blacklist": [true, "rxjs/Rx", "ngx-bootstrap"],
+    "import-blacklist": [true, "rxjs/Rx", {"@angular/core/testing": ["async"]}],
     "import-spacing": true,
     "indent": [true, "spaces"],
     "interface-over-type-literal": true,
@@ -27,7 +30,8 @@
     "no-construct": true,
     "no-debugger": true,
     "no-duplicate-super": true,
-    "no-empty": false,
+    "no-duplicate-imports": [true, { "allow-namespace-imports": true }],
+    "no-empty": [true, "allow-empty-catch"],
     "no-empty-interface": true,
     "no-eval": true,
     "no-inferrable-types": [true, "ignore-params"],
@@ -40,14 +44,12 @@
     "no-trailing-whitespace": true,
     "no-unnecessary-initializer": true,
     "no-unused-expression": true,
-    "no-use-before-declare": true,
     "no-var-keyword": true,
     "object-literal-sort-keys": false,
     "one-line": [true, "check-open-brace", "check-catch", "check-else", "check-whitespace"],
     "prefer-const": true,
-    "quotemark": [true, "single", "avoid-escape"],
+    "quotemark": [true, "single"],
     "radix": true,
-    "semicolon": [true, "always"],
     "triple-equals": [true, "allow-null-check"],
     "typedef-whitespace": [
       true,
@@ -84,7 +86,29 @@
     "directive-class-suffix": true,
     "no-forward-ref": true,
     "no-output-native": true,
-    "ordered-imports": true
+    "ordered-imports": [
+      true,
+      {
+        "grouped-imports": true,
+        "groups": [
+          {
+            "name": "angular",
+            "match": "^@angular",
+            "order": 1
+          },
+          {
+            "name": "relative dir",
+            "match": "^([.]|src/).*",
+            "order": 3
+          },
+          {
+            "name": "node_modules",
+            "match": ".*",
+            "order": 2
+          }
+        ]
+      }
+    ]
   },
   "jsRules": { "no-empty": true }
 }

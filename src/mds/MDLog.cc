@@ -554,8 +554,6 @@ void MDLog::_prepare_new_segment()
   logger->set(l_mdl_seg, segments.size());
 
   // Adjust to next stray dir
-  dout(10) << "Advancing to next stray directory on mds " << mds->get_nodeid() 
-	   << dendl;
   mds->mdcache->advance_stray();
 }
 

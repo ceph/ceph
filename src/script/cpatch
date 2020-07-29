@@ -1,0 +1,246 @@
+#!/bin/bash -e
+
+SCRIPT=$(readlink -f "$0")
+SCRIPTPATH=$(dirname "$SCRIPT")
+BUILDPATH=$(pwd)
+
+if [ ! -e Makefile ] || [ ! -e ../do_cmake.sh ]; then
+    echo "must run from cmake build dir"
+    exit 1
+fi
+
+base="quay.io/ceph-ci/ceph:master"
+target=""
+push=0
+strip=1
+
+py=0
+dashboard=0
+core=0
+cephfs=0
+rgw=0
+rbd=0
+all=1
+asroot=""
+
+usage() {
+    echo "usage: $SCRIPT [options]"
+    echo "  --base <image>       base container image [$base]"
+    echo "  --target <image>     target image (required)"
+    echo "  --push               push when done"
+    echo "  --strip              strip binaries"
+    echo "  --root-build         build image as root"
+    echo
+    echo "  --py                 python components (python-common, mgr)"
+    echo "  --dashboard          dashboard"
+    echo "  --core               mon, mgr, osd, mds, bins and libraries"
+    echo "  --rgw                radosgw, radosgw-admin"
+}
+
+while [ -n "$1" ]; do
+    case $1 in
+	--base)
+	    shift
+	    base="$1"
+	    ;;
+	--target | -t)
+	    shift
+	    target="$1"
+	    ;;
+	--nostrip)
+	    strip=0
+	    ;;
+	--root-build)
+	    asroot="sudo"
+	    ;;
+	-h | --help)
+	    usage
+	    exit 0
+	    ;;
+	--push)
+	    push=1
+	    ;;
+
+	--py)
+	    py=1
+	    all=0
+	    ;;
+	--dashboard)
+	    py=1
+	    dashboard=1
+	    all=0
+	    ;;
+	--core)
+	    core=1
+	    all=0
+	    rbd=1
+	    cephfs=1
+	    ;;
+	--rgw)
+	    rgw=1
+	    all=0
+	    ;;
+
+	*)
+	    echo "unrecognized option $1"
+	    exit 1
+	    ;;
+    esac
+    shift
+done
+
+if [ -z "$target" ]; then
+    echo "must specify --target <image>"
+    exit 1
+fi
+
+if [ -x /usr/bin/podman ]; then
+    runtime="podman"
+elif [ -x /usr/bin/docker ]; then
+    runtime="docker"
+else
+    echo "cannot find podman or docker in PATH"
+    exit 1
+fi
+
+TMP="$BUILDPATH/tmp.cpatch"
+if [ -d $TMP ]; then rm -rf $TMP ; fi
+mkdir -p $TMP
+
+if [ $all -eq 1 ]; then
+    echo "consider --py, --core, and/or --rgw for an abbreviated (faster) build."
+fi
+
+dockerfile="FROM $base"$'\n'
+
+if [ $py -eq 1 ] || [ $all -eq 1 ]; then
+    pushd ../src/pybind/mgr > /dev/null
+    find ./ -name "*.pyc" -exec rm -f {} \;
+    if [ $dashboard -eq 1 ] || [ $all -eq 1 ]; then
+	echo "py + dashboard"
+	exclude=""
+    else
+	echo "py"
+	# Exclude node_modules because it's the huge sources in
+	# dashboard/frontend
+	exclude="--exclude=node_modules"
+    fi
+    tar $exclude --exclude=tests --exclude-backups -cf $TMP/mgr_plugins.tar *
+    popd > /dev/null
+    dockerfile+=$'ADD mgr_plugins.tar /usr/share/ceph/mgr\n'
+
+    pushd ../src/python-common > /dev/null
+    find ./ -name "*.pyc" -exec rm -f {} \;
+    # Exclude node_modules because it's the huge sources in dashboard/frontend
+    tar --exclude=node_modules --exclude=tests --exclude-backups -cf $TMP/python_common.tar *
+    popd > /dev/null
+    dockerfile+=$'ADD python_common.tar /usr/lib/python3.6/site-packages\n'
+
+    pushd lib/cython_modules/lib.3
+    CYTHONLIBS="*.cpython-36m*.so"
+    mkdir -p $TMP/cythonlib
+    for f in $CYTHONLIBS; do cp $f $TMP/cythonlib ; done
+    [ $strip -eq 1 ] && strip $TMP/cythonlib/*
+    popd > /dev/null
+    dockerfile+=$'ADD cythonlib /usr/lib64/python3.6/site-packages\n'
+
+    # cephadm
+    pushd ../src/cephadm > /dev/null
+    cp cephadm $TMP/cephadm
+    dockerfile+=$'ADD cephadm /usr/sbin/cephadm\n'
+    popd > /dev/null
+fi
+
+if [ $core -eq 1 ] || [ $all -eq 1 ]; then
+    # binaries are annoying because the ceph version is embedded all over
+    # the place, so we have to include everything but the kitchen sink.
+    echo "core"
+
+    BINS="ceph-mgr ceph-mon ceph-osd rados"
+    mkdir -p $TMP/bin
+    for f in $BINS; do cp bin/$f $TMP/bin ; done
+    [ $strip -eq 1 ] && strip $TMP/bin/*
+    dockerfile+=$'ADD bin /usr/bin\n'
+
+    # We need ceph-common to support the binaries
+    # We need librados/rbd to support mgr modules
+    # that import the python bindings
+    LIBS="libceph-common.so.2 libceph-common.so librados.so.2 librados.so librados.so.2.0.0"
+    mkdir -p $TMP/lib
+    for f in $LIBS; do cp lib/$f $TMP/lib ; done
+    [ $strip -eq 1 ] && strip $TMP/lib/*
+    dockerfile+=$'ADD lib /usr/lib64\n'
+
+    ECLIBS="libec_*.so*"
+    mkdir -p $TMP/eclib
+    for f in lib/$ECLIBS; do cp $f $TMP/eclib ; done
+    [ $strip -eq 1 ] && strip $TMP/eclib/*
+    dockerfile+=$'ADD eclib /usr/lib64/ceph/erasure-code\n'
+
+    CLSLIBS="libcls_*.so*"
+    mkdir -p $TMP/clslib
+    for f in lib/$CLSLIBS; do cp $f $TMP/clslib ; done
+    [ $strip -eq 1 ] && strip $TMP/clslib/*
+    dockerfile+=$'ADD clslib /usr/lib64/rados-classes\n'
+
+    # by default locally built binaries assume /usr/local
+    dockerfile+=$'RUN rm -rf /usr/local/lib64 ; ln -s /usr/lib64 /usr/local ; ln -s /usr/share/ceph /usr/local/share\n'
+fi
+
+if [ $rgw -eq 1 ] || [ $all -eq 1 ]; then
+    echo "rgw"
+    RGW="radosgw radosgw-admin"
+    mkdir -p $TMP/rgw
+    for f in $RGW; do cp bin/$f $TMP/rgw ; done
+    [ $strip -eq 1 ] && strip $TMP/rgw/*
+    dockerfile+=$'ADD rgw /usr/bin\n'
+
+    RGWLIBS="libradosgw.so*"
+    mkdir -p $TMP/rgwlib
+    for f in lib/$RGWLIBS; do cp $f $TMP/rgwlib ; done
+    [ $strip -eq 1 ] && strip $TMP/rgwlib/*
+    dockerfile+=$'ADD rgwlib /usr/lib64\n'
+fi
+
+if [ $cephfs -eq 1 ] || [ $all -eq 1 ]; then
+    echo "cephfs"
+    FS="ceph-mds"
+    mkdir -p $TMP/fs
+    for f in $FS; do cp bin/$f $TMP/fs ; done
+    [ $strip -eq 1 ] && strip $TMP/fs/*
+    dockerfile+=$'ADD fs /usr/bin\n'
+
+    FSLIBS="libcephfs.so*"
+    mkdir -p $TMP/fslib
+    for f in lib/$FSLIBS; do cp $f $TMP/fslib ; done
+    [ $strip -eq 1 ] && strip $TMP/fslib/*
+    dockerfile+=$'ADD fslib /usr/lib64\n'
+fi
+
+if [ $rbd -eq 1 ] || [ $all -eq 1 ]; then
+    echo "rbd"
+    RBD="rbd rbd-mirror"
+    mkdir -p $TMP/rbd
+    for f in $RBD; do cp bin/$f $TMP/rbd ; done
+    [ $strip -eq 1 ] && strip $TMP/rbd/*
+    dockerfile+=$'ADD rbd /usr/bin\n'
+
+    RBDLIBS="librbd.so*"
+    mkdir -p $TMP/rbdlib
+    for f in lib/$RBDLIBS; do cp $f $TMP/rbdlib ; done
+    [ $strip -eq 1 ] && strip $TMP/rbdlib/*
+    dockerfile+=$'ADD rbdlib /usr/lib64\n'
+fi
+
+echo "build"
+pushd $TMP > /dev/null
+echo "$dockerfile" > Dockerfile
+$asroot $runtime build -t $target .
+popd > /dev/null
+
+if [ $push -eq 1 ]; then
+    echo "push"
+    $asroot $runtime push $target
+fi
+
+rm -r $TMP

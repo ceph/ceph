@@ -1,0 +1,59 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.chart-container {
+  cursor: pointer;
+  margin: auto;
+  overflow: visible;
+  position: absolute;
+}
+
+canvas {
+  user-select: none;
+}
+
+.chartjs-tooltip {
+  background: bd.$color-chart-tooltip-bg;
+  border-radius: 3px;
+  color: bd.$color-chat-tooltip-text;
+  font-family: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif !important;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+
+  transform: translate(-50%, 0);
+  transition: all 0.1s ease;
+
+  &.transform-left {
+    transform: translate(-10%, 0);
+
+    &::after {
+      left: 10%;
+    }
+  }
+
+  &.transform-right {
+    transform: translate(-90%, 0);
+
+    &::after {
+      left: 90%;
+    }
+  }
+}
+
+.chartjs-tooltip::after {
+  border-color: bd.$color-chart-tooltip-border transparent transparent transparent;
+  border-style: solid;
+  border-width: 5px;
+  content: ' ';
+  left: 50%;
+  margin-left: -5px;
+  position: absolute;
+  top: 100%; /* At the bottom of the tooltip */
+}
+
+::ng-deep .chartjs-tooltip-key {
+  display: inline-block;
+  height: 10px;
+  margin-right: 10px;
+  width: 10px;
+}

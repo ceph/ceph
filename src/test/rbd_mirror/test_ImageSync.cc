@@ -11,10 +11,11 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Io.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
@@ -35,10 +36,10 @@ int flush(librbd::ImageCtx *image_ctx) {
   C_SaferCond ctx;
   auto aio_comp = librbd::io::AioCompletion::create_and_start(
     &ctx, image_ctx, librbd::io::AIO_TYPE_FLUSH);
-  auto req = librbd::io::ImageDispatchSpec<>::create_flush_request(
-    *image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
+  auto req = librbd::io::ImageDispatchSpec<>::create_flush(
+    *image_ctx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+    librbd::io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
-  delete req;
   return ctx.wait();
 }
 
@@ -51,13 +52,13 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, uint64_t max_size)
 
     if (rand() % 4 == 0) {
       ASSERT_EQ((int)len,
-                image_ctx->io_work_queue->discard(
-                  off, len, image_ctx->discard_granularity_bytes));
+                librbd::api::Io<>::discard(
+                  *image_ctx, off, len, image_ctx->discard_granularity_bytes));
     } else {
       bufferlist bl;
       bl.append(std::string(len, '1'));
-      ASSERT_EQ((int)len, image_ctx->io_work_queue->write(off, len,
-                                                          std::move(bl), 0));
+      ASSERT_EQ((int)len, librbd::api::Io<>::write(
+                  *image_ctx, off, len, std::move(bl), 0));
     }
   }
 
@@ -79,11 +80,14 @@ public:
         cct, "rbd_mirror_concurrent_image_syncs");
 
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
-        m_local_io_ctx, m_threads->work_queue, nullptr, m_image_sync_throttler);
+      m_local_io_ctx, *m_threads->asio_engine, nullptr, m_image_sync_throttler);
     m_instance_watcher->handle_acquire_leader();
 
+    ContextWQ* context_wq;
+    librbd::Journal<>::get_work_queue(cct, &context_wq);
+
     m_remote_journaler = new ::journal::Journaler(
-      m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
+      context_wq, m_threads->timer, &m_threads->timer_lock,
       m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {}, nullptr);
 
     m_client_meta = {"image-id"};
@@ -175,11 +179,11 @@ TEST_F(TestImageSync, Simple) {
 
   for (uint64_t offset = 0; offset < m_remote_image_ctx->size;
        offset += object_size) {
-    ASSERT_LE(0, m_remote_image_ctx->io_work_queue->read(
-                   offset, object_size,
+    ASSERT_LE(0, librbd::api::Io<>::read(
+                   *m_remote_image_ctx, offset, object_size,
                    librbd::io::ReadResult{&read_remote_bl}, 0));
-    ASSERT_LE(0, m_local_image_ctx->io_work_queue->read(
-                   offset, object_size,
+    ASSERT_LE(0, librbd::api::Io<>::read(
+                   *m_local_image_ctx, offset, object_size,
                    librbd::io::ReadResult{&read_local_bl}, 0));
     ASSERT_TRUE(read_remote_bl.contents_equal(read_local_bl));
   }
@@ -194,9 +198,8 @@ TEST_F(TestImageSync, Resize) {
 
   bufferlist bl;
   bl.append(std::string(len, '1'));
-  ASSERT_EQ((int)len, m_remote_image_ctx->io_work_queue->write(off, len,
-                                                               std::move(bl),
-                                                               0));
+  ASSERT_EQ((int)len, librbd::api::Io<>::write(
+                        *m_remote_image_ctx, off, len, std::move(bl), 0));
   {
     std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
     ASSERT_EQ(0, flush(m_remote_image_ctx));
@@ -219,10 +222,12 @@ TEST_F(TestImageSync, Resize) {
   bufferlist read_local_bl;
   read_local_bl.append(std::string(len, '\0'));
 
-  ASSERT_LE(0, m_remote_image_ctx->io_work_queue->read(
-              off, len, librbd::io::ReadResult{&read_remote_bl}, 0));
-  ASSERT_LE(0, m_local_image_ctx->io_work_queue->read(
-              off, len, librbd::io::ReadResult{&read_local_bl}, 0));
+  ASSERT_LE(0, librbd::api::Io<>::read(
+              *m_remote_image_ctx, off, len,
+              librbd::io::ReadResult{&read_remote_bl}, 0));
+  ASSERT_LE(0, librbd::api::Io<>::read(
+              *m_local_image_ctx, off, len,
+              librbd::io::ReadResult{&read_local_bl}, 0));
 
   ASSERT_TRUE(read_remote_bl.contents_equal(read_local_bl));
 }
@@ -236,9 +241,8 @@ TEST_F(TestImageSync, Discard) {
 
   bufferlist bl;
   bl.append(std::string(len, '1'));
-  ASSERT_EQ((int)len, m_remote_image_ctx->io_work_queue->write(off, len,
-                                                               std::move(bl),
-                                                               0));
+  ASSERT_EQ((int)len, librbd::api::Io<>::write(
+              *m_remote_image_ctx, off, len, std::move(bl), 0));
   {
     std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
     ASSERT_EQ(0, flush(m_remote_image_ctx));
@@ -247,8 +251,9 @@ TEST_F(TestImageSync, Discard) {
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap", nullptr));
 
   ASSERT_EQ((int)len - 2,
-            m_remote_image_ctx->io_work_queue->discard(
-              off + 1, len - 2, m_remote_image_ctx->discard_granularity_bytes));
+            librbd::api::Io<>::discard(
+              *m_remote_image_ctx, off + 1, len - 2,
+              m_remote_image_ctx->discard_granularity_bytes));
   {
     std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
     ASSERT_EQ(0, flush(m_remote_image_ctx));
@@ -264,10 +269,12 @@ TEST_F(TestImageSync, Discard) {
   bufferlist read_local_bl;
   read_local_bl.append(std::string(object_size, '\0'));
 
-  ASSERT_LE(0, m_remote_image_ctx->io_work_queue->read(
-              off, len, librbd::io::ReadResult{&read_remote_bl}, 0));
-  ASSERT_LE(0, m_local_image_ctx->io_work_queue->read(
-              off, len, librbd::io::ReadResult{&read_local_bl}, 0));
+  ASSERT_LE(0, librbd::api::Io<>::read(
+              *m_remote_image_ctx, off, len,
+              librbd::io::ReadResult{&read_remote_bl}, 0));
+  ASSERT_LE(0, librbd::api::Io<>::read(
+              *m_local_image_ctx, off, len,
+              librbd::io::ReadResult{&read_local_bl}, 0));
 
   ASSERT_TRUE(read_remote_bl.contents_equal(read_local_bl));
 }
@@ -352,11 +359,11 @@ TEST_F(TestImageSync, SnapshotStress) {
     ASSERT_EQ(remote_size, local_size);
 
     for (uint64_t offset = 0; offset < remote_size; offset += object_size) {
-      ASSERT_LE(0, m_remote_image_ctx->io_work_queue->read(
-                     offset, object_size,
+      ASSERT_LE(0, librbd::api::Io<>::read(
+                     *m_remote_image_ctx, offset, object_size,
                      librbd::io::ReadResult{&read_remote_bl}, 0));
-      ASSERT_LE(0, m_local_image_ctx->io_work_queue->read(
-                     offset, object_size,
+      ASSERT_LE(0, librbd::api::Io<>::read(
+                     *m_local_image_ctx, offset, object_size,
                      librbd::io::ReadResult{&read_local_bl}, 0));
       ASSERT_TRUE(read_remote_bl.contents_equal(read_local_bl));
     }

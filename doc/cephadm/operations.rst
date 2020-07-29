@@ -141,6 +141,21 @@ You will then need to restart the mgr daemon to reload the configuration with::
 
   ceph mgr fail
 
+Configuring a different SSH user
+----------------------------------
+
+Cephadm must be able to log into all the Ceph cluster nodes as an user
+that has enough privileges to download container images, start containers
+and execute commands without prompting for a password. If you do not want
+to use the "root" user (default option in cephadm), you must provide
+cephadm the name of the user that is going to be used to perform all the
+cephadm operations. Use the command::
+
+  ceph cephadm set-user <user>
+
+Prior to running this the cluster ssh key needs to be added to this users
+authorized_keys file and non-root users must have passwordless sudo access.
+
 
 Customizing the SSH configuration
 ---------------------------------
@@ -193,6 +208,8 @@ Resume cephadm work with::
 
   ceph orch resume
 
+.. _cephadm-stray-host:
+
 CEPHADM_STRAY_HOST
 ------------------
 
@@ -215,6 +232,9 @@ managed by *cephadm*.
 You can also disable this warning entirely with::
 
   ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
+
+See :ref:`cephadm-fqdn` for more information about host names and
+domain names.
 
 CEPHADM_STRAY_DAEMON
 --------------------
@@ -254,3 +274,23 @@ You can remove a broken host from management with::
 You can disable this health warning with::
 
   ceph config set mgr mgr/cephadm/warn_on_failed_host_check false
+
+/etc/ceph/ceph.conf
+===================
+
+Cephadm uses a minimized ``ceph.conf`` that only contains 
+a minimal set of information to connect to the Ceph cluster.
+
+To update the configuration settings, use::
+
+  ceph config set ...
+
+
+To set up an initial configuration before calling
+`bootstrap`, create an initial ``ceph.conf`` file. For example::
+
+  cat <<EOF > /etc/ceph/ceph.conf
+  [global]
+  osd crush chooseleaf type = 0
+  EOF
+  cephadm bootstrap -c /root/ceph.conf ...

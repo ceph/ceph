@@ -1,13 +1,10 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { SharedModule } from '../../../shared/shared.module';
@@ -18,9 +15,13 @@ describe('CephfsClientsComponent', () => {
   let fixture: ComponentFixture<CephfsClientsComponent>;
 
   configureTestBed({
-    imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
-    declarations: [CephfsClientsComponent],
-    providers: i18nProviders
+    imports: [
+      BrowserAnimationsModule,
+      ToastrModule.forRoot(),
+      SharedModule,
+      HttpClientTestingModule
+    ],
+    declarations: [CephfsClientsComponent]
   });
 
   beforeEach(() => {

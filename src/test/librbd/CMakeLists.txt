@@ -51,7 +51,7 @@ set(unittest_librbd_srcs
   test_mock_TrashWatcher.cc
   test_mock_Watcher.cc
   cache/test_mock_WriteAroundObjectDispatch.cc
-  cache/test_mock_ParentImageCache.cc
+  cache/test_mock_ParentCacheObjectDispatch.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
   deep_copy/test_mock_ObjectCopyRequest.cc
@@ -73,7 +73,6 @@ set(unittest_librbd_srcs
   image/test_mock_ValidatePoolRequest.cc
   io/test_mock_CopyupRequest.cc
   io/test_mock_ImageRequest.cc
-  io/test_mock_ImageRequestWQ.cc
   io/test_mock_ObjectRequest.cc
   io/test_mock_SimpleSchedulerObjectDispatch.cc
   journal/test_mock_OpenRequest.cc
@@ -119,29 +118,32 @@ set(unittest_librbd_srcs
 if(WITH_RBD_RWL)
    set(unittest_librbd_srcs
      ${unittest_librbd_srcs}
-     cache/test_mock_ReplicatedWriteLog.cc)
+     cache/test_mock_ReplicatedWriteLog.cc
+     cache/rwl/test_WriteLogMap.cc)
 endif(WITH_RBD_RWL)
 
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
-target_link_libraries(unittest_librbd
-  cls_rbd
-  cls_rbd_client
-  cls_lock
-  cls_lock_client
-  journal
-  journal_test_mock
+add_dependencies(unittest_librbd
   cls_journal
-  cls_journal_client
-  rados_test_stub
-  librados
+  cls_lock
+  cls_rbd)
+target_link_libraries(unittest_librbd
   rbd_test
-  rbd_test_mock
   rbd_api
   rbd_internal
+  rbd_test_mock
+  journal
+  journal_test_mock
+  cls_rbd_client
+  cls_lock_client
+  cls_journal_client
   rbd_types
+  rados_test_stub
+  librados
+  ceph_immutable_object_cache_lib
   osdc
   ceph-common
   global
@@ -158,6 +160,7 @@ target_link_libraries(ceph_test_librbd
   journal
   cls_journal_client
   cls_rbd_client
+  libneorados
   librados
   ${UNITTEST_LIBS}
   radostest)

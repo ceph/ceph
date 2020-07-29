@@ -101,7 +101,7 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
 	if (b.get_epoch() > latest_ver) {
 	  dout(10) << __func__ << " using stashed monmap " << b.get_epoch()
 		   << " instead" << dendl;
-	  bl.claim(bl2);
+	  bl = std::move(bl2);
 	} else {
 	  dout(10) << __func__ << " ignoring stashed monmap " << b.get_epoch()
 		   << dendl;

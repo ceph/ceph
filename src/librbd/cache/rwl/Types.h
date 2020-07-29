@@ -27,6 +27,9 @@ enum {
   // Reed requests with hit and miss extents
   l_librbd_rwl_rd_part_hit_req,  // read ops
 
+  // Per SyncPoint's LogEntry number and write bytes distribution
+  l_librbd_rwl_syncpoint_hist,
+
   // All write requests
   l_librbd_rwl_wr_req,             // write requests
   l_librbd_rwl_wr_req_def,         // write requests deferred for resources
@@ -141,8 +144,15 @@ namespace librbd {
 namespace cache {
 namespace rwl {
 
+class ImageExtentBuf;
+typedef std::vector<ImageExtentBuf> ImageExtentBufs;
+
+const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 64;
+const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
+
 /* Limit work between sync points */
 const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
+const uint64_t MAX_BYTES_PER_SYNC_POINT = (1024 * 1024 * 8);
 
 const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
@@ -158,6 +168,10 @@ constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 const uint8_t RWL_POOL_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
+const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
+const double RETIRE_HIGH_WATER = 0.50;
+const double RETIRE_LOW_WATER = 0.40;
+const int RETIRE_BATCH_TIME_LIMIT_MS = 250;
 
 /* Defer a set of Contexts until destruct/exit. Used for deferring
  * work on a given thread until a required lock is dropped. */
@@ -201,6 +215,23 @@ struct WriteLogPmemEntry {
   BlockExtent block_extent();
   uint64_t get_offset_bytes();
   uint64_t get_write_bytes();
+  bool is_sync_point() {
+    return sync_point;
+  }
+  bool is_discard() {
+    return discard;
+  }
+  bool is_writesame() {
+    return writesame;
+  }
+  bool is_write() {
+    /* Log entry is a basic write */
+    return !is_sync_point() && !is_discard() && !is_writesame();
+  }
+  bool is_writer() {
+    /* Log entry is any type that writes data */
+    return is_write() || is_discard() || is_writesame();
+  }
   friend std::ostream& operator<<(std::ostream& os,
                                   const WriteLogPmemEntry &entry);
 };
@@ -253,6 +284,21 @@ public:
   io::Extent image_extent() {
     return image_extent(block_extent());
   }
+};
+
+io::Extent whole_volume_extent();
+
+BlockExtent block_extent(const io::Extent& image_extent);
+
+Context * override_ctx(int r, Context *ctx);
+
+class ImageExtentBuf : public io::Extent {
+public:
+  bufferlist m_bl;
+  ImageExtentBuf(io::Extent extent)
+    : io::Extent(extent) { }
+  ImageExtentBuf(io::Extent extent, bufferlist bl)
+    : io::Extent(extent), m_bl(bl) { }
 };
 
 } // namespace rwl

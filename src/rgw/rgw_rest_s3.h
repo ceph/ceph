@@ -6,9 +6,10 @@
 #define TIME_BUF_SIZE 128
 
 #include <mutex>
+#include <string_view>
 
-#include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
+#include <boost/crc.hpp> 
 
 #include "common/sstring.hh"
 #include "rgw_op.h"
@@ -42,10 +43,12 @@ protected:
   // just the status line altered.
   int custom_http_ret = 0;
   std::map<std::string, std::string> crypt_http_responses;
+  int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry);
 public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() override {}
 
+  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) override;
   int get_params() override;
   int send_response_data_error() override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
@@ -294,7 +297,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
 
   int get_policy();
   int get_tags();
-  void rebuild_key(string& key);
+  void rebuild_key(rgw::sal::RGWObject* obj);
 
   std::string get_current_filename() const override;
   std::string get_current_content_type() const override;
@@ -622,7 +625,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::RGWRadosStore *store, struct req_state *s, int default_formatter, bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
@@ -726,8 +729,12 @@ protected:
     return s->info.args.exists("legal-hold");
   }
 
+  bool is_select_op() const {
+    return s->info.args.exists("select-type");
+  }
+
   bool is_obj_update_op() const override {
-    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op();
+    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op() || is_select_op();
   }
   RGWOp *get_obj_op(bool get_data);
 
@@ -758,7 +765,8 @@ public:
 
   ~RGWRESTMgr_S3() override = default;
 
-  RGWHandler_REST *get_handler(struct req_state* s,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
@@ -873,6 +881,75 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
   return 0;
 }
 
+namespace s3selectEngine
+{
+class s3select;
+class csv_object;
+}
+
+class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
+{
+
+private:
+  std::unique_ptr<s3selectEngine::s3select> s3select_syntax;
+  std::string m_s3select_query;
+  std::string m_result;
+  std::unique_ptr<s3selectEngine::csv_object> m_s3_csv_object;
+  std::string m_column_delimiter;
+  std::string m_quot;
+  std::string m_row_delimiter;
+  std::string m_compression_type;
+  std::string m_escape_char;
+  std::unique_ptr<char[]>  m_buff_header;
+  std::string m_header_info;
+  std::string m_sql_query;
+
+public:
+  unsigned int chunk_number;
+
+  enum header_name_En
+  {
+    EVENT_TYPE,
+    CONTENT_TYPE,
+    MESSAGE_TYPE
+  };
+  static const char* header_name_str[3];
+
+  enum header_value_En
+  {
+    RECORDS,
+    OCTET_STREAM,
+    EVENT
+  };
+  static const char* header_value_str[3];
+
+  RGWSelectObj_ObjStore_S3();
+  virtual ~RGWSelectObj_ObjStore_S3();
+
+  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
+
+  virtual int get_params() override;
+
+private:
+  void encode_short(char* buff, uint16_t s, int& i);
+
+  void encode_int(char* buff, u_int32_t s, int& i);
+
+  int create_header_records(char* buff);
+
+  std::unique_ptr<boost::crc_32_type> crc32;
+
+  int create_message(char* buff, u_int32_t result_len, u_int32_t header_len);
+
+  int run_s3select(const char* query, const char* input, size_t input_length);
+
+  int extract_by_tag(std::string tag_name, std::string& result);
+
+  void convert_escape_seq(std::string& esc);
+
+  int handle_aws_cli_parameters(std::string& sql_query);
+};
+
 
 namespace rgw::auth::s3 {
 
@@ -891,9 +968,9 @@ public:
   public:
     virtual ~VersionAbstractor() {};
 
-    using access_key_id_t = boost::string_view;
-    using client_signature_t = boost::string_view;
-    using session_token_t = boost::string_view;
+    using access_key_id_t = std::string_view;
+    using client_signature_t = std::string_view;
+    using session_token_t = std::string_view;
     using server_signature_t = basic_sstring<char, uint16_t, SIGNATURE_MAX_SIZE>;
     using string_to_sign_t = std::string;
 
@@ -942,9 +1019,9 @@ protected:
    * the signature get_auth_data() of VersionAbstractor is too complicated.
    * Replace these thing with a simple, dedicated structure. */
   virtual result_t authenticate(const DoutPrefixProvider* dpp,
-                                const boost::string_view& access_key_id,
-                                const boost::string_view& signature,
-                                const boost::string_view& session_token,
+                                const std::string_view& access_key_id,
+                                const std::string_view& signature,
+                                const std::string_view& session_token,
                                 const string_to_sign_t& string_to_sign,
                                 const signature_factory_t& signature_factory,
                                 const completer_factory_t& completer_factory,
@@ -960,7 +1037,7 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
 
   virtual boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
-                           const boost::string_view& signedheaders,
+                           const std::string_view& signedheaders,
                            const bool using_qs) const;
 
   auth_data_t get_auth_data_v2(const req_state* s) const;
@@ -977,7 +1054,7 @@ public:
 class AWSGeneralBoto2Abstractor : public AWSGeneralAbstractor {
   boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
-                           const boost::string_view& signedheaders,
+                           const std::string_view& signedheaders,
                            const bool using_qs) const override;
 
 public:
@@ -1019,9 +1096,9 @@ protected:
   auth_info_t get_creds_info(const rgw::RGWToken& token) const noexcept;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,
@@ -1052,9 +1129,9 @@ class LocalEngine : public AWSEngine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
@@ -1088,13 +1165,13 @@ class STSEngine : public AWSEngine {
   acl_strategy_t get_acl_strategy() const { return nullptr; };
   auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
 
-  int get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
+  int get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
                         STS::SessionToken& token) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp, 
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,

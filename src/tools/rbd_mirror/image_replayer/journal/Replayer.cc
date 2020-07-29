@@ -5,9 +5,9 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/Replay.h"
 #include "journal/Journaler.h"
 #include "journal/JournalMetadataListener.h"
@@ -76,22 +76,6 @@ struct Replayer<I>::C_ReplayCommitted : public Context {
 };
 
 template <typename I>
-struct Replayer<I>::C_TrackedOp : public Context {
-  Replayer *replayer;
-  Context* ctx;
-
-  C_TrackedOp(Replayer* replayer, Context* ctx)
-    : replayer(replayer), ctx(ctx) {
-    replayer->m_in_flight_op_tracker.start_op();
-  }
-
-  void finish(int r) override {
-    ctx->complete(r);
-    replayer->m_in_flight_op_tracker.finish_op();
-  }
-};
-
-template <typename I>
 struct Replayer<I>::RemoteJournalerListener
   : public ::journal::JournalMetadataListener {
   Replayer* replayer;
@@ -99,9 +83,11 @@ struct Replayer<I>::RemoteJournalerListener
   RemoteJournalerListener(Replayer* replayer) : replayer(replayer) {}
 
   void handle_update(::journal::JournalMetadata*) override {
-    auto ctx = new C_TrackedOp(replayer, new LambdaContext([this](int r) {
-      replayer->handle_remote_journal_metadata_updated();
-    }));
+    auto ctx = new C_TrackedOp(
+      replayer->m_in_flight_op_tracker,
+      new LambdaContext([this](int r) {
+        replayer->handle_remote_journal_metadata_updated();
+      }));
     replayer->m_threads->work_queue->queue(ctx, 0);
   }
 };
@@ -193,27 +179,15 @@ template <typename I>
 void Replayer<I>::init(Context* on_finish) {
   dout(10) << dendl;
 
-  ceph_assert(m_local_journal == nullptr);
   {
     auto local_image_ctx = m_state_builder->local_image_ctx;
     std::shared_lock image_locker{local_image_ctx->image_lock};
     m_image_spec = util::compute_image_spec(local_image_ctx->md_ctx,
                                             local_image_ctx->name);
-    m_local_journal = local_image_ctx->journal;
   }
 
   ceph_assert(m_on_init_shutdown == nullptr);
   m_on_init_shutdown = on_finish;
-
-  if (m_local_journal == nullptr) {
-    std::unique_lock locker{m_lock};
-    m_state = STATE_COMPLETE;
-    m_state_builder->remote_journaler = nullptr;
-
-    handle_replay_complete(locker, -EINVAL, "error accessing local journal");
-    close_local_image();
-    return;
-  }
 
   init_remote_journaler();
 }
@@ -240,14 +214,14 @@ void Replayer<I>::shut_down(Context* on_finish) {
 
   cancel_delayed_preprocess_task();
   cancel_flush_local_replay_task();
-  shut_down_local_journal_replay();
+  wait_for_flush();
 }
 
 template <typename I>
 void Replayer<I>::flush(Context* on_finish) {
   dout(10) << dendl;
 
-  flush_local_replay(new C_TrackedOp(this, on_finish));
+  flush_local_replay(new C_TrackedOp(m_in_flight_op_tracker, on_finish));
 }
 
 template <typename I>
@@ -264,7 +238,7 @@ bool Replayer<I>::get_replay_status(std::string* description,
     return false;
   }
 
-  on_finish = new C_TrackedOp(this, on_finish);
+  on_finish = new C_TrackedOp(m_in_flight_op_tracker, on_finish);
   return m_replay_status_formatter->get_or_send_update(description,
                                                        on_finish);
 }
@@ -316,13 +290,28 @@ void Replayer<I>::handle_init_remote_journaler(int r) {
     return;
   }
 
-  start_external_replay();
+  start_external_replay(locker);
 }
 
 template <typename I>
-void Replayer<I>::start_external_replay() {
+void Replayer<I>::start_external_replay(std::unique_lock<ceph::mutex>& locker) {
   dout(10) << dendl;
 
+  auto local_image_ctx = m_state_builder->local_image_ctx;
+  std::shared_lock local_image_locker{local_image_ctx->image_lock};
+
+  ceph_assert(m_local_journal == nullptr);
+  m_local_journal = local_image_ctx->journal;
+  if (m_local_journal == nullptr) {
+    local_image_locker.unlock();
+
+    derr << "local image journal closed" << dendl;
+    handle_replay_complete(locker, -EINVAL, "error accessing local journal");
+    close_local_image();
+    return;
+  }
+
+  // safe to hold pointer to journal after external playback starts
   Context *start_ctx = create_context_callback<
     Replayer, &Replayer<I>::handle_start_external_replay>(this);
   m_local_journal->start_external_replay(&m_local_journal_replay, start_ctx);
@@ -350,28 +339,8 @@ void Replayer<I>::handle_start_external_replay(int r) {
 
   m_state = STATE_REPLAYING;
 
-  // listen for promotion and resync requests against local journal
-  m_local_journal_listener = new LocalJournalListener(this);
-  m_local_journal->add_listener(m_local_journal_listener);
-
-  // verify that the local image wasn't force-promoted and that a resync hasn't
-  // been requested now that we are listening for events
-  if (m_local_journal->is_tag_owner()) {
-    dout(10) << "local image force-promoted" << dendl;
-    handle_replay_complete(locker, 0, "force promoted");
-    return;
-  }
-
-  bool resync_requested = false;
-  r = m_local_journal->is_resync_requested(&resync_requested);
-  if (r < 0) {
-    dout(10) << "failed to determine resync state: " << cpp_strerror(r)
-             << dendl;
-    handle_replay_complete(locker, r, "error parsing resync state");
-    return;
-  } else if (resync_requested) {
-    dout(10) << "local image resync requested" << dendl;
-    handle_replay_complete(locker, 0, "resync requested");
+  // check for resync/promotion state after adding listener
+  if (!add_local_journal_listener(locker)) {
     return;
   }
 
@@ -391,6 +360,40 @@ void Replayer<I>::handle_start_external_replay(int r) {
                                                        poll_seconds);
 
   notify_status_updated();
+}
+
+template <typename I>
+bool Replayer<I>::add_local_journal_listener(
+    std::unique_lock<ceph::mutex>& locker) {
+  dout(10) << dendl;
+
+  // listen for promotion and resync requests against local journal
+  ceph_assert(m_local_journal_listener == nullptr);
+  m_local_journal_listener = new LocalJournalListener(this);
+  m_local_journal->add_listener(m_local_journal_listener);
+
+  // verify that the local image wasn't force-promoted and that a resync hasn't
+  // been requested now that we are listening for events
+  if (m_local_journal->is_tag_owner()) {
+    dout(10) << "local image force-promoted" << dendl;
+    handle_replay_complete(locker, 0, "force promoted");
+    return false;
+  }
+
+  bool resync_requested = false;
+  int r = m_local_journal->is_resync_requested(&resync_requested);
+  if (r < 0) {
+    dout(10) << "failed to determine resync state: " << cpp_strerror(r)
+             << dendl;
+    handle_replay_complete(locker, r, "error parsing resync state");
+    return false;
+  } else if (resync_requested) {
+    dout(10) << "local image resync requested" << dendl;
+    handle_replay_complete(locker, 0, "resync requested");
+    return false;
+  }
+
+  return true;
 }
 
 template <typename I>
@@ -419,14 +422,37 @@ bool Replayer<I>::notify_init_complete(std::unique_lock<ceph::mutex>& locker) {
 }
 
 template <typename I>
-void Replayer<I>::shut_down_local_journal_replay() {
+void Replayer<I>::wait_for_flush() {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  // ensure that we don't have two concurrent local journal replay shut downs
+  dout(10) << dendl;
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      Replayer<I>, &Replayer<I>::handle_wait_for_flush>(this));
+  m_flush_tracker.wait_for_ops(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_wait_for_flush(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  shut_down_local_journal_replay();
+}
+
+template <typename I>
+void Replayer<I>::shut_down_local_journal_replay() {
+  std::unique_lock locker{m_lock};
 
   if (m_local_journal_replay == nullptr) {
     wait_for_event_replay();
     return;
   }
 
+  // It's required to stop the local journal replay state machine prior to
+  // waiting for the events to complete. This is to ensure that IO is properly
+  // flushed (it might be batched), wait for any running ops to complete, and
+  // to cancel any ops waiting for their associated OnFinish events.
   dout(10) << dendl;
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_shut_down_local_journal_replay>(this);
@@ -813,6 +839,7 @@ void Replayer<I>::handle_replay_ready(
 template <typename I>
 void Replayer<I>::replay_flush() {
   dout(10) << dendl;
+  m_flush_tracker.start_op();
 
   // shut down the replay to flush all IO and ops and create a new
   // replayer to handle the new tag epoch
@@ -824,16 +851,38 @@ void Replayer<I>::replay_flush() {
 
 template <typename I>
 void Replayer<I>::handle_replay_flush_shut_down(int r) {
-  {
-    std::unique_lock locker{m_lock};
-    ceph_assert(m_local_journal != nullptr);
-    m_local_journal->stop_external_replay();
-    m_local_journal_replay = nullptr;
+  std::unique_lock locker{m_lock};
+  dout(10) << "r=" << r << dendl;
+
+  ceph_assert(m_local_journal != nullptr);
+  ceph_assert(m_local_journal_listener != nullptr);
+
+  // blocks if listener notification is in-progress
+  m_local_journal->remove_listener(m_local_journal_listener);
+  delete m_local_journal_listener;
+  m_local_journal_listener = nullptr;
+
+  m_local_journal->stop_external_replay();
+  m_local_journal_replay = nullptr;
+  m_local_journal.reset();
+
+  if (r < 0) {
+    locker.unlock();
+
+    handle_replay_flush(r);
+    return;
   }
 
-  dout(10) << "r=" << r << dendl;
-  if (r < 0) {
-    handle_replay_flush(r);
+  // journal might have been closed now that we stopped external replay
+  auto local_image_ctx = m_state_builder->local_image_ctx;
+  std::shared_lock local_image_locker{local_image_ctx->image_lock};
+  m_local_journal = local_image_ctx->journal;
+  if (m_local_journal == nullptr) {
+    local_image_locker.unlock();
+    locker.unlock();
+
+    derr << "local image journal closed" << dendl;
+    handle_replay_flush(-EINVAL);
     return;
   }
 
@@ -844,16 +893,26 @@ void Replayer<I>::handle_replay_flush_shut_down(int r) {
 
 template <typename I>
 void Replayer<I>::handle_replay_flush(int r) {
+  std::unique_lock locker{m_lock};
   dout(10) << "r=" << r << dendl;
+  m_flush_tracker.finish_op();
+
   if (r < 0) {
     derr << "replay flush encountered an error: " << cpp_strerror(r) << dendl;
-    handle_replay_complete(r, "replay flush encountered an error");
+    handle_replay_complete(locker, r, "replay flush encountered an error");
     m_event_replay_tracker.finish_op();
     return;
-  } else if (is_replay_complete()) {
+  } else if (is_replay_complete(locker)) {
     m_event_replay_tracker.finish_op();
     return;
   }
+
+  // check for resync/promotion state after adding listener
+  if (!add_local_journal_listener(locker)) {
+    m_event_replay_tracker.finish_op();
+    return;
+  }
+  locker.unlock();
 
   get_remote_tag();
 }
@@ -1071,6 +1130,8 @@ void Replayer<I>::handle_process_entry_ready(int r) {
     }
   }
 
+  m_replay_status_formatter->handle_entry_processed(m_replay_bytes);
+
   if (update_status) {
     unregister_perf_counters();
     register_perf_counters();
@@ -1134,7 +1195,7 @@ void Replayer<I>::notify_status_updated() {
 
   dout(10) << dendl;
 
-  auto ctx = new C_TrackedOp(this, new LambdaContext(
+  auto ctx = new C_TrackedOp(m_in_flight_op_tracker, new LambdaContext(
     [this](int) {
       m_replayer_listener->handle_notification();
     }));

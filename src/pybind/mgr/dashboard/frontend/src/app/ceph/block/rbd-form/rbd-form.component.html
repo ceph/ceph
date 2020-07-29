@@ -1,4 +1,5 @@
-<div class="cd-col-form">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="rbdForm"
         #formDir="ngForm"
         [formGroup]="rbdForm"
@@ -251,8 +252,8 @@
                   i18n>Advanced</legend>
 
           <div class="col-md-12">
-            <h3 class="cd-header"
-                i18n>Striping</h3>
+            <h4 class="cd-header"
+                i18n>Striping</h4>
 
             <!-- Object Size -->
             <div class="form-group row">
@@ -324,7 +325,7 @@
 
       </div>
       <div class="card-footer">
-        <div class="button-group text-right">
+        <div class="text-right">
           <cd-submit-button (submitAction)="submit()"
                             i18n="form action button|Example: Create Pool@@formActionButton"
                             [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>

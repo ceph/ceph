@@ -1,9 +1,10 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
@@ -21,14 +22,14 @@ describe('IscsiComponent', () => {
 
   const fakeService = {
     overview: () => {
-      return new Promise(function() {
+      return new Promise(function () {
         return;
       });
     }
   };
 
   configureTestBed({
-    imports: [SharedModule],
+    imports: [BrowserAnimationsModule, SharedModule],
     declarations: [IscsiComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
@@ -37,15 +38,14 @@ describe('IscsiComponent', () => {
       FormatterService,
       RelativeDatePipe,
       IscsiBackstorePipe,
-      { provide: IscsiService, useValue: fakeService },
-      i18nProviders
+      { provide: IscsiService, useValue: fakeService }
     ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiComponent);
     component = fixture.componentInstance;
-    iscsiService = TestBed.get(IscsiService);
+    iscsiService = TestBed.inject(IscsiService);
     fixture.detectChanges();
     tcmuiscsiData = {
       images: []

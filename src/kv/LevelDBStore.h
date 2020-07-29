@@ -177,9 +177,9 @@ public:
   int init(std::string option_str="") override;
 
   /// Opens underlying db
-  int open(std::ostream &out, const std::vector<ColumnFamily>& = {}) override;
+  int open(std::ostream &out, const std::string& cfs="") override;
   /// Creates underlying db if missing and opens it
-  int create_and_open(std::ostream &out, const std::vector<ColumnFamily>& = {}) override;
+  int create_and_open(std::ostream &out, const std::string& cfs="") override;
 
   void close() override;
 
@@ -402,7 +402,7 @@ err:
   }
 
 
-  WholeSpaceIterator get_wholespace_iterator() override {
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override {
     return std::make_shared<LevelDBWholeSpaceIteratorImpl>(
 	db->NewIterator(leveldb::ReadOptions()));
   }

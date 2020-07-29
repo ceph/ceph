@@ -4,6 +4,23 @@
   "newProjectRoot": "projects",
   "projects": {
     "ceph-dashboard": {
+      "i18n": {
+        "sourceLocale": { "code": "en", "baseHref": "" },
+        "locales": {
+          "cs": { "translation": "src/locale/messages.cs.xlf", "baseHref": "" },
+          "de": { "translation": "src/locale/messages.de-DE.xlf", "baseHref": "" },
+          "es": { "translation": "src/locale/messages.es-ES.xlf", "baseHref": "" },
+          "fr": { "translation": "src/locale/messages.fr-FR.xlf", "baseHref": "" },
+          "id": { "translation": "src/locale/messages.id-ID.xlf", "baseHref": "" },
+          "it": { "translation": "src/locale/messages.it-IT.xlf", "baseHref": "" },
+          "ja": { "translation": "src/locale/messages.ja-JP.xlf", "baseHref": "" },
+          "ko": { "translation": "src/locale/messages.ko-KR.xlf", "baseHref": "" },
+          "pl": { "translation": "src/locale/messages.pl-PL.xlf", "baseHref": "" },
+          "pt": { "translation": "src/locale/messages.pt-BR.xlf", "baseHref": "" },
+          "zh-Hans": { "translation": "src/locale/messages.zh-CN.xlf", "baseHref": "" },
+          "zh-Hant": { "translation": "src/locale/messages.zh-TW.xlf", "baseHref": "" }
+        }
+      },
       "root": "",
       "sourceRoot": "src",
       "projectType": "application",
@@ -11,8 +28,14 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "allowedCommonJsDependencies": [
+              "chart.js",
+              "core-js",
+              "file-saver",
+              "lodash"
+            ],
+            "i18nLocale": "en",
             "aot": true,
-            "i18nFormat": "xlf",
             "i18nMissingTranslation": "ignore",
             "outputPath": "dist",
             "index": "src/index.html",
@@ -35,22 +58,23 @@
             ],
             "styles": [
               "node_modules/ngx-toastr/toastr.css",
-              "node_modules/ngx-bootstrap/datepicker/bs-datepicker.css",
-              "src/styles.scss",
-              "src/styles/vendor.overrides.scss"
+              "src/styles.scss"
             ],
-            "scripts": [
-              "node_modules/chart.js/dist/Chart.bundle.js"
-            ],
+            "scripts": ["node_modules/chart.js/dist/Chart.bundle.js"],
             "stylePreprocessorOptions": {
               "includePaths": [
-                "src/styles",
                 "src"
               ]
             }
           },
           "configurations": {
             "production": {
+              "budgets": [
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "6kb"
+                }
+              ],
               "optimization": true,
               "outputHashing": "all",
               "sourceMap": false,
@@ -67,69 +91,43 @@
               ]
             },
             "cs": {
-              "outputPath": "dist/cs/",
-              "i18nFile": "src/locale/messages.cs.xlf",
-              "i18nLocale": "cs"
+              "localize": ["cs"]
             },
-            "de-DE": {
-              "outputPath": "dist/de-DE/",
-              "i18nFile": "src/locale/messages.de-DE.xlf",
-              "i18nLocale": "de-DE"
+            "de": {
+              "localize": ["de"]
             },
-            "en-US": {
-              "outputPath": "dist/en-US/",
-              "i18nFile": "src/locale/messages.en-US.xlf",
-              "i18nLocale": "en-US"
+            "en": {
+              "localize": ["en"]
             },
-            "es-ES": {
-              "outputPath": "dist/es-ES/",
-              "i18nFile": "src/locale/messages.es-ES.xlf",
-              "i18nLocale": "es-ES"
+            "es": {
+              "localize": ["es"]
             },
-            "fr-FR": {
-              "outputPath": "dist/fr-FR/",
-              "i18nFile": "src/locale/messages.fr-FR.xlf",
-              "i18nLocale": "fr-FR"
+            "fr": {
+              "localize": ["fr"]
             },
-            "id-ID": {
-              "outputPath": "dist/id-ID/",
-              "i18nFile": "src/locale/messages.id-ID.xlf",
-              "i18nLocale": "id-ID"
+            "id": {
+              "localize": ["id"]
             },
-            "it-IT": {
-              "outputPath": "dist/it-IT/",
-              "i18nFile": "src/locale/messages.it-IT.xlf",
-              "i18nLocale": "it-IT"
+            "it": {
+              "localize": ["it"]
             },
-            "ja-JP": {
-              "outputPath": "dist/ja-JP/",
-              "i18nFile": "src/locale/messages.ja-JP.xlf",
-              "i18nLocale": "ja-JP"
+            "ja": {
+              "localize": ["ja"]
             },
-            "ko-KR": {
-              "outputPath": "dist/ko-KR/",
-              "i18nFile": "src/locale/messages.ko-KR.xlf",
-              "i18nLocale": "ko-KR"
+            "ko": {
+              "localize": ["ko"]
             },
-            "pl-PL": {
-              "outputPath": "dist/pl-PL/",
-              "i18nFile": "src/locale/messages.pl-PL.xlf",
-              "i18nLocale": "pl-PL"
+            "pl": {
+              "localize": ["pl"]
             },
-            "pt-BR": {
-              "outputPath": "dist/pt-BR/",
-              "i18nFile": "src/locale/messages.pt-BR.xlf",
-              "i18nLocale": "pt-BR"
+            "pt": {
+              "localize": ["pt"]
             },
-            "zh-CN": {
-              "outputPath": "dist/zh-CN/",
-              "i18nFile": "src/locale/messages.zh-CN.xlf",
-              "i18nLocale": "zh-CN"
+            "zh-Hans": {
+              "localize": ["zh-Hans"]
             },
-            "zh-TW": {
-              "outputPath": "dist/zh-TW/",
-              "i18nFile": "src/locale/messages.zh-TW.xlf",
-              "i18nLocale": "zh-TW"
+            "zh-Hant": {
+              "localize": ["zh-Hant"]
             }
           }
         },
@@ -146,41 +144,41 @@
             "cs": {
               "browserTarget": "ceph-dashboard:build:cs"
             },
-            "de-DE": {
-              "browserTarget": "ceph-dashboard:build:de-DE"
+            "de": {
+              "browserTarget": "ceph-dashboard:build:de"
             },
-            "en-US": {
-              "browserTarget": "ceph-dashboard:build:en-US"
+            "en": {
+              "browserTarget": "ceph-dashboard:build:en"
             },
-            "es-ES": {
-              "browserTarget": "ceph-dashboard:build:es-ES"
+            "es": {
+              "browserTarget": "ceph-dashboard:build:es"
             },
-            "fr-FR": {
-              "browserTarget": "ceph-dashboard:build:fr-FR"
+            "fr": {
+              "browserTarget": "ceph-dashboard:build:fr"
             },
-            "id-ID": {
-              "browserTarget": "ceph-dashboard:build:id-ID"
+            "id": {
+              "browserTarget": "ceph-dashboard:build:id"
             },
-            "it-IT": {
-              "browserTarget": "ceph-dashboard:build:it-IT"
+            "it": {
+              "browserTarget": "ceph-dashboard:build:it"
             },
-            "ja-JP": {
-              "browserTarget": "ceph-dashboard:build:ja-JP"
+            "ja": {
+              "browserTarget": "ceph-dashboard:build:ja"
             },
-            "ko-KR": {
-              "browserTarget": "ceph-dashboard:build:ko-KR"
+            "ko": {
+              "browserTarget": "ceph-dashboard:build:ko"
             },
-            "pl-PL": {
-              "browserTarget": "ceph-dashboard:build:pl-PL"
+            "pl": {
+              "browserTarget": "ceph-dashboard:build:pl"
             },
-            "pt-BR": {
-              "browserTarget": "ceph-dashboard:build:pt-BR"
+            "pt": {
+              "browserTarget": "ceph-dashboard:build:pt"
             },
-            "zh-CN": {
-              "browserTarget": "ceph-dashboard:build:zh-CN"
+            "zh-Hans": {
+              "browserTarget": "ceph-dashboard:build:zh-Hans"
             },
-            "zh-TW": {
-              "browserTarget": "ceph-dashboard:build:zh-TW"
+            "zh-Hant": {
+              "browserTarget": "ceph-dashboard:build:zh-Hant"
             }
           }
         },
@@ -195,33 +193,8 @@
           "options": {
             "tsConfig": [
               "src/tsconfig.app.json",
-              "tsconfig.spec.json"
-            ],
-            "exclude": [
-              "**/node_modules/**"
-            ]
-          }
-        }
-      },
-      "cli": {}
-    },
-    "ceph-dashboard-e2e": {
-      "root": "",
-      "sourceRoot": "",
-      "projectType": "application",
-      "architect": {
-        "e2e": {
-          "builder": "@angular-devkit/build-angular:protractor",
-          "options": {
-            "protractorConfig": "./protractor.conf.js",
-            "devServerTarget": "ceph-dashboard:serve"
-          }
-        },
-        "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
-          "options": {
-            "tsConfig": [
-              "e2e/tsconfig.e2e.json"
+              "tsconfig.spec.json",
+              "cypress/tsconfig.json"
             ],
             "exclude": [
               "**/node_modules/**"
@@ -236,11 +209,13 @@
   "schematics": {
     "@schematics/angular:component": {
       "prefix": "cd",
-      "styleext": "scss"
+      "style": "scss"
     },
     "@schematics/angular:directive": {
       "prefix": "cd"
     }
   },
-  "cli": {}
+  "cli": {
+    "analytics": false
+  }
 }

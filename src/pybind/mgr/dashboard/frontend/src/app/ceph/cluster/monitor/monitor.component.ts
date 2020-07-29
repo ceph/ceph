@@ -1,6 +1,5 @@
 import { Component } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { MonitorService } from '../../../shared/api/monitor.service';
@@ -18,15 +17,15 @@ export class MonitorComponent {
 
   interval: any;
 
-  constructor(private monitorService: MonitorService, private i18n: I18n) {
+  constructor(private monitorService: MonitorService) {
     this.inQuorum = {
       columns: [
-        { prop: 'name', name: this.i18n('Name'), cellTransformation: CellTemplate.routerLink },
-        { prop: 'rank', name: this.i18n('Rank') },
-        { prop: 'public_addr', name: this.i18n('Public Address') },
+        { prop: 'name', name: $localize`Name`, cellTransformation: CellTemplate.routerLink },
+        { prop: 'rank', name: $localize`Rank` },
+        { prop: 'public_addr', name: $localize`Public Address` },
         {
           prop: 'cdOpenSessions',
-          name: this.i18n('Open Sessions'),
+          name: $localize`Open Sessions`,
           cellTransformation: CellTemplate.sparkline,
           comparator: (dataA: any, dataB: any) => {
             // We get the last value of time series to compare:
@@ -40,17 +39,15 @@ export class MonitorComponent {
             return lastValueA > lastValueB ? 1 : -1;
           }
         }
-      ],
-      data: []
+      ]
     };
 
     this.notInQuorum = {
       columns: [
-        { prop: 'name', name: this.i18n('Name'), cellTransformation: CellTemplate.routerLink },
-        { prop: 'rank', name: this.i18n('Rank') },
-        { prop: 'public_addr', name: this.i18n('Public Address') }
-      ],
-      data: []
+        { prop: 'name', name: $localize`Name`, cellTransformation: CellTemplate.routerLink },
+        { prop: 'rank', name: $localize`Rank` },
+        { prop: 'public_addr', name: $localize`Public Address` }
+      ]
     };
   }
 

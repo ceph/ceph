@@ -32,14 +32,15 @@ DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                     librados::snap_t dst_snap_id_start,
                                     bool flatten,
                                     const ObjectNumber &object_number,
-                                    ContextWQ *work_queue, SnapSeqs *snap_seqs,
-                                    ProgressContext *prog_ctx,
+                                    asio::ContextWQ *work_queue,
+                                    SnapSeqs *snap_seqs,
+                                    deep_copy::Handler *handler,
                                     Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_src_snap_id_start(src_snap_id_start),
     m_src_snap_id_end(src_snap_id_end), m_dst_snap_id_start(dst_snap_id_start),
     m_flatten(flatten), m_object_number(object_number),
-    m_work_queue(work_queue), m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx),
+    m_work_queue(work_queue), m_snap_seqs(snap_seqs), m_handler(handler),
     m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(ceph::make_mutex(unique_lock_name("DeepCopyRequest::m_lock", this))) {
 }
@@ -158,7 +159,7 @@ void DeepCopyRequest<I>::send_copy_image() {
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_image>(this);
   m_image_copy_request = ImageCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_src_snap_id_end,
-    m_dst_snap_id_start, m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx,
+    m_dst_snap_id_start, m_flatten, m_object_number, *m_snap_seqs, m_handler,
     ctx);
   m_image_copy_request->get();
   m_lock.unlock();

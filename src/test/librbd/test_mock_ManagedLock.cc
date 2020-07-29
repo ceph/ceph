@@ -27,11 +27,11 @@ struct Traits<MockManagedLockImageCtx> {
 }
 
 struct MockMockManagedLock : public ManagedLock<MockManagedLockImageCtx> {
-  MockMockManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  MockMockManagedLock(librados::IoCtx& ioctx, AsioEngine& asio_engine,
                  const std::string& oid, librbd::MockImageWatcher *watcher,
-                 managed_lock::Mode  mode, bool blacklist_on_break_lock, 
+                 managed_lock::Mode  mode, bool blacklist_on_break_lock,
                  uint32_t blacklist_expire_seconds)
-    : ManagedLock<MockManagedLockImageCtx>(ioctx, work_queue, oid, watcher, 
+    : ManagedLock<MockManagedLockImageCtx>(ioctx, asio_engine, oid, watcher,
       librbd::managed_lock::EXCLUSIVE, true, 0) {
   };
   virtual ~MockMockManagedLock() = default;
@@ -50,8 +50,8 @@ struct BaseRequest {
   Context *on_finish = nullptr;
 
   static T* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
-                   ContextWQ *work_queue, const std::string& oid,
-                   const std::string& cookie, Context *on_finish) {
+                   const std::string& oid, const std::string& cookie,
+                   Context *on_finish) {
     ceph_assert(!s_requests.empty());
     T* req = s_requests.front();
     req->on_finish = on_finish;
@@ -68,15 +68,17 @@ template<typename T>
 std::list<T *> BaseRequest<T>::s_requests;
 
 template <>
-struct AcquireRequest<MockManagedLockImageCtx> : public BaseRequest<AcquireRequest<MockManagedLockImageCtx> > {
+struct AcquireRequest<MockManagedLockImageCtx>
+  : public BaseRequest<AcquireRequest<MockManagedLockImageCtx> > {
   static AcquireRequest* create(librados::IoCtx& ioctx,
 				MockImageWatcher *watcher,
-                                ContextWQ *work_queue, const std::string& oid,
+                                AsioEngine& asio_engine,
+                                const std::string& oid,
                                 const std::string& cookie,
                                 bool exclusive, bool blacklist_on_break_lock,
                                 uint32_t blacklist_expire_seconds,
                                 Context *on_finish) {
-    return BaseRequest::create(ioctx, watcher, work_queue, oid, cookie, on_finish);
+    return BaseRequest::create(ioctx, watcher, oid, cookie, on_finish);
   }
 
   MOCK_METHOD0(send, void());
@@ -87,7 +89,7 @@ struct ReacquireRequest<MockManagedLockImageCtx> : public BaseRequest<ReacquireR
   static ReacquireRequest* create(librados::IoCtx &ioctx, const std::string& oid,
                                 const string& old_cookie, const std::string& new_cookie,
                                 bool exclusive, Context *on_finish) {
-    return BaseRequest::create(ioctx, nullptr, nullptr, oid, new_cookie,
+    return BaseRequest::create(ioctx, nullptr, oid, new_cookie,
                                on_finish);
   }
 
@@ -97,10 +99,10 @@ struct ReacquireRequest<MockManagedLockImageCtx> : public BaseRequest<ReacquireR
 template <>
 struct ReleaseRequest<MockManagedLockImageCtx> : public BaseRequest<ReleaseRequest<MockManagedLockImageCtx> > {
   static ReleaseRequest* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
-                                ContextWQ *work_queue, const std::string& oid,
+                                asio::ContextWQ *work_queue,
+                                const std::string& oid,
                                 const std::string& cookie, Context *on_finish) {
-    return BaseRequest::create(ioctx, watcher, work_queue, oid, cookie,
-                               on_finish);
+    return BaseRequest::create(ioctx, watcher, oid, cookie, on_finish);
   }
   MOCK_METHOD0(send, void());
 };
@@ -120,7 +122,8 @@ struct GetLockerRequest<MockManagedLockImageCtx> {
 
 template <>
 struct BreakRequest<MockManagedLockImageCtx> {
-  static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  static BreakRequest* create(librados::IoCtx& ioctx,
+                              AsioEngine& asio_engine,
                               const std::string& oid, const Locker &locker,
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
@@ -182,21 +185,21 @@ public:
   }
 
   void expect_acquire_lock(MockImageWatcher &watcher,
-                           ContextWQ *work_queue,
+                           asio::ContextWQ *work_queue,
                            MockAcquireRequest &acquire_request, int r) {
     expect_get_watch_handle(watcher);
     EXPECT_CALL(acquire_request, send())
                   .WillOnce(QueueRequest(&acquire_request, r, work_queue));
   }
 
-  void expect_release_lock(ContextWQ *work_queue,
+  void expect_release_lock(asio::ContextWQ *work_queue,
                            MockReleaseRequest &release_request, int r) {
     EXPECT_CALL(release_request, send())
                   .WillOnce(QueueRequest(&release_request, r, work_queue));
   }
 
   void expect_reacquire_lock(MockImageWatcher& watcher,
-                             ContextWQ *work_queue,
+                             asio::ContextWQ *work_queue,
                              MockReacquireRequest &mock_reacquire_request,
                              int r) {
     EXPECT_CALL(mock_reacquire_request, send())
@@ -205,10 +208,10 @@ public:
 
   void expect_flush_notifies(MockImageWatcher *mock_watcher) {
     EXPECT_CALL(*mock_watcher, flush(_))
-                  .WillOnce(CompleteContext(0, (ContextWQ *)nullptr));
+                  .WillOnce(CompleteContext(0, (asio::ContextWQ *)nullptr));
   }
 
-  void expect_post_reacquired_lock_handler(MockImageWatcher& watcher, 
+  void expect_post_reacquired_lock_handler(MockImageWatcher& watcher,
                         MockMockManagedLock &managed_lock, uint64_t &client_id) {
     expect_get_watch_handle(watcher);
     EXPECT_CALL(managed_lock, post_reacquire_lock_handler(_, _))
@@ -268,7 +271,7 @@ TEST_F(TestMockManagedLock, StateTransitions) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -299,7 +302,7 @@ TEST_F(TestMockManagedLock, AcquireLockLockedState) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -319,7 +322,7 @@ TEST_F(TestMockManagedLock, AcquireLockAlreadyLocked) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -337,7 +340,7 @@ TEST_F(TestMockManagedLock, AcquireLockBusy) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -355,7 +358,7 @@ TEST_F(TestMockManagedLock, AcquireLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -374,7 +377,7 @@ TEST_F(TestMockManagedLock, AcquireLockBlacklist) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -393,7 +396,7 @@ TEST_F(TestMockManagedLock, ReleaseLockUnlockedState) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -408,7 +411,7 @@ TEST_F(TestMockManagedLock, ReleaseLockBlacklist) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockMockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                    ictx->header_oid, mock_image_ctx.image_watcher,
                                    librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -430,7 +433,7 @@ TEST_F(TestMockManagedLock, ReleaseLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -456,7 +459,7 @@ TEST_F(TestMockManagedLock, ConcurrentRequests) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -513,7 +516,7 @@ TEST_F(TestMockManagedLock, ReacquireLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -541,7 +544,7 @@ TEST_F(TestMockManagedLock, AttemptReacquireBlacklistedLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -570,7 +573,7 @@ TEST_F(TestMockManagedLock, ReacquireBlacklistedLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -607,7 +610,7 @@ TEST_F(TestMockManagedLock, ReacquireLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -642,7 +645,7 @@ TEST_F(TestMockManagedLock, ReacquireWithSameCookie) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockMockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
@@ -672,7 +675,7 @@ TEST_F(TestMockManagedLock, ShutDownWhileWaiting) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockManagedLockImageCtx mock_image_ctx(*ictx);
-  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+  MockMockManagedLock managed_lock(ictx->md_ctx, *ictx->asio_engine,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
 

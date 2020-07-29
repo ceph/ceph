@@ -1,36 +1,44 @@
+@use './src/styles/defaults/bootstrap-defaults' as bd;
+
+.about-container {
+  background-color: bd.$color-secondary;
+  background-image: url('../../../../assets/ceph_background.gif');
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  color: bd.$color-solid-white;
+  text-shadow: 1px 1px bd.$color-secondary;
+}
+
 .product-versions {
   margin-top: 30px;
 }
+
 .product-versions strong {
   margin-right: 10px;
 }
+
 .modal-header {
-  border-bottom: none;
+  border-bottom: 0;
 }
+
+.modal-header .close {
+  color: bd.$color-solid-white;
+  font-size: 2em;
+}
+
 .modal-body {
   padding-left: 80px;
   padding-right: 80px;
 }
-.modal-footer {
-  border-top: none;
-}
-h2 {
-  font-size: 3em;
-}
-.ceph-logo {
-  width: 10%;
-}
-.list-unstyled li {
-  margin-top: 5px;
-}
-.modal-footer {
-  padding: 15px 80px 35px 80px;
-}
-.modal-body {
-  margin-top: 0;
-  padding-top: 0;
 
-  h2 {
-    margin-top: 0;
-  }
+.ceph-logo {
+  margin-bottom: 30px;
+  object-position: -20px 0;
+  width: 25%;
+}
+
+.modal-footer {
+  border-top: 0;
+  display: block;
+  padding: 15px 80px 35px;
 }

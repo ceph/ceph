@@ -69,6 +69,7 @@ static const std::string IMAGE_DATA_POOL("data-pool");
 static const std::string IMAGE_SPARSE_SIZE("sparse-size");
 static const std::string IMAGE_THICK_PROVISION("thick-provision");
 static const std::string IMAGE_FLATTEN("flatten");
+static const std::string IMAGE_MIRROR_IMAGE_MODE("mirror-image-mode");
 
 static const std::string JOURNAL_OBJECT_SIZE("journal-object-size");
 static const std::string JOURNAL_SPLAY_WIDTH("journal-splay-width");
@@ -78,12 +79,17 @@ static const std::string NO_PROGRESS("no-progress");
 static const std::string FORMAT("format");
 static const std::string PRETTY_FORMAT("pretty-format");
 static const std::string VERBOSE("verbose");
-static const std::string NO_ERROR("no-error");
+static const std::string NO_ERR("no-error");
 
 static const std::string LIMIT("limit");
 
+static const std::string SKIP_QUIESCE("skip-quiesce");
+static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
+
 static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR};
+  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
+  IGNORE_QUIESCE_ERROR
+};
 
 struct ImageSize {};
 struct ImageOrder {};
@@ -96,6 +102,8 @@ struct ImageFeatures {
 
   uint64_t features;
 };
+
+struct MirrorImageMode {};
 
 template <typename T>
 struct TypedValue {
@@ -184,6 +192,8 @@ void add_verbose_option(boost::program_options::options_description *opt);
 void add_no_error_option(boost::program_options::options_description *opt);
 
 void add_flatten_option(boost::program_options::options_description *opt);
+
+void add_snap_create_options(boost::program_options::options_description *opt);
 
 std::string get_short_features_help(bool append_suffix);
 std::string get_long_features_help();

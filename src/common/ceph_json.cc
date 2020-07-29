@@ -478,6 +478,34 @@ void decode_json_obj(utime_t& val, JSONObj *obj)
   }
 }
 
+void decode_json_obj(ceph::real_time& val, JSONObj *obj)
+{
+  const std::string& s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    using namespace std::chrono;
+    val = real_time{seconds(epoch) + nanoseconds(nsec)};
+  } else {
+    throw JSONDecoder::err("failed to decode real_time");
+  }
+}
+
+void decode_json_obj(ceph::coarse_real_time& val, JSONObj *obj)
+{
+  const std::string& s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    using namespace std::chrono;
+    val = coarse_real_time{seconds(epoch) + nanoseconds(nsec)};
+  } else {
+    throw JSONDecoder::err("failed to decode coarse_real_time");
+  }
+}
+
 void decode_json_obj(ceph_dir_layout& i, JSONObj *obj){
 
     unsigned tmp;
@@ -545,6 +573,16 @@ void encode_json(const char *name, long long val, Formatter *f)
 void encode_json(const char *name, const utime_t& val, Formatter *f)
 {
   val.gmtime(f->dump_stream(name));
+}
+
+void encode_json(const char *name, const ceph::real_time& val, Formatter *f)
+{
+  encode_json(name, utime_t{val}, f);
+}
+
+void encode_json(const char *name, const ceph::coarse_real_time& val, Formatter *f)
+{
+  encode_json(name, utime_t{val}, f);
 }
 
 void encode_json(const char *name, const bufferlist& bl, Formatter *f)

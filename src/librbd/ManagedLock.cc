@@ -2,6 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ManagedLock.h"
+#include "librbd/AsioEngine.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/Watcher.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/managed_lock/AcquireRequest.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
@@ -9,13 +13,10 @@
 #include "librbd/managed_lock/ReacquireRequest.h"
 #include "librbd/managed_lock/Types.h"
 #include "librbd/managed_lock/Utils.h"
-#include "librbd/Watcher.h"
-#include "librbd/ImageCtx.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"
-#include "common/WorkQueue.h"
 #include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -63,13 +64,14 @@ using managed_lock::util::decode_lock_cookie;
 using managed_lock::util::encode_lock_cookie;
 
 template <typename I>
-ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
+ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, AsioEngine& asio_engine,
                             const string& oid, Watcher *watcher, Mode mode,
                             bool blacklist_on_break_lock,
                             uint32_t blacklist_expire_seconds)
   : m_lock(ceph::make_mutex(unique_lock_name("librbd::ManagedLock<I>::m_lock", this))),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_work_queue(work_queue),
+    m_asio_engine(asio_engine),
+    m_work_queue(asio_engine.get_work_queue()),
     m_oid(oid),
     m_watcher(watcher),
     m_mode(mode),
@@ -267,7 +269,7 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
     } else {
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
-        m_ioctx, m_work_queue, m_oid, locker, m_mode == EXCLUSIVE,
+        m_ioctx, m_asio_engine, m_oid, locker, m_mode == EXCLUSIVE,
         m_blacklist_on_break_lock, m_blacklist_expire_seconds, force_break_lock,
         on_finish);
       req->send();
@@ -286,8 +288,8 @@ int ManagedLock<I>::assert_header_locked() {
   {
     std::lock_guard locker{m_lock};
     rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME,
-                                    (m_mode == EXCLUSIVE ? LOCK_EXCLUSIVE :
-                                                           LOCK_SHARED),
+                                    (m_mode == EXCLUSIVE ? ClsLockType::EXCLUSIVE :
+                                                           ClsLockType::SHARED),
                                     m_cookie,
                                     managed_lock::util::get_watcher_lock_tag());
   }
@@ -509,7 +511,7 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
 
   using managed_lock::AcquireRequest;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
-    m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie, m_mode == EXCLUSIVE,
+    m_ioctx, m_watcher, m_asio_engine, m_oid, m_cookie, m_mode == EXCLUSIVE,
     m_blacklist_on_break_lock, m_blacklist_expire_seconds,
     create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));

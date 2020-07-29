@@ -20,6 +20,11 @@ struct TaskFinisherSingleton {
   SafeTimer *m_safe_timer;
   Finisher *m_finisher;
 
+  static TaskFinisherSingleton& get_singleton(CephContext* cct) {
+    return cct->lookup_or_create_singleton_object<
+      TaskFinisherSingleton>("librbd::TaskFinisherSingleton", false, cct);
+  }
+
   explicit TaskFinisherSingleton(CephContext *cct) {
     m_safe_timer = new SafeTimer(cct, m_lock, false);
     m_safe_timer->init();
@@ -36,6 +41,10 @@ struct TaskFinisherSingleton {
     m_finisher->stop();
     delete m_finisher;
   }
+
+  void queue(Context* ctx, int r) {
+    m_finisher->queue(ctx, r);
+  }
 };
 
 
@@ -43,22 +52,23 @@ template <typename Task>
 class TaskFinisher {
 public:
   TaskFinisher(CephContext &cct) : m_cct(cct) {
-    auto& singleton =
-      cct.lookup_or_create_singleton_object<TaskFinisherSingleton>(
-	"librbd::TaskFinisher::m_safe_timer", false, &cct);
+    auto& singleton = TaskFinisherSingleton::get_singleton(&cct);
     m_lock = &singleton.m_lock;
     m_safe_timer = singleton.m_safe_timer;
     m_finisher = singleton.m_finisher;
   }
 
-  void cancel(const Task& task) {
+  bool cancel(const Task& task) {
     std::lock_guard l{*m_lock};
     typename TaskContexts::iterator it = m_task_contexts.find(task);
-    if (it != m_task_contexts.end()) {
-      delete it->second.first;
-      m_safe_timer->cancel_event(it->second.second);
-      m_task_contexts.erase(it);
+    if (it == m_task_contexts.end()) {
+      return false;
     }
+    delete it->second.first;
+    bool canceled = m_safe_timer->cancel_event(it->second.second);
+    ceph_assert(canceled);
+    m_task_contexts.erase(it);
+    return true;
   }
 
   void cancel_all(Context *comp) {
@@ -88,8 +98,22 @@ public:
     return true;
   }
 
-  void queue(Context *ctx) {
-    m_finisher->queue(ctx);
+  bool reschedule_event_after(const Task& task, double seconds) {
+    std::lock_guard l{*m_lock};
+    auto it = m_task_contexts.find(task);
+    if (it == m_task_contexts.end()) {
+      return false;
+    }
+    bool canceled = m_safe_timer->cancel_event(it->second.second);
+    ceph_assert(canceled);
+    auto timer_ctx = new C_Task(this, task);
+    it->second.second = timer_ctx;
+    m_safe_timer->add_event_after(seconds, timer_ctx);
+    return true;
+  }
+
+  void queue(Context *ctx, int r = 0) {
+    m_finisher->queue(ctx, r);
   }
 
   bool queue(const Task& task, Context *ctx) {

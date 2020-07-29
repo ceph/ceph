@@ -25,15 +25,12 @@
 #include <boost/intrusive/set.hpp>
 
 #include "include/function2.hpp"
+#include "include/compat.h"
+
+#include "common/detail/construct_suspended.h"
 
 namespace bi = boost::intrusive;
 namespace ceph {
-
-/// Newly constructed timer should be suspended at point of
-/// construction.
-
-struct construct_suspended_t { };
-constexpr construct_suspended_t construct_suspended { };
 
 // Compared to the SafeTimer this does fewer allocations (you
 // don't have to allocate a new Context every time you
@@ -145,6 +142,7 @@ class timer {
 public:
   timer() : suspended(false) {
     thread = std::thread(&timer::timer_thread, this);
+    ceph_pthread_setname(thread.native_handle(), "ceph_timer");
   }
 
   // Create a suspended timer, jobs will be executed in order when

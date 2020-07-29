@@ -57,7 +57,7 @@ cd build-doc
 if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
 fi
-$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
+$vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \
@@ -69,6 +69,10 @@ install -d -m0755 \
 mkdir -p $vdir/lib
 export LD_LIBRARY_PATH="$vdir/lib"
 export PYTHONPATH=$TOPDIR/src/pybind
+
+
+$vdir/bin/python $TOPDIR/doc/scripts/gen_mon_command_api.py > $TOPDIR/doc/api/mon_command_api.rst
+
 
 # FIXME(sileht): I dunno how to pass the include-dirs correctly with pip
 # for build_ext step, it should be:

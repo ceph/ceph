@@ -35,10 +35,10 @@
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
-#include "include/ceph_assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
@@ -47,6 +47,7 @@
 #include "byteorder.h"
 
 #include "common/convenience.h"
+#include "common/error_code.h"
 
 template<typename T, typename=void>
 struct denc_traits {
@@ -124,7 +125,7 @@ private:
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
     if (auto bl_delta = appender.bl.length() - bl_offset; bl_delta > 0) {
       ceph::bufferlist dump_bl;
-      appender.bl.copy(bl_offset + space_offset, bl_delta - space_offset, dump_bl);
+      appender.bl.begin(bl_offset + space_offset).copy(bl_delta - space_offset, dump_bl);
       const size_t space_len = space_size();
       dump_bl.append(appender.get_pos() - space_len, space_len);
       dump_bl.write_fd(fd);
@@ -1085,6 +1086,106 @@ struct denc_traits<
 				 _denc::pushback_details<std::vector<T, Ts...>>,
 				 T, Ts...> {};
 
+template<typename T, std::size_t N, typename ...Ts>
+struct denc_traits<
+  boost::container::small_vector<T, N, Ts...>,
+  typename std::enable_if_t<denc_traits<T>::supported>> {
+private:
+  using container = boost::container::small_vector<T, N, Ts...>;
+public:
+  using traits = denc_traits<T>;
+
+  static constexpr bool supported = true;
+  static constexpr bool featured = traits::featured;
+  static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = traits::need_contiguous;
+
+  template<typename U=T>
+  static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
+    p += sizeof(uint32_t);
+    if constexpr (traits::bounded) {
+      if (!s.empty()) {
+	const auto elem_num = s.size();
+	size_t elem_size = 0;
+	if constexpr (traits::featured) {
+	  denc(*s.begin(), elem_size, f);
+        } else {
+          denc(*s.begin(), elem_size);
+        }
+        p += elem_size * elem_num;
+      }
+    } else {
+      for (const T& e : s) {
+	if constexpr (traits::featured) {
+	  denc(e, p, f);
+	} else {
+	  denc(e, p);
+	}
+      }
+    }
+  }
+
+  template<typename U=T>
+  static void encode(const container& s,
+		     ceph::buffer::list::contiguous_appender& p,
+		     uint64_t f = 0) {
+    denc((uint32_t)s.size(), p);
+    if constexpr (traits::featured) {
+      encode_nohead(s, p, f);
+    } else {
+      encode_nohead(s, p);
+    }
+  }
+  static void decode(container& s, ceph::buffer::ptr::const_iterator& p,
+		     uint64_t f = 0) {
+    uint32_t num;
+    denc(num, p);
+    decode_nohead(num, s, p, f);
+  }
+  template<typename U=T>
+  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
+  decode(container& s, ceph::buffer::list::const_iterator& p) {
+    uint32_t num;
+    denc(num, p);
+    decode_nohead(num, s, p);
+  }
+
+  // nohead
+  static void encode_nohead(const container& s, ceph::buffer::list::contiguous_appender& p,
+			    uint64_t f = 0) {
+    for (const T& e : s) {
+      if constexpr (traits::featured) {
+        denc(e, p, f);
+      } else {
+        denc(e, p);
+      }
+    }
+  }
+  static void decode_nohead(size_t num, container& s,
+			    ceph::buffer::ptr::const_iterator& p,
+			    uint64_t f=0) {
+    s.clear();
+    s.reserve(num);
+    while (num--) {
+      T t;
+      denc(t, p, f);
+      s.push_back(std::move(t));
+    }
+  }
+  template<typename U=T>
+  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
+  decode_nohead(size_t num, container& s,
+		ceph::buffer::list::const_iterator& p) {
+    s.clear();
+    s.reserve(num);
+    while (num--) {
+      T t;
+      denc(t, p);
+      s.push_back(std::move(t));
+    }
+  }
+};
+
 namespace _denc {
   template<typename Container>
   struct setlike_details : public container_details_base<Container> {
@@ -1536,6 +1637,29 @@ struct denc_traits<std::nullopt_t> {
     }									\
   };
 
+// ----------------------------------------------------------------------
+// encoded_sizeof_wrapper
+
+namespace ceph {
+
+template <typename T, typename traits=denc_traits<T>>
+constexpr std::enable_if_t<traits::supported && traits::bounded, size_t>
+encoded_sizeof_bounded() {
+  size_t p = 0;
+  traits::bound_encode(T(), p);
+  return p;
+}
+
+template <typename T, typename traits=denc_traits<T>>
+std::enable_if_t<traits::supported, size_t>
+encoded_sizeof(const T &t) {
+  size_t p = 0;
+  traits::bound_encode(t, p);
+  return p;
+}
+
+} // namespace ceph
+
 
 // ----------------------------------------------------------------------
 // encode/decode wrappers
@@ -1713,7 +1837,9 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			   uint32_t *struct_len) {			\
     const char *pos = p.get_pos();					\
     char *end = *start_pos + *struct_len;				\
-    ceph_assert(pos <= end);							\
+    if (pos > end) {							\
+      throw ::ceph::buffer::malformed_input(__PRETTY_FUNCTION__);	\
+    }									\
     if (pos < end) {							\
       p += end - pos;							\
     }									\

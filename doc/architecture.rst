@@ -27,7 +27,9 @@ A Ceph Storage Cluster consists of two types of daemons:
 - :term:`Ceph Monitor`
 - :term:`Ceph OSD Daemon`
 
-.. ditaa::  +---------------+ +---------------+
+.. ditaa::
+
+            +---------------+ +---------------+
             |      OSDs     | |    Monitors   |
             +---------------+ +---------------+
 
@@ -56,7 +58,9 @@ comes through a :term:`Ceph Block Device`, :term:`Ceph Object Storage`, the
 file in a filesystem, which is stored on an :term:`Object Storage Device`. Ceph
 OSD Daemons handle the read/write operations on the storage disks.
 
-.. ditaa:: /-----\       +-----+       +-----+
+.. ditaa::
+
+           /-----\       +-----+       +-----+
            | obj |------>| {d} |------>| {s} |
            \-----/       +-----+       +-----+
    
@@ -70,7 +74,9 @@ attributes such as the file owner, created date, last modified date, and so
 forth.
 
 
-.. ditaa:: /------+------------------------------+----------------\
+.. ditaa::
+
+           /------+------------------------------+----------------\
            | ID   | Binary Data                  | Metadata       |
            +------+------------------------------+----------------+
            | 1234 | 0101010101010100110101010010 | name1 = value1 | 
@@ -229,7 +235,9 @@ the client and the monitor share a secret key.
 .. note:: The ``client.admin`` user must provide the user ID and 
    secret key to the user in a secure manner. 
 
-.. ditaa:: +---------+     +---------+
+.. ditaa::
+
+           +---------+     +---------+
            | Client  |     | Monitor |
            +---------+     +---------+
                 |  request to   |
@@ -252,7 +260,9 @@ user's secret key and transmits it back to the client. The client decrypts the
 ticket and uses it to sign requests to OSDs and metadata servers throughout the
 cluster.
 
-.. ditaa:: +---------+     +---------+
+.. ditaa::
+
+           +---------+     +---------+
            | Client  |     | Monitor |
            +---------+     +---------+
                 |  authenticate |
@@ -283,7 +293,9 @@ machine and the Ceph servers. Each message sent between a client and server,
 subsequent to the initial authentication, is signed using a ticket that the
 monitors, OSDs and metadata servers can verify with their shared secret.
 
-.. ditaa:: +---------+     +---------+     +-------+     +-------+
+.. ditaa::
+
+           +---------+     +---------+     +-------+     +-------+
            |  Client |     | Monitor |     |  MDS  |     |  OSD  |
            +---------+     +---------+     +-------+     +-------+
                 |  request to   |              |             |
@@ -370,13 +382,13 @@ ability to leverage this computing power leads to several major benefits:
    OSDs`_ and `Heartbeats`_ for additional details.
 
 #. **Data Scrubbing:** As part of maintaining data consistency and cleanliness, 
-   Ceph OSD Daemons can scrub objects within placement groups. That is, Ceph 
-   OSD Daemons can compare object metadata in one placement group with its 
-   replicas in placement groups stored on other OSDs. Scrubbing (usually 
-   performed daily) catches bugs or filesystem errors. Ceph OSD Daemons also 
-   perform deeper scrubbing by comparing data in objects bit-for-bit. Deep 
-   scrubbing (usually performed weekly) finds bad sectors on a drive that 
-   weren't apparent in a light scrub. See `Data Scrubbing`_ for details on 
+   Ceph OSD Daemons can scrub objects. That is, Ceph OSD Daemons can compare
+   their local objects metadata with its replicas stored on other OSDs. Scrubbing
+   happens on a per-Placement Group base. Scrubbing (usually performed daily)
+   catches mismatches in size and other metadata. Ceph OSD Daemons also perform deeper
+   scrubbing by comparing data in objects bit-for-bit with their checksums.
+   Deep scrubbing (usually performed weekly) finds bad sectors on a drive that
+   weren't apparent in a light scrub. See `Data Scrubbing`_ for details on
    configuring scrubbing.
 
 #. **Replication:** Like Ceph Clients, Ceph OSD Daemons use the CRUSH 
@@ -393,7 +405,8 @@ ability to leverage this computing power leads to several major benefits:
    and tertiary OSDs (as many OSDs as additional replicas), and responds to the
    client once it has confirmed the object was stored successfully.
 
-.. ditaa:: 
+.. ditaa::
+
              +----------+
              |  Client  |
              |          |
@@ -443,7 +456,8 @@ Ceph Clients retrieve a `Cluster Map`_ from a Ceph Monitor, and write objects to
 pools. The pool's ``size`` or number of replicas, the CRUSH rule and the
 number of placement groups determine how Ceph will place the data.
 
-.. ditaa:: 
+.. ditaa::
+
             +--------+  Retrieves  +---------------+
             | Client |------------>|  Cluster Map  |
             +--------+             +---------------+
@@ -488,7 +502,8 @@ rebalance dynamically when new Ceph OSD Daemons and the underlying OSD devices
 come online. The following diagram depicts how CRUSH maps objects to placement
 groups, and placement groups to OSDs.
 
-.. ditaa:: 
+.. ditaa::
+
            /-----\  /-----\  /-----\  /-----\  /-----\
            | obj |  | obj |  | obj |  | obj |  | obj |
            \-----/  \-----/  \-----/  \-----/  \-----/
@@ -614,7 +629,8 @@ and each OSD gets some added capacity, so there are no load spikes on the
 new OSD after rebalancing is complete.
 
 
-.. ditaa:: 
+.. ditaa::
+
            +--------+     +--------+
    Before  |  OSD 1 |     |  OSD 2 |
            +--------+     +--------+
@@ -685,6 +701,7 @@ name. Chunk 1 contains ``ABC`` and is stored on **OSD5** while chunk 4 contains
 
 
 .. ditaa::
+
                             +-------------------+
                        name |       NYAN        |
                             +-------------------+
@@ -739,6 +756,7 @@ three chunks are read: **OSD2** was the slowest and its chunk was not taken into
 account.
 
 .. ditaa::
+
 	                         +-------------------+
 	                    name |       NYAN        |
 	                         +-------------------+
@@ -804,6 +822,7 @@ version 1).
 
 
 .. ditaa::
+
      Primary OSD
     
    +-------------+
@@ -934,6 +953,7 @@ object can be removed: ``D1v1`` on **OSD 1**, ``D2v1`` on **OSD 2** and ``C1v1``
 on **OSD 3**.
 
 .. ditaa::
+
      Primary OSD
     
    +-------------+
@@ -972,6 +992,7 @@ to be available on all OSDs in the previous acting set ) is ``1,1`` and that
 will be the head of the new authoritative log.
 
 .. ditaa::
+
    +-------------+
    |    OSD 1    |
    |   (down)    |
@@ -1017,6 +1038,7 @@ the erasure coding library during scrubbing and stored on the new primary
 
 
 .. ditaa::
+
      Primary OSD
     
    +-------------+
@@ -1068,7 +1090,8 @@ tier. So the cache tier and the backing storage tier are completely transparent
 to Ceph clients.
 
 
-.. ditaa:: 
+.. ditaa::
+
            +-------------+
            | Ceph Client |
            +------+------+
@@ -1150,7 +1173,8 @@ Cluster. Ceph packages this functionality into the ``librados`` library so that
 you can create your own custom Ceph Clients. The following diagram depicts the
 basic architecture.
 
-.. ditaa::  
+.. ditaa::
+
             +---------------------------------+
             |  Ceph Storage Cluster Protocol  |
             |           (librados)            |
@@ -1193,7 +1217,9 @@ notification. This enables a client to use any object as a
 synchronization/communication channel.
 
 
-.. ditaa:: +----------+     +----------+     +----------+     +---------------+
+.. ditaa::
+
+           +----------+     +----------+     +----------+     +---------------+
            | Client 1 |     | Client 2 |     | Client 3 |     | OSD:Object ID |
            +----------+     +----------+     +----------+     +---------------+
                  |                |                |                  |
@@ -1269,7 +1295,8 @@ take maximum advantage of Ceph's ability to distribute data across placement
 groups, and consequently doesn't improve performance very much. The following
 diagram depicts the simplest form of striping:
 
-.. ditaa::              
+.. ditaa::
+
                         +---------------+
                         |  Client Data  |
                         |     Format    |
@@ -1327,7 +1354,8 @@ set (``object set 2`` in the following diagram), and begins writing to the first
 stripe (``stripe unit 16``) in the first object in the new object set (``object
 4`` in the diagram below).
 
-.. ditaa::                 
+.. ditaa::
+
                           +---------------+
                           |  Client Data  |
                           |     Format    |
@@ -1443,6 +1471,7 @@ and high availability. The following diagram depicts the high-level
 architecture. 
 
 .. ditaa::
+
             +--------------+  +----------------+  +-------------+
             | Block Device |  | Object Storage |  |   CephFS    |
             +--------------+  +----------------+  +-------------+            
@@ -1527,6 +1556,7 @@ Cluster. Ceph Clients mount a CephFS filesystem as a kernel object or as
 a Filesystem in User Space (FUSE).
 
 .. ditaa::
+
             +-----------------------+  +------------------------+
             | CephFS Kernel Object  |  |      CephFS FUSE       |
             +-----------------------+  +------------------------+            

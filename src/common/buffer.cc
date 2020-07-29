@@ -27,12 +27,14 @@
 #include "armor.h"
 #include "common/environment.h"
 #include "common/errno.h"
+#include "common/error_code.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
 #include "common/RWLock.h"
+#include "common/error_code.h"
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
@@ -74,21 +76,6 @@ static ceph::spinlock debug_lock;
   int buffer::get_missed_crc() {
     return buffer_missed_crc;
   }
-
-  const char * buffer::error::what() const throw () {
-    return "buffer::exception";
-  }
-  const char * buffer::bad_alloc::what() const throw () {
-    return "buffer::bad_alloc";
-  }
-  const char * buffer::end_of_buffer::what() const throw () {
-    return "buffer::end_of_buffer";
-  }
-  const char * buffer::malformed_input::what() const throw () {
-    return buf;
-  }
-  buffer::error_code::error_code(int error) :
-    buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
   /*
    * raw_combined is always placed within a single allocation along
@@ -206,7 +193,7 @@ static ceph::spinlock debug_lock;
     raw_hack_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       realdata = new char[len+align-1];
-      unsigned off = ((unsigned)realdata) & (align-1);
+      unsigned off = ((uintptr_t)realdata) & (align-1);
       if (off)
 	data = realdata + align - off;
       else
@@ -214,7 +201,7 @@ static ceph::spinlock debug_lock;
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      ceph_assert(((unsigned)data & (align-1)) == 0);
+      ceph_assert(((uintptr_t)data & (align-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
@@ -292,12 +279,17 @@ static ceph::spinlock debug_lock;
 
   ceph::unique_leakable_ptr<buffer::raw> buffer::copy(const char *c, unsigned len) {
     auto r = buffer::create_aligned(len, sizeof(size_t));
-    memcpy(r->data, c, len);
+    memcpy(r->get_data(), c, len);
     return r;
   }
 
   ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len) {
     return buffer::create_aligned(len, sizeof(size_t));
+  }
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len, char c) {
+    auto ret = buffer::create_aligned(len, sizeof(size_t));
+    memset(ret->get_data(), c, len);
+    return ret;
   }
   ceph::unique_leakable_ptr<buffer::raw>
   buffer::create_in_mempool(unsigned len, int mempool) {
@@ -367,7 +359,7 @@ static ceph::spinlock debug_lock;
   buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
     : _raw(r.release()),
       _off(0),
-      _len(_raw->len)
+      _len(_raw->get_len())
   {
     _raw->nref.store(1, std::memory_order_release);
     bdout << "ptr " << this << " get " << _raw << bendl;
@@ -465,21 +457,29 @@ static ceph::spinlock debug_lock;
 
   void buffer::ptr::release()
   {
-    if (_raw) {
-      bdout << "ptr " << this << " release " << _raw << bendl;
-      const bool last_one = (1 == _raw->nref.load(std::memory_order_acquire));
-      if (likely(last_one) || --_raw->nref == 0) {
-        // BE CAREFUL: this is called also for hypercombined ptr_node. After
-        // freeing underlying raw, `*this` can become inaccessible as well!
-        const auto* delete_raw = _raw;
-        _raw = nullptr;
-	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-        ANNOTATE_HAPPENS_AFTER(&delete_raw->nref);
-        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&delete_raw->nref);
-	delete delete_raw;  // dealloc old (if any)
+    // BE CAREFUL: this is called also for hypercombined ptr_node. After
+    // freeing underlying raw, `*this` can become inaccessible as well!
+    //
+    // cache the pointer to avoid unncecessary reloads and repeated
+    // checks.
+    if (auto* const cached_raw = std::exchange(_raw, nullptr);
+	cached_raw) {
+      bdout << "ptr " << this << " release " << cached_raw << bendl;
+      // optimize the common case where a particular `buffer::raw` has
+      // only a single reference. Altogether with initializing `nref` of
+      // freshly fabricated one with `1` through the std::atomic's ctor
+      // (which doesn't impose a memory barrier on the strongly-ordered
+      // x86), this allows to avoid all atomical operations in such case.
+      const bool last_one = \
+        (1 == cached_raw->nref.load(std::memory_order_acquire));
+      if (likely(last_one) || --cached_raw->nref == 0) {
+	bdout << "deleting raw " << static_cast<void*>(cached_raw)
+	      << " len " << cached_raw->get_len() << bendl;
+	ANNOTATE_HAPPENS_AFTER(&cached_raw->nref);
+	ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&cached_raw->nref);
+	delete cached_raw;  // dealloc old (if any)
       } else {
-        ANNOTATE_HAPPENS_BEFORE(&_raw->nref);
-        _raw = nullptr;
+	ANNOTATE_HAPPENS_BEFORE(&cached_raw->nref);
       }
     }
   }
@@ -521,10 +521,7 @@ static ceph::spinlock debug_lock;
 
   unsigned buffer::ptr::unused_tail_length() const
   {
-    if (_raw)
-      return _raw->len - (_off+_len);
-    else
-      return 0;
+    return _raw ? _raw->get_len() - (_off + _len) : 0;
   }
   const char& buffer::ptr::operator[](unsigned n) const
   {
@@ -539,21 +536,21 @@ static ceph::spinlock debug_lock;
     return _raw->get_data()[_off + n];
   }
 
-  const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->data; }
-  unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->len; }
+  const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->get_data(); }
+  unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->get_len(); }
   int buffer::ptr::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
 
   void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
     ceph_assert(_raw);
     if (o+l > _len)
         throw end_of_buffer();
-    char* src =  _raw->data + _off + o;
+    char* src =  _raw->get_data() + _off + o;
     maybe_inline_memcpy(dest, src, l, 8);
   }
 
   unsigned buffer::ptr::wasted() const
   {
-    return _raw->len - _len;
+    return _raw->get_len() - _len;
   }
 
   int buffer::ptr::cmp(const ptr& o) const
@@ -580,7 +577,7 @@ static ceph::spinlock debug_lock;
   {
     ceph_assert(_raw);
     ceph_assert(1 <= unused_tail_length());
-    char* ptr = _raw->data + _off + _len;
+    char* ptr = _raw->get_data() + _off + _len;
     *ptr = c;
     _len++;
     return _len + _off;
@@ -590,7 +587,7 @@ static ceph::spinlock debug_lock;
   {
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
-    char* c = _raw->data + _off + _len;
+    char* c = _raw->get_data() + _off + _len;
     maybe_inline_memcpy(c, p, l, 32);
     _len += l;
     return _len + _off;
@@ -600,7 +597,7 @@ static ceph::spinlock debug_lock;
   {
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
-    char* c = _raw->data + _off + _len;
+    char* c = _raw->get_data() + _off + _len;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c, 0, l);
     _len += l;
@@ -612,7 +609,7 @@ static ceph::spinlock debug_lock;
     ceph_assert(_raw);
     ceph_assert(o <= _len);
     ceph_assert(o+l <= _len);
-    char* dest = _raw->data + _off + o;
+    char* dest = _raw->get_data() + _off + o;
     if (crc_reset)
         _raw->invalidate_crc();
     maybe_inline_memcpy(dest, src, l, 64);
@@ -634,6 +631,19 @@ static ceph::spinlock debug_lock;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c_str()+o, 0, l);
   }
+
+  template<bool B>
+  buffer::ptr::iterator_impl<B>& buffer::ptr::iterator_impl<B>::operator +=(size_t len) {
+    pos += len;
+    if (pos > end_ptr)
+      throw end_of_buffer();
+    return *this;
+  }
+
+  template buffer::ptr::iterator_impl<false>&
+  buffer::ptr::iterator_impl<false>::operator +=(size_t len);
+  template buffer::ptr::iterator_impl<true>&
+  buffer::ptr::iterator_impl<true>::operator +=(size_t len);
 
   // -- buffer::list::iterator --
   /*
@@ -990,12 +1000,12 @@ static ceph::spinlock debug_lock;
 
     const auto* other_buf = reinterpret_cast<const char*>(other);
     for (const auto& bp : buffers()) {
-      const auto round_length = std::min<size_t>(length, bp.length());
-      if (std::memcmp(bp.c_str(), other_buf, round_length) != 0) {
+      assert(bp.length() <= length);
+      if (std::memcmp(bp.c_str(), other_buf, bp.length()) != 0) {
         return false;
       } else {
-        length -= round_length;
-        other_buf += round_length;
+        length -= bp.length();
+        other_buf += bp.length();
       }
     }
 
@@ -1143,7 +1153,7 @@ static ceph::spinlock debug_lock;
       if (r == last)
 	continue;
       last = r;
-      total += r->len;
+      total += r->get_len();
     }
     // If multiple buffers are sharing the same raw buffer and they overlap
     // with each other, the wasted space will be underestimated.
@@ -1170,6 +1180,8 @@ static ceph::spinlock debug_lock;
     std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> nb)
   {
     unsigned pos = 0;
+    int mempool = _buffers.front().get_mempool();
+    nb->reassign_to_mempool(mempool);
     for (auto& node : _buffers) {
       nb->copy_in(pos, node.length(), node.c_str(), false);
       pos += node.length();
@@ -1265,24 +1277,13 @@ static ceph::spinlock debug_lock;
     }
   }
 
-  // sort-of-like-assignment-op
-  void buffer::list::claim(list& bl)
-  {
-    // free my buffers
-    clear();
-    claim_append(bl);
-  }
-
   void buffer::list::claim_append(list& bl)
   {
     // steal the other guy's buffers
     _len += bl._len;
     _num += bl._num;
     _buffers.splice_back(bl._buffers);
-    bl._carriage = &always_empty_bptr;
-    bl._buffers.clear_and_dispose();
-    bl._len = 0;
-    bl._num = 0;
+    bl.clear();
   }
 
   void buffer::list::claim_append_piecewise(list& bl)
@@ -1862,6 +1863,7 @@ static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen
   return 0;
 }
 
+#ifndef _WIN32
 int buffer::list::write_fd(int fd) const
 {
   // use writev!
@@ -1941,6 +1943,36 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   }
   return 0;
 }
+#else
+int buffer::list::write_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::write(fd, p->c_str(), p->length() - written);
+      if (r < 0)
+        return -errno;
+
+      written += r;
+    }
+  }
+
+  return 0;
+
+}
+int buffer::list::write_fd(int fd, uint64_t offset) const
+{
+  int r = ::lseek64(fd, offset, SEEK_SET);
+  if (r != offset)
+    return -errno;
+
+  return write_fd(fd);
+}
+#endif
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
@@ -2144,7 +2176,9 @@ buffer::ptr_node* buffer::ptr_node::cloner::operator()(
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.load() << ")";
+  return out << "buffer::raw("
+             << (void*)r.get_data() << " len " << r.get_len()
+             << " nref " << r.nref.load() << ")";
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
@@ -2160,21 +2194,16 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
-  out << "buffer::list(len=" << bl.length() << "," << std::endl;
+  out << "buffer::list(len=" << bl.length() << ",\n";
 
   for (const auto& node : bl.buffers()) {
     out << "\t" << node;
     if (&node != &bl.buffers().back()) {
-      out << "," << std::endl;
+      out << ",\n";
     }
   }
-  out << std::endl << ")";
+  out << "\n)";
   return out;
-}
-
-std::ostream& buffer::operator<<(std::ostream& out, const buffer::error& e)
-{
-  return out << e.what();
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
@@ -2187,3 +2216,93 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_claimed_char, buffer_raw_claimed_char,
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 			      buffer_meta);
 
+
+namespace ceph::buffer {
+inline namespace v15_2_0 {
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnon-virtual-dtor"
+class buffer_error_category : public ceph::converting_category {
+public:
+  buffer_error_category(){}
+  const char* name() const noexcept override;
+  const char* message(int ev, char*, std::size_t) const noexcept override;
+  std::string message(int ev) const override;
+  boost::system::error_condition default_error_condition(int ev) const noexcept
+    override;
+  using ceph::converting_category::equivalent;
+  bool equivalent(int ev, const boost::system::error_condition& c) const
+    noexcept override;
+  int from_code(int ev) const noexcept override;
+};
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
+const char* buffer_error_category::name() const noexcept {
+  return "buffer";
+}
+
+const char*
+buffer_error_category::message(int ev, char*, std::size_t) const noexcept {
+  using ceph::buffer::errc;
+  if (ev == 0)
+    return "No error";
+
+  switch (static_cast<errc>(ev)) {
+  case errc::bad_alloc:
+    return "Bad allocation";
+
+  case errc::end_of_buffer:
+    return "End of buffer";
+
+  case errc::malformed_input:
+    return "Malformed input";
+  }
+
+  return "Unknown error";
+}
+
+std::string buffer_error_category::message(int ev) const {
+  return message(ev, nullptr, 0);
+}
+
+boost::system::error_condition
+buffer_error_category::default_error_condition(int ev)const noexcept {
+  using ceph::buffer::errc;
+  switch (static_cast<errc>(ev)) {
+  case errc::bad_alloc:
+    return boost::system::errc::not_enough_memory;
+  case errc::end_of_buffer:
+  case errc::malformed_input:
+    return boost::system::errc::io_error;
+  }
+  return { ev, *this };
+}
+
+bool buffer_error_category::equivalent(int ev, const boost::system::error_condition& c) const noexcept {
+  return default_error_condition(ev) == c;
+}
+
+int buffer_error_category::from_code(int ev) const noexcept {
+  using ceph::buffer::errc;
+  switch (static_cast<errc>(ev)) {
+  case errc::bad_alloc:
+    return -ENOMEM;
+
+  case errc::end_of_buffer:
+    return -EIO;
+
+  case errc::malformed_input:
+    return -EIO;
+  }
+  return -EDOM;
+}
+
+const boost::system::error_category& buffer_category() noexcept {
+  static const buffer_error_category c;
+  return c;
+}
+}
+}

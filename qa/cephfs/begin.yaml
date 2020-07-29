@@ -13,14 +13,25 @@ tasks:
         - flex
         - libelf-dev
         - libssl-dev
+        - network-manager
+        - iproute2
+        - util-linux
         # for xfstests-dev
         - dump
         - indent
+        # for fsx
+        - libaio-dev
+        - libtool-bin
+        - uuid-dev
+        - xfslibs-dev
         rpm:
         - bison
         - flex
         - elfutils-libelf-devel
         - openssl-devel
+        - NetworkManager
+        - iproute
+        - util-linux
         # for xfstests-dev
         - libacl-devel
         - libaio-devel
@@ -29,5 +40,10 @@ tasks:
         - libuuid-devel
         - xfsdump
         - xfsprogs
+        - xfsprogs-devel
+        # for fsx
+        - libaio-devel
+        - libtool
+        - libuuid-devel
         - xfsprogs-devel
   - ceph:

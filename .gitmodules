@@ -67,3 +67,6 @@
 [submodule "src/pybind/mgr/rook/rook-client-python"]
 	path = src/pybind/mgr/rook/rook-client-python
 	url = https://github.com/ceph/rook-client-python.git
+[submodule "s3select"]
+	path = src/s3select
+	url = https://github.com/ceph/s3select.git

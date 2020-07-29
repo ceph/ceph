@@ -2,9 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormArray, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
@@ -13,9 +12,11 @@ import { SelectMessages } from '../../../shared/components/select/select-message
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { IscsiTargetImageSettingsModalComponent } from '../iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
 import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
@@ -25,10 +26,10 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
   templateUrl: './iscsi-target-form.component.html',
   styleUrls: ['./iscsi-target-form.component.scss']
 })
-export class IscsiTargetFormComponent implements OnInit {
+export class IscsiTargetFormComponent extends CdForm implements OnInit {
   cephIscsiConfigVersion: number;
   targetForm: CdFormGroup;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   api_version = 0;
   minimum_gateways = 1;
   target_default_controls: any;
@@ -55,49 +56,33 @@ export class IscsiTargetFormComponent implements OnInit {
 
   imagesSettings: any = {};
   messages = {
-    portals: new SelectMessages(
-      { noOptions: this.i18n('There are no portals available.') },
-      this.i18n
-    ),
-    images: new SelectMessages(
-      { noOptions: this.i18n('There are no images available.') },
-      this.i18n
-    ),
-    initiatorImage: new SelectMessages(
-      {
-        noOptions: this.i18n(
-          'There are no images available. Please make sure you add an image to the target.'
-        )
-      },
-      this.i18n
-    ),
-    groupInitiator: new SelectMessages(
-      {
-        noOptions: this.i18n(
-          'There are no initiators available. Please make sure you add an initiator to the target.'
-        )
-      },
-      this.i18n
-    )
+    portals: new SelectMessages({ noOptions: $localize`There are no portals available.` }),
+    images: new SelectMessages({ noOptions: $localize`There are no images available.` }),
+    initiatorImage: new SelectMessages({
+      noOptions: $localize`There are no images available. Please make sure you add an image to the target.`
+    }),
+    groupInitiator: new SelectMessages({
+      noOptions: $localize`There are no initiators available. Please make sure you add an initiator to the target.`
+    })
   };
 
   IQN_REGEX = /^iqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)*$/;
-  USER_REGEX = /[\w\.:@_-]{8,64}/;
-  PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
+  USER_REGEX = /^[\w\.:@_-]{8,64}$/;
+  PASSWORD_REGEX = /^[\w@\-_\/]{12,16}$/;
   action: string;
   resource: string;
 
   constructor(
     private iscsiService: IscsiService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private rbdService: RbdService,
     private router: Router,
     private route: ActivatedRoute,
-    private i18n: I18n,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.resource = this.i18n('target');
+    super();
+    this.resource = $localize`target`;
   }
 
   ngOnInit() {
@@ -182,6 +167,8 @@ export class IscsiTargetFormComponent implements OnInit {
       if (data[5]) {
         this.resolveModel(data[5]);
       }
+
+      this.loadingReady();
     });
   }
 
@@ -429,7 +416,7 @@ export class IscsiTargetFormComponent implements OnInit {
         validators: [
           Validators.required,
           CdValidators.custom('notUnique', (client_iqn: string) => {
-            const flattened = this.initiators.controls.reduce(function(accumulator, currentValue) {
+            const flattened = this.initiators.controls.reduce(function (accumulator, currentValue) {
               return accumulator.concat(currentValue.value.client_iqn);
             }, []);
 
@@ -766,13 +753,12 @@ export class IscsiTargetFormComponent implements OnInit {
       });
     }
 
-    wrapTask.subscribe(
-      undefined,
-      () => {
+    wrapTask.subscribe({
+      error: () => {
         this.targetForm.setErrors({ cdSubmitButton: true });
       },
-      () => this.router.navigate(['/block/iscsi/targets'])
-    );
+      complete: () => this.router.navigate(['/block/iscsi/targets'])
+    });
   }
 
   targetSettingsModal() {
@@ -782,7 +768,7 @@ export class IscsiTargetFormComponent implements OnInit {
       target_controls_limits: this.target_controls_limits
     };
 
-    this.modalRef = this.modalService.show(IscsiTargetIqnSettingsModalComponent, { initialState });
+    this.modalRef = this.modalService.show(IscsiTargetIqnSettingsModalComponent, initialState);
   }
 
   imageSettingsModal(image: string) {
@@ -796,9 +782,7 @@ export class IscsiTargetFormComponent implements OnInit {
       control: this.targetForm.get('disks')
     };
 
-    this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {
-      initialState
-    });
+    this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, initialState);
   }
 
   validFeatures(image: Record<string, any>, backstore: string) {

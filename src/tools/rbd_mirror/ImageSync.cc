@@ -12,6 +12,8 @@
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/asio/ContextWQ.h"
+#include "librbd/deep_copy/Handler.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.h"
@@ -32,9 +34,10 @@ using librbd::util::create_context_callback;
 using librbd::util::unique_lock_name;
 
 template <typename I>
-class ImageSync<I>::ImageCopyProgressContext : public librbd::ProgressContext {
+class ImageSync<I>::ImageCopyProgressHandler
+  : public librbd::deep_copy::NoOpHandler {
 public:
-  ImageCopyProgressContext(ImageSync *image_sync) : image_sync(image_sync) {
+  ImageCopyProgressHandler(ImageSync *image_sync) : image_sync(image_sync) {
   }
 
   int update_progress(uint64_t object_no, uint64_t object_count) override {
@@ -73,7 +76,7 @@ ImageSync<I>::ImageSync(
 template <typename I>
 ImageSync<I>::~ImageSync() {
   ceph_assert(m_image_copy_request == nullptr);
-  ceph_assert(m_image_copy_prog_ctx == nullptr);
+  ceph_assert(m_image_copy_prog_handler == nullptr);
   ceph_assert(m_update_sync_ctx == nullptr);
 }
 
@@ -252,11 +255,11 @@ void ImageSync<I>::send_copy_image() {
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_copy_image>(this);
-  m_image_copy_prog_ctx = new ImageCopyProgressContext(this);
+  m_image_copy_prog_handler = new ImageCopyProgressHandler(this);
   m_image_copy_request = librbd::DeepCopyRequest<I>::create(
       m_remote_image_ctx, m_local_image_ctx, snap_id_start, snap_id_end,
       0, false, object_number, m_threads->work_queue, &m_snap_seqs_copy,
-      m_image_copy_prog_ctx, ctx);
+      m_image_copy_prog_handler, ctx);
   m_image_copy_request->get();
   m_lock.unlock();
 
@@ -273,8 +276,8 @@ void ImageSync<I>::handle_copy_image(int r) {
     std::scoped_lock locker{m_threads->timer_lock, m_lock};
     m_image_copy_request->put();
     m_image_copy_request = nullptr;
-    delete m_image_copy_prog_ctx;
-    m_image_copy_prog_ctx = nullptr;
+    delete m_image_copy_prog_handler;
+    m_image_copy_prog_handler = nullptr;
     if (r == 0 && m_canceled) {
       r = -ECANCELED;
     }

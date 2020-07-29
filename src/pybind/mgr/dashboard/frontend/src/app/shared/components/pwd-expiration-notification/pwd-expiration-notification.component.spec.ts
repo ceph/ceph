@@ -4,12 +4,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { of as observableOf } from 'rxjs';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
-
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-
 import { SettingsService } from '../../api/settings.service';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification.component';
@@ -25,20 +23,21 @@ describe('PwdExpirationNotificationComponent', () => {
 
   const routes: Routes = [{ path: 'login', component: FakeComponent }];
 
+  const spyOnDate = (fakeDate: string) => {
+    const dateValue = Date;
+    spyOn(global, 'Date').and.callFake((date) => new dateValue(date ? date : fakeDate));
+  };
+
   configureTestBed({
     declarations: [PwdExpirationNotificationComponent, FakeComponent],
-    imports: [
-      AlertModule.forRoot(),
-      HttpClientTestingModule,
-      RouterTestingModule.withRoutes(routes)
-    ],
+    imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule.withRoutes(routes)],
     providers: [SettingsService, AuthStorageService]
   });
 
   describe('password expiration date has been set', () => {
     beforeEach(() => {
-      authStorageService = TestBed.get(AuthStorageService);
-      settingsService = TestBed.get(SettingsService);
+      authStorageService = TestBed.inject(AuthStorageService);
+      settingsService = TestBed.inject(SettingsService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(1645488000);
       spyOn(settingsService, 'getStandardSettings').and.returnValue(
         observableOf({
@@ -64,48 +63,35 @@ describe('PwdExpirationNotificationComponent', () => {
     });
 
     it('should calculate password expiration in days', () => {
-      const dateValue = Date;
-      spyOn(global, 'Date').and.callFake((date) => {
-        if (date) {
-          return new dateValue(date);
-        } else {
-          return new Date('2022-02-18T00:00:00.000Z');
-        }
-      });
+      spyOnDate('2022-02-18T00:00:00.000Z');
       component.ngOnInit();
       expect(component['expirationDays']).toBe(4);
     });
 
     it('should set alert type warning correctly', () => {
-      const dateValue = Date;
-      spyOn(global, 'Date').and.callFake((date) => {
-        if (date) {
-          return new dateValue(date);
-        } else {
-          return new Date('2022-02-14T00:00:00.000Z');
-        }
-      });
+      spyOnDate('2022-02-14T00:00:00.000Z');
       component.ngOnInit();
       expect(component['alertType']).toBe('warning');
+      expect(component.displayNotification).toBeTruthy();
     });
 
     it('should set alert type danger correctly', () => {
-      const dateValue = Date;
-      spyOn(global, 'Date').and.callFake((date) => {
-        if (date) {
-          return new dateValue(date);
-        } else {
-          return new Date('2022-02-18T00:00:00.000Z');
-        }
-      });
+      spyOnDate('2022-02-18T00:00:00.000Z');
       component.ngOnInit();
       expect(component['alertType']).toBe('danger');
+      expect(component.displayNotification).toBeTruthy();
+    });
+
+    it('should not display if date is far', () => {
+      spyOnDate('2022-01-01T00:00:00.000Z');
+      component.ngOnInit();
+      expect(component.displayNotification).toBeFalsy();
     });
   });
 
   describe('password expiration date has not been set', () => {
     beforeEach(() => {
-      authStorageService = TestBed.get(AuthStorageService);
+      authStorageService = TestBed.inject(AuthStorageService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(null);
       fixture = TestBed.createComponent(PwdExpirationNotificationComponent);
       component = fixture.componentInstance;

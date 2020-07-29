@@ -3,9 +3,9 @@ set(osdc_osd_srcs
   ${CMAKE_SOURCE_DIR}/src/osdc/Striper.cc)
 
 if(WITH_OSD_INSTRUMENT_FUNCTIONS AND CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  set(GCC_C_FLAGS "-finstrument-functions")
-  set(GCC_C_FLAGS "${GCC_C_FLAGS} -finstrument-functions-exclude-function-list=_mm_loadu_si128,_mm_cmpeq_epi32,_mm_movemask_epi8")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GCC_C_FLAGS}")
+  add_compile_options(
+    -finstrument-functions
+    -finstrument-functions-exclude-function-list=_mm_loadu_si128,_mm_cmpeq_epi32,_mm_movemask_epi8)
   set(osd_cyg_functions_src ${CMAKE_SOURCE_DIR}/src/tracing/cyg_profile_functions.c)
 endif()
 
@@ -33,6 +33,7 @@ set(osd_srcs
   scheduler/mClockScheduler.cc
   PeeringState.cc
   PGStateUtils.cc
+  recovery_types.cc
   MissingLoc.cc
   osd_perf_counters.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
@@ -59,7 +60,7 @@ endif()
 
 # libcls_* are runtime dependencies
 add_dependencies(osd cls_journal cls_hello cls_lock cls_log cls_numops
-  cls_refcount cls_timeindex cls_user cls_version cls_cas)
+  cls_refcount cls_timeindex cls_user cls_version cls_cas cls_cmpomap)
 if(WITH_CEPHFS)
   add_dependencies(osd cls_cephfs)
 endif()
@@ -67,5 +68,5 @@ if(WITH_RBD)
   add_dependencies(osd cls_rbd)
 endif()
 if(WITH_RADOSGW)
-  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc)
+  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc cls_2pc_queue)
 endif()

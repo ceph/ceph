@@ -1,9 +1,10 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { CephServiceService } from '../../../shared/api/ceph-service.service';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -16,8 +17,8 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   templateUrl: './services.component.html',
   styleUrls: ['./services.component.scss']
 })
-export class ServicesComponent implements OnChanges, OnInit {
-  @ViewChild(TableComponent, { static: false })
+export class ServicesComponent extends ListWithDetails implements OnChanges, OnInit {
+  @ViewChild(TableComponent)
   table: TableComponent;
 
   @Input() hostname: string;
@@ -38,42 +39,48 @@ export class ServicesComponent implements OnChanges, OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private orchService: OrchestratorService,
     private cephServiceService: CephServiceService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
   }
 
   ngOnInit() {
     const columns = [
       {
-        name: this.i18n('Service'),
+        name: $localize`Service`,
         prop: 'service_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Container image name'),
+        name: $localize`Container image name`,
         prop: 'status.container_image_name',
         flexGrow: 3
       },
       {
-        name: this.i18n('Container image ID'),
+        name: $localize`Container image ID`,
         prop: 'status.container_image_id',
-        flexGrow: 3
+        flexGrow: 3,
+        cellTransformation: CellTemplate.truncate,
+        customTemplateConfig: {
+          length: 12
+        }
       },
       {
-        name: this.i18n('Running'),
+        name: $localize`Running`,
         prop: 'status.running',
-        flexGrow: 1
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: this.i18n('Size'),
+        name: $localize`Size`,
         prop: 'status.size',
         flexGrow: 1
       },
       {
-        name: this.i18n('Last Refreshed'),
+        name: $localize`Last Refreshed`,
         prop: 'status.last_refresh',
         flexGrow: 1
       }
@@ -93,10 +100,6 @@ export class ServicesComponent implements OnChanges, OnInit {
       this.services = [];
       this.table.reloadData();
     }
-  }
-
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
   }
 
   getServices(context: CdTableFetchDataContext) {

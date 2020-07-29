@@ -33,6 +33,13 @@ enum {
 
   l_rgw_gc_retire,
 
+  l_rgw_lc_expire_current,
+  l_rgw_lc_expire_noncurrent,
+  l_rgw_lc_expire_dm,
+  l_rgw_lc_transition_current,
+  l_rgw_lc_transition_noncurrent,
+  l_rgw_lc_abort_mpu,
+
   l_rgw_pubsub_event_triggered,
   l_rgw_pubsub_event_lost,
   l_rgw_pubsub_store_ok,

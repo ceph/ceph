@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - missing required features
+tasks:
+- exec:
+    mon.a:
+      - ceph fs dump --format=json-pretty
+      - ceph fs required_client_features cephfs add metric_collect
+- fs.clients_evicted:

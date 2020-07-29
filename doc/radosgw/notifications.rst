@@ -29,6 +29,31 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+
+Topic Management via CLI
+------------------------
+
+Configuration of all topics of a user could be fetched using the following command:
+   
+::
+   
+   # radosgw-admin topic list --uid={user-id}
+
+
+Configuration of a specific topic could be fetched using:
+
+::
+   
+   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+
+
+And removed using:
+
+::
+   
+   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+
+
 Notification Performance Stats
 ------------------------------
 The same counters are shared between the pubsub sync module and the bucket notification mechanism.
@@ -50,6 +75,10 @@ Bucket Notification REST API
 Topics
 ~~~~~~
 
+.. note:: 
+
+    In all topic actions, the parameters are URL encoded, and sent in the message body using ``application/x-www-form-urlencoded`` content type
+
 Create a Topic
 ``````````````
 
@@ -63,21 +92,22 @@ To update a topic, use the same command used for topic creation, with the topic 
 ::
 
    POST
+
    Action=CreateTopic
    &Name=<topic-name>
-   &push-endpoint=<endpoint>
    [&Attributes.entry.1.key=amqp-exchange&Attributes.entry.1.value=<exchange>]
-   [&Attributes.entry.2.key=amqp-ack-level&Attributes.entry.2.value=none|broker]
+   [&Attributes.entry.2.key=amqp-ack-level&Attributes.entry.2.value=none|broker|routable]
    [&Attributes.entry.3.key=verify-ssl&Attributes.entry.3.value=true|false]
    [&Attributes.entry.4.key=kafka-ack-level&Attributes.entry.4.value=none|broker]
    [&Attributes.entry.5.key=use-ssl&Attributes.entry.5.value=true|false]
    [&Attributes.entry.6.key=ca-location&Attributes.entry.6.value=<file path>]
    [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
+   [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
-- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
 
 - HTTP endpoint 
 
@@ -92,11 +122,14 @@ Request parameters:
  - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
  - port defaults to: 5672
  - vhost defaults to: "/"
- - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
- - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
+  - "routable": message is considered "delivered" if broker can route to a consumer
+
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
 
 - Kafka endpoint 
 
@@ -144,7 +177,9 @@ Returns information about specific topic. This includes push-endpoint informatio
 ::
 
    POST
-   Action=GetTopic&TopicArn=<topic-arn>
+
+   Action=GetTopic
+   &TopicArn=<topic-arn>
 
 Response will have the following format:
 
@@ -183,7 +218,9 @@ Delete Topic
 ::
 
    POST
-   Action=DeleteTopic&TopicArn=<topic-arn>
+
+   Action=DeleteTopic
+   &TopicArn=<topic-arn>
 
 Delete the specified topic. Note that deleting a deleted topic should result with no-op and not a failure.
 
@@ -204,7 +241,8 @@ List all topics that user defined.
 
 ::
 
-   POST 
+   POST
+
    Action=ListTopics
  
 Response will have the following format:
@@ -242,7 +280,6 @@ Detailed under: `Bucket Operations`_.
 .. note:: 
 
     - "Abort Multipart Upload" request does not emit a notification
-    - "Delete Multiple Objects" request does not emit a notification
     - Both "Initiate Multipart Upload" and "POST Object" requests will emit an ``s3:ObjectCreated:Post`` notification
 
 
@@ -315,9 +352,9 @@ pushed or pulled using the pubsub sync module. For example:
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API) 
-- s3.object.tags: any tags set on the objcet (an extension to the S3 notification API)
+- s3.object.tags: any tags set on the object (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
-- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic (an extension to the S3 notification API)
 
 .. _PubSub Module : ../pubsub-module
 .. _S3 Notification Compatibility: ../s3-notification-compatibility

@@ -54,8 +54,8 @@ size_t RGWFCGX::send_100_continue()
   return sent;
 }
 
-size_t RGWFCGX::send_header(const boost::string_ref& name,
-                            const boost::string_ref& value)
+size_t RGWFCGX::send_header(const std::string_view& name,
+                            const std::string_view& value)
 {
   static constexpr char HEADER_SEP[] = ": ";
   static constexpr char HEADER_END[] = "\r\n";

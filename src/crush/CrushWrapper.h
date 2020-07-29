@@ -1331,6 +1331,7 @@ public:
       crush->max_devices = name_map.rbegin()->first + 1;
     }
     have_uniform_rules = !has_legacy_rule_ids();
+    build_rmaps();
   }
   int bucket_set_alg(int id, int alg);
 

@@ -26,6 +26,19 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
+CreateNonPrimaryRequest<I>::CreateNonPrimaryRequest(
+    I* image_ctx, bool demoted, const std::string &primary_mirror_uuid,
+    uint64_t primary_snap_id, const SnapSeqs& snap_seqs,
+    const ImageState &image_state, uint64_t *snap_id, Context *on_finish)
+  : m_image_ctx(image_ctx), m_demoted(demoted),
+    m_primary_mirror_uuid(primary_mirror_uuid),
+    m_primary_snap_id(primary_snap_id), m_snap_seqs(snap_seqs),
+    m_image_state(image_state), m_snap_id(snap_id), m_on_finish(on_finish) {
+  m_default_ns_ctx.dup(m_image_ctx->md_ctx);
+  m_default_ns_ctx.set_namespace("");
+}
+
+template <typename I>
 void CreateNonPrimaryRequest<I>::send() {
   refresh_image();
 }
@@ -110,6 +123,56 @@ void CreateNonPrimaryRequest<I>::handle_get_mirror_image(int r) {
   m_snap_name = ".mirror.non_primary." + mirror_image.global_image_id + "." +
     uuid_gen.to_string();
 
+  get_mirror_peers();
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::get_mirror_peers() {
+  if (!m_demoted) {
+    create_snapshot();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::mirror_peer_list_start(&op);
+
+  auto aio_comp = create_rados_callback<
+    CreateNonPrimaryRequest<I>,
+    &CreateNonPrimaryRequest<I>::handle_get_mirror_peers>(this);
+  m_out_bl.clear();
+  int r = m_default_ns_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::handle_get_mirror_peers(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+  if (r == 0) {
+    auto iter = m_out_bl.cbegin();
+    r = cls_client::mirror_peer_list_finish(&iter, &peers);
+  }
+
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve mirror peers: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+  for (auto &peer : peers) {
+    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
+      continue;
+    }
+    m_mirror_peer_uuids.insert(peer.uuid);
+  }
+
   create_snapshot();
 }
 
@@ -121,6 +184,9 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
     (m_demoted ? cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED :
                  cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY), {},
     m_primary_mirror_uuid, m_primary_snap_id};
+  if (m_demoted) {
+    ns.mirror_peer_uuids = m_mirror_peer_uuids;
+  }
   ns.snap_seqs = m_snap_seqs;
   ns.complete = is_orphan();
   ldout(cct, 20) << "ns=" << ns << dendl;
@@ -128,7 +194,7 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
   auto ctx = create_context_callback<
     CreateNonPrimaryRequest<I>,
     &CreateNonPrimaryRequest<I>::handle_create_snapshot>(this);
-  m_image_ctx->operations->snap_create(ns, m_snap_name, ctx);
+  m_image_ctx->operations->snap_create(ns, m_snap_name, 0, m_prog_ctx, ctx);
 }
 
 template <typename I>

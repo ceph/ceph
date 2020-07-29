@@ -259,7 +259,7 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
-  entity_addrvec_t get_active_addrs() const { return active_addrs; }
+  const entity_addrvec_t& get_active_addrs() const { return active_addrs; }
   uint64_t get_active_gid() const { return active_gid; }
   bool get_available() const { return available; }
   const std::string &get_active_name() const { return active_name; }
@@ -352,9 +352,19 @@ public:
   }
 
   std::set<std::string> get_always_on_modules() const {
-    auto it = always_on_modules.find(ceph::to_integer<uint32_t>(ceph_release()));
-    if (it == always_on_modules.end())
-      return {};
+    unsigned rnum = to_integer<uint32_t>(ceph_release());
+    auto it = always_on_modules.find(rnum);
+    if (it == always_on_modules.end()) {
+      // ok, try the most recent release
+      if (always_on_modules.empty()) {
+	return {}; // ugh
+      }
+      --it;
+      if (it->first < rnum) {
+	return it->second;
+      }
+      return {};      // wth
+    }
     return it->second;
   }
 

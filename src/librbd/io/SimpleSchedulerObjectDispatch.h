@@ -22,6 +22,7 @@ class ImageCtx;
 
 namespace io {
 
+template <typename> class FlushTracker;
 class LatencyStats;
 
 /**
@@ -41,7 +42,7 @@ public:
   SimpleSchedulerObjectDispatch(ImageCtxT* image_ctx);
   ~SimpleSchedulerObjectDispatch() override;
 
-  ObjectDispatchLayer get_object_dispatch_layer() const override {
+  ObjectDispatchLayer get_dispatch_layer() const override {
     return OBJECT_DISPATCH_LAYER_SCHEDULER;
   }
 
@@ -52,7 +53,7 @@ public:
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      ExtentMap* extent_map, int* object_dispatch_flags,
+      Extents* extent_map, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
@@ -175,6 +176,8 @@ private:
   typedef std::map<uint64_t, ObjectRequestsRef> Requests;
 
   ImageCtxT *m_image_ctx;
+
+  FlushTracker<ImageCtxT>* m_flush_tracker;
 
   ceph::mutex m_lock;
   SafeTimer *m_timer;

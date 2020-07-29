@@ -15,7 +15,7 @@ the Ceph Storage Cluster:
 - The :term:`Ceph Monitor`, which maintains a master copy of the cluster map. 
 - The :term:`Ceph OSD Daemon` (OSD), which stores data as objects on a storage node.
 
-.. ditaa::  
+.. ditaa::
             +---------------------------------+
             |  Ceph Storage Cluster Protocol  |
             |           (librados)            |
@@ -165,7 +165,7 @@ placement group and `OSD`_  for locating the data. Then the client application
 can read or write data. The client app doesn't need to learn about the topology
 of the cluster directly.
 
-.. ditaa:: 
+.. ditaa::
             +--------+  Retrieves  +---------------+
             | Client |------------>|  Cluster Map  |
             +--------+             +---------------+
@@ -217,7 +217,8 @@ these capabilities. The following diagram provides a high-level flow for the
 initial connection.
 
 
-.. ditaa:: +---------+     +---------+
+.. ditaa::
+           +---------+     +---------+
            | Client  |     | Monitor |
            +---------+     +---------+
                 |               |
@@ -521,7 +522,8 @@ functionality includes:
 - Snapshot pools, list snapshots, etc.
 
 
-.. ditaa:: +---------+     +---------+     +---------+
+.. ditaa::
+           +---------+     +---------+     +---------+
            | Client  |     | Monitor |     |   OSD   |
            +---------+     +---------+     +---------+
                 |               |               |

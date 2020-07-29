@@ -597,21 +597,20 @@ public:
     ceph_assert(p != extents.end());
     while (b_off >= p->length) {
       b_off -= p->length;
-      ++p;
-      ceph_assert(p != extents.end());
+      if (++p == extents.end())
+        return false;
     }
     b_len += b_off;
     while (b_len) {
-      ceph_assert(p != extents.end());
       if (require_allocated != p->is_valid()) {
         return false;
       }
-
       if (p->length >= b_len) {
         return true;
       }
       b_len -= p->length;
-      ++p;
+      if (++p == extents.end())
+        return false;
     }
     ceph_abort_msg("we should not get here");
     return false;
@@ -684,10 +683,49 @@ public:
     }
   }
 
+  // map_f_invoke templates intended to mask parameters which are not expected
+  // by the provided callback
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    uint64_t,
+    uint64_t>>::type* = nullptr>
+  int map_f_invoke(uint64_t lo,
+    const bluestore_pextent_t& p,
+    uint64_t o,
+    uint64_t l, F&& f) const{
+    return f(o, l);
+  }
+
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    uint64_t,
+    uint64_t,
+    uint64_t>>::type * = nullptr>
+  int map_f_invoke(uint64_t lo,
+    const bluestore_pextent_t& p,
+    uint64_t o,
+    uint64_t l, F&& f) const {
+    return f(lo, o, l);
+  }
+
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    const bluestore_pextent_t&,
+    uint64_t,
+    uint64_t>>::type * = nullptr>
+    int map_f_invoke(uint64_t lo,
+      const bluestore_pextent_t& p,
+      uint64_t o,
+      uint64_t l, F&& f) const {
+    return f(p, o, l);
+  }
+
   template<class F>
   int map(uint64_t x_off, uint64_t x_len, F&& f) const {
-    static_assert(std::is_invocable_r_v<int, F, uint64_t, uint64_t>);
-
+    auto x_off0 = x_off;
     auto p = extents.begin();
     ceph_assert(p != extents.end());
     while (x_off >= p->length) {
@@ -695,18 +733,19 @@ public:
       ++p;
       ceph_assert(p != extents.end());
     }
-    while (x_len > 0) {
-      ceph_assert(p != extents.end());
+    while (x_len > 0 && p != extents.end()) {
       uint64_t l = std::min(p->length - x_off, x_len);
-      int r = f(p->offset + x_off, l);
+      int r = map_f_invoke(x_off0, *p, p->offset + x_off, l, f);
       if (r < 0)
         return r;
       x_off = 0;
       x_len -= l;
+      x_off0 += l;
       ++p;
     }
     return 0;
   }
+
   template<class F>
   void map_bl(uint64_t x_off,
 	      ceph::buffer::list& bl,
@@ -897,7 +936,8 @@ std::ostream& operator<<(std::ostream& out, const bluestore_shared_blob_t& o);
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
-  std::map<mempool::bluestore_cache_other::string, ceph::buffer::ptr> attrs;        ///< attrs
+  // FIXME: bufferptr does not have a mempool
+  std::map<mempool::bluestore_cache_meta::string, ceph::buffer::ptr> attrs;
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
@@ -1035,15 +1075,19 @@ WRITE_CLASS_DENC(bluestore_deferred_transaction_t)
 struct bluestore_compression_header_t {
   uint8_t type = Compressor::COMP_ALG_NONE;
   uint32_t length = 0;
+  boost::optional<int32_t> compressor_message;
 
   bluestore_compression_header_t() {}
   bluestore_compression_header_t(uint8_t _type)
     : type(_type) {}
 
   DENC(bluestore_compression_header_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.type, p);
     denc(v.length, p);
+    if (struct_v >= 2) {
+      denc(v.compressor_message, p);
+    }
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;

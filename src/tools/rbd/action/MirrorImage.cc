@@ -518,6 +518,12 @@ int execute_status(const po::variables_map &vm,
   return 0;
 }
 
+void get_snapshot_arguments(po::options_description *positional,
+                            po::options_description *options) {
+  at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_create_options(options);
+}
+
 int execute_snapshot(const po::variables_map &vm,
                      const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -528,6 +534,12 @@ int execute_snapshot(const po::variables_map &vm,
       vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
       &image_name, nullptr, true, utils::SNAPSHOT_PRESENCE_NONE,
       utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
   if (r < 0) {
     return r;
   }
@@ -547,7 +559,7 @@ int execute_snapshot(const po::variables_map &vm,
   }
 
   uint64_t snap_id;
-  r = image.mirror_image_create_snapshot(&snap_id);
+  r = image.mirror_image_create_snapshot2(flags, &snap_id);
   if (r < 0) {
     std::cerr << "rbd: error creating snapshot: " << cpp_strerror(r)
               << std::endl;
@@ -585,7 +597,7 @@ Shell::Action action_status(
 Shell::Action action_snapshot(
   {"mirror", "image", "snapshot"}, {},
   "Create RBD mirroring image snapshot.", "",
-  &get_arguments, &execute_snapshot);
+  &get_snapshot_arguments, &execute_snapshot);
 
 } // namespace mirror_image
 } // namespace action

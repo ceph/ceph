@@ -22,6 +22,7 @@ class TestRadosClient;
 typedef boost::function<int(TestIoCtxImpl*,
 			    const std::string&,
 			    bufferlist *,
+                            uint64_t,
                             const SnapContext &)> ObjectOperationTestImpl;
 typedef std::list<ObjectOperationTestImpl> ObjectOperations;
 
@@ -89,7 +90,7 @@ public:
                           int flags);
   virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
-                               bufferlist *pbl);
+                               bufferlist *pbl, uint64_t snap_id);
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
                          int flags = 0) = 0;
   virtual int aio_watch(const std::string& o, AioCompletionImpl *c,
@@ -97,14 +98,14 @@ public:
   virtual int aio_unwatch(uint64_t handle, AioCompletionImpl *c);
   virtual int append(const std::string& oid, const bufferlist &bl,
                      const SnapContext &snapc) = 0;
-  virtual int assert_exists(const std::string &oid) = 0;
+  virtual int assert_exists(const std::string &oid, uint64_t snap_id) = 0;
 
   virtual int create(const std::string& oid, bool exclusive,
                      const SnapContext &snapc) = 0;
   virtual int exec(const std::string& oid, TestClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
-                   const SnapContext &snapc);
+                   uint64_t snap_id, const SnapContext &snapc);
   virtual int list_snaps(const std::string& o, snap_set_t *out_snaps) = 0;
   virtual int list_watchers(const std::string& o,
                             std::list<obj_watch_t> *out_watchers);
@@ -131,7 +132,7 @@ public:
   virtual int operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                            bufferlist *pbl);
   virtual int read(const std::string& oid, size_t len, uint64_t off,
-                   bufferlist *bl) = 0;
+                   bufferlist *bl, uint64_t snap_id) = 0;
   virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
   virtual int selfmanaged_snap_create(uint64_t *snapid) = 0;
   virtual void aio_selfmanaged_snap_create(uint64_t *snapid,
@@ -151,7 +152,7 @@ public:
   virtual void set_snap_read(snap_t seq);
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m,
-                          bufferlist *data_bl) = 0;
+                          bufferlist *data_bl, uint64_t snap_id) = 0;
   virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) = 0;
   virtual int truncate(const std::string& oid, uint64_t size,
                        const SnapContext &snapc) = 0;
@@ -165,7 +166,8 @@ public:
                          const SnapContext &snapc) = 0;
   virtual int writesame(const std::string& oid, bufferlist& bl, size_t len,
                         uint64_t off, const SnapContext &snapc) = 0;
-  virtual int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) = 0;
+  virtual int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl,
+                     uint64_t snap_id) = 0;
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset) = 0;
   virtual int xattr_set(const std::string& oid, const std::string &name,
@@ -182,7 +184,8 @@ protected:
 
   int execute_aio_operations(const std::string& oid,
                              TestObjectOperationImpl *ops,
-                             bufferlist *pbl, const SnapContext &snapc);
+                             bufferlist *pbl, uint64_t,
+                             const SnapContext &snapc);
 
 private:
   struct C_AioNotify : public Context {

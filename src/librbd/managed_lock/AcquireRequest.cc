@@ -7,10 +7,11 @@
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "include/stringify.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/Utils.h"
@@ -33,32 +34,34 @@ namespace managed_lock {
 template <typename I>
 AcquireRequest<I>* AcquireRequest<I>::create(librados::IoCtx& ioctx,
                                              Watcher *watcher,
-                                             ContextWQ *work_queue,
+                                             AsioEngine& asio_engine,
                                              const string& oid,
                                              const string& cookie,
                                              bool exclusive,
 					     bool blacklist_on_break_lock,
 					     uint32_t blacklist_expire_seconds,
                                              Context *on_finish) {
-    return new AcquireRequest(ioctx, watcher, work_queue, oid, cookie,
+    return new AcquireRequest(ioctx, watcher, asio_engine, oid, cookie,
                               exclusive, blacklist_on_break_lock,
                               blacklist_expire_seconds, on_finish);
 }
 
 template <typename I>
 AcquireRequest<I>::AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
-                                  ContextWQ *work_queue, const string& oid,
+                                  AsioEngine& asio_engine,
+                                  const string& oid,
                                   const string& cookie, bool exclusive,
                                   bool blacklist_on_break_lock,
                                   uint32_t blacklist_expire_seconds,
                                   Context *on_finish)
   : m_ioctx(ioctx), m_watcher(watcher),
     m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
-    m_work_queue(work_queue), m_oid(oid), m_cookie(cookie),
+    m_asio_engine(asio_engine), m_oid(oid), m_cookie(cookie),
     m_exclusive(exclusive),
     m_blacklist_on_break_lock(blacklist_on_break_lock),
     m_blacklist_expire_seconds(blacklist_expire_seconds),
-    m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)) {
+    m_on_finish(new C_AsyncCallback<asio::ContextWQ>(
+      asio_engine.get_work_queue(), on_finish)) {
 }
 
 template <typename I>
@@ -108,7 +111,7 @@ void AcquireRequest<I>::send_lock() {
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME,
-                         m_exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED, m_cookie,
+                         m_exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED, m_cookie,
                          util::get_watcher_lock_tag(), "", utime_t(), 0);
 
   using klass = AcquireRequest;
@@ -146,7 +149,7 @@ void AcquireRequest<I>::send_break_lock() {
   Context *ctx = create_context_callback<
     AcquireRequest<I>, &AcquireRequest<I>::handle_break_lock>(this);
   auto req = BreakRequest<I>::create(
-    m_ioctx, m_work_queue, m_oid, m_locker, m_exclusive,
+    m_ioctx, m_asio_engine, m_oid, m_locker, m_exclusive,
     m_blacklist_on_break_lock, m_blacklist_expire_seconds, false, ctx);
   req->send();
 }

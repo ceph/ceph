@@ -2,11 +2,10 @@
 from __future__ import absolute_import
 
 import logging
-import six
 import time
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JAny, JList, JObj
+from .helper import DashboardTestCase, JAny, JList, JObj, JUnion
 
 log = logging.getLogger(__name__)
 
@@ -23,14 +22,16 @@ class PoolTest(DashboardTestCase):
     }, allow_unknown=True)
 
     pool_list_stat_schema = JObj(sub_elems={
-        'latest': int,
+        'latest': JUnion([int,float]),
         'rate': float,
         'rates': JList(JAny(none=False)),
     })
 
     pool_list_stats_schema = JObj(sub_elems={
+        'avail_raw': pool_list_stat_schema,
         'bytes_used': pool_list_stat_schema,
         'max_avail': pool_list_stat_schema,
+        'percent_used': pool_list_stat_schema,
         'rd_bytes': pool_list_stat_schema,
         'wr_bytes': pool_list_stat_schema,
         'rd': pool_list_stat_schema,
@@ -158,6 +159,16 @@ class PoolTest(DashboardTestCase):
         self._delete('/api/pool/ddd')
         self.assertStatus(403)
 
+    def test_pool_configuration(self):
+        pool_name = 'device_health_metrics'
+        data = self._get('/api/pool/{}/configuration'.format(pool_name))
+        self.assertStatus(200)
+        self.assertSchema(data, JList(JObj({
+             'name': str,
+             'value': str,
+             'source': int
+             })))
+
     def test_pool_list(self):
         data = self._get("/api/pool")
         self.assertStatus(200)
@@ -245,6 +256,7 @@ class PoolTest(DashboardTestCase):
             'compression_mode': 'aggressive',
             'compression_max_blob_size': '10000000',
             'compression_required_ratio': '0.8',
+            'application_metadata': ['rbd'],
             'configuration': {
                 'rbd_qos_bps_limit': 2048,
                 'rbd_qos_iops_limit': None,
@@ -402,16 +414,18 @@ class PoolTest(DashboardTestCase):
     def test_pool_info(self):
         self._get("/ui-api/pool/info")
         self.assertSchemaBody(JObj({
-            'pool_names': JList(six.string_types),
-            'compression_algorithms': JList(six.string_types),
-            'compression_modes': JList(six.string_types),
+            'pool_names': JList(str),
+            'compression_algorithms': JList(str),
+            'compression_modes': JList(str),
             'is_all_bluestore': bool,
-            'bluestore_compression_algorithm': six.string_types,
+            'bluestore_compression_algorithm': str,
             'osd_count': int,
             'crush_rules_replicated': JList(JObj({}, allow_unknown=True)),
             'crush_rules_erasure': JList(JObj({}, allow_unknown=True)),
-            'pg_autoscale_default_mode': six.string_types,
-            'pg_autoscale_modes': JList(six.string_types),
+            'pg_autoscale_default_mode': str,
+            'pg_autoscale_modes': JList(str),
             'erasure_code_profiles': JList(JObj({}, allow_unknown=True)),
             'used_rules': JObj({}, allow_unknown=True),
+            'used_profiles': JObj({}, allow_unknown=True),
+            'nodes': JList(JObj({}, allow_unknown=True)),
         }))

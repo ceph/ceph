@@ -3,9 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
+import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SettingsService } from '../../api/settings.service';
 import { CephReleaseNamePipe } from '../../pipes/ceph-release-name.pipe';
@@ -19,8 +20,8 @@ describe('GrafanaComponent', () => {
 
   configureTestBed({
     declarations: [GrafanaComponent, AlertPanelComponent, LoadingPanelComponent],
-    imports: [AlertModule.forRoot(), HttpClientTestingModule, RouterTestingModule, FormsModule],
-    providers: [CephReleaseNamePipe, SettingsService, SummaryService, i18nProviders]
+    imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule, FormsModule],
+    providers: [CephReleaseNamePipe, SettingsService, SummaryService]
   });
 
   beforeEach(() => {
@@ -45,7 +46,7 @@ describe('GrafanaComponent', () => {
 
   describe('with grafana initialized', () => {
     beforeEach(() => {
-      TestBed.get(SettingsService).settings = { 'api/grafana/url': 'http:localhost:3000' };
+      TestBed.inject(SettingsService)['settings'] = { 'api/grafana/url': 'http:localhost:3000' };
       fixture.detectChanges();
     });
 
@@ -76,7 +77,7 @@ describe('GrafanaComponent', () => {
     });
 
     it('should have Dashboard', () => {
-      TestBed.get(SettingsService).validateGrafanaDashboardUrl = { uid: 200 };
+      TestBed.inject(SettingsService).validateGrafanaDashboardUrl = () => of({ uid: 200 });
       expect(component.dashboardExist).toBe(true);
     });
   });

@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n
                 class="modal-title">Create Bootstrap Token</ng-container>
 
@@ -53,11 +53,10 @@
                 i18n>At least one pool is required.</span>
         </div>
 
-        <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="createBootstrapForm"
-                            (submitAction)="generate()">Generate</cd-submit-button>
-        </div>
+        <cd-submit-button class="mb-4 float-right"
+                          i18n
+                          [form]="createBootstrapForm"
+                          (submitAction)="generate()">Generate</cd-submit-button>
 
         <div class="form-group">
           <label class="col-form-label"
@@ -72,15 +71,21 @@
                     readonly>
           </textarea>
         </div>
+        <button class="btn btn-primary mb-3 float-right"
+                aria-label="Copy to Clipboard"
+                i18n-aria-label
+                title="Copy to Clipboard"
+                i18n-title
+                cdCopy2ClipboardButton="token">
+          <ng-container i18n>Copy to Clipboard</ng-container>
+        </button>
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-back-button [back]="modalRef.hide"
-                          name="Close"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-back-button [back]="activeModal.close"
+                        name="Close"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

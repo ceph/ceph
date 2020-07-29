@@ -8,6 +8,41 @@ function expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
+function get_config_value_or_die()
+{
+  local pool_name config_opt raw val
+
+  pool_name=$1
+  config_opt=$2
+
+  raw="`$SUDO ceph osd pool get $pool_name $config_opt 2>/dev/null`"
+  if [[ $? -ne 0 ]]; then
+    echo "error obtaining config opt '$config_opt' from '$pool_name': $raw"
+    exit 1
+  fi
+
+  raw=`echo $raw | sed -e 's/[{} "]//g'`
+  val=`echo $raw | cut -f2 -d:`
+
+  echo "$val"
+  return 0
+}
+
+function expect_config_value()
+{
+  local pool_name config_opt expected_val val
+  pool_name=$1
+  config_opt=$2
+  expected_val=$3
+
+  val=$(get_config_value_or_die $pool_name $config_opt)
+
+  if [[ "$val" != "$expected_val" ]]; then
+    echo "expected '$expected_val', got '$val'"
+    exit 1
+  fi
+}
+
 # note: we need to pass the other args or ceph_argparse.py will take
 # 'invalid' that is not replicated|erasure and assume it is the next
 # argument, which is a string.
@@ -20,8 +55,11 @@ ceph osd pool create foooo 123
 ceph osd pool create foo 123 # idempotent
 
 ceph osd pool set foo size 1 --yes-i-really-mean-it
+expect_config_value "foo" "min_size" 1
 ceph osd pool set foo size 4
+expect_config_value "foo" "min_size" 2
 ceph osd pool set foo size 10
+expect_config_value "foo" "min_size" 5
 expect_false ceph osd pool set foo size 0
 expect_false ceph osd pool set foo size 20
 

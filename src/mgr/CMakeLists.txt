@@ -20,6 +20,8 @@ if(WITH_MGR)
     MetricCollector.cc
     OSDPerfMetricTypes.cc
     OSDPerfMetricCollector.cc
+    MDSPerfMetricTypes.cc
+    MDSPerfMetricCollector.cc
     PyFormatter.cc
     PyUtil.cc
     PyModule.cc

@@ -62,6 +62,7 @@ class BucketReshardShard {
   rgw::sal::RGWRadosStore *store;
   const RGWBucketInfo& bucket_info;
   int num_shard;
+  const rgw::bucket_index_layout_generation& idx_layout;
   RGWRados::BucketShard bs;
   vector<rgw_cls_bi_entry> entries;
   map<RGWObjCategory, rgw_bucket_category_stats> stats;
@@ -102,13 +103,14 @@ class BucketReshardShard {
 
 public:
   BucketReshardShard(rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
-                     int _num_shard,
+                     int _num_shard, const rgw::bucket_index_layout_generation& _idx_layout,
                      deque<librados::AioCompletion *>& _completions) :
-    store(_store), bucket_info(_bucket_info), bs(store->getRados()),
+    store(_store), bucket_info(_bucket_info), idx_layout(_idx_layout), bs(store->getRados()),
     aio_completions(_completions)
   {
-    num_shard = (bucket_info.num_shards > 0 ? _num_shard : -1);
-    bs.init(bucket_info.bucket, num_shard, nullptr /* no RGWBucketInfo */);
+    num_shard = (idx_layout.layout.normal.num_shards > 0 ? _num_shard : -1);
+
+    bs.init(bucket_info.bucket, num_shard, idx_layout, nullptr /* no RGWBucketInfo */);
 
     max_aio_completions =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
@@ -192,10 +194,11 @@ public:
 		       int _num_target_shards) :
     store(_store), target_bucket_info(_target_bucket_info),
     num_target_shards(_num_target_shards)
-  {
+  { 
+    const auto& idx_layout = target_bucket_info.layout.current_index;
     target_shards.resize(num_target_shards);
     for (int i = 0; i < num_target_shards; ++i) {
-      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, completions);
+      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, idx_layout, completions);
     }
   }
 
@@ -304,7 +307,7 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
 int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
 						       const RGWBucketInfo& bucket_info)
 {
-  uint32_t num_shards = bucket_info.num_shards;
+  uint32_t num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
 
   if (num_shards < std::numeric_limits<uint32_t>::max()) {
     int ret = set_resharding_status(store, bucket_info,
@@ -332,7 +335,7 @@ static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
 
   store->getRados()->create_bucket_id(&new_bucket_info.bucket.bucket_id);
 
-  new_bucket_info.num_shards = new_num_shards;
+  new_bucket_info.layout.current_index.layout.normal.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
 
   new_bucket_info.new_bucket_instance_id.clear();
@@ -524,14 +527,11 @@ int RGWBucketReshard::do_reshard(int num_shards,
 				 ostream *out,
 				 Formatter *formatter)
 {
-  rgw_bucket& bucket = bucket_info.bucket;
-
-  int ret = 0;
-
   if (out) {
-    (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
-    (*out) << "bucket name: " << bucket_info.bucket.name << std::endl;
-    (*out) << "old bucket instance id: " << bucket_info.bucket.bucket_id <<
+    const rgw_bucket& bucket = bucket_info.bucket;
+    (*out) << "tenant: " << bucket.tenant << std::endl;
+    (*out) << "bucket name: " << bucket.name << std::endl;
+    (*out) << "old bucket instance id: " << bucket.bucket_id <<
       std::endl;
     (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id <<
       std::endl;
@@ -550,13 +550,13 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // complete successfully
   BucketInfoReshardUpdate bucket_info_updater(store, bucket_info, bucket_attrs, new_bucket_info.bucket.bucket_id);
 
-  ret = bucket_info_updater.start();
+  int ret = bucket_info_updater.start();
   if (ret < 0) {
     ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
     return ret;
   }
 
-  int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
+  int num_target_shards = (new_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? new_bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
   BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
 
@@ -573,14 +573,14 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   const int num_source_shards =
-    (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+    (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
   string marker;
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
     marker.clear();
     while (is_truncated) {
       entries.clear();
-      ret = store->getRados()->bi_list(bucket, i, string(), marker, max_entries, &entries, &is_truncated);
+      ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
       if (ret < 0 && ret != -ENOENT) {
 	derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
 	return ret;
@@ -611,7 +611,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  // place the multipart .meta object on the same shard as its head object
 	  obj.index_hash_source = mp.get_key();
 	}
-	int ret = store->getRados()->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
+	int ret = store->getRados()->get_target_shard_id(new_bucket_info.layout.current_index.layout.normal, obj.get_hash_object(), &target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
 	  return ret;
@@ -641,7 +641,6 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	    return ret;
 	  }
 	}
-
 	if (verbose_json_out) {
 	  formatter->close_section();
 	  formatter->flush(*out);
@@ -868,11 +867,12 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
   int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
 
   if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
+    << "marker=" << marker << " " << cpp_strerror(ret) << dendl;
     if (ret == -ENOENT) {
       *is_truncated = false;
       ret = 0;
     } else {
-      lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
       if (ret == -EACCES) {
         lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
                           << ". Fix the pool access permissions of your client" << dendl;
@@ -1021,19 +1021,25 @@ int RGWReshard::process_single_logshard(int logshard_num)
 						 entry.tenant, entry.bucket_name,
 						 bucket_info, nullptr,
 						 null_yield, &attrs);
-	if (ret < 0) {
-	  ldout(cct, 0) <<  __func__ <<
-	    ": Error in get_bucket_info for bucket " << entry.bucket_name <<
-	    ": " << cpp_strerror(-ret) << dendl;
-	  if (ret != -ENOENT) {
-	    // any error other than ENOENT will abort
-	    return ret;
+	if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
+	  if (ret < 0) {
+	    ldout(cct, 0) <<  __func__ <<
+	      ": Error in get_bucket_info for bucket " << entry.bucket_name <<
+	      ": " << cpp_strerror(-ret) << dendl;
+	    if (ret != -ENOENT) {
+	      // any error other than ENOENT will abort
+	      return ret;
+	    }
+	  } else {
+	    ldout(cct,0) << __func__ <<
+	      ": Bucket: " << entry.bucket_name <<
+	      " already resharded by someone, skipping " << dendl;
 	  }
 
 	  // we've encountered a reshard queue entry for an apparently
 	  // non-existent bucket; let's try to recover by cleaning up
 	  ldout(cct, 0) <<  __func__ <<
-	    ": removing reshard queue entry for non-existent bucket " <<
+	    ": removing reshard queue entry for a resharded or non-existent bucket" <<
 	    entry.bucket_name << dendl;
 
 	  ret = remove(entry);

@@ -34,8 +34,7 @@ Monitors can query the most recent version of the cluster map during sync
 operations. Ceph Monitors leverage the key/value store's snapshots and iterators
 (using leveldb) to perform store-wide synchronization.
 
-.. ditaa:: 
-
+.. ditaa::
  /-------------\               /-------------\
  |   Monitor   | Write Changes |    Paxos    |
  |   cCCC      +-------------->+   cCCC      |
@@ -505,7 +504,6 @@ Ceph Clients to read and write data. So the Ceph Storage Cluster's operating
 capacity is 95TB, not 99TB.
 
 .. ditaa::
-
  +--------+  +--------+  +--------+  +--------+  +--------+  +--------+
  | Rack 1 |  | Rack 2 |  | Rack 3 |  | Rack 4 |  | Rack 5 |  | Rack 6 |
  | cCCC   |  | cF00   |  | cCCC   |  | cCCC   |  | cCCC   |  | cCCC   |
@@ -636,7 +634,8 @@ fallen behind the other monitors. The requester asks the leader to synchronize,
 and the leader tells the requester to synchronize with a provider.
 
 
-.. ditaa:: +-----------+          +---------+          +----------+
+.. ditaa::
+           +-----------+          +---------+          +----------+
            | Requester |          | Leader  |          | Provider |
            +-----------+          +---------+          +----------+
                   |                    |                     |

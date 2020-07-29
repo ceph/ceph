@@ -5,10 +5,10 @@
 #define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
 #include "common/Cond.h"
-#include "common/WorkQueue.h"
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"

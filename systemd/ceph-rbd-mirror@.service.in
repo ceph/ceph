@@ -5,25 +5,29 @@ Wants=network-online.target local-fs.target
 PartOf=ceph-rbd-mirror.target
 
 [Service]
+Environment=CLUSTER=ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=/usr/bin/rbd-mirror -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 LimitNOFILE=1048576
 LimitNPROC=1048576
-EnvironmentFile=-@SYSTEMD_ENV_FILE@
-Environment=CLUSTER=ceph
-ExecStart=/usr/bin/rbd-mirror -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
-ExecReload=/bin/kill -HUP $MAINPID
 LockPersonality=true
 MemoryDenyWriteExecute=true
 NoNewPrivileges=true
 PrivateDevices=yes
+PrivateTmp=true
+ProtectClock=true
 ProtectControlGroups=true
 ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
 ProtectSystem=full
-PrivateTmp=true
 Restart=on-failure
-StartLimitInterval=30min
+RestrictSUIDSGID=true
 StartLimitBurst=3
+StartLimitInterval=30min
 TasksMax=infinity
 
 [Install]

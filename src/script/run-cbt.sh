@@ -10,7 +10,7 @@ usage:
 options:
   -a,--archive-dir    directory in which the test result is stored, default to $PWD/cbt-archive
   --build-dir         directory where CMakeCache.txt is located, default to $PWD
-  --cbt-dir           directory of cbt if you have already a copy of it. ceph/cbt:master will be cloned from github if not specified
+  --cbt               directory of cbt if you have already a copy of it. ceph/cbt:master will be cloned from github if not specified
   -h,--help           print this help message
   --source-dir        the path to the top level of Ceph source tree, default to $PWD/..
   --use-existing      do not setup/teardown a vstart cluster for testing
@@ -97,8 +97,7 @@ if ! $use_existing; then
     fi
     if $classical; then
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
-           --without-dashboard --memstore \
-           -o "memstore_device_bytes=34359738368"
+           --without-dashboard
     else
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
            --without-dashboard --memstore \

@@ -489,6 +489,20 @@ public:
   virtual void handle_notify() = 0;
 };
 
+class CEPH_RBD_API QuiesceWatchCtx {
+public:
+  virtual ~QuiesceWatchCtx() {}
+  /**
+   * Callback activated when we want to quiesce.
+   */
+  virtual void handle_quiesce() = 0;
+
+  /**
+   * Callback activated when we want to unquiesce.
+   */
+  virtual void handle_unquiesce() = 0;
+};
+
 class CEPH_RBD_API Image
 {
 public:
@@ -598,6 +612,7 @@ public:
   bool snap_exists(const char *snapname) CEPH_RBD_DEPRECATED;
   int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
+  int snap_create2(const char *snapname, uint32_t flags, ProgressContext& pctx);
   int snap_remove(const char *snapname);
   int snap_remove2(const char *snapname, uint32_t flags, ProgressContext& pctx);
   int snap_remove_by_id(uint64_t snap_id);
@@ -664,8 +679,11 @@ public:
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
+
   int discard(uint64_t ofs, uint64_t len);
   ssize_t writesame(uint64_t ofs, size_t len, ceph::bufferlist &bl, int op_flags);
+  ssize_t write_zeroes(uint64_t ofs, size_t len, int zero_flags, int op_flags);
+
   ssize_t compare_and_write(uint64_t ofs, size_t len, ceph::bufferlist &cmp_bl,
                             ceph::bufferlist& bl, uint64_t *mismatch_off, int op_flags);
 
@@ -673,11 +691,17 @@ public:
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
+
+  int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
   int aio_writesame(uint64_t off, size_t len, ceph::bufferlist& bl,
                     RBD::AioCompletion *c, int op_flags);
+  int aio_write_zeroes(uint64_t ofs, size_t len, RBD::AioCompletion *c,
+                       int zero_flags, int op_flags);
+
   int aio_compare_and_write(uint64_t off, size_t len, ceph::bufferlist& cmp_bl,
                             ceph::bufferlist& bl, RBD::AioCompletion *c,
                             uint64_t *mismatch_off, int op_flags);
+
   /**
    * read async from image
    *
@@ -699,7 +723,6 @@ public:
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_read2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
-  int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();
   /**
@@ -737,6 +760,7 @@ public:
   int mirror_image_demote();
   int mirror_image_resync();
   int mirror_image_create_snapshot(uint64_t *snap_id);
+  int mirror_image_create_snapshot2(uint32_t flags, uint64_t *snap_id);
   int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                             size_t info_size);
   int mirror_image_get_mode(mirror_image_mode_t *mode);
@@ -767,6 +791,10 @@ public:
   int list_watchers(std::list<image_watcher_t> &watchers);
 
   int config_list(std::vector<config_option_t> *options);
+
+  int quiesce_watch(QuiesceWatchCtx *ctx, uint64_t *handle);
+  int quiesce_unwatch(uint64_t handle);
+  void quiesce_complete(int r);
 
 private:
   friend class RBD;

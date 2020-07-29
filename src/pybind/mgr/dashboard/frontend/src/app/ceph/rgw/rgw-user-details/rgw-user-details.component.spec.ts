@@ -1,11 +1,10 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { configureTestBed, TabHelper } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
@@ -16,52 +15,47 @@ describe('RgwUserDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserDetailsComponent],
-    imports: [HttpClientTestingModule, SharedModule, TabsModule.forRoot()],
-    providers: [BsModalService, i18nProviders]
+    imports: [BrowserAnimationsModule, HttpClientTestingModule, SharedModule, NgbNavModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserDetailsComponent);
     component = fixture.componentInstance;
-    component.selection = new CdTableSelection();
+    component.selection = {};
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
 
-    const detailsTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Details"]');
-    expect(detailsTab).toBeFalsy();
-    const keysTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Keys"]');
-    expect(keysTab).toBeFalsy();
+    const tabs = TabHelper.getTextContents(fixture);
+    expect(tabs).toContain('Details');
+    expect(tabs).not.toContain('Keys');
   });
 
   it('should show "Details" tab', () => {
-    component.selection.selected = [{ uid: 'myUsername' }];
+    component.selection = { uid: 'myUsername' };
     fixture.detectChanges();
 
-    const detailsTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Details"]');
-    expect(detailsTab).toBeTruthy();
-    const keysTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Keys"]');
-    expect(keysTab).toBeFalsy();
+    const tabs = TabHelper.getTextContents(fixture);
+    expect(tabs).toContain('Details');
+    expect(tabs).not.toContain('Keys');
   });
 
   it('should show "Keys" tab', () => {
     const s3Key = new RgwUserS3Key();
-    component.selection.selected = [{ keys: [s3Key] }];
+    component.selection = { keys: [s3Key] };
     component.ngOnChanges();
     fixture.detectChanges();
 
-    const detailsTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Details"]');
-    expect(detailsTab).toBeTruthy();
-    const keysTab = fixture.debugElement.nativeElement.querySelector('tab[heading="Keys"]');
-    expect(keysTab).toBeTruthy();
+    const tabs = TabHelper.getTextContents(fixture);
+    expect(tabs).toContain('Details');
+    expect(tabs).toContain('Keys');
   });
 
   it('should show correct "System" info', () => {
-    component.selection.selected = [
-      { uid: '', email: '', system: 'true', keys: [], swift_keys: [] }
-    ];
+    component.selection = { uid: '', email: '', system: 'true', keys: [], swift_keys: [] };
+
     component.ngOnChanges();
     fixture.detectChanges();
 
@@ -71,7 +65,7 @@ describe('RgwUserDetailsComponent', () => {
     expect(detailsTab[6].textContent).toEqual('System');
     expect(detailsTab[7].textContent).toEqual('Yes');
 
-    component.selection.selected[0].system = 'false';
+    component.selection.system = 'false';
     component.ngOnChanges();
     fixture.detectChanges();
 

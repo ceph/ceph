@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os.path
 
 import time
+from functools import wraps
 
 from . import ApiController, Endpoint, ReadPermission, UpdatePermission
 from . import RESTController, Task
@@ -11,7 +12,7 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient
-from ..tools import TaskManager, wraps
+from ..tools import TaskManager
 
 
 def get_device_osd_map():
@@ -57,7 +58,7 @@ def raise_if_no_orchestrator(method):
     def inner(self, *args, **kwargs):
         orch = OrchClient.instance()
         if not orch.available():
-            raise DashboardException(code='orchestrator_status_unavailable',
+            raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
                                      msg='Orchestrator is unavailable',
                                      component='orchestrator',
                                      http_status_code=503)
@@ -78,7 +79,7 @@ class Orchestrator(RESTController):
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
     @orchestrator_task('identify_device', ['{hostname}', '{device}'])
-    def identify_device(self, hostname, device, duration):
+    def identify_device(self, hostname, device, duration):  # pragma: no cover
         # type: (str, str, int) -> None
         """
         Identify a device by switching on the device light for N seconds.
@@ -110,7 +111,7 @@ class OrchestratorInventory(RESTController):
         for inventory_host in inventory_hosts:
             host_osds = device_osd_map.get(inventory_host['name'])
             for device in inventory_host['devices']:
-                if host_osds:
+                if host_osds:  # pragma: no cover
                     dev_name = os.path.basename(device['path'])
                     device['osd_ids'] = sorted(host_osds.get(dev_name, []))
                 else:

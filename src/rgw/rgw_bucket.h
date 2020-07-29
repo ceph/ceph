@@ -939,5 +939,7 @@ private:
 
 };
 
+bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr, const string& marker,
+                           const string& bucket_id, rgw_bucket* bucket_out);
 
 #endif

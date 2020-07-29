@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_OTP_TYPES_H
 #define CEPH_CLS_OTP_TYPES_H
 
@@ -27,10 +30,10 @@ namespace rados {
 
       struct otp_info_t {
         OTPType type{OTP_TOTP};
-        string id;
-        string seed;
+        std::string id;
+        std::string seed;
         SeedType seed_type{OTP_SEED_UNKNOWN};
-        bufferlist seed_bin; /* parsed seed, built automatically by otp_set_op,
+        ceph::buffer::list seed_bin; /* parsed seed, built automatically by otp_set_op,
                               * not being json encoded/decoded on purpose
                               */
         int32_t time_ofs{0};
@@ -39,7 +42,7 @@ namespace rados {
 
         otp_info_t() {}
 
-        void encode(bufferlist &bl) const {
+        void encode(ceph::buffer::list &bl) const {
           ENCODE_START(1, 1, bl);
           encode((uint8_t)type, bl);
           /* if we ever implement anything other than TOTP
@@ -53,7 +56,7 @@ namespace rados {
           encode(window, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::const_iterator &bl) {
+        void decode(ceph::buffer::list::const_iterator &bl) {
           DECODE_START(1, bl);
           uint8_t t;
           decode(t, bl);
@@ -69,7 +72,7 @@ namespace rados {
           decode(window, bl);
           DECODE_FINISH(bl);
         }
-        void dump(Formatter *f) const;
+        void dump(ceph::Formatter *f) const;
         void decode_json(JSONObj *obj);
       };
       WRITE_CLASS_ENCODER(rados::cls::otp::otp_info_t)
@@ -81,18 +84,18 @@ namespace rados {
       };
 
       struct otp_check_t {
-        string token;
+        std::string token;
         ceph::real_time timestamp;
         OTPCheckResult result{OTP_CHECK_UNKNOWN};
 
-        void encode(bufferlist &bl) const {
+        void encode(ceph::buffer::list &bl) const {
           ENCODE_START(1, 1, bl);
           encode(token, bl);
           encode(timestamp, bl);
           encode((char)result, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::const_iterator &bl) {
+        void decode(ceph::buffer::list::const_iterator &bl) {
           DECODE_START(1, bl);
           decode(token, bl);
           decode(timestamp, bl);
@@ -105,16 +108,16 @@ namespace rados {
       WRITE_CLASS_ENCODER(rados::cls::otp::otp_check_t)
 
       struct otp_repo_t {
-        map<string, otp_info_t> entries;
+        std::map<std::string, otp_info_t> entries;
 
         otp_repo_t() {}
 
-        void encode(bufferlist &bl) const {
+        void encode(ceph::buffer::list &bl) const {
           ENCODE_START(1, 1, bl);
           encode(entries, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::const_iterator &bl) {
+        void decode(ceph::buffer::list::const_iterator &bl) {
           DECODE_START(1, bl);
           decode(entries, bl);
           DECODE_FINISH(bl);

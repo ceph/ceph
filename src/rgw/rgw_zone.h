@@ -268,9 +268,9 @@ struct RGWZonePlacementInfo {
   rgw_pool index_pool;
   rgw_pool data_extra_pool; /* if not set we should use data_pool */
   RGWZoneStorageClasses storage_classes;
-  RGWBucketIndexType index_type;
+  rgw::BucketIndexType index_type;
 
-  RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
+  RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Normal) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(7, 1, bl);
@@ -301,7 +301,7 @@ struct RGWZonePlacementInfo {
     if (struct_v >= 5) {
       uint32_t it;
       decode(it, bl);
-      index_type = (RGWBucketIndexType)it;
+      index_type = (rgw::BucketIndexType)it;
     }
     string standard_compression_type;
     if (struct_v >= 6) {
@@ -372,6 +372,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool roles_pool;
   rgw_pool reshard_pool;
   rgw_pool otp_pool;
+  rgw_pool oidc_pool;
 
   RGWAccessKey system_key;
 
@@ -405,7 +406,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(12, 1, bl);
+    ENCODE_START(13, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -429,11 +430,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(reshard_pool, bl);
     encode(otp_pool, bl);
     encode(tier_config, bl);
+    encode(oidc_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(12, bl);
+    DECODE_START(13, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -491,6 +493,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       for (auto& kv : old_tier_config) {
         tier_config.set(kv.first, kv.second);
       }
+    }
+    if (struct_v >= 13) {
+      ::decode(oidc_pool, bl);
+    } else {
+      oidc_pool = name + ".rgw.meta:oidc";
     }
     DECODE_FINISH(bl);
   }

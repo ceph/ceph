@@ -7,7 +7,7 @@ Vcs-Browser: https://github.com/ceph/ceph
 Maintainer: Ceph Maintainers <ceph-maintainers@lists.ceph.com>
 Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
-Build-Depends: cmake (>= 3.5),
+Build-Depends: cmake (>= 3.10.2),
                cpio,
                cryptsetup-bin | cryptsetup,
                cython,
@@ -75,7 +75,6 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   python3-nose,
 # Make-Check   python3-pecan,
 # Make-Check   python3-bcrypt,
-# Make-Check   python3-six,
 # Make-Check   tox,
 # Make-Check   python3-coverage,
 # Make-Check   python3-dateutil,
@@ -99,7 +98,7 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   xmlstarlet,
                yasm [amd64],
                zlib1g-dev,
-Standards-Version: 3.9.3
+Standards-Version: 4.4.0
 
 Package: ceph
 Architecture: linux-any
@@ -315,7 +314,6 @@ Description: ceph manager modules which are always enabled
 Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-six,
          python3-jsonpatch
          ${misc:Depends},
          ${python:Depends},
@@ -348,10 +346,10 @@ Package: ceph-mgr-cephadm
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
 	 cephadm,
-	 python3-six,
          ${misc:Depends},
          ${python:Depends},
-         openssh-client
+         openssh-client,
+         python3-jinja2
 Description: cephadm orchestrator module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,

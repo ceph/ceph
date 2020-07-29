@@ -3,15 +3,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  FormHelper,
-  i18nProviders
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../../testing/unit-test-helper';
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -33,7 +29,7 @@ describe('PoolEditModeModalComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [BsModalRef, BsModalService, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
@@ -41,10 +37,10 @@ describe('PoolEditModeModalComponent', () => {
     component = fixture.componentInstance;
     component.poolName = 'somePool';
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
 
-    rbdMirroringService = TestBed.get(RbdMirroringService);
+    rbdMirroringService = TestBed.inject(RbdMirroringService);
 
     formHelper = new FormHelper(component.editModeForm);
     fixture.detectChanges();
@@ -56,11 +52,11 @@ describe('PoolEditModeModalComponent', () => {
 
   describe('update pool mode', () => {
     beforeEach(() => {
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
     });
 
     afterEach(() => {
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('should call updatePool', () => {

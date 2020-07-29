@@ -50,7 +50,7 @@ class TestClientLimits(CephFSTestCase):
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
         mds_max_caps_per_client = int(self.fs.get_config("mds_max_caps_per_client"))
-        mds_recall_warning_decay_rate = self.fs.get_config("mds_recall_warning_decay_rate")
+        mds_recall_warning_decay_rate = float(self.fs.get_config("mds_recall_warning_decay_rate"))
         self.assertTrue(open_files >= mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
@@ -122,8 +122,7 @@ class TestClientLimits(CephFSTestCase):
 
         self.set_conf('client.{0}'.format(self.mount_a.client_id), 'client inject release failure', 'true')
         self.mount_a.teardown()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         mount_a_client_id = self.mount_a.get_global_id()
 
         # Client A creates a file.  He will hold the write caps on the file, and later (simulated bug) fail
@@ -164,8 +163,7 @@ class TestClientLimits(CephFSTestCase):
 
         self.set_conf('client', 'client inject fixed oldest tid', 'true')
         self.mount_a.teardown()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         self.fs.mds_asok(['config', 'set', 'mds_max_completed_requests', '{0}'.format(max_requests)])
 
@@ -176,7 +174,7 @@ class TestClientLimits(CephFSTestCase):
         self.mount_a.create_n_files("testdir/file2", 5, True)
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
-        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests / 10)
+        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests // 10)
 
     def _test_client_cache_size(self, mount_subdir):
         """
@@ -195,8 +193,7 @@ class TestClientLimits(CephFSTestCase):
             self.mount_a.run_shell(["mkdir", "subdir"])
             self.mount_a.umount_wait()
             self.set_conf('client', 'client mountpoint', '/subdir')
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
             root_ino = self.mount_a.path_to_ino(".")
             self.assertEqual(root_ino, 1);
 
@@ -217,7 +214,7 @@ class TestClientLimits(CephFSTestCase):
         self.assertGreaterEqual(dentry_count, num_dirs)
         self.assertGreaterEqual(dentry_pinned_count, num_dirs)
 
-        cache_size = num_dirs / 10
+        cache_size = num_dirs // 10
         self.mount_a.set_cache_size(cache_size)
 
         def trimmed():

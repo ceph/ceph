@@ -3,11 +3,31 @@
 
 #include "librbd/io/Utils.h"
 #include "include/buffer.h"
+#include "include/rados/librados.hpp"
+#include "include/neorados/RADOS.hpp"
 #include "osd/osd_types.h"
 
 namespace librbd {
 namespace io {
 namespace util {
+
+void apply_op_flags(uint32_t op_flags, uint32_t flags, neorados::Op* op) {
+  if (op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)
+    op->set_fadvise_random();
+  if (op_flags & LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL)
+    op->set_fadvise_sequential();
+  if (op_flags & LIBRADOS_OP_FLAG_FADVISE_WILLNEED)
+    op->set_fadvise_willneed();
+  if (op_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
+    op->set_fadvise_dontneed();
+  if (op_flags & LIBRADOS_OP_FLAG_FADVISE_NOCACHE)
+    op->set_fadvise_nocache();
+
+  if (flags & librados::OPERATION_BALANCE_READS)
+    op->balance_reads();
+  if (flags & librados::OPERATION_LOCALIZE_READS)
+    op->localize_reads();
+}
 
 bool assemble_write_same_extent(
     const LightweightObjectExtent &object_extent, const ceph::bufferlist& data,

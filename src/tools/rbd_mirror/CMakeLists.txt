@@ -43,6 +43,7 @@ set(rbd_mirror_internal
   image_replayer/PrepareLocalImageRequest.cc
   image_replayer/PrepareRemoteImageRequest.cc
   image_replayer/StateBuilder.cc
+  image_replayer/TimeRollingMean.cc
   image_replayer/Utils.cc
   image_replayer/journal/CreateLocalImageRequest.cc
   image_replayer/journal/EventPreprocessor.cc
@@ -76,6 +77,7 @@ target_link_libraries(rbd-mirror
   rbd_internal
   rbd_types
   journal
+  libneorados
   librados
   osdc
   cls_rbd_client

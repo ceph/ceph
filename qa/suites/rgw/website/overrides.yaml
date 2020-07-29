@@ -11,6 +11,8 @@ overrides:
         osd_min_pg_log_entries: 10
         osd_max_pg_log_entries: 10
       client:
+        setuser: ceph
+        setgroup: ceph
         debug rgw: 20
         rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=

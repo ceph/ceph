@@ -301,6 +301,7 @@ struct PurgeRange {
   int flags;
   Context *oncommit;
   int uncommitted;
+  int err = 0;
   PurgeRange(inodeno_t i, const file_layout_t& l, const SnapContext& sc,
 	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
 	     Context *fin)
@@ -330,7 +331,7 @@ int Filer::purge_range(inodeno_t ino,
   PurgeRange *pr = new PurgeRange(ino, *layout, snapc, first_obj,
 				  num_obj, mtime, flags, oncommit);
 
-  _do_purge_range(pr, 0);
+  _do_purge_range(pr, 0, 0);
   return 0;
 }
 
@@ -339,20 +340,22 @@ struct C_PurgeRange : public Context {
   PurgeRange *pr;
   C_PurgeRange(Filer *f, PurgeRange *p) : filer(f), pr(p) {}
   void finish(int r) override {
-    filer->_do_purge_range(pr, 1);
+    filer->_do_purge_range(pr, 1, r);
   }
 };
 
-void Filer::_do_purge_range(PurgeRange *pr, int fin)
+void Filer::_do_purge_range(PurgeRange *pr, int fin, int err)
 {
   PurgeRange::unique_lock prl(pr->lock);
+  if (err && err != -ENOENT)
+    pr->err = err;
   pr->uncommitted -= fin;
   ldout(cct, 10) << "_do_purge_range " << pr->ino << " objects " << pr->first
 		 << "~" << pr->num << " uncommitted " << pr->uncommitted
 		 << dendl;
 
   if (pr->num == 0 && pr->uncommitted == 0) {
-    pr->oncommit->complete(0);
+    pr->oncommit->complete(pr->err);
     prl.unlock();
     delete pr;
     return;
@@ -415,7 +418,7 @@ void Filer::truncate(inodeno_t ino,
   if (num_objs == 1) {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    vector<OSDOp> ops(1);
+    osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
     ops[0].op.extent.truncate_seq = truncate_seq;
     ops[0].op.extent.truncate_size = extents[0].offset;
@@ -474,7 +477,7 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 
   // Issue objecter ops outside tr->lock to avoid lock dependency loop
   for (const auto& p : extents) {
-    vector<OSDOp> ops(1);
+    osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
     ops[0].op.extent.truncate_size = p.offset;
     ops[0].op.extent.truncate_seq = tr->truncate_seq;

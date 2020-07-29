@@ -501,7 +501,8 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water, in_flight.size());
+  files_high_water = std::max(files_high_water,
+                              static_cast<uint64_t>(in_flight.size()));
   logger->set(l_pq_executing_high_water, files_high_water);
   auto ops = _calculate_ops(item);
   ops_in_flight += ops;
@@ -579,7 +580,8 @@ void PurgeQueue::_execute_item(
     logger->set(l_pq_executing_ops_high_water, ops_high_water);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
-    files_high_water = std::max(files_high_water, in_flight.size());
+    files_high_water = std::max(files_high_water,
+                                static_cast<uint64_t>(in_flight.size()));
     logger->set(l_pq_executing_high_water, files_high_water);
     return;
   }
@@ -588,8 +590,14 @@ void PurgeQueue::_execute_item(
   gather.set_finisher(new C_OnFinisher(
                       new LambdaContext([this, expire_to](int r){
     std::lock_guard l(lock);
-    _execute_item_complete(expire_to);
 
+    if (r == -EBLACKLISTED) {
+      finisher.queue(on_error, r);
+      on_error = nullptr;
+      return;
+    }
+
+    _execute_item_complete(expire_to);
     _consume();
 
     // Have we gone idle?  If so, do an extra write_head now instead of
@@ -651,7 +659,8 @@ void PurgeQueue::_execute_item_complete(
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water, in_flight.size());
+  files_high_water = std::max(files_high_water,
+                              static_cast<uint64_t>(in_flight.size()));
   logger->set(l_pq_executing_high_water, files_high_water);
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 

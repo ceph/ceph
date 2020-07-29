@@ -2,12 +2,11 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
 import { TablePerformanceCounterComponent } from '../../../performance-counter/table-performance-counter/table-performance-counter.component';
 import { DeviceListComponent } from '../../../shared/device-list/device-list.component';
@@ -23,22 +22,21 @@ describe('OsdDetailsComponent', () => {
   let getDetailsSpy: jasmine.Spy;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, TabsModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, NgbNavModule, SharedModule],
     declarations: [
       OsdDetailsComponent,
       DeviceListComponent,
       SmartListComponent,
       TablePerformanceCounterComponent,
       OsdPerformanceHistogramComponent
-    ],
-    providers: i18nProviders
+    ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdDetailsComponent);
     component = fixture.componentInstance;
 
-    component.selection = new CdTableSelection();
+    component.selection = undefined;
     debugElement = fixture.debugElement;
     osdService = debugElement.injector.get(OsdService);
 

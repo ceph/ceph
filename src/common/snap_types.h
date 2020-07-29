@@ -53,7 +53,7 @@ struct SnapContext {
     seq = 0;
     snaps.clear();
   }
-  bool empty() { return seq == 0; }
+  bool empty() const { return seq == 0; }
 
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;

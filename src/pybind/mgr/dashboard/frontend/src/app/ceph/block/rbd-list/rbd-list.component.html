@@ -8,10 +8,12 @@
           [data]="images"
           columnMode="flex"
           [columns]="columns"
-          identifier="id"
+          identifier="unique_id"
           [searchableObjects]="true"
           forceIdentifier="true"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
@@ -19,7 +21,7 @@
                     [tableActions]="tableActions">
   </cd-table-actions>
   <cd-rbd-details cdTableDetail
-                  [selection]="selection">
+                  [selection]="expandedRow">
   </cd-rbd-details>
 </cd-table>
 

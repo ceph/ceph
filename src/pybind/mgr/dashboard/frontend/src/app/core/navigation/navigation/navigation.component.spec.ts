@@ -1,10 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { configureTestSuite } from 'ng-bullet';
 import { MockModule } from 'ng-mocks';
 import { of } from 'rxjs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { Permission, Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import {
@@ -12,6 +12,7 @@ import {
   FeatureTogglesMap,
   FeatureTogglesService
 } from '../../../shared/services/feature-toggles.service';
+import { PrometheusAlertService } from '../../../shared/services/prometheus-alert.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { NavigationModule } from '../navigation.module';
 import { NavigationComponent } from './navigation.component';
@@ -48,22 +49,22 @@ describe('NavigationComponent', () => {
   let component: NavigationComponent;
   let fixture: ComponentFixture<NavigationComponent>;
 
-  configureTestSuite(() => {
-    TestBed.configureTestingModule({
-      declarations: [NavigationComponent],
-      imports: [MockModule(NavigationModule)],
-      providers: [
-        {
-          provide: AuthStorageService,
-          useValue: {
-            getPermissions: jest.fn(),
-            isPwdDisplayed$: { subscribe: jest.fn() }
-          }
-        },
-        { provide: SummaryService, useValue: { subscribe: jest.fn() } },
-        { provide: FeatureTogglesService, useValue: { get: jest.fn() } }
-      ]
-    });
+  configureTestBed({
+    declarations: [NavigationComponent],
+    imports: [MockModule(NavigationModule)],
+    providers: [
+      {
+        provide: AuthStorageService,
+        useValue: {
+          getPermissions: jest.fn(),
+          isPwdDisplayed$: { subscribe: jest.fn() },
+          telemetryNotification$: { subscribe: jest.fn() }
+        }
+      },
+      { provide: SummaryService, useValue: { subscribe: jest.fn() } },
+      { provide: FeatureTogglesService, useValue: { get: jest.fn() } },
+      { provide: PrometheusAlertService, useValue: { alerts: [] } }
+    ]
   });
 
   beforeEach(() => {
@@ -179,5 +180,57 @@ describe('NavigationComponent', () => {
         }
       });
     }
+  });
+
+  describe('showTopNotification', () => {
+    const notification1 = 'notificationName1';
+    const notification2 = 'notificationName2';
+
+    beforeEach(() => {
+      component.notifications = [];
+    });
+
+    it('should show notification', () => {
+      component.showTopNotification(notification1, true);
+      expect(component.notifications.includes(notification1)).toBeTruthy();
+      expect(component.notifications.length).toBe(1);
+    });
+
+    it('should not add a second notification if it is already shown', () => {
+      component.showTopNotification(notification1, true);
+      component.showTopNotification(notification1, true);
+      expect(component.notifications.includes(notification1)).toBeTruthy();
+      expect(component.notifications.length).toBe(1);
+    });
+
+    it('should add a second notification if the first one is different', () => {
+      component.showTopNotification(notification1, true);
+      component.showTopNotification(notification2, true);
+      expect(component.notifications.includes(notification1)).toBeTruthy();
+      expect(component.notifications.includes(notification2)).toBeTruthy();
+      expect(component.notifications.length).toBe(2);
+    });
+
+    it('should hide an active notification', () => {
+      component.showTopNotification(notification1, true);
+      expect(component.notifications.includes(notification1)).toBeTruthy();
+      expect(component.notifications.length).toBe(1);
+      component.showTopNotification(notification1, false);
+      expect(component.notifications.length).toBe(0);
+    });
+
+    it('should not fail if it tries to hide an inactive notification', () => {
+      expect(() => component.showTopNotification(notification1, false)).not.toThrow();
+      expect(component.notifications.length).toBe(0);
+    });
+
+    it('should keep other notifications if it hides one', () => {
+      component.showTopNotification(notification1, true);
+      component.showTopNotification(notification2, true);
+      expect(component.notifications.length).toBe(2);
+      component.showTopNotification(notification2, false);
+      expect(component.notifications.length).toBe(1);
+      expect(component.notifications.includes(notification1)).toBeTruthy();
+    });
   });
 });

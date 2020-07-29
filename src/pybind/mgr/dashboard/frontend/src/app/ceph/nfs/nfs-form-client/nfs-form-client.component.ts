@@ -1,7 +1,6 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { NfsService } from '../../../shared/api/nfs.service';
@@ -13,21 +12,31 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
   templateUrl: './nfs-form-client.component.html',
   styleUrls: ['./nfs-form-client.component.scss']
 })
-export class NfsFormClientComponent {
+export class NfsFormClientComponent implements OnInit {
   @Input()
   form: CdFormGroup;
+
+  @Input()
+  clients: any[];
 
   nfsSquash: any[] = this.nfsService.nfsSquash;
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   icons = Icons;
 
-  constructor(private nfsService: NfsService, private i18n: I18n) {}
+  constructor(private nfsService: NfsService) {}
+
+  ngOnInit() {
+    _.forEach(this.clients, (client) => {
+      const fg = this.addClient();
+      fg.patchValue(client);
+    });
+  }
 
   getNoAccessTypeDescr() {
     if (this.form.getValue('access_type')) {
-      return `${this.form.getValue('access_type')} ${this.i18n('(inherited from global config)')}`;
+      return `${this.form.getValue('access_type')} ${$localize`(inherited from global config)`}`;
     }
-    return this.i18n('-- Select the access type --');
+    return $localize`-- Select the access type --`;
   }
 
   getAccessTypeHelp(index: number) {
@@ -39,9 +48,9 @@ export class NfsFormClientComponent {
 
   getNoSquashDescr() {
     if (this.form.getValue('squash')) {
-      return `${this.form.getValue('squash')} (${this.i18n('inherited from global config')})`;
+      return `${this.form.getValue('squash')} (${$localize`inherited from global config`})`;
     }
-    return this.i18n('-- Select what kind of user id squashing is performed --');
+    return $localize`-- Select what kind of user id squashing is performed --`;
   }
 
   addClient() {
@@ -75,13 +84,6 @@ export class NfsFormClientComponent {
     const clients = this.form.get('clients') as FormArray;
     const client = clients.at(index) as CdFormGroup;
     return client.getValue(control);
-  }
-
-  resolveModel(clients: any[]) {
-    _.forEach(clients, (client) => {
-      const fg = this.addClient();
-      fg.patchValue(client);
-    });
   }
 
   trackByFn(index: number) {

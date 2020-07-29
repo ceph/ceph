@@ -1,8 +1,6 @@
 import time
 import logging
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.exceptions import CommandFailedError
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ class OpenFileTable(CephFSTestCase):
 
         # Hold the file open
         file_count = 8
-        for i in xrange(0, file_count):
+        for i in range(0, file_count):
             filename = "open_file{}".format(i)
             p = self.mount_a.open_background(filename)
             self.mount_a.write_n_mb(filename, size_mb)
@@ -44,7 +42,7 @@ class OpenFileTable(CephFSTestCase):
         mds0_openfiles.1 to hold the extra keys.
         """
 
-        stat_out = self.fs.rados(["stat", "mds0_openfiles.1"])
+        self.fs.rados(["stat", "mds0_openfiles.1"])
 
         # Now close the file
         self.mount_a.kill_background(p)

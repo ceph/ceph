@@ -2,27 +2,18 @@
  SeaStore
 ==========
 
-This is a rough design doc for a new ObjectStore implementation design
-to facilitate higher performance on solid state devices.
-
-Name
-====
-
-SeaStore maximizes the opportunity for confusion (seastar? seashore?)
-and associated fun.  Alternative suggestions welcome.
-
-
-Goals
-=====
+Goals and Basics
+================
 
 * Target NVMe devices.  Not primarily concerned with pmem or HDD.
 * make use of SPDK for user-space driven IO
-* Use Seastar futures programming model to facilitate run-to-completion and a sharded memory/processing model
-* Allow zero- (or minimal) data copying on read and write paths when combined with a seastar-based messenger using DPDK
-
+* Use Seastar futures programming model to facilitate
+  run-to-completion and a sharded memory/processing model
+* Allow zero- (or minimal) data copying on read and write paths when
+  combined with a seastar-based messenger using DPDK
 
 Motivation and background
-=========================
+-------------------------
 
 All flash devices are internally structured in terms of segments that
 can be written efficiently but must be erased in their entirety.  The
@@ -35,10 +26,6 @@ drive garbage collection at higher layers.
 In principle a fine-grained discard could communicate our intent to
 the device, but in practice discard is poorly implemented in the
 device and intervening software layers.
-
-  
-Basics
-======
 
 The basic idea is that all data will be stream out sequentially to
 large segments on the device.  In the SSD hardware, segments are
@@ -60,11 +47,9 @@ the device.
 
 The key is to mix a small bit of cleaning work with every write
 transaction to avoid spikes and variance in write latency.
-
-
   
 Data layout basics
-==================
+------------------
 
 One or more cores/shards will be reading and writing to the device at
 once.  Each shard will have its own independent data it is operating
@@ -72,67 +57,243 @@ on and stream to its own open segments.  Devices that support streams
 can be hinted accordingly so that data from different shards is not
 mixed on the underlying media.
 
-Global state
-------------
-
-There will be a simple global table of segments and their usage/empty
-status.  Each shard will occasionally claim new empty segments for
-writing as needed, or return cleaned segments to the global free list.
-
-At a high level, all metadata will be structured as a b-tree.  The
-root for the metadata btree will also be stored centrally (along with
-the segment allocation table).
-
-This is hand-wavey, but it is probably sufficient to update the root
-pointer for the btree either as each segment is sealed or as a new
-segment is opened.
-
-
-Writing segments
-----------------
-
-Each segment will be written sequentially as a sequence of
-transactions.  Each transaction will be on-disk expression of an
-ObjectStore::Transaction.  It will consist of
-
-* new data blocks
-* some metadata describing changes to b-tree metadata blocks.  This
-  will be written compact as a delta: which keys are removed and which
-  keys/values are inserted into the b-tree block.
-
-As each b-tree block is modified, we update the block in memory and
-put it on a 'dirty' list.  However, again, only the (compact) delta is journaled
-to the segment.
-
-As we approach the end of the segment, the goal is to undirty all of
-our dirty blocks in memory.  Based on the number of dirty blocks and
-the remaining space, we include a proportional number of dirty blocks
-in each transaction write so that we undirty some of the b-tree
-blocks.  Eventually, the last transaction written to the segment will
-include all of the remaining dirty b-tree blocks.
-
-Segment inventory
+Persistent Memory
 -----------------
 
-At the end of each segment, an inventory will be written that includes
-any metadata needed to test whether blocks in the segment are still
-live.  For data blocks, that means an object id (e.g., ino number) and
-offset to test whether the block is still reference.  For metadata
-blocks, it would be at least one metadata key that lands in any b-tree
-block that is modified (via a delta) in the segment--enough for us to
-do a forward lookup in the b-tree to check whether the b-tree block is
-still referenced.  Once this is written, the segment is sealed and read-only.
+As the intial sequential design above matures, we'll introduce
+persistent memory support for metadata and caching structures.
 
-Crash recovery
+Design
+======
+
+The design is based heavily on both f2fs and btrfs.  Each reactor
+manages its own root.  Prior to reusing a segment, we rewrite any live
+blocks to an open segment.
+
+Because we are only writing sequentially to open segments, we must
+“clean” one byte of an existing segment for every byte written at
+steady state.  Generally, we’ll need to reserve some portion of the
+usable capacity in order to ensure that write amplification remains
+acceptably low (20% for 2x? -- TODO: find prior work).  As a design
+choice, we want to avoid a background gc scheme as it tends to
+complicate estimating operation cost and tends to introduce
+non-deterministic latency behavior.  Thus, we want a set of structures
+that permits us to relocate blocks from existing segments inline with
+ongoing client IO.
+
+To that end, at a high level, we’ll maintain 2 basic metadata trees.
+First, we need a tree mapping ghobject_t->onode_t (onode_by_hobject).
+Second, we need a way to find live blocks within a segment and a way
+to decouple internal references from physical locations (lba_tree).
+
+Each onode contains xattrs directly as well as the top of the omap and
+extent trees (optimization: we ought to be able to fit small enough
+objects into the onode).
+
+Segment Layout
 --------------
 
-On any crash, we simply "replay" the currently open segment in memory.
-For any b-tree delta encountered, we load the original block, modify
-in memory, and mark it dirty.  Once we continue writing, the normal "write
-dirty blocks as we near the end of the segment" behavior will pick up where
-we left off.
+The backing storage is abstracted into a set of segments.  Each
+segment can be in one of 3 states: empty, open, closed.  The byte
+contents of a segment are a sequence of records.  A record is prefixed
+by a header (including length and checksums) and contains a sequence
+of deltas and/or blocks.  Each delta describes a logical mutation for
+some block.  Each included block is an aligned extent addressable by
+<segment_id_t, segment_offset_t>.  A transaction can be implemented by
+constructing a record combining deltas and updated blocks and writing
+it to an open segment.
 
+Note that segments will generally be large (something like >=256MB),
+so there will not typically be very many of them.
 
+record: [ header | delta | delta... | block | block ... ]
+segment: [ record ... ]
+
+See src/crimson/os/seastore/journal.h for Journal implementation
+See src/crimson/os/seastore/seastore_types.h for most seastore structures.
+
+Each shard will keep open N segments for writes
+
+- HDD: N is probably 1 on one shard
+- NVME/SSD: N is probably 2/shard, one for "journal" and one for
+  finished data records as their lifetimes are different.
+
+I think the exact number to keep open and how to partition writes
+among them will be a tuning question -- gc/layout should be flexible.
+Where practical, the goal is probably to partition blocks by expected
+lifetime so that a segment either has long lived or short lived
+blocks.
+
+The backing physical layer is exposed via a segment based interface.
+See src/crimson/os/seastore/segment_manager.h
+
+Journal and Atomicity
+---------------------
+
+One open segment is designated to be the journal.  A transaction is
+represented by an atomically written record.  A record will contain
+blocks written as part of the transaction as well as deltas which
+are logical mutations to existing physical extents.  Transaction deltas
+are always written to the journal.  If the transaction is associated
+with blocks written to other segments, final record with the deltas
+should be written only once the other blocks are persisted.  Crash
+recovery is done by finding the segment containing the beginning of
+the current journal, loading the root node, replaying the deltas, and
+loading blocks into the cache as needed.
+
+See src/crimson/os/seastore/journal.h
+
+Block Cache
+-----------
+
+Every block is in one of two states:
+
+- clean: may be in cache or not, reads may cause cache residence or
+  not
+- dirty: the current version of the record requires overlaying deltas
+  from the journal.  Must be fully present in the cache.
+
+Periodically, we need to trim the journal (else, we’d have to replay
+journal deltas from the beginning of time).  To do this, we need to
+create a checkpoint by rewriting the root blocks and all currently
+dirty blocks.  Note, we can do journal checkpoints relatively
+infrequently, and they needn’t block the write stream.
+
+Note, deltas may not be byte range modifications.  Consider a btree
+node structured with keys to the left and values to the right (common
+trick for improving point query/key scan performance).  Inserting a
+key/value into that node at the min would involve moving a bunch of
+bytes, which would be expensive (or verbose) to express purely as a
+sequence of byte operations.  As such, each delta indicates the type
+as well as the location of the corresponding extent.  Each block
+type can therefore implement CachedExtent::apply_delta as appopriate.
+
+See src/os/crimson/seastore/cached_extent.h.
+See src/os/crimson/seastore/cache.h.
+
+GC
+---
+
+Prior to reusing a segment, we must relocate all live blocks.  Because
+we only write sequentially to empty segments, for every byte we write
+to currently open segments, we need to clean a byte of an existing
+closed segment.  As a design choice, we’d like to avoid background
+work as it complicates estimating operation cost and has a tendency to
+create non-deterministic latency spikes.  Thus, under normal operation
+each seastore reactor will be inserting enough work to clean a segment
+at the same rate as incoming operations.
+
+In order to make this cheap for sparse segments, we need a way to
+positively identify dead blocks.  Thus, for every block written, an
+entry will be added to the lba tree with a pointer to the previous lba
+in the segment.  Any transaction that moves a block or modifies the
+reference set of an existing one will include deltas/blocks required
+to update the lba tree to update or remove the previous block
+allocation.  The gc state thus simply needs to maintain an iterator
+(of a sort) into the lba tree segment linked list for segment
+currently being cleaned and a pointer to the next record to be
+examined -- records not present in the allocation tree may still
+contain roots (like allocation tree blocks) and so the record metadata
+must be checked for a flag indicating root blocks.
+
+For each transaction, we evaluate a heuristic function of the
+currently available space and currently live space in order to
+determine whether we need to do cleaning work (could be simply a range
+of live/used space ratios).
+
+TODO: there is not yet a GC implementation
+
+Logical Layout
+==============
+
+Using the above block and delta semantics, we build two root level trees:
+- onode tree: maps hobject_t to onode_t
+- lba_tree: maps lba_t to lba_range_t
+
+Each of the above structures is comprised of blocks with mutations
+encoded in deltas.  Each node of the above trees maps onto a block.
+Each block is either physically addressed (root blocks and the
+lba_tree nodes) or is logically addressed (everything else).
+Physically addressed blocks are located by a paddr_t: <segment_id_t,
+segment_off_t> tuple and are marked as physically addressed in the
+record.  Logical blocks are addressed by laddr_t and require a lookup in
+the lba_tree to address.
+
+Because the cache/transaction machinery lives below the level of the
+lba tree, we can represent atomic mutations of the lba tree and other
+structures by simply including both in a transaction.
+
+LBAManager/BtreeLBAManager
+--------------------------
+
+Implementations of the LBAManager interface are responsible for managing
+the logical->physical mapping -- see crimson/os/seastore/lba_manager.h.
+
+The BtreeLBAManager implements this interface directly on top of
+Journal and SegmentManager using a wandering btree approach.
+
+Because SegmentManager does not let us predict the location of a
+committed record (a property of both SMR and Zone devices), references
+to blocks created within the same transaction will necessarily be
+*relative* addresses.  The BtreeLBAManager maintains an invariant by
+which the in-memory copy of any block will contain only absolute
+addresses when !is_pending() -- on_commit and complete_load fill in
+absolute addresses based on the actual block addr and on_delta_write
+does so based on the just committed record.  When is_pending(), if
+is_initial_pending references in memory are block_relative (because
+they will be written to the original block location) and
+record_relative otherwise (value will be written to delta).
+
+TransactionManager
+------------------
+
+The TransactionManager is responsible for presenting a unified
+interface on top of the Journal, SegmentManager, Cache, and
+LBAManager.  Users can allocate and mutate extents based on logical
+addresses with segment cleaning handled in the background.
+
+See crimson/os/seastore/transaction_manager.h
+
+Next Steps
+==========
+
+Journal
+-------
+
+- Support for scanning a segment to find physically addressed blocks
+- Add support for trimming the journal and releasing segments.
+
+Cache
+-----
+
+- Support for rewriting dirty blocks
+
+  - Need to add support to CachedExtent for finding/updating
+    dependent blocks
+  - Need to add support for adding dirty block writout to
+    try_construct_record
+
+LBAManager
+----------
+
+- Add support for pinning
+- Add segment -> laddr for use in GC
+- Support for locating remaining used blocks in segments
+
+GC
+---
+
+- Initial implementation
+- Support in BtreeLBAManager for tracking used blocks in segments
+- Heuristic for identifying segments to clean
+
+Other
+------
+
+- Add support for periodically generating a journal checkpoint.
+- Onode tree
+- Extent tree
+- Remaining ObjectStore integration
 
 ObjectStore considerations
 ==========================

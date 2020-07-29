@@ -32,7 +32,7 @@ else()
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=10.18.1
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=12.16.2
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
   )
@@ -49,7 +49,7 @@ endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
-  COMMAND NG_CLI_ANALYTICS=false npm ci
+  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress npm ci
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
@@ -84,31 +84,15 @@ execute_process(
     OUTPUT_VARIABLE default_lang
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-if(DASHBOARD_FRONTEND_LANGS)
-  string(STRIP "${DASHBOARD_FRONTEND_LANGS}" DASHBOARD_FRONTEND_LANGS)
-  if(DASHBOARD_FRONTEND_LANGS STREQUAL "ALL")
-    set(build_target ":*")
-  else()
-    string(FIND "${DASHBOARD_FRONTEND_LANGS}" "${default_lang}" default_idx)
-    if (default_idx EQUAL -1)
-      # default language must be always built
-      string(CONCAT DASHBOARD_FRONTEND_LANGS "${DASHBOARD_FRONTEND_LANGS}" ",${default_lang}")
-    endif()
-    set(build_target ":\{${DASHBOARD_FRONTEND_LANGS}\}")
-  endif()
-else(DASHBOARD_FRONTEND_LANGS)
-  set(build_target ":${default_lang}")
-endif(DASHBOARD_FRONTEND_LANGS)
-
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_args "-- --prod --progress=false")
+  set(npm_args "--prod --progress=false")
 else()
-  set(npm_args "-- --progress=false")
+  set(npm_args "--progress=false")
 endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/dist"
-  COMMAND npx npm-run-all --print-label --parallel --max-parallel 2 "\"build${build_target} -- ${npm_args}\""
+  COMMAND DASHBOARD_FRONTEND_LANGS="${DASHBOARD_FRONTEND_LANGS}" npm run build:localize -- ${npm_args}
   DEPENDS ${frontend_src} frontend/node_modules
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend is being created"

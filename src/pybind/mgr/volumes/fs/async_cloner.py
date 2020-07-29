@@ -80,7 +80,7 @@ def sync_attrs(fs_handle, target_path, source_statx):
         fs_handle.lutimes(target_path, (time.mktime(source_statx["atime"].timetuple()),
                                         time.mktime(source_statx["mtime"].timetuple())))
     except cephfs.Error as e:
-        log.warn("error synchronizing attrs for {0} ({1})".format(target_path, e))
+        log.warning("error synchronizing attrs for {0} ({1})".format(target_path, e))
         raise e
 
 def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
@@ -129,7 +129,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                             copy_file(fs_handle, d_full_src, d_full_dst, mo, cancel_check=should_cancel)
                         else:
                             handled = False
-                            log.warn("cptree: (IGNORE) {0}".format(d_full_src))
+                            log.warning("cptree: (IGNORE) {0}".format(d_full_src))
                         if handled:
                             sync_attrs(fs_handle, d_full_dst, stx)
                     d = fs_handle.readdir(dir_handle)
@@ -281,7 +281,7 @@ class Cloner(AsyncJobs):
                             raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
                         track_idx = self.get_clone_tracking_index(fs_handle, clone_subvolume)
                         if not track_idx:
-                            log.warn("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
+                            log.warning("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
                             raise VolumeException(-errno.EINVAL, "error canceling clone")
                         if OpSm.is_init_state("clone", clone_state):
                             # clone has not started yet -- cancel right away.

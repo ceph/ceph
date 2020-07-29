@@ -46,7 +46,7 @@
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSResolve.h"
 #include "messages/MMDSResolveAck.h"
-#include "messages/MMDSSlaveRequest.h"
+#include "messages/MMDSPeerRequest.h"
 #include "messages/MMDSSnapUpdate.h"
 
 #include "osdc/Filer.h"
@@ -213,8 +213,14 @@ class MDCache {
     return cache_size() > cache_memory_limit*cache_health_threshold;
   }
 
-  void advance_stray() {
-    stray_index = (stray_index+1)%NUM_STRAY;
+  void advance_stray();
+
+  bool get_export_ephemeral_distributed_config(void) const {
+    return export_ephemeral_distributed_config;
+  }
+
+  bool get_export_ephemeral_random_config(void) const {
+    return export_ephemeral_random_config;
   }
 
   /**
@@ -228,6 +234,8 @@ class MDCache {
 
     stray_manager.eval_stray(dn);
   }
+
+  mds_rank_t hash_into_rank_bucket(inodeno_t ino);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   void clear_dirty_bits_for_stray(CInode* diri);
@@ -376,7 +384,7 @@ class MDCache {
   int get_num_client_requests();
 
   MDRequestRef request_start(const cref_t<MClientRequest>& req);
-  MDRequestRef request_start_slave(metareqid_t rid, __u32 attempt, const cref_t<Message> &m);
+  MDRequestRef request_start_peer(metareqid_t rid, __u32 attempt, const cref_t<Message> &m);
   MDRequestRef request_start_internal(int op);
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);
@@ -416,26 +424,32 @@ class MDCache {
 				int flags, int linkunlink=0,
 				snapid_t follows=CEPH_NOSNAP);
 
-  // slaves
-  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<mds_rank_t> &slaves, bool safe=false) {
-    uncommitted_masters[reqid].ls = ls;
-    uncommitted_masters[reqid].slaves = slaves;
-    uncommitted_masters[reqid].safe = safe;
+  // peers
+  void add_uncommitted_leader(metareqid_t reqid, LogSegment *ls, set<mds_rank_t> &peers, bool safe=false) {
+    uncommitted_leaders[reqid].ls = ls;
+    uncommitted_leaders[reqid].peers = peers;
+    uncommitted_leaders[reqid].safe = safe;
   }
-  void wait_for_uncommitted_master(metareqid_t reqid, MDSContext *c) {
-    uncommitted_masters[reqid].waiters.push_back(c);
+  void wait_for_uncommitted_leader(metareqid_t reqid, MDSContext *c) {
+    uncommitted_leaders[reqid].waiters.push_back(c);
   }
-  bool have_uncommitted_master(metareqid_t reqid, mds_rank_t from) {
-    auto p = uncommitted_masters.find(reqid);
-    return p != uncommitted_masters.end() && p->second.slaves.count(from) > 0;
+  bool have_uncommitted_leader(metareqid_t reqid, mds_rank_t from) {
+    auto p = uncommitted_leaders.find(reqid);
+    return p != uncommitted_leaders.end() && p->second.peers.count(from) > 0;
   }
-  void log_master_commit(metareqid_t reqid);
-  void logged_master_update(metareqid_t reqid);
-  void _logged_master_commit(metareqid_t reqid);
-  void committed_master_slave(metareqid_t r, mds_rank_t from);
-  void finish_committed_masters();
+  void log_leader_commit(metareqid_t reqid);
+  void logged_leader_update(metareqid_t reqid);
+  void _logged_leader_commit(metareqid_t reqid);
+  void committed_leader_peer(metareqid_t r, mds_rank_t from);
+  void finish_committed_leaders();
 
-  void _logged_slave_commit(mds_rank_t from, metareqid_t reqid);
+  void add_uncommitted_peer(metareqid_t reqid, LogSegment*, mds_rank_t, MDPeerUpdate *su=nullptr);
+  void wait_for_uncommitted_peer(metareqid_t reqid, MDSContext *c) {
+    uncommitted_peers.at(reqid).waiters.push_back(c);
+  }
+  void finish_uncommitted_peer(metareqid_t reqid, bool assert_exist=true);
+  MDPeerUpdate* get_uncommitted_peer(metareqid_t reqid, mds_rank_t leader);
+  void _logged_peer_commit(mds_rank_t from, metareqid_t reqid);
 
   void set_recovery_set(set<mds_rank_t>& s);
   void handle_mds_failure(mds_rank_t who);
@@ -444,26 +458,26 @@ class MDCache {
   void recalc_auth_bits(bool replay);
   void remove_inode_recursive(CInode *in);
 
-  bool is_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    auto p = ambiguous_slave_updates.find(master);
-    return p != ambiguous_slave_updates.end() && p->second.count(reqid);
+  bool is_ambiguous_peer_update(metareqid_t reqid, mds_rank_t leader) {
+    auto p = ambiguous_peer_updates.find(leader);
+    return p != ambiguous_peer_updates.end() && p->second.count(reqid);
   }
-  void add_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    ambiguous_slave_updates[master].insert(reqid);
+  void add_ambiguous_peer_update(metareqid_t reqid, mds_rank_t leader) {
+    ambiguous_peer_updates[leader].insert(reqid);
   }
-  void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
-    auto p = ambiguous_slave_updates.find(master);
+  void remove_ambiguous_peer_update(metareqid_t reqid, mds_rank_t leader) {
+    auto p = ambiguous_peer_updates.find(leader);
     auto q = p->second.find(reqid);
     ceph_assert(q != p->second.end());
     p->second.erase(q);
     if (p->second.empty())
-      ambiguous_slave_updates.erase(p);
+      ambiguous_peer_updates.erase(p);
   }
 
-  void add_rollback(metareqid_t reqid, mds_rank_t master) {
-    resolve_need_rollback[reqid] = master;
+  void add_rollback(metareqid_t reqid, mds_rank_t leader) {
+    resolve_need_rollback[reqid] = leader;
   }
-  void finish_rollback(metareqid_t reqid);
+  void finish_rollback(metareqid_t reqid, MDRequestRef& mdr);
 
   // ambiguous imports
   void add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds);
@@ -605,7 +619,7 @@ class MDCache {
   void try_trim_non_auth_subtree(CDir *dir);
   bool can_trim_non_auth_dirfrag(CDir *dir) {
     return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
-	   uncommitted_slave_rename_olddir.count(dir->inode) == 0;
+	   uncommitted_peer_rename_olddir.count(dir->inode) == 0;
   }
 
   /**
@@ -760,7 +774,6 @@ class MDCache {
 
   void open_foreign_mdsdir(inodeno_t ino, MDSContext *c);
   CDir *get_stray_dir(CInode *in);
-  CDentry *get_or_create_stray_dentry(CInode *in);
 
   /**
    * Find the given dentry (and whether it exists or not), its ancestors,
@@ -866,12 +879,16 @@ class MDCache {
   void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
-    ceph_assert(uncommitted_fragments.count(dirfrag));
-    uncommitted_fragments[dirfrag].waiters.push_back(c);
+    uncommitted_fragments.at(dirfrag).waiters.push_back(c);
   }
+  bool is_any_uncommitted_fragment() const {
+    return !uncommitted_fragments.empty();
+  }
+  void wait_for_uncommitted_fragments(MDSGather *gather);
+  void rollback_uncommitted_fragments();
+
   void split_dir(CDir *dir, int byn);
   void merge_dir(CInode *diri, frag_t fg);
-  void rollback_uncommitted_fragments();
 
   void find_stale_fragment_freeze();
   void fragment_freeze_inc_num_waiters(CDir *dir);
@@ -891,7 +908,7 @@ class MDCache {
   void discard_delayed_expire(CDir *dir);
 
   // -- mdsmap --
-  void handle_mdsmap(const MDSMap &mdsmap);
+  void handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap);
 
   int dump_cache() { return dump_cache({}, nullptr); }
   int dump_cache(std::string_view filename);
@@ -926,7 +943,7 @@ class MDCache {
   void repair_dirfrag_stats(CDir *dir);
   void upgrade_inode_snaprealm(CInode *in);
 
-  // my master
+  // my leader
   MDSRank *mds;
 
   // -- my cache --
@@ -979,19 +996,31 @@ class MDCache {
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
   std::set<CInode *> export_pin_delayed_queue;
+  std::set<CInode *> rand_ephemeral_pins;
+  std::set<CInode *> dist_ephemeral_pins;
 
   OpenFileTable open_file_table;
 
+  double export_ephemeral_random_max = 0.0;
+
  protected:
-  // track master requests whose slaves haven't acknowledged commit
-  struct umaster {
-    umaster() {}
-    set<mds_rank_t> slaves;
+  // track leader requests whose peers haven't acknowledged commit
+  struct uleader {
+    uleader() {}
+    set<mds_rank_t> peers;
     LogSegment *ls = nullptr;
     MDSContext::vec waiters;
     bool safe = false;
     bool committing = false;
     bool recovering = false;
+  };
+
+  struct upeer {
+    upeer() {}
+    mds_rank_t leader;
+    LogSegment *ls = nullptr;
+    MDPeerUpdate *su = nullptr;
+    MDSContext::vec waiters;
   };
 
   struct open_ino_info_t {
@@ -1019,7 +1048,7 @@ class MDCache {
   friend class C_MDC_Join;
   friend class C_MDC_RespondInternalRequest;
 
-  friend class ESlaveUpdate;
+  friend class EPeerUpdate;
   friend class ECommitted;
 
   void set_readonly() { readonly = true; }
@@ -1032,13 +1061,10 @@ class MDCache {
   void disambiguate_my_imports();
   void disambiguate_other_imports();
   void trim_unlinked_inodes();
-  void add_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master, MDSlaveUpdate*);
-  void finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);
-  MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);
 
-  void send_slave_resolves();
+  void send_peer_resolves();
   void send_subtree_resolves();
-  void maybe_finish_slave_resolve();
+  void maybe_finish_peer_resolve();
 
   void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
   void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
@@ -1113,6 +1139,7 @@ class MDCache {
   bool readonly = false;
 
   int stray_index = 0;
+  int stray_fragmenting_index = -1;
 
   set<CInode*> base_inodes;
 
@@ -1138,14 +1165,14 @@ class MDCache {
   // from MMDSResolves
   map<mds_rank_t, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;
 
-  map<mds_rank_t, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
-  map<CInode*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
-  map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
+  map<CInode*, int> uncommitted_peer_rename_olddir;  // peer: preserve the non-auth dir until seeing commit.
+  map<CInode*, int> uncommitted_peer_unlink;  // peer: preserve the unlinked inode until seeing commit.
 
-  map<metareqid_t, umaster> uncommitted_masters;         // master: req -> slave set
+  map<metareqid_t, uleader> uncommitted_leaders;         // leader: req -> peer set
+  map<metareqid_t, upeer> uncommitted_peers;  // peer: preserve the peer req until seeing commit.
 
-  set<metareqid_t> pending_masters;
-  map<int, set<metareqid_t> > ambiguous_slave_updates;
+  set<metareqid_t> pending_leaders;
+  map<int, set<metareqid_t> > ambiguous_peer_updates;
 
   bool resolves_pending = false;
   set<mds_rank_t> resolve_gather;	// nodes i need resolves from
@@ -1161,7 +1188,7 @@ class MDCache {
   set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
-  map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
+  map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_peer_exports;
 
   map<client_t,entity_inst_t> rejoin_client_map;
   map<client_t,client_metadata_t> rejoin_client_metadata_map;
@@ -1285,6 +1312,9 @@ class MDCache {
   double cache_health_threshold;
   bool forward_all_requests_to_auth;
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
+
+  bool export_ephemeral_distributed_config;
+  bool export_ephemeral_random_config;
 
   // File size recovery
   RecoveryQueue recovery_queue;

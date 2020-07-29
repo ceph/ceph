@@ -10,8 +10,9 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/image/SetFlagsRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/journal/CreateRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/object_map/CreateRequest.h"
 
@@ -91,7 +92,7 @@ void EnableFeaturesRequest<I>::send_block_writes() {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   std::unique_lock locker{image_ctx.owner_lock};
-  image_ctx.io_work_queue->block_writes(create_context_callback<
+  image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_block_writes>(this));
 }
@@ -235,13 +236,16 @@ void EnableFeaturesRequest<I>::send_create_journal() {
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_create_journal>(this);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<I>::get_work_queue(cct, &context_wq);
+
   journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
     image_ctx.md_ctx, image_ctx.id,
     image_ctx.config.template get_val<uint64_t>("rbd_journal_order"),
     image_ctx.config.template get_val<uint64_t>("rbd_journal_splay_width"),
     image_ctx.config.template get_val<std::string>("rbd_journal_pool"),
     cls::journal::Tag::TAG_CLASS_NEW, tag_data,
-    librbd::Journal<>::IMAGE_CLIENT_ID, image_ctx.op_work_queue, ctx);
+    librbd::Journal<>::IMAGE_CLIENT_ID, context_wq, ctx);
 
   req->send();
 }
@@ -420,8 +424,8 @@ void EnableFeaturesRequest<I>::send_enable_mirror_image() {
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_enable_mirror_image>(this);
 
-  mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
-    &image_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    &image_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", false, ctx);
   req->send();
 }
 
@@ -476,7 +480,7 @@ Context *EnableFeaturesRequest<I>::handle_finish(int r) {
       image_ctx.exclusive_lock->unblock_requests();
     }
     if (m_writes_blocked) {
-      image_ctx.io_work_queue->unblock_writes();
+      image_ctx.io_image_dispatcher->unblock_writes();
     }
   }
   image_ctx.state->handle_prepare_lock_complete();

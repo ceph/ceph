@@ -22,15 +22,13 @@
 #include "include/encoding.h"
 #include "compressor/Compressor.h"
 
-#define COMPRESSION_LEVEL 5
-
 class ZstdCompressor : public Compressor {
  public:
-  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
+  ZstdCompressor(CephContext *cct) : Compressor(COMP_ALG_ZSTD, "zstd"), cct(cct) {}
 
-  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst) override {
+  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> &compressor_message) override {
     ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream_srcSize(s, COMPRESSION_LEVEL, src.length());
+    ZSTD_initCStream_srcSize(s, cct->_conf->compressor_zstd_level, src.length());
     auto p = src.begin();
     size_t left = src.length();
 
@@ -63,14 +61,15 @@ class ZstdCompressor : public Compressor {
     return 0;
   }
 
-  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst) override {
+  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> compressor_message) override {
     auto i = std::cbegin(src);
-    return decompress(i, src.length(), dst);
+    return decompress(i, src.length(), dst, compressor_message);
   }
 
   int decompress(ceph::buffer::list::const_iterator &p,
 		 size_t compressed_len,
-		 ceph::buffer::list &dst) override {
+		 ceph::buffer::list &dst,
+		 boost::optional<int32_t> compressor_message) override {
     if (compressed_len < 4) {
       return -1;
     }
@@ -101,6 +100,8 @@ class ZstdCompressor : public Compressor {
     dst.append(dstptr, 0, outbuf.pos);
     return 0;
   }
+ private:
+  CephContext *const cct;
 };
 
 #endif

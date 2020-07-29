@@ -59,7 +59,7 @@ function main() {
         cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
     configure $cmake_opts $@
-    build tests && echo "make check: successful run on $(git rev-parse HEAD)"
+    build tests && echo "make check: successful build on $(git rev-parse HEAD)"
     run
 }
 

@@ -118,7 +118,7 @@ TEST(ClsHello, WriteReturnData) {
     return;
   }
 
-  // this will return nothing -- not flag set
+  // this will return nothing -- no flag is set
   bufferlist in, out;
   ASSERT_EQ(0, ioctx.exec("myobject", "hello", "write_return_data", in, out));
   ASSERT_EQ(std::string(), std::string(out.c_str(), out.length()));

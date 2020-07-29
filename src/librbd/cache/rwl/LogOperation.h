@@ -47,7 +47,10 @@ public:
   virtual void appending() = 0;
   virtual void complete(int r) = 0;
   virtual void mark_log_entry_completed() {};
-  virtual bool reserved_allocated() {
+  virtual bool reserved_allocated() const {
+    return false;
+  }
+  virtual bool is_writing_op() const {
     return false;
   }
   virtual void copy_bl_to_pmem_buffer() {};
@@ -105,7 +108,10 @@ public:
   void mark_log_entry_completed() override{
     sync_point->log_entry->writes_completed++;
   }
-  bool reserved_allocated() override {
+  bool reserved_allocated() const override {
+    return true;
+  }
+  bool is_writing_op() const override {
     return true;
   }
   void appending() override;
@@ -164,6 +170,58 @@ public:
   WriteLogOperationSet &operator=(const WriteLogOperationSet&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
                                   const WriteLogOperationSet &s);
+};
+
+class DiscardLogOperation : public GenericWriteLogOperation {
+public:
+  using GenericWriteLogOperation::m_lock;
+  using GenericWriteLogOperation::sync_point;
+  using GenericWriteLogOperation::on_write_append;
+  using GenericWriteLogOperation::on_write_persist;
+  std::shared_ptr<DiscardLogEntry> log_entry;
+  DiscardLogOperation(std::shared_ptr<SyncPoint> sync_point,
+                      const uint64_t image_offset_bytes,
+                      const uint64_t write_bytes,
+                      uint32_t discard_granularity_bytes,
+                      const utime_t dispatch_time,
+                      PerfCounters *perfcounter,
+                      CephContext *cct);
+  ~DiscardLogOperation() override;
+  DiscardLogOperation(const DiscardLogOperation&) = delete;
+  DiscardLogOperation &operator=(const DiscardLogOperation&) = delete;
+  const std::shared_ptr<GenericLogEntry> get_log_entry() override {
+    return log_entry;
+  }
+  bool reserved_allocated() const override {
+    return false;
+  }
+  void init(uint64_t current_sync_gen, bool persist_on_flush,
+            uint64_t last_op_sequence_num, Context *write_persist);
+  std::ostream &format(std::ostream &os) const;
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const DiscardLogOperation &op);
+};
+
+class WriteSameLogOperation : public WriteLogOperation {
+public:
+  using GenericWriteLogOperation::m_lock;
+  using GenericWriteLogOperation::sync_point;
+  using GenericWriteLogOperation::on_write_append;
+  using GenericWriteLogOperation::on_write_persist;
+  using WriteLogOperation::log_entry;
+  using WriteLogOperation::bl;
+  using WriteLogOperation::buffer_alloc;
+  WriteSameLogOperation(WriteLogOperationSet &set,
+                        const uint64_t image_offset_bytes,
+                        const uint64_t write_bytes,
+                        const uint32_t data_len,
+                        CephContext *cct);
+  ~WriteSameLogOperation();
+  WriteSameLogOperation(const WriteSameLogOperation&) = delete;
+  WriteSameLogOperation &operator=(const WriteSameLogOperation&) = delete;
+  std::ostream &format(std::ostream &os) const;
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const WriteSameLogOperation &op);
 };
 
 } // namespace rwl

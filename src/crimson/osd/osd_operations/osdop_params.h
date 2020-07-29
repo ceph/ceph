@@ -13,9 +13,11 @@ struct osd_op_params_t {
   eversion_t pg_trim_to;
   eversion_t min_last_complete_ondisk;
   eversion_t last_complete;
-  version_t user_at_version;
+  version_t user_at_version = 0;
   bool user_modify = false;
+  ObjectCleanRegions clean_regions;
 
+  osd_op_params_t() = default;
   osd_op_params_t(Ref<MOSDOp>&& req) : req(req) {}
   osd_op_params_t(Ref<MOSDOp>&& req, eversion_t at_version, eversion_t pg_trim_to,
       eversion_t mlcod, eversion_t lc, version_t user_at_version) :

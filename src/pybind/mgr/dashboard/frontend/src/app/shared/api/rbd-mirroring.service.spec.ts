@@ -1,4 +1,9 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { HttpRequest } from '@angular/common/http';
+import {
+  HttpClientTestingModule,
+  HttpTestingController,
+  TestRequest
+} from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
@@ -7,6 +12,8 @@ import { RbdMirroringService } from './rbd-mirroring.service';
 describe('RbdMirroringService', () => {
   let service: RbdMirroringService;
   let httpTesting: HttpTestingController;
+  let getMirroringSummaryCalls: () => TestRequest[];
+  let flushCalls: (call: TestRequest) => void;
 
   const summary: Record<string, any> = {
     status: 0,
@@ -20,21 +27,24 @@ describe('RbdMirroringService', () => {
     executing_tasks: [{}]
   };
 
-  configureTestBed(
-    {
-      providers: [RbdMirroringService],
-      imports: [HttpClientTestingModule]
-    },
-    true
-  );
+  configureTestBed({
+    providers: [RbdMirroringService],
+    imports: [HttpClientTestingModule]
+  });
 
   beforeEach(() => {
-    service = TestBed.get(RbdMirroringService);
-    httpTesting = TestBed.get(HttpTestingController);
-
-    const req = httpTesting.expectOne('api/block/mirroring/summary');
-    expect(req.request.method).toBe('GET');
-    req.flush(summary);
+    service = TestBed.inject(RbdMirroringService);
+    httpTesting = TestBed.inject(HttpTestingController);
+    getMirroringSummaryCalls = () => {
+      return httpTesting.match((request: HttpRequest<any>) => {
+        return request.url.match(/api\/block\/mirroring\/summary/) && request.method === 'GET';
+      });
+    };
+    flushCalls = (call: TestRequest) => {
+      if (!call.cancelled) {
+        call.flush(summary);
+      }
+    };
   });
 
   afterEach(() => {
@@ -46,30 +56,21 @@ describe('RbdMirroringService', () => {
   });
 
   it('should periodically poll summary', fakeAsync(() => {
+    const subs = service.startPolling();
+    tick();
     const calledWith: any[] = [];
     service.subscribeSummary((data) => {
       calledWith.push(data);
     });
-    service.refreshAndSchedule();
-    tick(30000);
-    // In order to not trigger setTimeout again,
-    // which would raise 'Error: 1 timer(s) still in the queue.'
-    spyOn(service, 'refreshAndSchedule').and.callFake(() => true);
-    tick(30000);
+    tick(service.REFRESH_INTERVAL * 2);
+    const calls = getMirroringSummaryCalls();
 
-    const calls = httpTesting.match((request) => {
-      return request.url.match(/api\/block\/mirroring\/summary/) && request.method === 'GET';
-    });
+    expect(calls.length).toEqual(3);
+    calls.forEach((call: TestRequest) => flushCalls(call));
+    expect(calledWith).toEqual([summary]);
 
-    expect(calls.length).toEqual(2);
-    calls.forEach((call) => call.flush(summary));
-
-    expect(calledWith).toEqual([summary, summary, summary]);
+    subs.unsubscribe();
   }));
-
-  it('should get current summary', () => {
-    expect(service.getCurrentSummary()).toEqual(summary);
-  });
 
   it('should get pool config', () => {
     service.getPool('poolName').subscribe();

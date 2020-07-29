@@ -2,16 +2,15 @@ import { Component, EventEmitter, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-
-import { AsyncSubject, forkJoin, Observable } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { forkJoin, Observable, ReplaySubject } from 'rxjs';
+import { first, switchMap } from 'rxjs/operators';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
@@ -25,6 +24,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../../pool/pool';
+import { RBDImageFormat, RbdModel } from '../rbd-list/rbd-model';
 import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
 import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
@@ -38,7 +38,7 @@ import { RbdFormResponseModel } from './rbd-form-response.model';
   templateUrl: './rbd-form.component.html',
   styleUrls: ['./rbd-form.component.scss']
 })
-export class RbdFormComponent implements OnInit {
+export class RbdFormComponent extends CdForm implements OnInit {
   poolPermission: Permission;
   rbdForm: CdFormGroup;
   getDirtyConfigurationValues: (
@@ -89,7 +89,7 @@ export class RbdFormComponent implements OnInit {
   ];
   action: string;
   resource: string;
-  private rbdImage = new AsyncSubject();
+  private rbdImage = new ReplaySubject(1);
 
   icons = Icons;
 
@@ -101,47 +101,47 @@ export class RbdFormComponent implements OnInit {
     private formatter: FormatterService,
     private taskWrapper: TaskWrapperService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n,
     public router: Router
   ) {
+    super();
     this.poolPermission = this.authStorageService.getPermissions().pool;
-    this.resource = this.i18n('RBD');
+    this.resource = $localize`RBD`;
     this.features = {
       'deep-flatten': {
-        desc: this.i18n('Deep flatten'),
+        desc: $localize`Deep flatten`,
         requires: null,
         allowEnable: false,
         allowDisable: true
       },
       layering: {
-        desc: this.i18n('Layering'),
+        desc: $localize`Layering`,
         requires: null,
         allowEnable: false,
         allowDisable: false
       },
       'exclusive-lock': {
-        desc: this.i18n('Exclusive lock'),
+        desc: $localize`Exclusive lock`,
         requires: null,
         allowEnable: true,
         allowDisable: true
       },
       'object-map': {
-        desc: this.i18n('Object map (requires exclusive-lock)'),
+        desc: $localize`Object map (requires exclusive-lock)`,
         requires: 'exclusive-lock',
         allowEnable: true,
         allowDisable: true,
         initDisabled: true
       },
       journaling: {
-        desc: this.i18n('Journaling (requires exclusive-lock)'),
+        desc: $localize`Journaling (requires exclusive-lock)`,
         requires: 'exclusive-lock',
         allowEnable: true,
         allowDisable: true,
         initDisabled: true
       },
       'fast-diff': {
-        desc: this.i18n('Fast diff (interlocked with object-map)'),
+        desc: $localize`Fast diff (interlocked with object-map)`,
         requires: 'object-map',
         allowEnable: true,
         allowDisable: true,
@@ -198,6 +198,15 @@ export class RbdFormComponent implements OnInit {
     this.rbdForm.get('obj_size').disable();
     this.rbdForm.get('stripingUnit').disable();
     this.rbdForm.get('stripingCount').disable();
+
+    /* RBD Image Format v1 */
+    this.rbdImage.subscribe((image: RbdModel) => {
+      if (image.image_format === RBDImageFormat.V1) {
+        this.rbdForm.get('deep-flatten').disable();
+        this.rbdForm.get('layering').disable();
+        this.rbdForm.get('exclusive-lock').disable();
+      }
+    });
   }
 
   disableForClone() {
@@ -293,6 +302,8 @@ export class RbdFormComponent implements OnInit {
         this.setResponse(resp, this.snapName);
         this.rbdImage.next(resp);
       }
+
+      this.loadingReady();
     });
 
     _.each(this.features, (feature) => {
@@ -464,10 +475,7 @@ export class RbdFormComponent implements OnInit {
         // becoming disabled when manually unchecked.  This is because it
         // triggers an update on `object-map` and if `object-map` doesn't emit,
         // `fast-diff` will not be automatically disabled.
-        this.rbdForm
-          .get('features')
-          .get(feature.interlockedWith)
-          .setValue(false);
+        this.rbdForm.get('features').get(feature.interlockedWith).setValue(false);
       }
     }
   }
@@ -701,9 +709,9 @@ export class RbdFormComponent implements OnInit {
     if (!this.mode) {
       this.rbdImage.next('create');
     }
-    this.rbdImage.complete();
     this.rbdImage
       .pipe(
+        first(),
         switchMap(() => {
           if (this.mode === this.rbdFormMode.editing) {
             return this.editAction();
@@ -717,7 +725,7 @@ export class RbdFormComponent implements OnInit {
         })
       )
       .subscribe(
-        () => {},
+        () => undefined,
         () => this.rbdForm.setErrors({ cdSubmitButton: true }),
         () => this.router.navigate(['/block/rbd'])
       );

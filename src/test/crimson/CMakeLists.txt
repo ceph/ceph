@@ -30,11 +30,14 @@ add_executable(unittest_async_echo
   test_async_echo.cc)
 target_link_libraries(unittest_async_echo ceph-common global)
 
-add_executable(unittest_seastar_thread_pool
-  test_thread_pool.cc)
-add_ceph_test(unittest_seastar_thread_pool
-  unittest_seastar_thread_pool --memory 256M --smp 1)
-target_link_libraries(unittest_seastar_thread_pool crimson)
+add_executable(unittest_seastar_alienstore_thread_pool
+  test_alienstore_thread_pool.cc)
+add_ceph_test(unittest_seastar_alienstore_thread_pool
+  unittest_seastar_alienstore_thread_pool --memory 256M --smp 1)
+target_link_libraries(unittest_seastar_alienstore_thread_pool
+  crimson-os
+  crimson-alienstore
+  crimson)
 
 add_executable(unittest_seastar_config
   test_config.cc)
@@ -55,3 +58,14 @@ add_executable(unittest_seastar_lru
 add_ceph_unittest(unittest_seastar_lru --memory 256M --smp 1)
 target_link_libraries(unittest_seastar_lru crimson GTest::Main)
 
+add_executable(unittest_fixed_kv_node_layout
+  test_fixed_kv_node_layout.cc)
+add_ceph_unittest(unittest_fixed_kv_node_layout)
+target_link_libraries(unittest_seastar_lru crimson GTest::Main)
+
+add_subdirectory(seastore)
+
+add_library(crimson-gtest STATIC
+  gtest_seastar.cc)
+target_link_libraries(crimson-gtest crimson-common GTest::GTest)
+add_library(crimson::gtest ALIAS crimson-gtest)
