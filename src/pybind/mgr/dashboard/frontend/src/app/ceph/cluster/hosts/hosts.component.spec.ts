@@ -3,12 +3,15 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../core/core.module';
 import { HostService } from '../../../shared/api/host.service';
+import { ActionLabels } from '../../../shared/constants/app.constants';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -88,30 +91,39 @@ describe('HostsComponent', () => {
     });
   });
 
-  describe('getEditDisableDesc', () => {
-    it('should return message (not managed by Orchestrator)', () => {
+  describe('test edit button', () => {
+    let tableAction: CdTableAction;
+
+    beforeEach(() => {
+      tableAction = _.find(component.tableActions, { name: ActionLabels.EDIT });
+    });
+
+    it('should disable button and return message (not managed by Orchestrator)', () => {
       component.selection.add({
         sources: {
           ceph: true,
           orchestrator: false
         }
       });
+      expect(tableAction.disable(component.selection)).toBeTruthy();
       expect(component.getEditDisableDesc(component.selection)).toBe(
         'Host editing is disabled because the selected host is not managed by Orchestrator.'
       );
     });
 
-    it('should return undefined (no selection)', () => {
+    it('should disable button and return undefined (no selection)', () => {
+      expect(tableAction.disable(component.selection)).toBeTruthy();
       expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
     });
 
-    it('should return undefined (managed by Orchestrator)', () => {
+    it('should enable button and return undefined (managed by Orchestrator)', () => {
       component.selection.add({
         sources: {
           ceph: false,
           orchestrator: true
         }
       });
+      expect(tableAction.disable(component.selection)).toBeFalsy();
       expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
     });
   });
