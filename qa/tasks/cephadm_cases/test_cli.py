@@ -43,3 +43,10 @@ class TestCephadmCLI(MgrTestCase):
         self.wait_for_health('CEPHADM_PAUSED', 30)
         self._orch_cmd('resume')
         self.wait_for_health_clear(30)
+
+    def test_daemon_restart(self):
+        self._orch_cmd('daemon', 'stop', 'osd.0')
+        self.wait_for_health('OSD_DOWN', 30)
+        self._orch_cmd('daemon', 'start', 'osd.0')
+        self.wait_for_health_clear(30)
+        self._orch_cmd('daemon', 'restart', 'osd.0')
