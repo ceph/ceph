@@ -7,7 +7,7 @@ import time
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
 from mgr_util import get_most_recent_rate
 
-from . import ApiController, RESTController, Endpoint, Task
+from . import ApiController, RESTController, Endpoint, Task, EndpointDoc, ControllerDoc
 from . import CreatePermission, ReadPermission, UpdatePermission, DeletePermission
 from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
@@ -25,12 +25,25 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger('controllers.osd')
 
+SAFE_TO_DESTROY_SCHEMA = {
+    "safe_to_destroy": ([str], "Is OSD safe to destroy?"),
+    "active": ([int], ""),
+    "missing_stats": ([str], ""),
+    "stored_pgs": ([str], "Stored Pool groups in Osd"),
+    "is_safe_to_destroy": (bool, "Is OSD safe to destroy?")
+}
+
+EXPORT_FLAGS_SCHEMA = {
+    "list_of_flags": ([str], "")
+}
+
 
 def osd_task(name, metadata, wait_for=2.0):
     return Task("osd/{}".format(name), metadata, wait_for)
 
 
 @ApiController('/osd', Scope.OSD)
+@ControllerDoc("Get OSD Details", "OSD")
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
@@ -301,6 +314,11 @@ class Osd(RESTController):
 
     @Endpoint('GET', query_params=['ids'])
     @ReadPermission
+    @EndpointDoc("Check If OSD is Safe to Destroy",
+                 parameters={
+                     'ids': (str, 'OSD Service Identifier'),
+                 },
+                 responses={200: SAFE_TO_DESTROY_SCHEMA})
     def safe_to_destroy(self, ids):
         """
         :type ids: int|[int]
@@ -345,6 +363,7 @@ class Osd(RESTController):
 
 
 @ApiController('/osd/flags', Scope.OSD)
+@ControllerDoc("OSD Flags controller Management API", "OsdFlagsController")
 class OsdFlagsController(RESTController):
     @staticmethod
     def _osd_flags():
@@ -358,6 +377,8 @@ class OsdFlagsController(RESTController):
                 set(enabled_flags) - {'pauserd', 'pausewr'} | {'pause'})
         return sorted(enabled_flags)
 
+    @EndpointDoc("Display OSD Flags",
+                 responses={200: EXPORT_FLAGS_SCHEMA})
     def list(self):
         return self._osd_flags()
 

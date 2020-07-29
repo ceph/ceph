@@ -8,7 +8,8 @@ import os
 import cherrypy
 import cephfs
 
-from . import ApiController, ControllerDoc, RESTController, UiApiController
+from . import ApiController, ControllerDoc, RESTController, \
+    UiApiController, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -16,8 +17,14 @@ from ..services.cephfs import CephFS as CephFS_
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
+GET_QUOTAS_SCHEMA = {
+    'max_bytes': (int, ''),
+    'max_files': (int, '')
+}
+
 
 @ApiController('/cephfs', Scope.CEPHFS)
+@ControllerDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
     def __init__(self):  # pragma: no cover
         super(CephFS, self).__init__()
@@ -431,6 +438,12 @@ class CephFS(RESTController):
         cfs.rm_snapshot(path, name)
 
     @RESTController.Resource('GET')
+    @EndpointDoc("Get Cephfs Quotas of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'File System Path'),
+                 },
+                 responses={200: GET_QUOTAS_SCHEMA})
     def get_quotas(self, fs_id, path):
         """
         Get the quotas of the specified path.
