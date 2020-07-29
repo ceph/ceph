@@ -205,8 +205,7 @@ public:
   void get_all_keys(std::vector<std::string> *keys) const;
 
   // Return a list of all the sections that the current entity is a member of.
-  void get_my_sections(const ConfigValues& values,
-		       std::vector <std::string> &sections) const;
+  std::vector<std::string> get_my_sections(const ConfigValues& values) const;
 
   // Return a list of all sections
   int get_all_sections(std::vector <std::string> &sections) const;
@@ -264,9 +263,6 @@ private:
 
   void _show_config(const ConfigValues& values,
 		    std::ostream *out, ceph::Formatter *f) const;
-
-  void _get_my_sections(const ConfigValues& values,
-			std::vector<std::string> &sections) const;
 
   int _get_val_from_conf_file(const std::vector<std::string> &sections,
 			      const std::string_view key, std::string &out) const;
