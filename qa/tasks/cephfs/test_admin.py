@@ -267,3 +267,120 @@ class TestConfigCommands(CephFSTestCase):
         # Implicitly asserting that things don't have lockdep error in shutdown
         self.mount_a.umount_wait(require_clean=True)
         self.fs.mds_stop()
+
+class TestMirroringCommands(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def _enable_mirroring(self, fs_name):
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", fs_name)
+
+    def _disable_mirroring(self, fs_name):
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", fs_name)
+
+    def _add_peer(self, fs_name, peer_spec, remote_fs_name):
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_spec, remote_fs_name)
+
+    def _remove_peer(self, fs_name, peer_uuid):
+        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
+
+    def _verify_mirroring(self, fs_name, flag_str):
+        status = self.fs.status()
+        fs_map = status.get_fsmap_byname(fs_name)
+        if flag_str == 'enabled':
+            self.assertTrue('mirror_info' in fs_map)
+        elif flag_str == 'disabled':
+            self.assertTrue('mirror_info' not in fs_map)
+        else:
+            raise RuntimeError(f'invalid flag_str {flag_str}')
+
+    def _get_peer_uuid(self, fs_name, peer_spec):
+        status = self.fs.status()
+        fs_map = status.get_fsmap_byname(fs_name)
+        mirror_info = fs_map.get('mirror_info', None)
+        self.assertTrue(mirror_info is not None)
+        for uuid, remote in mirror_info['peers'].items():
+            client_name = remote['remote']['client_name']
+            cluster_name = remote['remote']['cluster_name']
+            spec = f'{client_name}@{cluster_name}'
+            if spec == peer_spec:
+                return uuid
+        return None
+
+    def test_mirroring_command(self):
+        """basic mirroring command test -- enable, disable mirroring on a
+        filesystem"""
+        self._enable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "enabled")
+        self._disable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "disabled")
+
+    def test_mirroring_peer_commands(self):
+        """test adding and removing peers to a mirror enabled filesystem"""
+        self._enable_mirroring(self.fs.name)
+        self._add_peer(self.fs.name, "client.site-b@site-b", "fs_b")
+        self._add_peer(self.fs.name, "client.site-c@site-c", "fs_c")
+        self._verify_mirroring(self.fs.name, "enabled")
+        uuid_peer_b = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        uuid_peer_c = self._get_peer_uuid(self.fs.name, "client.site-c@site-c")
+        self.assertTrue(uuid_peer_b is not None)
+        self.assertTrue(uuid_peer_c is not None)
+        self._remove_peer(self.fs.name, uuid_peer_b)
+        self._remove_peer(self.fs.name, uuid_peer_c)
+        self._disable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "disabled")
+
+    def test_mirroring_command_idempotency(self):
+        """test to check idempotency of mirroring family of commands """
+        self._enable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "enabled")
+        self._enable_mirroring(self.fs.name)
+        # add peer
+        self._add_peer(self.fs.name, "client.site-b@site-b", "fs_b")
+        uuid_peer_b1 = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        self.assertTrue(uuid_peer_b1 is not None)
+        # adding the peer again should be idempotent
+        self._add_peer(self.fs.name, "client.site-b@site-b", "fs_b")
+        uuid_peer_b2 = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        self.assertTrue(uuid_peer_b2 is not None)
+        self.assertTrue(uuid_peer_b1 == uuid_peer_b2)
+        # remove peer
+        self._remove_peer(self.fs.name, uuid_peer_b1)
+        uuid_peer_b3 = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        self.assertTrue(uuid_peer_b3 is None)
+        # removing the peer again should be idempotent
+        self._remove_peer(self.fs.name, uuid_peer_b1)
+        self._disable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "disabled")
+        self._disable_mirroring(self.fs.name)
+
+    def test_mirroring_disable_with_peers(self):
+        """test disabling mirroring for a filesystem with active peers"""
+        self._enable_mirroring(self.fs.name)
+        self._add_peer(self.fs.name, "client.site-b@site-b", "fs_b")
+        self._verify_mirroring(self.fs.name, "enabled")
+        uuid_peer_b = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        self.assertTrue(uuid_peer_b is not None)
+        self._disable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "disabled")
+        # enable mirroring to check old peers
+        self._enable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "enabled")
+        # peer should be gone
+        uuid_peer_b = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        self.assertTrue(uuid_peer_b is None)
+        self._disable_mirroring(self.fs.name)
+        self._verify_mirroring(self.fs.name, "disabled")
+
+    def test_mirroring_with_filesystem_reset(self):
+        """test to verify mirroring state post filesystem reset"""
+        self._enable_mirroring(self.fs.name)
+        self._add_peer(self.fs.name, "client.site-b@site-b", "fs_b")
+        self._verify_mirroring(self.fs.name, "enabled")
+        uuid_peer_b = self._get_peer_uuid(self.fs.name, "client.site-b@site-b")
+        self.assertTrue(uuid_peer_b is not None)
+        # reset filesystem
+        self.fs.fail()
+        self.fs.mon_manager.raw_cluster_cmd("fs", "reset", self.fs.name, "--yes-i-really-mean-it")
+        self.fs.wait_for_daemons()
+        self._verify_mirroring(self.fs.name, "disabled")
