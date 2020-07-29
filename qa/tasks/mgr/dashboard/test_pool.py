@@ -83,7 +83,7 @@ class PoolTest(DashboardTestCase):
         self._task_delete('/api/pool/' + name)
         self.assertStatus(204)
 
-    def _validate_pool_properties(self, data, pool):
+    def _validate_pool_properties(self, data, pool, timeout=DashboardTestCase.TIMEOUT_HEALTH_CLEAR):
         for prop, value in data.items():
             if prop == 'pool_type':
                 self.assertEqual(pool['type'], value)
@@ -111,13 +111,15 @@ class PoolTest(DashboardTestCase):
                 #   1.  The default value cannot be given to this method, which becomes relevant
                 #       when resetting a value, because it's not always zero.
                 #   2.  The expected `source` cannot be given to this method, and it cannot
-                #       relibably be determined (see 1)
+                #       reliably be determined (see 1)
                 pass
             else:
                 self.assertEqual(pool[prop], value, '{}: {} != {}'.format(prop, pool[prop], value))
 
-        health = self._get('/api/health/minimal')['health']
-        self.assertEqual(health['status'], 'HEALTH_OK', msg='health={}'.format(health))
+        self.wait_until_equal(self._get_health_status, 'HEALTH_OK', timeout)
+
+    def _get_health_status(self):
+        return self._get('/api/health/minimal')['health']['status']
 
     def _get_pool(self, pool_name):
         pool = self._get("/api/pool/" + pool_name)
@@ -134,8 +136,8 @@ class PoolTest(DashboardTestCase):
         """
         pgp_prop = 'pg_placement_num'
         t = 0
-        while (int(value) != pool[pgp_prop] or self._get('/api/health/minimal')['health']['status']
-               != 'HEALTH_OK') and t < 180:
+        while (int(value) != pool[pgp_prop] or self._get_health_status() != 'HEALTH_OK') \
+                and t < 180:
             time.sleep(2)
             t += 2
             pool = self._get_pool(pool['pool_name'])
@@ -325,23 +327,23 @@ class PoolTest(DashboardTestCase):
         with self.__yield_pool(pool_name):
             props = {'application_metadata': ['rbd', 'sth']}
             self._task_put('/api/pool/{}'.format(pool_name), props)
-            time.sleep(5)
-            self._validate_pool_properties(props, self._get_pool(pool_name))
+            self._validate_pool_properties(props, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
             properties = {'application_metadata': ['rgw']}
             self._task_put('/api/pool/' + pool_name, properties)
-            time.sleep(5)
-            self._validate_pool_properties(properties, self._get_pool(pool_name))
+            self._validate_pool_properties(properties, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
             properties = {'application_metadata': ['rbd', 'sth']}
             self._task_put('/api/pool/' + pool_name, properties)
-            time.sleep(5)
-            self._validate_pool_properties(properties, self._get_pool(pool_name))
+            self._validate_pool_properties(properties, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
             properties = {'application_metadata': ['rgw']}
             self._task_put('/api/pool/' + pool_name, properties)
-            time.sleep(5)
-            self._validate_pool_properties(properties, self._get_pool(pool_name))
+            self._validate_pool_properties(properties, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
     def test_pool_update_configuration(self):
         pool_name = 'pool_update_configuration'
