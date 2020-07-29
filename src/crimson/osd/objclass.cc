@@ -291,9 +291,9 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
   return vals->size();
 }
 
-int cls_cxx_map_get_vals(cls_method_context_t hctx,
-                         const std::set<std::string> &keys,
-			 std::map<std::string, ceph::bufferlist> *vals)
+int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,
+				 const std::set<std::string> &keys,
+				 std::map<std::string, ceph::bufferlist> *vals)
 {
   OSDOp op{CEPH_OSD_OP_OMAPGETVALSBYKEYS};
   encode(keys, op.indata);
