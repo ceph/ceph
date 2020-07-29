@@ -377,6 +377,9 @@ static int get_key_object(const S& key, ghobject_t *oid)
 
   p = _key_decode_prefix(p, oid);
 
+  if (key.length() == ENCODED_KEY_PREFIX_LEN)
+    return -2;
+
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
     return -2;
