@@ -13,7 +13,13 @@
  */
 
 #include <boost/type_traits.hpp>
-
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -351,11 +357,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
     return -ENOSYS;
 
   if (values.cluster.empty() && !conf_files_str) {
-    /*
-     * set the cluster name to 'ceph' when neither cluster name nor
-     * configuration file are specified.
-     */
-    values.cluster = "ceph";
+    values.cluster = get_cluster_name(nullptr);
   }
   // open new conf
   string conffile;
@@ -377,23 +379,8 @@ int md_config_t::parse_config_files(ConfigValues& values,
   if (conffile.empty())
     return -ENOENT;
 
-  if (values.cluster.size() == 0) {
-    /*
-     * If cluster name is not set yet, use the prefix of the
-     * basename of configuration file as cluster name.
-     */
-    auto start = conffile.rfind('/') + 1;
-    auto end = conffile.find(".conf", start);
-    if (end == conffile.npos) {
-        /*
-         * If the configuration file does not follow $cluster.conf
-         * convention, we do the last try and assign the cluster to
-         * 'ceph'.
-         */
-        values.cluster = "ceph";
-    } else {
-      values.cluster = conffile.substr(start, end - start);
-    }
+  if (values.cluster.empty()) {
+    values.cluster = get_cluster_name(conffile.c_str());
   }
 
   std::vector<std::string> my_sections = get_my_sections(values);
@@ -471,6 +458,25 @@ md_config_t::get_conffile_paths(const ConfigValues& values,
     }
   }
   return paths;
+}
+
+std::string md_config_t::get_cluster_name(const char* conffile)
+{
+  if (conffile) {
+    // If cluster name is not set yet, use the prefix of the
+    // basename of configuration file as cluster name.
+    if (fs::path path{conffile}; path.extension() == ".conf") {
+      return path.stem();
+    } else {
+      // If the configuration file does not follow $cluster.conf
+      // convention, we do the last try and assign the cluster to
+      // 'ceph'.
+      return "ceph";
+    }
+  } else {
+    // set the cluster name to 'ceph' when configuration file is not specified.
+    return "ceph";
+  }
 }
 
 void md_config_t::parse_env(unsigned entity_type,
