@@ -126,16 +126,20 @@ void Heartbeat::add_peer(osd_id_t _peer, epoch_t epoch)
 
 Heartbeat::osds_t Heartbeat::remove_down_peers()
 {
-  osds_t osds;
-  for (auto& [osd, peer] : peers) {
+  osds_t old_osds; // osds not added in this epoch
+  for (auto i = peers.begin(); i != peers.end(); ) {
     auto osdmap = service.get_osdmap_service().get_map();
+    const auto& [osd, peer] = *i;
     if (!osdmap->is_up(osd)) {
-      remove_peer(osd);
-    } else if (peer.get_epoch() < osdmap->get_epoch()) {
-      osds.push_back(osd);
+      i = peers.erase(i);
+    } else {
+      if (peer.get_epoch() < osdmap->get_epoch()) {
+        old_osds.push_back(osd);
+      }
+      ++i;
     }
   }
-  return osds;
+  return old_osds;
 }
 
 void Heartbeat::add_reporter_peers(int whoami)
