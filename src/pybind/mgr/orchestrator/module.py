@@ -67,6 +67,8 @@ def to_format(what, format: str, many: bool, cls):
         if many:
             return yaml.dump_all(to_yaml(copy), default_flow_style=False)
         return yaml.dump(to_yaml(copy), default_flow_style=False)
+    else:
+        raise OrchestratorError(f'unsupported format type: {format}')
 
 
 def generate_preview_tables(data):
