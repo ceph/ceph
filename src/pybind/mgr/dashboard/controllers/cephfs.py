@@ -8,7 +8,8 @@ import os
 import cherrypy
 import cephfs
 
-from . import ApiController, ControllerDoc, RESTController, UiApiController
+from . import ApiController, ControllerDoc, RESTController, UiApiController, \
+    allow_empty_body
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -385,6 +386,7 @@ class CephFS(RESTController):
         return path
 
     @RESTController.Resource('POST')
+    @allow_empty_body
     def mk_dirs(self, fs_id, path):
         """
         Create a directory.
@@ -395,6 +397,7 @@ class CephFS(RESTController):
         cfs.mk_dirs(path)
 
     @RESTController.Resource('POST')
+    @allow_empty_body
     def rm_dir(self, fs_id, path):
         """
         Remove a directory.
@@ -405,6 +408,7 @@ class CephFS(RESTController):
         cfs.rm_dir(path)
 
     @RESTController.Resource('POST')
+    @allow_empty_body
     def mk_snapshot(self, fs_id, path, name=None):
         """
         Create a snapshot.
@@ -420,6 +424,7 @@ class CephFS(RESTController):
         return cfs.mk_snapshot(path, name)
 
     @RESTController.Resource('POST')
+    @allow_empty_body
     def rm_snapshot(self, fs_id, path, name):
         """
         Remove a snapshot.
@@ -444,6 +449,7 @@ class CephFS(RESTController):
         return cfs.get_quotas(path)
 
     @RESTController.Resource('POST')
+    @allow_empty_body
     def set_quotas(self, fs_id, path, max_bytes=None, max_files=None):
         """
         Set the quotas of the specified path.
