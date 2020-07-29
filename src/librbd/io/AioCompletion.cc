@@ -111,10 +111,6 @@ void AioCompletion::complete() {
     notify_callbacks_complete();
   }
 
-  if (image_dispatcher_ctx != nullptr) {
-    image_dispatcher_ctx->complete(rval);
-  }
-
   tracepoint(librbd, aio_complete_exit);
 }
 
@@ -282,6 +278,10 @@ void AioCompletion::notify_callbacks_complete() {
   {
     std::unique_lock<std::mutex> locker(lock);
     cond.notify_all();
+  }
+
+  if (image_dispatcher_ctx != nullptr) {
+    image_dispatcher_ctx->complete(rval);
   }
 
   // note: possible for image to be closed after op marked finished
