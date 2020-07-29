@@ -317,7 +317,7 @@ private:
 					    const char *conf_files,
 					    std::ostream *warnings,
 					    int flags) const;
-
+  static std::string get_cluster_name(const char* conffile_path);
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
 public:
