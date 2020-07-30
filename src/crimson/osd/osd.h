@@ -37,6 +37,7 @@ class MCommand;
 class MOSDMap;
 class MOSDRepOpReply;
 class MOSDRepOp;
+class MOSDScrub2;
 class OSDMap;
 class OSDMeta;
 class Heartbeat;
@@ -191,6 +192,8 @@ private:
 				      Ref<MOSDPeeringOp> m);
   seastar::future<> handle_recovery_subreq(crimson::net::Connection* conn,
 					   Ref<MOSDFastDispatchOp> m);
+  seastar::future<> handle_scrub(crimson::net::Connection* conn,
+				 Ref<MOSDScrub2> m);
   seastar::future<> handle_mark_me_down(crimson::net::Connection* conn,
 					Ref<MOSDMarkMeDown> m);
 

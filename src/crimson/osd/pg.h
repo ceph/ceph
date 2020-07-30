@@ -150,9 +150,7 @@ public:
     // Not needed yet -- mainly for scrub scheduling
   }
 
-  void scrub_requested(bool deep, bool repair, bool need_auto = false) final {
-    ceph_assert(0 == "Not implemented");
-  }
+  void scrub_requested(bool deep, bool repair, bool need_auto = false) final;
 
   uint64_t get_snap_trimq_size() const final {
     return 0;
