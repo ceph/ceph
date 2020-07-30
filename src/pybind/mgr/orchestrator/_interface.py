@@ -956,8 +956,8 @@ class Orchestrator(object):
         providing the logical service).
 
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
-        :param service_type: e.g. "mds", "rgw", ...
-        :param service_name: name of logical service ("cephfs", "us-east", ...)
+        :param service_name: service_type + '.' + service_id
+                            (e.g. "mon", "mgr", "mds.mycephfs", "rgw.realm.zone", ...)
         :rtype: Completion
         """
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
