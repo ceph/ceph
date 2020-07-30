@@ -342,20 +342,23 @@ class RGWSyncShardMarkerTrack {
   struct marker_entry {
     uint64_t tracker_pos;
     T marker;
+    K key;
     uint64_t pos;
     real_time timestamp;
 
     marker_entry() : pos(0) {}
     marker_entry(uint64_t _tracker_pos,
                  const T& _marker,
+                 std::optional<K> _key,
                  uint64_t _p, const
                  real_time& _ts) : tracker_pos(_tracker_pos),
                                    marker(_marker),
+                                   key(_key.value_or(K())),
                                    pos(_p),
                                    timestamp(_ts) {}
   };
 
-  typename std::map<T, typename std::list<marker_entry>::iterator> keys;
+  typename std::map<T, typename std::list<marker_entry>::iterator> markers;
   typename std::list<marker_entry> pending;
 
   std::map<uint64_t, marker_entry> finish_markers;
@@ -369,7 +372,7 @@ class RGWSyncShardMarkerTrack {
 protected:
   typename std::set<K> need_retry_set;
 
-  virtual RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
+  virtual RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const T& new_marker, const K& key, uint64_t index_pos, const real_time& timestamp) = 0;
   virtual RGWOrderCallCR *allocate_order_control_cr() = 0;
   virtual void handle_finish(const T& marker) { }
 
@@ -381,19 +384,19 @@ public:
     }
   }
 
-  bool start(const T& marker, int index_pos, const real_time& timestamp) {
-    if (keys.find(marker) != keys.end()) {
+  bool start(const T& marker, std::optional<K> key, int index_pos, const real_time& timestamp) {
+    if (markers.find(marker) != markers.end()) {
       return false;
     }
     auto i = ++max_keys;
-    pending.push_back(marker_entry(i, marker, index_pos, timestamp));
-    keys[marker] = std::prev(pending.end());
+    pending.push_back(marker_entry(i, marker, key, index_pos, timestamp));
+    markers[marker] = std::prev(pending.end());
     return true;
   }
 
-  void try_update_high_marker(const T& marker, int index_pos, const real_time& timestamp) {
+  void try_update_high_marker(const T& marker, std::optional<K> key, int index_pos, const real_time& timestamp) {
     auto i = ++max_keys;
-    finish_markers[i] = marker_entry(i, marker, index_pos, timestamp);
+    finish_markers[i] = marker_entry(i, marker, key, index_pos, timestamp);
   }
 
   RGWCoroutine *finish(const DoutPrefixProvider *dpp, const T& marker) {
@@ -404,11 +407,11 @@ public:
       return nullptr;
     }
 
-    auto kiter = keys.find(marker);
-    if (kiter == keys.end()) {
+    auto miter = markers.find(marker);
+    if (miter == markers.end()) {
       return nullptr;
     }
-    auto& marker_iter = kiter->second;
+    auto& marker_iter = miter->second;
 
     auto iter = pending.begin();
 
@@ -422,7 +425,7 @@ public:
     finish_markers[marker_iter->tracker_pos] = *marker_iter;
 
     pending.erase(marker_iter);
-    keys.erase(kiter);
+    markers.erase(miter);
 
     handle_finish(marker);
 
@@ -455,7 +458,7 @@ public:
     auto last = i;
     --i;
     marker_entry& high_entry = i->second;
-    RGWCoroutine *cr = order(store_marker(dpp, high_entry.marker, high_entry.pos, high_entry.timestamp));
+    RGWCoroutine *cr = order(store_marker(dpp, high_entry.marker, high_entry.key, high_entry.pos, high_entry.timestamp));
     finish_markers.erase(finish_markers.begin(), last);
     return cr;
   }

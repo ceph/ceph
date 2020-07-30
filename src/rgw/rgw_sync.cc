@@ -1226,7 +1226,7 @@ public:
                                                                 sync_marker(_marker),
                                                                 tn(_tn){}
 
-  RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const string& new_marker, const string& key, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     if (index_pos > 0) {
       sync_marker.pos = index_pos;
@@ -1615,7 +1615,7 @@ public:
           marker = *iter;
           tn->log(20, SSTR("full sync: " << marker));
           total_entries++;
-          if (!marker_tracker->start(marker, total_entries, real_time())) {
+          if (!marker_tracker->start(marker, std::nullopt, total_entries, real_time())) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << marker << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
@@ -1807,7 +1807,7 @@ public:
               continue;
             }
             tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
+            if (!marker_tracker->start(log_iter->id, std::nullopt, 0, log_iter->timestamp.to_real_time())) {
               ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;

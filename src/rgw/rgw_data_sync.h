@@ -483,6 +483,7 @@ class RGWBucketSyncCR;
 
 struct rgw_bucket_shard_full_sync_marker {
   rgw_obj_key position;
+  std::string position_id;
   uint64_t count;
 
   rgw_bucket_shard_full_sync_marker() : count(0) {}
@@ -490,17 +491,23 @@ struct rgw_bucket_shard_full_sync_marker {
   void encode_attr(std::map<std::string, bufferlist>& attrs) const;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(position, bl);
     encode(count, bl);
+    encode(position_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(position, bl);
     decode(count, bl);
-     DECODE_FINISH(bl);
+    if (struct_v >= 2) {
+      decode(position_id, bl);
+    } else {
+      position_id = position.to_escaped_str();
+    }
+    DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const;
@@ -595,16 +602,24 @@ struct RGWBucketSyncCtx {
   CephContext *cct{nullptr};
   RGWDataSyncCtx *sc{nullptr};
   RGWDataSyncEnv *env{nullptr};
-  RGWBucketPipeSyncInfoCRHandler *hsi{nullptr};     /* hsi: handler for sync info */
+  struct {
+    RGWBucketPipeSyncInfoCRHandler *full{nullptr};     /* handler for full sync info */
+    RGWBucketPipeSyncInfoCRHandler *inc{nullptr};     /* handler for incremental sync info */
+  } hsi;
   RGWBucketPipeSyncStatusCRHandler *hst{nullptr};   /* hst: handler for status */
+  rgw_bucket_sync_pair_info sync_pair;
 
   void init(RGWDataSyncCtx *_sc,
-            RGWBucketPipeSyncInfoCRHandler *_hsi,
+            const rgw_bucket_sync_pair_info& _sync_pair,
+            RGWBucketPipeSyncInfoCRHandler *_full,
+            RGWBucketPipeSyncInfoCRHandler *_inc,
             RGWBucketPipeSyncStatusCRHandler *_hst) {
     cct = _sc->cct;
     sc = _sc;
     env = _sc->env;
-    hsi = _hsi;
+    sync_pair = _sync_pair,
+    hsi.full = _full;
+    hsi.inc = _inc;
     hst = _hst;
   }
 };
@@ -621,7 +636,10 @@ class RGWRemoteBucketManager {
   std::vector<rgw_bucket_sync_pair_info> sync_pairs;
 
   struct _handlers {
-    std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> info;
+    struct {
+      std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> full;
+      std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> inc;
+    } info;
     std::shared_ptr<RGWBucketPipeSyncStatusCRHandler> status;
   };
 
