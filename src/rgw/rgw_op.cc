@@ -3069,6 +3069,10 @@ void RGWDeleteBucketWebsite::execute()
 
 int RGWStatBucket::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   // This (a HEAD request on a bucket) is governed by the s3:ListBucket permission.
   if (!verify_bucket_permission(this, s, rgw::IAM::s3ListBucket)) {
     return -EACCES;
@@ -3079,11 +3083,21 @@ int RGWStatBucket::verify_permission()
 
 void RGWStatBucket::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWStatBucket::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
@@ -3093,7 +3107,7 @@ void RGWStatBucket::execute()
   if (op_ret) {
     return;
   }
-  op_ret = bucket->update_container_stats();
+  op_ret = bucket->update_container_stats(this_parent_span);
 }
 
 int RGWListBucket::verify_permission()
@@ -5586,6 +5600,11 @@ void RGWCopyObj::execute()
 
 int RGWGetACLs::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   bool perm;
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
     auto iam_action = s->object->get_instance().empty() ?
@@ -5626,6 +5645,11 @@ void RGWGetACLs::pre_exec()
 
 void RGWGetACLs::execute()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+
   stringstream ss;
   RGWAccessControlPolicy* const acl = \
     (!rgw::sal::RGWObject::empty(s->object.get()) ? s->object_acl.get() : s->bucket_acl.get());
@@ -5639,6 +5663,11 @@ void RGWGetACLs::execute()
 
 int RGWPutACLs::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   bool perm;
 
   rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
@@ -5709,6 +5738,12 @@ void RGWDeleteLC::pre_exec()
 
 void RGWPutACLs::execute()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   bufferlist bl;
 
   RGWAccessControlPolicy_S3 *policy = NULL;
@@ -5808,7 +5843,9 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
+  Span span_1 = trace(this_parent_span, "rgw_acl_s3.cc RGWAccessControlPolicy_S3::rebuild");
   op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy, s->err.message);
+  finish_trace(span_1);
   if (op_ret < 0)
     return;
 
@@ -5824,7 +5861,9 @@ void RGWPutACLs::execute()
     op_ret = -EACCES;
     return;
   }
+  Span span_2 = trace(this_parent_span, "rgw_acl.h : RGWAccessControlPolicy::encode");
   new_policy.encode(bl);
+  finish_trace(span_2);
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
@@ -5834,9 +5873,11 @@ void RGWPutACLs::execute()
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
+    Span span_3 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::set_bucket_instance_attrs");
     op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
 							  &s->bucket->get_info().objv_tracker,
 							  s->yield);
+    finish_trace(span_3);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */

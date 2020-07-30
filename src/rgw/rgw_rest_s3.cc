@@ -2353,6 +2353,13 @@ static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucke
 
 void RGWStatBucket_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", 's3');
+
   if (op_ret >= 0) {
     dump_bucket_metadata(s, bucket.get());
   }
@@ -3681,6 +3688,13 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
 void RGWGetACLs_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3692,6 +3706,12 @@ void RGWGetACLs_ObjStore_S3::send_response()
 
 int RGWPutACLs_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   int ret =  RGWPutACLs_ObjStore::get_params();
   if (ret >= 0) {
     const int ret_auth = do_aws4_auth_completion();
@@ -3715,6 +3735,11 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store
 						  struct req_state *s,
 						  stringstream& ss)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
   // bucket-* canned acls do not apply to bucket
@@ -3734,6 +3759,12 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store
 
 void RGWPutACLs_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
