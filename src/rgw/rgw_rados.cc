@@ -2297,16 +2297,23 @@ bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_ob
   return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
 }
 
-int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx)
+int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
 
   rgw_pool pool;
+  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_obj_data_pool");
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
     ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
     return -EIO;
   }
+  finish_trace(span_2);
 
   int r = open_pool_ctx(pool, *ioctx, false);
   if (r < 0) {
@@ -2957,8 +2964,13 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, bool modify_tail,
-                                           void *_index_op, optional_yield y)
+                                           void *_index_op, optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
 
@@ -2999,9 +3011,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (!ptag && !index_op->get_optag()->empty()) {
     ptag = index_op->get_optag();
   }
+  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Object::Pepare prepare_atomic_modification");
   r = target->prepare_atomic_modification(op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, modify_tail, y);
   if (r < 0)
     return r;
+  finish_trace(span_2);
 
   if (real_clock::is_zero(meta.set_mtime)) {
     meta.set_mtime = real_clock::now();
@@ -3127,7 +3141,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   auto& ioctx = ref.pool.ioctx();
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
+  r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, null_yield, this_parent_span);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -3142,7 +3156,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   epoch = ioctx.get_last_version();
   poolid = ioctx.get_id();
 
-  r = target->complete_atomic_modification();
+  {
+    Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Object::complete_atomic_modification");
+    r = target->complete_atomic_modification();
+    finish_trace(span_3);
+  }
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
@@ -3151,7 +3169,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
                         storage_class, &acl_bl,
-                        meta.category, meta.remove_objs, meta.user_data, meta.appendable);
+                        meta.category, meta.remove_objs, meta.user_data, meta.appendable, this_parent_span);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -3186,12 +3204,16 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   /* update quota cache */
   if (meta.completeMultipart){
+    Span span_4 = trace(this_parent_span, "rgw_quota.cc : update_stats");
   	store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
                                      0, orig_size);
+    finish_trace(span_4);
   }
   else {
+    Span span_4 = trace(this_parent_span, "rgw_quota.cc : update_stats");
     store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
-                                     accounted_size, orig_size);  
+                                      accounted_size, orig_size); 
+    finish_trace(span_4); 
   }
   return 0;
 
@@ -3241,8 +3263,13 @@ done_cancel:
 }
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
-                                           map<string, bufferlist>& attrs, optional_yield y)
+                                           map<string, bufferlist>& attrs, optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(target->get_store(), bucket_info);
@@ -3252,13 +3279,13 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y, this_parent_span);
     if (r == -EEXIST) {
       assume_noent = false;
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y, this_parent_span);
   }
   return r;
 }
@@ -5891,8 +5918,13 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
   return 0;
 }
 
-int RGWRados::Object::Read::prepare(optional_yield y)
+int RGWRados::Object::Read::prepare(optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);  
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
 
@@ -5912,12 +5944,15 @@ int RGWRados::Object::Read::prepare(optional_yield y)
   const RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   state.obj = astate->obj;
+
+  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::obj_to_raw");
   store->obj_to_raw(bucket_info.placement_rule, state.obj, &state.head_obj);
+  finish_trace(span_2);
 
   state.cur_pool = state.head_obj.pool;
   state.cur_ioctx = &state.io_ctxs[state.cur_pool];
 
-  r = store->get_obj_head_ioctx(bucket_info, state.obj, state.cur_ioctx);
+  r = store->get_obj_head_ioctx(bucket_info, state.obj, state.cur_ioctx, this_parent_span);
   if (r < 0) {
     return r;
   }
@@ -6092,8 +6127,13 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
                                             list<rgw_obj_index_key> *remove_objs, const string *user_data,
-                                            bool appendable)
+                                            bool appendable, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   if (blind) {
     return 0;
   }
@@ -6128,9 +6168,13 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
 
+  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::cls_obj_complete_add");
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
+  finish_trace(span_2);
 
+  Span span_3 = trace(this_parent_span, "svc_datalog_rados.cc : RGWSI_DataLog_RADOS::add_entry");
   int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  finish_trace(span_3);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
@@ -6421,8 +6465,13 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
 }
 
 int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
-                                    optional_yield y)
+                                    optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
   RGWObjectCtx& obj_ctx = source->get_ctx();
@@ -6432,8 +6481,10 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
+  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::iterate");
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data, y);
+  finish_trace(span_2);
   if (r < 0) {
     ldout(cct, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client

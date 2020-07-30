@@ -882,6 +882,12 @@ static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_
 
 int RGWPutObj_ObjStore_SWIFT::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   op_ret = RGWPutObj_ObjStore::verify_permission();
 
   /* We have to differentiate error codes depending on whether user is
@@ -895,6 +901,11 @@ int RGWPutObj_ObjStore_SWIFT::verify_permission()
 }
 
 int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
+
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
 
   int r = 0;
   const string& path = entry.path;
@@ -982,6 +993,12 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
 int RGWPutObj_ObjStore_SWIFT::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   if (s->has_bad_meta) {
     return -EINVAL;
   }
@@ -1089,6 +1106,12 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 void RGWPutObj_ObjStore_SWIFT::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret) {
     op_ret = meta_ret;

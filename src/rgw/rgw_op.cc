@@ -3456,6 +3456,11 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (! copy_source.empty()) {
 
     RGWAccessControlPolicy cs_acl(s->cct);
@@ -3584,6 +3589,10 @@ int RGWPutObj::verify_permission()
 
 void RGWPutObj::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -3601,6 +3610,10 @@ public:
 
 int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   bufferlist bl_tmp;
   bl.begin(bl_ofs).copy(bl_len, bl_tmp);
 
@@ -3611,6 +3624,12 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   RGWPutObj_CB cb(this);
   RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
@@ -3634,7 +3653,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   read_op.params.obj_size = &obj_size;
   read_op.params.attrs = &attrs;
 
-  ret = read_op.prepare(s->yield);
+  ret = read_op.prepare(s->yield, this_parent_span);
   if (ret < 0)
     return ret;
 
@@ -3670,7 +3689,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
 
   filter->fixup_range(new_ofs, new_end);
-  ret = read_op.iterate(new_ofs, new_end, filter, s->yield);
+  ret = read_op.iterate(new_ofs, new_end, filter, s->yield, this_parent_span);
 
   if (ret >= 0)
     ret = filter->flush();
@@ -3705,6 +3724,12 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 void RGWPutObj::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -3755,13 +3780,18 @@ void RGWPutObj::execute()
       return;
     }
 
+    Span span_2 = trace(this_parent_span, "rgw_common.h : buf_to_hex");
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+    finish_trace(span_2);
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->content_length);
+    Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::check_quota");
+    op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
+				user_quota, bucket_quota, s->content_length);
+    finish_trace(span_3);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -3778,12 +3808,14 @@ void RGWPutObj::execute()
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
+    Span span_4 = trace(this_parent_span, "rgw_rados.cc : RGWRados::swift_versioning_copy");
     op_ret = store->getRados()->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket.get(),
                                           s->object.get(),
                                           this,
                                           s->yield);
+    finish_trace(span_4);
     if (op_ret < 0) {
       return;
     }
@@ -3846,7 +3878,7 @@ void RGWPutObj::execute()
         s->req_id, this, s->yield);
   }
 
-  op_ret = processor->prepare(s->yield);
+  op_ret = processor->prepare(s->yield, this_parent_span);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
@@ -3858,7 +3890,9 @@ void RGWPutObj::execute()
     rgw::sal::RGWRadosBucket bucket(store, copy_source_bucket_info);
 
     RGWObjState *astate;
+    Span span_5 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_obj_state");
     op_ret = obj.get_obj_state(&obj_ctx, bucket, &astate, s->yield);
+    finish_trace(span_5);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
@@ -3902,6 +3936,7 @@ void RGWPutObj::execute()
     }
   }
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
+  Span span_6 = trace(this_parent_span, "rgw_op.cc : RGWPutObj-data transfer");
   do {
     bufferlist data;
     if (fst > lst)
@@ -3941,6 +3976,7 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
+  finish_trace(span_6);
   tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
   // flush any data in filters
@@ -3963,7 +3999,10 @@ void RGWPutObj::execute()
     return;
   }
 
-  op_ret = s->bucket->check_quota(user_quota, bucket_quota, s->obj_size);
+  Span span_7 = trace(this_parent_span, "rgw_rados.cc : RGWRados::check_quota");
+  op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
+                              user_quota, bucket_quota, s->obj_size);
+  finish_trace(span_7);  
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
@@ -4051,7 +4090,7 @@ void RGWPutObj::execute()
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
-                               s->yield);
+                               s->yield, this_parent_span);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
 
   /* produce torrent */

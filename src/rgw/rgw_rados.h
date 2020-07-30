@@ -461,6 +461,7 @@ class RGWRados
   // This field represents the number of bucket index object shards
   uint32_t bucket_index_max_shards;
 
+  int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx, const Span& parent_span = nullptr);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
@@ -781,10 +782,10 @@ public:
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
 
-      int prepare(optional_yield y);
+      int prepare(optional_yield y, const Span& parent_span = nullptr);
       static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
       int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y);
-      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
+      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y, const Span& parent_span = nullptr);
       int get_attr(const char *name, bufferlist& dest, optional_yield y);
     };
 
@@ -824,10 +825,10 @@ public:
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
-                     void *index_op, optional_yield y);
+                     void *index_op, optional_yield y, const Span& parent_span = nullptr);
       int write_meta(uint64_t size, uint64_t accounted_size,
-                     map<std::string, bufferlist>& attrs, optional_yield y);
-      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
+                     map<std::string, bufferlist>& attrs, optional_yield y, const Span& parent_span = nullptr);
+      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive, const Span& parent_span = nullptr);
       const req_state* get_req_state() {
         return (req_state *)target->get_ctx().get_private();
       }
@@ -969,7 +970,7 @@ public:
         zones_trace = _zones_trace;
       }
 
-      int prepare(RGWModifyOp, const string *write_tag, optional_yield y);
+      int prepare(RGWModifyOp, const string *write_tag, optional_yield y, const Span& parent_span = nullptr);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
