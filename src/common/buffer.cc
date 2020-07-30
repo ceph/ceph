@@ -1529,8 +1529,9 @@ static ceph::spinlock debug_lock;
     // make a new buffer.  fill out a complete page, factoring in the
     // raw_combined overhead.
     size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
-    size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
-      sizeof(raw_combined);
+    size_t alen = round_up_to(need,
+      _carriage == &always_empty_bptr ? 512 : CEPH_BUFFER_ALLOC_UNIT) -
+        sizeof(raw_combined);
     auto new_back = \
       ptr_node::create(RawT::create(alen, 0, get_mempool()));
     new_back->set_length(0);   // unused, so far.
