@@ -905,11 +905,10 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
 // general, they should just return op_ret.
 namespace {
 template<typename F>
-int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
+int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f) {
   auto r = f();
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
-    r = g->try_refresh_bucket_info(s->bucket->get_info(), nullptr,
-				   &s->bucket_attrs);
+    r = b->try_refresh_info(nullptr);
     if (r >= 0) {
       r = f();
     }
@@ -1170,10 +1169,10 @@ void RGWPutBucketTags::execute() {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
-    map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+    rgw::sal::RGWAttrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_TAGS] = tags_bl;
-    return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker, s->yield);
+    return s->bucket->set_instance_attrs(attrs, s->yield);
   });
 
 }
@@ -1197,10 +1196,10 @@ void RGWDeleteBucketTags::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
-    map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+    rgw::sal::RGWAttrs attrs = s->bucket->get_attrs();
     attrs.erase(RGW_ATTR_TAGS);
-    op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker, s->yield);
+    op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
 			 << s->bucket->get_name()
@@ -1245,7 +1244,7 @@ void RGWPutBucketReplication::execute() {
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
@@ -1254,10 +1253,9 @@ void RGWPutBucketReplication::execute() {
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
-                                                          &s->bucket_attrs);
+    int ret = s->bucket->put_instance_info(false, real_time());
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket->get_info().bucket.get_key() << ") returned ret=" << ret << dendl;
+      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
     }
 
@@ -1284,7 +1282,7 @@ void RGWDeleteBucketReplication::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
     if (!s->bucket->get_info().sync_policy) {
       return 0;
     }
@@ -1295,8 +1293,7 @@ void RGWDeleteBucketReplication::execute()
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
-                                                          &s->bucket_attrs);
+    int ret = s->bucket->put_instance_info(false, real_time());
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -2635,7 +2632,7 @@ void RGWSetBucketVersioning::execute()
 
   bool modified = mfa_set_status;
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [&] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [&] {
       if (mfa_set_status) {
         if (mfa_status) {
           s->bucket->get_info().flags |= BUCKET_MFA_ENABLED;
@@ -2709,11 +2706,10 @@ void RGWSetBucketWebsite::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       s->bucket->get_info().has_website = true;
       s->bucket->get_info().website_conf = website_conf;
-      op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false,
-					       real_time(), &s->bucket_attrs);
+      op_ret = s->bucket->put_instance_info(false, real_time());
       return op_ret;
     });
 
@@ -2744,15 +2740,14 @@ void RGWDeleteBucketWebsite::execute()
       << "returned err=" << op_ret << dendl;
     return;
   }
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       s->bucket->get_info().has_website = false;
       s->bucket->get_info().website_conf = RGWBucketWebsiteConf();
-      op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false,
-					       real_time(), &s->bucket_attrs);
+      op_ret = s->bucket->put_instance_info(false, real_time());
       return op_ret;
     });
   if (op_ret < 0) {
-    ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
+    ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket
         << " returned err=" << op_ret << dendl;
     return;
   }
@@ -4405,7 +4400,7 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs.attrs, false);
   if (op_ret < 0) {
     return;
   }
@@ -4416,7 +4411,7 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       /* Encode special metadata first as we're using std::map::emplace under
        * the hood. This method will add the new items only if the map doesn't
        * contain such keys yet. */
@@ -4442,15 +4437,15 @@ void RGWPutMetadataBucket::execute()
       /* It's supposed that following functions WILL NOT change any
        * special attributes (like RGW_ATTR_ACL) if they are already
        * present in attrs. */
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
-      populate_with_generic_attrs(s, attrs);
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs.attrs);
+      populate_with_generic_attrs(s, attrs.attrs);
 
       /* According to the Swift's behaviour and its container_quota
        * WSGI middleware implementation: anyone with write permissions
        * is able to set the bucket quota. This stays in contrast to
        * account quotas that can be set only by clients holding
        * reseller admin privileges. */
-      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket->get_info().quota);
+      op_ret = filter_out_quota_info(attrs.attrs, rmattr_names, s->bucket->get_info().quota);
       if (op_ret < 0) {
 	return op_ret;
       }
@@ -4461,15 +4456,13 @@ void RGWPutMetadataBucket::execute()
       }
 
       /* Web site of Swift API. */
-      filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
+      filter_out_website(attrs.attrs, rmattr_names, s->bucket->get_info().website_conf);
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
       /* Setting attributes also stores the provided bucket info. Due
        * to this fact, the new quota settings can be serialized with
        * the same call. */
-      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							    &s->bucket->get_info().objv_tracker,
-							    s->yield);
+      op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
       return op_ret;
     });
 }
@@ -5534,12 +5527,10 @@ void RGWPutCORS::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
-      map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_CORS] = cors_bl;
-      return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							  &s->bucket->get_info().objv_tracker,
-							  s->yield);
+      return s->bucket->set_instance_attrs(attrs, s->yield);
     });
 }
 
@@ -5558,7 +5549,7 @@ void RGWDeleteCORS::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       op_ret = read_bucket_cors();
       if (op_ret < 0)
 	return op_ret;
@@ -5569,11 +5560,9 @@ void RGWDeleteCORS::execute()
 	return op_ret;
       }
 
-      map<string, bufferlist> attrs = s->bucket_attrs;
+      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_CORS);
-      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							    &s->bucket->get_info().objv_tracker,
-							    s->yield);
+      op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket->get_name()
 			 << " returned err=" << op_ret << dendl;
@@ -7421,7 +7410,7 @@ void RGWPutBucketPolicy::execute()
 
   try {
     const Policy p(s->cct, s->bucket_tenant, data);
-    auto attrs = s->bucket_attrs;
+    rgw::sal::RGWAttrs attrs(s->bucket_attrs);
     if (s->bucket_access_conf &&
         s->bucket_access_conf->block_public_policy() &&
         rgw::IAM::is_public(p)) {
@@ -7429,12 +7418,10 @@ void RGWPutBucketPolicy::execute()
       return;
     }
 
-    op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this, &attrs] {
+    op_ret = retry_raced_bucket_write(s->bucket.get(), [&p, this, &attrs] {
 	attrs[RGW_ATTR_IAM_POLICY].clear();
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
-	op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							      &s->bucket->get_info().objv_tracker,
-							      s->yield);
+	op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7464,8 +7451,8 @@ int RGWGetBucketPolicy::verify_permission()
 
 void RGWGetBucketPolicy::execute()
 {
-  auto attrs = s->bucket_attrs;
-  map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_IAM_POLICY);
+  rgw::sal::RGWAttrs attrs(s->bucket_attrs);
+  auto aiter = attrs.find(RGW_ATTR_IAM_POLICY);
   if (aiter == attrs.end()) {
     ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
         << s->bucket_name << dendl;
@@ -7505,12 +7492,10 @@ int RGWDeleteBucketPolicy::verify_permission()
 
 void RGWDeleteBucketPolicy::execute()
 {
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
-      auto attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_IAM_POLICY);
-      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							    &s->bucket->get_info().objv_tracker,
-							    s->yield);
+      op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
       return op_ret;
     });
 }
@@ -7567,10 +7552,9 @@ void RGWPutBucketObjectLock::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
     s->bucket->get_info().obj_lock = obj_lock;
-    op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false,
-                                             real_time(), &s->bucket_attrs);
+    op_ret = s->bucket->put_instance_info(false, real_time());
     return op_ret;
   });
   return;
@@ -7889,10 +7873,10 @@ void RGWPutBucketPublicAccessBlock::execute()
 
   bufferlist bl;
   access_conf.encode(bl);
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &bl] {
-      map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &bl] {
+      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
-      return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker, s->yield);
+      return s->bucket->set_instance_attrs(attrs, s->yield);
     });
 
 }
@@ -7948,12 +7932,10 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission()
 
 void RGWDeleteBucketPublicAccessBlock::execute()
 {
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
-      auto attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
-      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							       &s->bucket->get_info().objv_tracker,
-							       s->yield);
+      op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
       return op_ret;
     });
 }

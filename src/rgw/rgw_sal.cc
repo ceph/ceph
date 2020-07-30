@@ -298,6 +298,17 @@ int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_q
 					  user_quota, bucket_quota, obj_size, check_size_only);
 }
 
+int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y)
+{
+    return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
+				attrs.attrs, &get_info().objv_tracker, y);
+}
+
+int RGWRadosBucket::try_refresh_info(ceph::real_time *pmtime)
+{
+  return store->getRados()->try_refresh_bucket_info(info, pmtime, &attrs.attrs);
+}
+
 int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
 {
   bufferlist aclbl;
