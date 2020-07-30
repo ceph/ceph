@@ -21,6 +21,7 @@ import { BackButtonComponent } from './back-button/back-button.component';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
+import { DocComponent } from './doc/doc.component';
 import { FormModalComponent } from './form-modal/form-modal.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
@@ -83,7 +84,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
-    OrchestratorDocModalComponent
+    OrchestratorDocModalComponent,
+    DocComponent
   ],
   providers: [],
   exports: [
@@ -105,7 +107,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     AlertPanelComponent,
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
-    OrchestratorDocPanelComponent
+    OrchestratorDocPanelComponent,
+    DocComponent
   ],
   entryComponents: [
     ModalComponent,

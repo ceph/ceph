@@ -61,7 +61,6 @@ export class OsdFormComponent implements OnInit {
   featureList: OsdFeature[] = [];
 
   hasOrchestrator = false;
-  docsUrl: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
