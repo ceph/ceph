@@ -825,6 +825,13 @@ void RGWCreateBucket_ObjStore_SWIFT::send_response()
 
 void RGWDeleteBucket_ObjStore_SWIFT::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+  set_span_tag(s->root_span, "success", "true");
+
   int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;

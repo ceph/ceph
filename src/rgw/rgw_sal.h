@@ -172,7 +172,7 @@ class RGWBucket {
     virtual RGWObject* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual RGWAttrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(RGWAttrs a) { attrs = a; return 0; }
-    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
+    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& parent_span = nullptr) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(RGWAccessControlPolicy& acl, optional_yield y) = 0;
     virtual int get_bucket_info(optional_yield y) = 0;
@@ -188,12 +188,10 @@ class RGWBucket {
     virtual int link(RGWUser* new_user, optional_yield y) = 0;
     virtual int unlink(RGWUser* new_user, optional_yield y) = 0;
     virtual int chown(RGWUser* new_user, RGWUser* old_user, optional_yield y) = 0;
-    virtual int put_instance_info(bool exclusive, ceph::real_time mtime) = 0;
+    virtual int put_instance_info(bool exclusive, ceph::real_time mtime, const Span& parent_span = nullptr) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
-    virtual int check_empty(optional_yield y) = 0;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) = 0;
-    virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) = 0;
-    virtual int try_refresh_info(ceph::real_time *pmtime) = 0;
+    virtual int check_empty(optional_yield y, const Span& parent_span = nullptr) = 0;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size) = 0;
 
     bool empty() const { return info.bucket.name.empty(); }
     const std::string& get_name() const { return info.bucket.name; }
@@ -569,7 +567,7 @@ class RGWRadosBucket : public RGWBucket {
     RGWBucketList* list(void) { return new RGWBucketList(); }
     virtual int list(ListParams&, int, ListResults&, optional_yield y) override;
     RGWObject* create_object(const rgw_obj_key& key /* Attributes */) override;
-    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
+    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& parent_span = nullptr) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     virtual int set_acl(RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(optional_yield y) override;
@@ -587,10 +585,8 @@ class RGWRadosBucket : public RGWBucket {
     virtual int chown(RGWUser* new_user, RGWUser* old_user, optional_yield y) override;
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(RGWUser* user) override;
-    virtual int check_empty(optional_yield y) override;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) override;
-    virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) override;
-    virtual int try_refresh_info(ceph::real_time *pmtime) override;
+    virtual int check_empty(optional_yield y, const Span& this_parent_span = nullptr) override;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size) override;
     virtual std::unique_ptr<RGWBucket> clone() {
       return std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this));
     }

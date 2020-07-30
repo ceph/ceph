@@ -3347,6 +3347,11 @@ void RGWCreateBucket::execute()
 
 int RGWDeleteBucket::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (!verify_bucket_permission(this, s, rgw::IAM::s3DeleteBucket)) {
     return -EACCES;
   }
@@ -3356,11 +3361,21 @@ int RGWDeleteBucket::verify_permission()
 
 void RGWDeleteBucket::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteBucket::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   if (s->bucket_name.empty()) {
     op_ret = -EINVAL;
     return;
@@ -3391,12 +3406,14 @@ void RGWDeleteBucket::execute()
     }
   }
 
+  Span span_1 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::sync_user_stats");
   op_ret = s->bucket->sync_user_stats();
+  finish_trace(span_1);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
 
-  op_ret = s->bucket->check_empty(s->yield);
+  op_ret = s->bucket->check_empty(s->yield, this_parent_span);
   if (op_ret < 0) {
     return;
   }
@@ -3427,7 +3444,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, false, nullptr, s->yield);
+  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, s->yield, this_parent_span);
 
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.

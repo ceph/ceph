@@ -321,8 +321,13 @@ bool rgw_bucket_object_check_filter(const string& oid)
   return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
 }
 
-int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key)
+int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWObjectCtx rctx(store);
 
   if (key.instance.empty()) {
@@ -331,7 +336,7 @@ int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucke
 
   rgw_obj obj(bucket, key);
 
-  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status(), 0, ceph::real_time(), nullptr, this_parent_span);
 }
 
 static int aio_wait(librados::AioCompletion *handle)

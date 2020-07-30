@@ -88,18 +88,30 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
   return nullptr;
 }
 
-int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y)
+int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   int ret;
 
-  // Refresh info
+  Span span_2 = trace(this_parent_span, "RGWRadosBucket::get_bucket_info");
   ret = get_bucket_info(y);
+  finish_trace(span_2);
   if (ret < 0)
     return ret;
 
-  ListParams params;
-  params.list_versions = true;
-  params.allow_unordered = true;
+  Span span_3 = trace(this_parent_span, "RGWRadosBucket::get_bucket_stats");
+  ret = get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats);
+  finish_trace(span_3);
+  if (ret < 0)
+    return ret;
+
+  RGWRados::Bucket target(store->getRados(), info);
+  RGWRados::Bucket::List list_op(&target);
+  int max = 1000;
 
   ListResults results;
 
@@ -107,9 +119,9 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
   do {
     results.objs.clear();
 
-      ret = list(params, 1000, results, y);
-      if (ret < 0)
-	return ret;
+    ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, null_yield, this_parent_span);
+    if (ret < 0)
+      return ret;
 
     if (!results.objs.empty() && !delete_children) {
       lderr(store->ctx()) << "ERROR: could not remove non-empty bucket " << info.bucket.name <<
@@ -120,22 +132,21 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
       /* xxx dang */
-      ret = rgw_remove_object(store, info, info.bucket, key);
+      ret = rgw_remove_object(store, info, info.bucket, key, this_parent_span);
       if (ret < 0 && ret != -ENOENT) {
 	return ret;
       }
     }
   } while(is_truncated);
 
-  /* If there's a prefix, then we are aborting multiparts as well */
-  if (!prefix.empty()) {
-    ret = abort_bucket_multiparts(store, store->ctx(), info, prefix, delimiter);
-    if (ret < 0) {
-      return ret;
-    }
+  ret = abort_bucket_multiparts(store, store->ctx(), info, prefix, delimiter, this_parent_span);
+  if (ret < 0) {
+    return ret;
   }
-
+  Span span_4 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::sync_user_stats");
   ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
+  finish_trace(span_4);
+
   if ( ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -144,14 +155,15 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
 
   // if we deleted children above we will force delete, as any that
   // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, ot, null_yield, !delete_children);
+  ret = store->getRados()->delete_bucket(info, objv_tracker, null_yield, !delete_children, this_parent_span);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
     return ret;
   }
-
+  Span span_5 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::unlink_bucket");
   ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false);
+  finish_trace(span_5);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
@@ -298,9 +310,9 @@ bool RGWRadosBucket::is_owner(RGWUser* user)
   return (info.owner.compare(user->get_user()) == 0);
 }
 
-int RGWRadosBucket::check_empty(optional_yield y)
+int RGWRadosBucket::check_empty(optional_yield y, const Span& parent_span)
 {
-  return store->getRados()->check_bucket_empty(info, y);
+  return store->getRados()->check_bucket_empty(info, y, parent_span);
 }
 
 int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)

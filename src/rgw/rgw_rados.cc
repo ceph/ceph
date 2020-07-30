@@ -4567,8 +4567,13 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
-int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y)
+int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   constexpr uint NUM_ENTRIES = 1000u;
 
   rgw_obj_index_key marker;
@@ -4588,7 +4593,7 @@ int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y)
 				      ent_list,
 				      &is_truncated,
 				      &marker,
-                                      y);
+                                      y, NULL, this_parent_span);
     if (r < 0) {
       return r;
     }
@@ -4611,12 +4616,17 @@ int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y)
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty)
+int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   const rgw_bucket& bucket = bucket_info.bucket;
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
-  int r = svc.bi_rados->open_bucket_index(bucket_info, std::nullopt, &index_pool, &bucket_objs, nullptr);
+  int r = svc.bi_rados->open_bucket_index(bucket_info, std::nullopt, &index_pool, &bucket_objs, nullptr, this_parent_span);
   if (r < 0)
     return r;
   
@@ -4631,11 +4641,13 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
 
   if (objv_tracker.read_version.empty()) {
     RGWBucketEntryPoint ep;
+    Span span_2 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::read_bucket_entrypoint_info");
     r = ctl.bucket->read_bucket_entrypoint_info(bucket_info.bucket,
                                                 &ep,
 						null_yield,
                                                 RGWBucketCtl::Bucket::GetParams()
                                                 .set_objv_tracker(&objv_tracker));
+    finish_trace(span_2);
     if (r < 0 ||
         (!bucket_info.bucket.bucket_id.empty() &&
          ep.bucket.bucket_id != bucket_info.bucket.bucket_id)) {
@@ -4652,9 +4664,11 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   }
  
   if (remove_ep) {
+    Span span_3 = trace(this_parent_span, "rgw_bucket.cc : remove_bucket_entrypoint_info");
     r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket, null_yield,
                                                   RGWBucketCtl::Bucket::RemoveParams()
                                                   .set_objv_tracker(&objv_tracker));
+    finish_trace(span_3);
     if (r < 0)
       return r;
   }
@@ -4662,7 +4676,9 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   /* if the bucket is not synced we can remove the meta file */
   if (!svc.zone->is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
+    Span span_4 = trace(this_parent_span, "rgw_bucket.cc : remove_bucket_instance_info");
     r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, null_yield);
+    finish_trace(span_4);
     if (r < 0) {
       return r;
     }

@@ -1198,14 +1198,14 @@ public:
                      const DoutPrefixProvider *dpp,
                      optional_yield y);
 
-  int check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y);
+  int check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, const Span& parent_span = nullptr);
 
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty = true);
+  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty = true, const Span& parent_span = nullptr);
 
   void wakeup_meta_sync_shards(set<int>& shard_ids);
   void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids);

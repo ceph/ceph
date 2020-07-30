@@ -290,8 +290,13 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 			   const string& delim,
 			   const int& max_uploads,
 			   vector<rgw_bucket_dir_entry> *objs,
-			   map<string, bool> *common_prefixes, bool *is_truncated)
+			   map<string, bool> *common_prefixes, bool *is_truncated, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
   MultipartMetaFilter mp_filter;
@@ -302,12 +307,17 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
 
-  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
+  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield, this_parent_span));
 }
 
 int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-				string& prefix, string& delim)
+				string& prefix, string& delim, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   constexpr int max = 1000;
   int ret, num_deleted = 0;
   vector<rgw_bucket_dir_entry> objs;
@@ -317,7 +327,7 @@ int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RG
 
   do {
     ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
-				 max, &objs, nullptr, &is_truncated);
+				 max, &objs, nullptr, &is_truncated, this_parent_span);
     if (ret < 0) {
       ldout(store->ctx(), 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
