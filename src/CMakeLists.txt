@@ -342,7 +342,8 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
-set(libcommon_files
+
+  set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   global/global_context.cc
@@ -372,6 +373,12 @@ set(libcommon_files
   osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
+
+if(WITH_JAEGER)
+  file(GLOB jager_tracing_file "common/tracer.cc")
+  list(APPEND libcommon_files ${jager_tracing_file})
+endif()
+
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
@@ -393,7 +400,8 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crush_objs>)
-set(ceph_common_deps
+  
+  set(ceph_common_deps
   json_spirit erasure_code arch crc32
   ${LIB_RESOLV}
   Boost::thread
@@ -412,6 +420,11 @@ set(ceph_common_deps
   ${GSSAPI_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}
   ${CMAKE_DL_LIBS})
+
+if(WITH_JAEGER)
+  list(APPEND ceph_common_deps ${Complete_Jaeger_LIBRARIES})
+endif()
+
 if(HAVE_UDEV)
   list(APPEND ceph_common_deps ${UDEV_LIBRARIES})
 endif()
@@ -437,7 +450,7 @@ if(WITH_DPDK)
 endif()
 
 if(WIN32)
-  list(APPEND ceph_common_deps ws2_32 mswsock bcrypt)
+  list(APPEND ceph_common_deps ws2_32 mswsock)
   list(APPEND ceph_common_deps dlfcn_win32)
 endif()
 

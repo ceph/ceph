@@ -352,6 +352,19 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+option(WITH_JAEGER "Use jaeger to create tracepoints and display it on Jaeger UI" OFF)
+
+if(WITH_JAEGER)
+  #TODO: handle the case if libraries found locally, why be redundant?
+  #set(Jaeger_DIR "${CMAKE_CURRENT_LIST_DIR}/Jaegertracing/Jaeger-client-cpp")
+  find_package(OpenTracing REQUIRED)
+  find_package(Jaeger REQUIRED)
+  find_package(yaml-cpp REQUIRED)
+  set(Complete_Jaeger_LIBRARIES ${Jaeger_LIBRARIES} ${OpenTracing_LIBRARIES} ${yaml-cpp_LIBRARIES})
+  include_directories(SYSTEM ${Jaeger_INCLUDE_DIRS} ${yaml-cpp_INCLUDE_DIRS} ${OpenTracing_INCLUDE_DIRS})
+  add_definitions(-DWITH_JAEGER)
+endif()
+
 option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
 if(WITH_BOOST_CONTEXT)
   set(HAVE_BOOST_CONTEXT ON)
