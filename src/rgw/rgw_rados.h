@@ -865,7 +865,7 @@ public:
       
       explicit Delete(RGWRados::Object *_target) : target(_target) {}
 
-      int delete_obj(optional_yield y);
+      int delete_obj(optional_yield y, const Span& parent_span = nullptr);
     };
 
     struct Stat {
@@ -1225,7 +1225,7 @@ public:
 		 int versioning_status,
 		 uint16_t bilog_flags = 0,
 		 const ceph::real_time& expiration_time = ceph::real_time(),
-		 rgw_zone_set *zones_trace = nullptr);
+		 rgw_zone_set *zones_trace = nullptr, const Span& parent_span = nullptr);
 
   int delete_raw_obj(const rgw_raw_obj& obj);
 

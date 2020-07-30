@@ -5020,8 +5020,13 @@ struct tombstone_entry {
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Delete::delete_obj(optional_yield y)
+int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados *store = target->get_store();
   rgw_obj& src_obj = target->get_obj();
   const string& instance = src_obj.key.instance;
@@ -5061,19 +5066,25 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
         meta.mtime = params.mtime;
       }
 
+      Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::set_olh");
       int r = store->set_olh(target->get_ctx(), target->get_bucket_info(), marker, true, &meta, params.olh_epoch, params.unmod_since, params.high_precision_time, y, params.zones_trace);
+      finish_trace(span_2);
       if (r < 0) {
         return r;
       }
     } else {
       rgw_bucket_dir_entry dirent;
 
+      Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::bi_get_instance");
       int r = store->bi_get_instance(target->get_bucket_info(), obj, &dirent);
+      finish_trace(span_3);
       if (r < 0) {
         return r;
       }
       result.delete_marker = dirent.is_delete_marker();
+      Span span_4 = trace(this_parent_span, "rgw_rados.cc : RGWRados::unlink_obj_instance");
       r = store->unlink_obj_instance(target->get_ctx(), target->get_bucket_info(), obj, params.olh_epoch, y, params.zones_trace);
+      finish_trace(span_4);
       if (r < 0) {
         return r;
       }
@@ -5087,7 +5098,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
       return r;
     }
 
+    Span span_5 = trace(this_parent_span, "svc_datalog.cc : RGWSI_DataLog_RADOS::add_entry");
     r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+    finish_trace(span_5);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
       return r;
@@ -5097,7 +5110,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
   }
 
   rgw_rados_ref ref;
+  Span span_6 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_obj_head_ref");
   int r = store->get_obj_head_ref(target->get_bucket_info(), obj, &ref);
+  finish_trace(span_6);
   if (r < 0) {
     return r;
   }
@@ -5157,7 +5172,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
     return -ENOENT;
   }
 
+  Span span_7 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Object::prepare_atomic_modification");
   r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true, false, y);
+  finish_trace(span_7);
   if (r < 0)
     return r;
 
@@ -5173,10 +5190,12 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
   if (r < 0)
     return r;
 
+  Span span_8 = trace(this_parent_span, "rgw_rados.cc : RGWRados::remove_rgw_head_obj");
   store->remove_rgw_head_obj(op);
+  finish_trace(span_8);
 
   auto& ioctx = ref.pool.ioctx();
-  r = rgw_rados_operate(ioctx, ref.obj.oid, &op, null_yield);
+  r = rgw_rados_operate(ioctx, ref.obj.oid, &op, null_yield, this_parent_span);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
@@ -5190,7 +5209,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
     }
     r = index_op.complete_del(poolid, ioctx.get_last_version(), state->mtime, params.remove_objs);
     
+    Span span_9 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Object::complete_atomic_modification");
     int ret = target->complete_atomic_modification();
+    finish_trace(span_9);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
@@ -5210,7 +5231,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
     return r;
 
   /* update quota cache */
+  Span span_10 = trace(this_parent_span, "rgw_quota.cc : update_stats");
   store->quota_handler->update_stats(params.bucket_owner, obj.bucket, -1, 0, obj_accounted_size);
+  finish_trace(span_10);
 
   return 0;
 }
@@ -5221,8 +5244,13 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
                          int versioning_status,
                          uint16_t bilog_flags,
                          const real_time& expiration_time,
-                         rgw_zone_set *zones_trace)
+                         rgw_zone_set *zones_trace, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados::Object del_target(this, bucket_info, obj_ctx, obj);
   RGWRados::Object::Delete del_op(&del_target);
 
@@ -5232,7 +5260,7 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
   del_op.params.expiration_time = expiration_time;
   del_op.params.zones_trace = zones_trace;
 
-  return del_op.delete_obj(null_yield);
+  return del_op.delete_obj(null_yield, this_parent_span);
 }
 
 int RGWRados::delete_raw_obj(const rgw_raw_obj& obj)

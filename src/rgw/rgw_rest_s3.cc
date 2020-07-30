@@ -3354,6 +3354,12 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
 
 int RGWDeleteObj_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
 
   if (s->system_request) {
@@ -3382,6 +3388,12 @@ int RGWDeleteObj_ObjStore_S3::get_params()
 
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   int r = op_ret;
   if (r == -ENOENT)
     r = 0;

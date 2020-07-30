@@ -1338,6 +1338,12 @@ static void bulkdelete_respond(const unsigned num_deleted,
 
 int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   op_ret = RGWDeleteObj_ObjStore::verify_permission();
 
   /* We have to differentiate error codes depending on whether user is
@@ -1352,6 +1358,12 @@ int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
 
 int RGWDeleteObj_ObjStore_SWIFT::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   const string& mm = s->info.args.get("multipart-manifest");
   multipart_delete = (mm.compare("delete") == 0);
 
@@ -1360,6 +1372,12 @@ int RGWDeleteObj_ObjStore_SWIFT::get_params()
 
 void RGWDeleteObj_ObjStore_SWIFT::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   int r = op_ret;
 
   if (multipart_delete) {
