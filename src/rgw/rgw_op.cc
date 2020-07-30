@@ -1317,6 +1317,11 @@ void RGWDeleteBucketTags::execute()
 
 int RGWGetBucketReplication::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetReplicationConfiguration)) {
     return -EACCES;
   }
@@ -1326,19 +1331,40 @@ int RGWGetBucketReplication::verify_permission()
 
 void RGWGetBucketReplication::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWGetBucketReplication::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   send_response_data();
 }
 
 int RGWPutBucketReplication::verify_permission() {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
 }
 
 void RGWPutBucketReplication::execute() {
+
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
 
   op_ret = get_params();
   if (op_ret < 0) 
@@ -1350,7 +1376,7 @@ void RGWPutBucketReplication::execute() {
     return;
   }
 
-  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &this_parent_span] {
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
@@ -1359,7 +1385,8 @@ void RGWPutBucketReplication::execute() {
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_instance_info(false, real_time());
+    int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
+                                                          &s->bucket_attrs, this_parent_span);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -1371,24 +1398,42 @@ void RGWPutBucketReplication::execute() {
 
 void RGWDeleteBucketReplication::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   rgw_bucket_object_pre_exec(s);
 }
 
 int RGWDeleteBucketReplication::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
 }
 
 void RGWDeleteBucketReplication::execute()
 {
-  bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    return;
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
+  if (!store->svc()->zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
   }
 
-  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &this_parent_span] {
     if (!s->bucket->get_info().sync_policy) {
       return 0;
     }
@@ -1399,7 +1444,8 @@ void RGWDeleteBucketReplication::execute()
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_instance_info(false, real_time());
+    int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
+                                                          &s->bucket_attrs, this_parent_span);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;

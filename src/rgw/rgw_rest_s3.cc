@@ -1238,6 +1238,13 @@ struct ReplicationConfiguration {
 
 void RGWGetBucketReplication_ObjStore_S3::send_response_data()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1269,6 +1276,12 @@ void RGWGetBucketReplication_ObjStore_S3::send_response_data()
 
 int RGWPutBucketReplication_ObjStore_S3::get_params()
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   RGWXMLParser parser;
 
   if (!parser.init()){
@@ -1313,6 +1326,12 @@ int RGWPutBucketReplication_ObjStore_S3::get_params()
 
 void RGWPutBucketReplication_ObjStore_S3::send_response()
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1328,6 +1347,12 @@ void RGWDeleteBucketReplication_ObjStore_S3::update_sync_policy(rgw_sync_policy_
 
 void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
