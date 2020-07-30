@@ -156,25 +156,19 @@ Create OSDs on a set of devices on a single host::
 
     ceph orch daemon add osd <host>:device1,device2
 
-Example::
-=========
-or::
+Another way of doing it is using ``apply`` interface::
 
     ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
-
 
 Where the ``json_file/yaml_file`` is a DriveGroup specification.
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
 
-or::
-
-    ceph orch apply osd --all-available-devices [--dry-run]
-
-If the 'apply' method is used. You will be presented with a preview of what will happen.
+Along with ``apply`` interface if ``dry-run`` option is used, it will present a
+preview of what will happen.
 
 Example::
 
-    # ceph orch apply osd --all-available-devices
+    # ceph orch apply osd --all-available-devices --dry-run
     NAME                  HOST  DATA     DB WAL
     all-available-devices node1 /dev/vdb -  -
     all-available-devices node2 /dev/vdc -  -
