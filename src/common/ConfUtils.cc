@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <experimental/iterator>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -301,6 +302,27 @@ std::string ConfFile::normalize_key_name(std::string_view key)
   std::string k{key};
   boost::algorithm::trim_fill_if(k, "_", isspace);
   return k;
+}
+
+void ConfFile::check_old_style_section_names(const std::vector<std::string>& prefixes,
+					     std::ostream& os)
+{
+  // Warn about section names that look like old-style section names
+  std::vector<std::string> old_style_section_names;
+  for (auto& [name, section] : *this) {
+    for (auto& prefix : prefixes) {
+      if (name.find(prefix) == 0 && name.size() > 3 && name[3] != '.') {
+	old_style_section_names.push_back(name);
+      }
+    }
+  }
+  if (!old_style_section_names.empty()) {
+    os << "ERROR! old-style section name(s) found: ";
+    std::copy(std::begin(old_style_section_names),
+              std::end(old_style_section_names),
+              std::experimental::make_ostream_joiner(os, ", "));
+    os << ". Please use the new style section names that include a period.";
+  }
 }
 
 std::ostream &operator<<(std::ostream &oss, const ConfFile &cf)
