@@ -686,26 +686,99 @@ namespace {
 class CollectionListIterator {
 public:
   CollectionListIterator(const KeyValueDB::Iterator &it)
-    : m_it(it), m_chunk_iter(m_chunk.end()) {
+    : m_it(it) {
+  }
+  virtual ~CollectionListIterator() {
   }
 
-  bool valid() const {
+  virtual bool valid() const = 0;
+  virtual const ghobject_t &oid() const = 0;
+  virtual const std::string &key() const = 0;
+  virtual void lower_bound(const std::string &key) = 0;
+  virtual void upper_bound(const std::string &key) = 0;
+  virtual void next() = 0;
+
+protected:
+  KeyValueDB::Iterator m_it;
+};
+
+class SimpleCollectionListIterator : public CollectionListIterator {
+public:
+  SimpleCollectionListIterator(const KeyValueDB::Iterator &it)
+    : CollectionListIterator(it) {
+  }
+
+  bool valid() const override {
+    return m_it->valid();
+  }
+
+  const ghobject_t &oid() const override {
+    ceph_assert(valid());
+
+    return m_oid;
+  }
+
+  virtual const std::string &key() const override {
+    ceph_assert(valid());
+
+    return m_key;
+  }
+
+  void lower_bound(const std::string &key) override {
+    m_it->lower_bound(key);
+    cache_key();
+  }
+
+  void upper_bound(const std::string &key) override {
+    m_it->upper_bound(key);
+    cache_key();
+  }
+
+  void next() override {
+    ceph_assert(valid());
+
+    m_it->next();
+    cache_key();
+  }
+
+private:
+  std::string m_key;
+  ghobject_t m_oid;
+
+  void cache_key() {
+    if (!valid()) {
+      return;
+    }
+
+    m_key = m_it->key();
+    int r = get_key_object(m_key, &m_oid);
+    ceph_assert(r != -1);
+  }
+};
+
+class SortedCollectionListIterator : public CollectionListIterator {
+public:
+  SortedCollectionListIterator(const KeyValueDB::Iterator &it)
+    : CollectionListIterator(it), m_chunk_iter(m_chunk.end()) {
+  }
+
+  bool valid() const override {
     return m_chunk_iter != m_chunk.end();
   }
 
-  const ghobject_t &oid() const {
+  const ghobject_t &oid() const override {
     ceph_assert(valid());
 
     return m_chunk_iter->first;
   }
 
-  const std::string &key() const {
+  const std::string &key() const override {
     ceph_assert(valid());
 
     return m_chunk_iter->second;
   }
 
-  void lower_bound(const std::string &key) {
+  void lower_bound(const std::string &key) override {
     ghobject_t oid;
     int r = get_key_object(key, &oid);
     ceph_assert(r != -1);
@@ -731,7 +804,7 @@ public:
     }
   }
 
-  void upper_bound(const std::string &key) {
+  void upper_bound(const std::string &key) override {
     lower_bound(key);
 
     if (valid() && this->key() == key) {
@@ -739,7 +812,7 @@ public:
     }
   }
 
-  void next() {
+  void next() override {
     ceph_assert(valid());
 
     m_chunk_iter++;
@@ -749,7 +822,6 @@ public:
   }
 
 private:
-  KeyValueDB::Iterator m_it;
   std::map<ghobject_t, std::string> m_chunk;
   std::map<ghobject_t, std::string>::iterator m_chunk_iter;
 
@@ -10602,7 +10674,28 @@ int BlueStore::collection_list(
   int r;
   {
     std::shared_lock l(c->lock);
-    r = _collection_list(c, start, end, max, ls, pnext);
+    r = _collection_list(c, start, end, max, false, ls, pnext);
+  }
+
+  dout(10) << __func__ << " " << c->cid
+    << " start " << start << " end " << end << " max " << max
+    << " = " << r << ", ls.size() = " << ls->size()
+    << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
+  return r;
+}
+
+int BlueStore::collection_list_legacy(
+  CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  c->flush();
+  dout(15) << __func__ << " " << c->cid
+           << " start " << start << " end " << end << " max " << max << dendl;
+  int r;
+  {
+    std::shared_lock l(c->lock);
+    r = _collection_list(c, start, end, max, true, ls, pnext);
   }
 
   dout(10) << __func__ << " " << c->cid
@@ -10614,7 +10707,7 @@ int BlueStore::collection_list(
 
 int BlueStore::_collection_list(
   Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
+  bool legacy, vector<ghobject_t> *ls, ghobject_t *pnext)
 {
 
   if (!c->exists)
@@ -10644,7 +10737,13 @@ int BlueStore::_collection_list(
     << " and " << pretty_binary_string(start_key)
     << " to " << pretty_binary_string(end_key)
     << " start " << start << dendl;
-  it = std::make_unique<CollectionListIterator>(db->get_iterator(PREFIX_OBJ));
+  if (legacy) {
+    it = std::make_unique<SimpleCollectionListIterator>(
+      db->get_iterator(PREFIX_OBJ));
+  } else {
+    it = std::make_unique<SortedCollectionListIterator>(
+      db->get_iterator(PREFIX_OBJ));
+  }
   if (start == ghobject_t() ||
     start.hobj == hobject_t() ||
     start == c->cid.get_min_hobj()) {
@@ -15038,7 +15137,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     // then check if all of them are marked as non-existent.
     // Bypass the check if (next != ghobject_t::get_max())
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
-                         nonexistent_count + 1, &ls, &next);
+                         nonexistent_count + 1, false, &ls, &next);
     if (r >= 0) {
       // If true mean collecton has more objects than nonexistent_count,
       // so bypass check.
