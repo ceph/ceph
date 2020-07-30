@@ -2128,9 +2128,13 @@ you may want to run:
                         reconfig=True)
                 except OrchestratorError as e:
                     self.events.from_orch_error(e)
+                    if dd.daemon_type in daemons_post:
+                        del daemons_post[dd.daemon_type]
                     # continue...
                 except Exception as e:
                     self.events.for_daemon_from_exception(dd.name(), e)
+                    if dd.daemon_type in daemons_post:
+                        del daemons_post[dd.daemon_type]
                     # continue...
 
         # do daemon post actions
