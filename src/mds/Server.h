@@ -351,7 +351,7 @@ public:
 
 private:
   void reply_client_request(MDRequestRef& mdr, const MClientReply::ref &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
+  void flush_session(Session *session, MDSGatherBuilder& gather);
 
   DecayCounter recall_throttle;
   time last_recall_state;
