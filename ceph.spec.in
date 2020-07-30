@@ -934,6 +934,12 @@ descriptions, and submitting the command to the appropriate daemon.
 
 %package -n python%{python3_pkgversion}-ceph-common
 Summary:	Python 3 utility libraries for Ceph
+%if 0%{?fedora} || 0%{?rhel} >= 8
+Requires:       python%{python3_pkgversion}-pyyaml
+%endif
+%if 0%{?suse_version}
+Requires:       python%{python3_pkgversion}-PyYAML
+%endif
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
