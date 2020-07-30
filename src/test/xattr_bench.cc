@@ -16,6 +16,7 @@
 #include <time.h>
 #include <string.h>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include "os/filestore/FileStore.h"
 #include "include/Context.h"
@@ -40,14 +41,10 @@ const int THREADS = 5;
 
 template <typename T>
 typename T::iterator rand_choose(T &cont) {
-  if (cont.size() == 0) {
-    return cont.end();
+  if (std::empty(cont) == 0) {
+    return std::end(cont);
   }
-  int index = rand() % cont.size();
-  typename T::iterator retval = cont.begin();
-
-  for (; index > 0; --index) ++retval;
-  return retval;
+  return std::next(std::begin(cont), rand() % cont.size());
 }
 
 class OnApplied : public Context {

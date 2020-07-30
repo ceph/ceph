@@ -13,6 +13,7 @@
  */
 
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
 #include "os/filestore/FileStore.h"
@@ -31,14 +32,10 @@ void usage(const string &name) {
 
 template <typename T>
 typename T::iterator rand_choose(T &cont) {
-  if (cont.size() == 0) {
-    return cont.end();
+  if (std::empty(cont)) {
+    return std::end(cont);
   }
-  int index = rand() % cont.size();
-  typename T::iterator retval = cont.begin();
-
-  for (; index > 0; --index) ++retval;
-  return retval;
+  return std::next(std::begin(cont), rand() % cont.size());
 }
 
 int main(int argc, char **argv) {
