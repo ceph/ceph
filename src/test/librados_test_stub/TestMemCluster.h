@@ -35,6 +35,7 @@ public:
 
     bufferlist data;
     time_t mtime;
+    uint64_t objver;
 
     uint64_t snap_id;
     std::vector<uint64_t> snaps;

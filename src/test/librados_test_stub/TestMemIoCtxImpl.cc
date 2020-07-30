@@ -823,6 +823,8 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
       file->mtime = ceph_clock_now().sec();
       m_pool->files[{get_namespace(), oid}].push_back(file);
     }
+
+    file->objver++;
     return file;
   }
 
