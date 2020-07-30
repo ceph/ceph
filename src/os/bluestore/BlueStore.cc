@@ -7953,7 +7953,7 @@ int BlueStore::_collection_list(
     << " start " << start << dendl;
   if (legacy) {
     it.reset(new SimpleCollectionListIterator(
-                 cct, db->get_iterator(PREFIX_OBJ)));
+                 db->get_iterator(PREFIX_OBJ)));
   } else {
     it.reset(new SortedCollectionListIterator(
                  db->get_iterator(PREFIX_OBJ)));
