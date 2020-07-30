@@ -646,6 +646,13 @@ void RGWDeleteObjTags_ObjStore_S3::send_response()
 
 void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -675,6 +682,12 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
 
 int RGWPutBucketTags_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   RGWXMLParser parser;
 
   if (!parser.init()){
@@ -722,6 +735,12 @@ int RGWPutBucketTags_ObjStore_S3::get_params()
 
 void RGWPutBucketTags_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -731,6 +750,13 @@ void RGWPutBucketTags_ObjStore_S3::send_response()
 
 void RGWDeleteBucketTags_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);

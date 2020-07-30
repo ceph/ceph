@@ -837,7 +837,7 @@ public:
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                  RGWBucketInfo& info,
                                  optional_yield y,
-                                 const BucketInstance::PutParams& params = {});
+                                 const BucketInstance::PutParams& params = {}, const Span& parent_span = nullptr);
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   optional_yield y,
@@ -859,7 +859,7 @@ public:
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker,
-                                optional_yield y);
+                                optional_yield y, const Span& parent_span = nullptr);
 
   /* user/bucket */
   int link_bucket(const rgw_user& user_id,
@@ -911,7 +911,7 @@ private:
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
                                     optional_yield y,
-                                    const BucketInstance::PutParams& params);
+                                    const BucketInstance::PutParams& params, const Span& parent_span = nullptr);
 
   int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                   RGWBucketInfo& info,

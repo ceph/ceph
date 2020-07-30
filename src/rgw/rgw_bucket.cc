@@ -3225,7 +3225,7 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,
                                                 optional_yield y,
-                                                const BucketInstance::PutParams& params)
+                                                const BucketInstance::PutParams& params, const Span& parent_span)
 {
   if (params.objv_tracker) {
     info.objv_tracker = *params.objv_tracker;
@@ -3238,16 +3238,21 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 params.exclusive,
                                                 params.mtime,
                                                 params.attrs,
-                                                y);
+                                                y, parent_span);
 }
 
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo& info,
                                             optional_yield y,
-                                            const BucketInstance::PutParams& params)
+                                            const BucketInstance::PutParams& params, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return do_store_bucket_instance_info(ctx, bucket, info, y, params);
+    return do_store_bucket_instance_info(ctx, bucket, info, y, params, this_parent_span);
   });
 }
 
@@ -3363,14 +3368,22 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             map<string, bufferlist>& attrs,
                                             RGWObjVersionTracker *objv_tracker,
-                                            optional_yield y)
+                                            optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
     rgw_bucket& bucket = bucket_info.bucket;
 
     if (!bucket_info.has_instance_obj) {
       /* an old bucket object, need to convert it */
+        Span span_2 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info");
         int ret = convert_old_bucket_info(ctx, bucket, y);
+        finish_trace(span_2);
+
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
           return ret;
@@ -3383,7 +3396,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                          y,
                                          BucketInstance::PutParams().set_attrs(&attrs)
                                                                     .set_objv_tracker(objv_tracker)
-                                                                    .set_orig_info(&bucket_info));
+                                                                    .set_orig_info(&bucket_info), this_parent_span);
     });
 }
 
