@@ -1310,7 +1310,7 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
-  map<string, buffer::list> attrs;
+  rgw::sal::RGWAttrs attrs;
   set<string> rmattr_names;
   bool has_policy, has_cors;
   uint32_t policy_rw_mask;
