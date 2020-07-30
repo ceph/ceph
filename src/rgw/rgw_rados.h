@@ -1174,7 +1174,7 @@ public:
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
-               optional_yield y);
+               optional_yield y, const Span& this_parent_span = nullptr);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                rgw::sal::RGWBucket* bucket,
@@ -1188,7 +1188,7 @@ public:
 	       ceph::real_time delete_at,
                string *petag,
                const DoutPrefixProvider *dpp,
-               optional_yield y);
+               optional_yield y, const Span& parent_span = nullptr);
   
   int transition_obj(RGWObjectCtx& obj_ctx,
                      rgw::sal::RGWBucket* bucket,
@@ -1339,7 +1339,7 @@ public:
       map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
 
-  int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);
+  int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs, const Span& parent_span = nullptr);
   /* xxx dang obj_ctx -> svc */
   int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y);
   int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y);
@@ -1349,7 +1349,7 @@ public:
   int get_bucket_info(RGWServices *svc,
 		      const string& tenant_name, const string& bucket_name,
 		      RGWBucketInfo& info,
-		      ceph::real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
+		      ceph::real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL, const Span& parent_span = nullptr);
 
   // Returns 0 on successful refresh. Returns error code if there was
   // an error or the version stored on the OSD is the same as that
@@ -1360,7 +1360,7 @@ public:
 			      map<string, bufferlist> *pattrs = nullptr);
 
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
-			     map<string, bufferlist> *pattrs, bool create_entry_point);
+			     map<string, bufferlist> *pattrs, bool create_entry_point, const Span& parent_span = nullptr);
 
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,

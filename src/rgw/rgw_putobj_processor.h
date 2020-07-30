@@ -42,7 +42,7 @@ class ObjectProcessor : public DataProcessor {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       optional_yield y, const Span& parent_span = nullptr) = 0;
 };
 
 // an object processor with special handling for the first chunk of the head.

@@ -65,7 +65,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_pool(const RGWBucketInfo& bucket_
     return -EINVAL;
   }
 
-  int r = open_pool(iter->second.index_pool, index_pool, true);
+  int r = open_pool(iter->second.index_pool, index_pool, true, this_parent_span);
   if (r < 0)
     return r;
 

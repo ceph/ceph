@@ -298,10 +298,10 @@ int RGWRadosBucket::chown(RGWUser* new_user, RGWUser* old_user, optional_yield y
 			   old_user->get_display_name(), obj_marker, y);
 }
 
-int RGWRadosBucket::put_instance_info(bool exclusive, ceph::real_time _mtime)
+int RGWRadosBucket::put_instance_info(bool exclusive, ceph::real_time _mtime, const Span& parent_span)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs.attrs);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs.attrs, parent_span);
 }
 
 /* Make sure to call get_bucket_info() if you need it first */

@@ -194,6 +194,10 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			 int *next_marker, bool *truncated,
 			 bool assume_unsorted)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   return list_multipart_parts(store, s->bucket->get_info(), s->cct, upload_id,
 			      meta_oid, num_parts, marker, parts,
 			      next_marker, truncated, assume_unsorted);
