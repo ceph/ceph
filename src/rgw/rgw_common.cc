@@ -192,6 +192,38 @@ is_err() const
   return !(http_ret >= 200 && http_ret <= 399);
 }
 
+string rgw_obj_key::to_escaped_str() const
+{
+  string s = rgw_escape_str(name, '\\', ':');
+  if (instance.empty() && ns.empty()) {
+    return s;
+  }
+
+  s += ":" + rgw_escape_str(instance, '\\', ':');
+  if (!ns.empty()) {
+    s += ":"  + rgw_escape_str(ns, '\\', ':');
+  }
+
+  return s;
+}
+
+rgw_obj_key rgw_obj_key::from_escaped_str(const string& s)
+{
+  rgw_obj_key k;
+  size_t pos = rgw_unescape_str(s, 0, '\\', ':', &k.name);
+  if (pos == string::npos) {
+    return k;
+  }
+
+  pos = rgw_unescape_str(s, pos, '\\', ':', &k.instance);
+  if (pos == string::npos) {
+    return k;
+  }
+
+  pos = rgw_unescape_str(s, pos, '\\', ':', &k.ns);
+  return k;
+}
+
 // The requestURI transferred from the frontend can be abs_path or absoluteURI
 // If it is absoluteURI, we should adjust it to abs_path for the following 
 // S3 authorization and some other processes depending on the requestURI

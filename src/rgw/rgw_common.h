@@ -1526,6 +1526,9 @@ struct rgw_obj_key {
     snprintf(buf, sizeof(buf), "%s[%s]", name.c_str(), instance.c_str());
     return buf;
   }
+
+  string to_escaped_str() const;
+  static rgw_obj_key from_escaped_str(const string& s);
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
