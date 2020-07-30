@@ -750,6 +750,7 @@ Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
+Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system

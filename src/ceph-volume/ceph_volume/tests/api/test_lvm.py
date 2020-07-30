@@ -223,8 +223,8 @@ class TestVolume(object):
     @pytest.mark.parametrize('dev',[
         '/dev/sdb',
         api.VolumeGroup(vg_name='foo'),
-        api.Volume(lv_name='vg/no_osd', lv_tags=''),
-        api.Volume(lv_name='vg/no_osd', lv_tags='ceph.osd_id=null'),
+        api.Volume(lv_name='vg/no_osd', lv_tags='', lv_path='lv/path'),
+        api.Volume(lv_name='vg/no_osd', lv_tags='ceph.osd_id=null', lv_path='lv/path'),
         None,
     ])
     def test_is_not_ceph_device(self, dev):
