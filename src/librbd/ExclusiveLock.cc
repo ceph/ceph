@@ -140,6 +140,7 @@ template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << dendl;
 
+  auto ref = ceph::ref_t<ExclusiveLock<I>>(this);
   on_shut_down = create_context_callback<Context>(on_shut_down, this);
 
   ML<I>::shut_down(on_shut_down);
