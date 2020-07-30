@@ -61,18 +61,22 @@ void WINAPI ServiceBase::run()
   s_service->hstatus = RegisterServiceCtrlHandler(
     "", (LPHANDLER_FUNCTION)control_handler);
   if (!s_service->hstatus) {
+    lderr(s_service->cct) << "Could not initialize service control handler. "
+                          << "Error: " << GetLastError() << dendl;
     return;
   }
 
   s_service->set_status(SERVICE_START_PENDING);
 
   // TODO: should we expect exceptions?
+  ldout(s_service->cct, 5) << "Starting service." << dendl;
   int err = s_service->run_hook();
   if (err) {
     lderr(s_service->cct) << "Failed to start service. Error code: "
                           << err << dendl;
     s_service->set_status(SERVICE_STOPPED);
   } else {
+    ldout(s_service->cct, 5) << "Successfully started service." << dendl;
     s_service->set_status(SERVICE_RUNNING);
   }
 }
@@ -87,6 +91,7 @@ void ServiceBase::shutdown()
     derr << "Shutdown service hook failed. Error code: " << err << dendl;
     set_status(original_state);
   } else {
+    dout(5) << "Shutdown hook completed." << dendl;
     set_status(SERVICE_STOPPED);
   }
 }
@@ -101,6 +106,7 @@ void ServiceBase::stop()
     derr << "Service stop hook failed. Error code: " << err << dendl;
     set_status(original_state);
   } else {
+    dout(5) << "Successfully stopped service." << dendl;
     set_status(SERVICE_STOPPED);
   }
 }
@@ -132,6 +138,12 @@ void ServiceBase::set_status(DWORD current_state, DWORD exit_code) {
   status.dwWin32ExitCode = exit_code;
 
   if (hstatus) {
+    dout(5) << "Updating service service status (" << current_state
+             << ") and exit code(" << exit_code << ")." << dendl;
     ::SetServiceStatus(hstatus, &status);
+  } else {
+    derr << "Service control handler not initialized. Cannot "
+         << "update service status (" << current_state
+         << ") and exit code(" << exit_code << ")." << dendl;
   }
 }
