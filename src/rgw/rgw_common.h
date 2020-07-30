@@ -38,6 +38,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
+#include "rgw_tracer.h"
 
 namespace ceph {
   class Formatter;
@@ -1633,6 +1634,8 @@ struct req_state : DoutPrefixProvider {
   string bucket_instance_id;
   int bucket_instance_shard_id{-1};
   string redirect_zone_endpoint;
+  std::stack<Span> stack_span;
+  Span root_span;
 
   string redirect;
 
@@ -2425,5 +2428,33 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
+
+#ifdef WITH_JAEGER
+  inline void req_state_span::set_span(Span& span){
+      this->state->stack_span.push(std::move(span));
+    }
+  inline void req_state_span::set_req_state(req_state* _s){
+      this->state = _s;
+      this->is_inserted = true;
+    }
+  inline req_state_span::~req_state_span(){
+      if(this->state && !this->state->stack_span.empty() && this->is_inserted)
+          this->state->stack_span.pop();
+    }
+  static inline void start_trace(req_state_span&& ss, Span&& sp, req_state* const s, const char* name)
+  {
+      Span span;
+      if(s && !s->stack_span.empty()){
+        span = child_span(name, s->stack_span.top());
+        ss.set_req_state(s);
+        ss.set_span(span);
+      }
+      else if(s && s->root_span){
+        span = child_span(name, s->root_span);
+        ss.set_req_state(s);
+        ss.set_span(span);
+      }
+  }
+#endif
 
 #endif
