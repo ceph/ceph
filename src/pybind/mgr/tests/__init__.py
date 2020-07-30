@@ -115,7 +115,7 @@ if 'UNITTEST' in os.environ:
 
 
         sys.modules.update({
-            'rados': mock.Mock(Error=MockRadosError, OSError=MockRadosError),
+            'rados': mock.MagicMock(Error=MockRadosError, OSError=MockRadosError),
             'rbd': mock.Mock(),
             'cephfs': mock.Mock(),
         })
