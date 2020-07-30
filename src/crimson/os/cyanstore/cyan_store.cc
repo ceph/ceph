@@ -71,12 +71,12 @@ seastar::future<> CyanStore::umount()
       ceph_assert(ch);
       ch->encode(bl);
       std::string fn = fmt::format("{}/{}", path, col);
-      return ceph::buffer::write_file(std::move(bl), fn);
+      return crimson::write_file(std::move(bl), fn);
     }).then([&collections, this] {
       ceph::bufferlist bl;
       ceph::encode(collections, bl);
       std::string fn = fmt::format("{}/collections", path);
-      return ceph::buffer::write_file(std::move(bl), fn);
+      return crimson::write_file(std::move(bl), fn);
     });
   });
 }
@@ -110,7 +110,7 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
     ceph::bufferlist bl;
     std::set<coll_t> collections;
     ceph::encode(collections, bl);
-    return ceph::buffer::write_file(std::move(bl), fn);
+    return crimson::write_file(std::move(bl), fn);
   }).then([this] {
     return write_meta("type", "memstore");
   });

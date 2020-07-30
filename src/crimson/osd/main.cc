@@ -98,7 +98,7 @@ seastar::future<> make_keyring()
       keyring.encode_plaintext(bl);
       const auto permissions = (seastar::file_permissions::user_read |
                               seastar::file_permissions::user_write);
-      return ceph::buffer::write_file(std::move(bl), path, permissions);
+      return crimson::write_file(std::move(bl), path, permissions);
     }
   }).handle_exception_type([path](const fs::filesystem_error& e) {
     seastar::fprint(std::cerr, "FATAL: writing new keyring to %s: %s\n", path, e.what());
