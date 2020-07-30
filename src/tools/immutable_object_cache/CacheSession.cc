@@ -32,6 +32,14 @@ stream_protocol::socket& CacheSession::socket() {
   return m_dm_socket;
 }
 
+void CacheSession::set_client_version(const std::string &version) {
+  m_client_version = version;
+}
+
+const std::string &CacheSession::client_version() const {
+  return m_client_version;
+}
+
 void CacheSession::close() {
   if (m_dm_socket.is_open()) {
     boost::system::error_code close_ec;

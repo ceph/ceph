@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
@@ -86,10 +87,11 @@ bool ParentCacheObjectDispatch<I>::read(
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
-   ([this, read_data, dispatch_result, on_dispatched,
-      oid, object_off, object_len](ObjectCacheRequest* ack) {
-     handle_read_cache(ack, object_off, object_len, read_data,
-                       dispatch_result, on_dispatched);
+   ([this, read_data, dispatch_result, on_dispatched, object_no, object_off,
+     object_len, snap_id, &parent_trace](ObjectCacheRequest* ack) {
+      handle_read_cache(ack, object_no, object_off, object_len, snap_id,
+                        parent_trace, read_data, dispatch_result,
+                        on_dispatched);
   });
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
@@ -100,9 +102,10 @@ bool ParentCacheObjectDispatch<I>::read(
 
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
-     ObjectCacheRequest* ack, uint64_t read_off, uint64_t read_len,
-     ceph::bufferlist* read_data, io::DispatchResult* dispatch_result,
-     Context* on_dispatched) {
+     ObjectCacheRequest* ack, uint64_t object_no, uint64_t read_off,
+     uint64_t read_len, librados::snap_t snap_id,
+     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+     io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -115,7 +118,20 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
 
   ceph_assert(ack->type == RBDSC_READ_REPLY);
   std::string file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
-  ceph_assert(file_path != "");
+  if (file_path.empty()) {
+    auto ctx = new LambdaContext(
+      [this, dispatch_result, on_dispatched](int r) {
+        if (r < 0 && r != -ENOENT) {
+          lderr(m_image_ctx->cct) << "failed to read parent: "
+                                  << cpp_strerror(r) << dendl;
+        }
+        *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+        on_dispatched->complete(r);
+      });
+    io::util::read_parent<I>(m_image_ctx, object_no, read_off, read_len,
+                             snap_id, parent_trace, read_data, ctx);
+    return;
+  }
 
   // try to read from parent image cache
   int r = read_object(file_path, read_data, read_off, read_len, on_dispatched);

@@ -2,10 +2,18 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/io/Utils.h"
+#include "common/dout.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "include/neorados/RADOS.hpp"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequest.h"
 #include "osd/osd_types.h"
+#include "osdc/Striper.h"
+
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::io::util: " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -71,7 +79,52 @@ bool assemble_write_same_extent(
   return false;
 }
 
+template <typename I>
+void read_parent(I *image_ctx, uint64_t object_no, uint64_t off,
+                 uint64_t len, librados::snap_t snap_id,
+                 const ZTracer::Trace &trace, ceph::bufferlist* data,
+                 Context* on_finish) {
+
+  auto cct = image_ctx->cct;
+
+  std::shared_lock image_locker{image_ctx->image_lock};
+
+  // calculate reverse mapping onto the image
+  Extents parent_extents;
+  Striper::extent_to_file(cct, &image_ctx->layout, object_no, off, len,
+                          parent_extents);
+
+  uint64_t parent_overlap = 0;
+  uint64_t object_overlap = 0;
+  int r = image_ctx->get_parent_overlap(snap_id, &parent_overlap);
+  if (r == 0) {
+    object_overlap = image_ctx->prune_parent_extents(parent_extents,
+                                                     parent_overlap);
+  }
+
+  if (object_overlap == 0) {
+    image_locker.unlock();
+
+    on_finish->complete(-ENOENT);
+    return;
+  }
+
+  ldout(cct, 20) << dendl;
+
+  auto comp = AioCompletion::create_and_start(on_finish, image_ctx->parent,
+                                              AIO_TYPE_READ);
+  ldout(cct, 20) << "completion " << comp << ", extents " << parent_extents
+                 << dendl;
+
+  ImageRequest<I>::aio_read(image_ctx->parent, comp, std::move(parent_extents),
+                            ReadResult{data}, 0, trace);
+}
+
 } // namespace util
 } // namespace io
 } // namespace librbd
 
+template void librbd::io::util::read_parent(
+    librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t off, uint64_t len,
+    librados::snap_t snap_id, const ZTracer::Trace &trace,
+    ceph::bufferlist* data, Context* on_finish);
