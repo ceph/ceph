@@ -2915,9 +2915,9 @@ def command_bootstrap():
                 cli(['orch', 'apply', t])
 
     if args.registry_url and args.registry_username and args.registry_password:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_url', args.registry_url])
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', args.registry_username])
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_url', args.registry_url, '--force'])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', args.registry_username, '--force'])
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password, '--force'])
 
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
