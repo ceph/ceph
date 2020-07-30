@@ -677,7 +677,6 @@ int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
 void init_context() {
   g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf().apply_changes(nullptr);
-  common_init_finish(g_ceph_context);
 }
 
 int init_rados(librados::Rados *rados) {
