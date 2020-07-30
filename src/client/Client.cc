@@ -8931,7 +8931,6 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 	ldout(cct, 8) << "Unable to get caps after open of inode " << *in <<
 			  " . Denying open: " <<
 			  cpp_strerror(result) << dendl;
-	in->put_open_ref(cmode);
       } else {
 	put_cap_ref(in, need);
       }
