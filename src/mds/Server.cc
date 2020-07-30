@@ -741,24 +741,24 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
   }
 }
 
-void Server::flush_session(Session *session, MDSGatherBuilder *gather) {
+void Server::flush_session(Session *session, MDSGatherBuilder& gather) {
   if (!session->is_open() ||
       !session->get_connection() ||
       !session->get_connection()->has_feature(CEPH_FEATURE_EXPORT_PEER)) {
     return;
   }
 
-  version_t seq = session->wait_for_flush(gather->new_sub());
+  version_t seq = session->wait_for_flush(gather.new_sub());
   mds->send_message_client(
     make_message<MClientSession>(CEPH_SESSION_FLUSHMSG, seq), session);
 }
 
 void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather)
 {
-  for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
-    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
+  for (const auto& client : client_set) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
     ceph_assert(session);
-    flush_session(session, &gather);
+    flush_session(session, gather);
   }
 }
 
@@ -1814,7 +1814,7 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
       m->head.max_caps = newlim;
       mds->send_message_client(m, session);
       if (gather) {
-        flush_session(session, gather);
+        flush_session(session, *gather);
       }
       caps_recalled += session->notify_recall_sent(newlim);
       recall_throttle.hit(recall);
