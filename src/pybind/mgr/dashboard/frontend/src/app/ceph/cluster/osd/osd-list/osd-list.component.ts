@@ -12,7 +12,6 @@ import { ConfirmationModalComponent } from '../../../../shared/components/confir
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
-import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
@@ -50,8 +49,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   markOsdConfirmationTpl: TemplateRef<any>;
   @ViewChild('criticalConfirmationTpl', { static: true })
   criticalConfirmationTpl: TemplateRef<any>;
-  @ViewChild(TableComponent, { static: true })
-  tableComponent: TableComponent;
   @ViewChild('reweightBodyTpl')
   reweightBodyTpl: TemplateRef<any>;
   @ViewChild('safeToDestroyBodyTpl')
