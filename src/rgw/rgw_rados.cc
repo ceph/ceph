@@ -2177,21 +2177,30 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             real_time creation_time,
                             rgw_bucket *pmaster_bucket,
                             uint32_t *pmaster_num_shards,
-			    bool exclusive)
+			    bool exclusive, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
   rgw_placement_rule selected_placement_rule;
   RGWZonePlacementInfo rule_info;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
+    Span span_2 = trace(this_parent_span, "svc_zone.cc : RGWSI_Zone::select_bucket_placement");
     ret = svc.zone->select_bucket_placement(owner, zonegroup_id, placement_rule,
                                             &selected_placement_rule, &rule_info);
+    finish_trace(span_2);
     if (ret < 0)
       return ret;
 
     if (!pmaster_bucket) {
+      Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::create_bucket_id");
       create_bucket_id(&bucket.marker);
+      finish_trace(span_3);
       bucket.bucket_id = bucket.marker;
     } else {
       bucket.marker = pmaster_bucket->marker;
@@ -2231,12 +2240,12 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
       info.quota = *pquota_info;
     }
 
-    int r = svc.bi->init_index(info);
+    int r = svc.bi->init_index(info, this_parent_span);
     if (r < 0) {
       return r;
     }
 
-    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
+    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, this_parent_span);
     if (ret == -ECANCELED) {
       ret = -EEXIST;
     }
@@ -7697,8 +7706,13 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
-                              real_time mtime, map<string, bufferlist> *pattrs)
+                              real_time mtime, map<string, bufferlist> *pattrs, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   return ctl.bucket->store_bucket_instance_info(info.bucket, info, null_yield,
 						RGWBucketCtl::BucketInstance::PutParams()
 						.set_exclusive(exclusive)
@@ -7707,11 +7721,16 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 }
 
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
-                                     map<string, bufferlist> *pattrs, bool create_entry_point)
+                                     map<string, bufferlist> *pattrs, bool create_entry_point, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   bool create_head = !info.has_instance_obj || create_entry_point;
 
-  int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs);
+  int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs, this_parent_span);
   if (ret < 0) {
     return ret;
   }
@@ -7736,7 +7755,7 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
   ret = ctl.bucket->store_bucket_entrypoint_info(info.bucket, entry_point, null_yield, RGWBucketCtl::Bucket::PutParams()
 						                          .set_exclusive(exclusive)
 									  .set_objv_tracker(&ot)
-									  .set_mtime(mtime));
+									  .set_mtime(mtime), this_parent_span);
   if (ret < 0)
     return ret;
 

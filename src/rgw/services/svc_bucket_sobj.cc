@@ -240,14 +240,21 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                     real_time mtime,
                                                     map<string, bufferlist> *pattrs,
                                                     RGWObjVersionTracker *objv_tracker,
-                                                    optional_yield y)
+                                                    optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   bufferlist bl;
   encode(info, bl);
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
+  Span span_2 = trace(this_parent_span, "RGWSI_MetaBackend::put()");
   int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y);
+  finish_trace(span_2);
   if (ret < 0) {
     return ret;
   }

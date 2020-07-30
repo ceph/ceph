@@ -749,6 +749,12 @@ static int get_swift_versioning_settings(
 
 int RGWCreateBucket_ObjStore_SWIFT::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   bool has_policy;
   uint32_t policy_rw_mask = 0;
 
@@ -793,6 +799,12 @@ static inline int handle_metadata_errors(req_state* const s, const int op_ret)
 
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret != op_ret) {
     op_ret = meta_ret;

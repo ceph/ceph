@@ -31,20 +31,25 @@ void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
 
 int RGWSI_BucketIndex_RADOS::open_pool(const rgw_pool& pool,
                                        RGWSI_RADOS::Pool *index_pool,
-                                       bool mostly_omap)
+                                       bool mostly_omap, const Span& parent_span)
 {
   *index_pool = svc.rados->pool(pool);
   return index_pool->open(RGWSI_RADOS::OpenParams()
-                          .set_mostly_omap(mostly_omap));
+                          .set_mostly_omap(mostly_omap), parent_span);
 }
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_pool(const RGWBucketInfo& bucket_info,
-                                                    RGWSI_RADOS::Pool *index_pool)
+                                                    RGWSI_RADOS::Pool *index_pool, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   const rgw_pool& explicit_pool = bucket_info.bucket.explicit_placement.index_pool;
 
   if (!explicit_pool.empty()) {
-    return open_pool(explicit_pool, index_pool, false);
+    return open_pool(explicit_pool, index_pool, false, this_parent_span);
   }
 
   auto& zonegroup = svc.zone->get_zonegroup();
@@ -322,12 +327,18 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
 }
 
 
-int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
+int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info, const Span& parent_span)
 {
+  string bucket_oid_base;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWSI_RADOS::Pool index_pool;
 
   string dir_oid = dir_oid_prefix;
-  int r = open_bucket_index_pool(bucket_info, &index_pool);
+  int r = open_bucket_index_pool(bucket_info, &index_pool, this_parent_span);
   if (r < 0) {
     return r;
   }

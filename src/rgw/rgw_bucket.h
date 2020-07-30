@@ -824,7 +824,7 @@ public:
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
                                    optional_yield y,
-                                   const Bucket::PutParams& params = {});
+                                   const Bucket::PutParams& params = {}, const Span& parent_span = nullptr);
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
                                     optional_yield y,
                                     const Bucket::RemoveParams& params = {});

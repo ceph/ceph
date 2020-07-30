@@ -117,7 +117,7 @@ public:
                                    real_time mtime,
                                    map<string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
-                                   optional_yield y) override;
+                                   optional_yield y, const Span& parent_span = nullptr) override;
 
   int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                     const string& key,

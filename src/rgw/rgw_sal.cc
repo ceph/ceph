@@ -756,8 +756,13 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out)
+				 std::unique_ptr<RGWBucket>* bucket_out, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   int ret;
   bufferlist in_data;
   RGWBucketInfo master_info;
@@ -775,12 +780,10 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (ret != -ENOENT) {
     *existed = true;
-    if (swift_ver_location.empty()) {
-      swift_ver_location = bucket->get_info().swift_ver_location;
-    }
-    placement_rule.inherit_from(bucket->get_info().placement_rule);
+    Span span_2 = trace(this_parent_span, "rgw_sal.cc : rgw_op_get_bucket_policy_from_attr");
     int r = rgw_op_get_bucket_policy_from_attr(this, u, bucket->get_attrs().attrs,
 					       &old_policy);
+    finish_trace(span_2);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(u.get_id()) != 0) {
 	bucket_out->swap(bucket);
@@ -828,9 +831,11 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
+    Span span_3 = trace(this_parent_span, "svc_zone.cc : RGWSI_Zone::select_bucket_placement");
     ret = svc()->zone->select_bucket_placement(u.get_info(),
 					    zid, placement_rule,
 					    &selected_placement_rule, nullptr);
+    finish_trace(span_3);
     if (selected_placement_rule != info.placement_rule) {
       ret = -EEXIST;
       bucket_out->swap(bucket);
@@ -842,7 +847,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				    zid, placement_rule, swift_ver_location,
 				    pquota_info, attrs,
 				    info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, pmaster_num_shards, exclusive);
+				    pmaster_bucket, pmaster_num_shards, exclusive, this_parent_span);
     if (ret == -EEXIST) {
       *existed = true;
     } else if (ret != 0) {

@@ -3113,8 +3113,13 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                RGWBucketEntryPoint& info,
                                                optional_yield y,
-                                               const Bucket::PutParams& params)
+                                               const Bucket::PutParams& params, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->store_bucket_entrypoint_info(ctx,
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
@@ -3123,7 +3128,7 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                     params.mtime,
                                                     params.attrs,
                                                     params.objv_tracker,
-                                                    y);
+                                                    y, this_parent_span);
   });
 }
 

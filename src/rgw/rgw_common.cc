@@ -1121,6 +1121,11 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             const rgw::ARN& res,
                             const uint64_t op)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   perm_state_from_req_state ps(s);
   return verify_user_permission(dpp, &ps, s->user_acl.get(), s->iam_user_policies, res, op);
 }

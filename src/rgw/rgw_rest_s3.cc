@@ -2356,6 +2356,12 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret == -ERR_BUCKET_EXISTS)
     op_ret = 0;
   if (op_ret)

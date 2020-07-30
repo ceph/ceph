@@ -80,7 +80,7 @@ class RGWStore : public DoutPrefixProvider {
 			    bool obj_lock_enabled,
 			    bool *existed,
 			    req_info& req_info,
-			    std::unique_ptr<RGWBucket>* bucket) = 0;
+			    std::unique_ptr<RGWBucket>* bucket, const Span& parent_span = nullptr) = 0;
     virtual RGWBucketList* list_buckets(void) = 0;
     virtual bool is_meta_master() = 0;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
@@ -628,7 +628,7 @@ class RGWRadosStore : public RGWStore {
 			    bool obj_lock_enabled,
 			    bool *existed,
 			    req_info& req_info,
-			    std::unique_ptr<RGWBucket>* bucket);
+			    std::unique_ptr<RGWBucket>* bucket, const Span& parent_span = nullptr) override;
     virtual RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
     virtual bool is_meta_master() override;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,

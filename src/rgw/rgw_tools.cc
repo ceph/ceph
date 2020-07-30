@@ -34,11 +34,16 @@ static std::map<std::string, std::string>* ext_mime_map;
 
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
-		   bool mostly_omap)
-{
+		   bool mostly_omap, const Span& parent_span)
+{ 
+  Span span_1 = trace(parent_span, "rgw_tools.cc : rados->ioctx_create");
   int r = rados->ioctx_create(pool.name.c_str(), ioctx);
+  finish_trace(span_1);
+
+  Span span_2 = trace(parent_span, "rgw_tools.cc :rados->pool_create");
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
+  finish_trace(span_2);
     if (r == -ERANGE) {
       dout(0)
         << __func__
@@ -63,6 +68,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
     if (mostly_omap) {
       // set pg_autoscale_bias
+      Span span_3 = trace(parent_span, "rados->mon_command:rgw_rados_pool_autoscale_bias");
       bufferlist inbl;
       float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
       int r = rados->mon_command(
@@ -70,10 +76,12 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
+      finish_trace(span_3);
       if (r < 0) {
 	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
+      Span span_4 = trace(parent_span, "rados->mon_command:rgw_rados_pool_autoscale_bias");
       // set pg_num_min
       int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
       r = rados->mon_command(
@@ -81,17 +89,20 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
+      finish_trace(span_4);
       if (r < 0) {
 	dout(10) << __func__ << " warning: failed to set pg_num_min on "
 		 << pool.name << dendl;
       }
       // set recovery_priority
+      Span span_5 = trace(parent_span, "rgw_rados_pool_recovery_priority");
       int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"recovery_priority\": \"" +
 	stringify(p) + "\"}",
 	inbl, NULL, NULL);
+      finish_trace(span_5);
       if (r < 0) {
 	dout(10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
