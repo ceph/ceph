@@ -5872,6 +5872,11 @@ void RGWSetRequestPayment::execute()
 
 int RGWInitMultipart::verify_permission()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
@@ -5905,11 +5910,21 @@ int RGWInitMultipart::verify_permission()
 
 void RGWInitMultipart::pre_exec()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWInitMultipart::execute()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   bufferlist aclbl;
   map<string, bufferlist> attrs;
   rgw_obj obj;
@@ -5920,7 +5935,9 @@ void RGWInitMultipart::execute()
   if (rgw::sal::RGWObject::empty(s->object.get()))
     return;
 
+  Span span_1 = trace(this_parent_span, "rgw_acl.h : RGWAccessControlPolicy::encode");
   policy.encode(aclbl);
+  finish_trace(span_1);
   attrs[RGW_ATTR_ACL] = aclbl;
 
   populate_with_generic_attrs(s, attrs);
@@ -5964,10 +5981,12 @@ void RGWInitMultipart::execute()
     upload_info.dest_placement = s->dest_placement;
 
     bufferlist bl;
+    Span span_2 = trace(this_parent_span, "rgw_op.cc : encode");
     encode(upload_info, bl);
+    finish_trace(span_2);
     obj_op.meta.data = &bl;
 
-    op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield);
+    op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield, this_parent_span);
   } while (op_ret == -EEXIST);
   
   const auto ret = rgw::notify::publish(s, s->object.get(), ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), rgw::notify::ObjectCreatedPost, store);
@@ -5981,6 +6000,11 @@ void RGWInitMultipart::execute()
 
 int RGWCompleteMultipart::verify_permission()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
@@ -6014,11 +6038,21 @@ int RGWCompleteMultipart::verify_permission()
 
 void RGWCompleteMultipart::pre_exec()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWCompleteMultipart::execute()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
@@ -6167,8 +6201,10 @@ void RGWCompleteMultipart::execute()
         return;
       }
 
+       Span span_1 = trace(this_parent_span, "rgw_common.h : hex_to_buf");
       hex_to_buf(obj_iter->second.etag.c_str(), petag,
 		CEPH_CRYPTO_MD5_DIGESTSIZE);
+    finish_trace(span_1);
       hash.Update((const unsigned char *)petag, sizeof(petag));
 
       RGWUploadPartInfo& obj_part = obj_iter->second;
@@ -6228,7 +6264,9 @@ void RGWCompleteMultipart::execute()
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
 
+  Span span_2 = trace(this_parent_span, "rgw_op.cc : buf_to_hex");
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
+  finish_trace(span_2);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
            "-%lld", (long long)parts->parts.size());
   etag = final_etag_str;
@@ -6271,13 +6309,13 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;
-  op_ret = obj_op.write_meta(ofs, accounted_size, attrs, s->yield);
+  op_ret = obj_op.write_meta(ofs, accounted_size, attrs, s->yield, this_parent_span);
   if (op_ret < 0)
     return;
 
   // remove the upload obj
   int r = store->getRados()->delete_obj(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-			    s->bucket->get_info(), meta_obj, 0);
+			    s->bucket->get_info(), meta_obj, 0, 0, ceph::real_time(), nullptr, this_parent_span);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer.clear_locked();
@@ -6312,6 +6350,10 @@ int RGWCompleteMultipart::MPSerializer::try_lock(
 
 void RGWCompleteMultipart::complete()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   /* release exclusive lock iff not already */
   if (unlikely(serializer.locked)) {
     int r = serializer.unlock();
@@ -6324,6 +6366,10 @@ void RGWCompleteMultipart::complete()
 
 int RGWAbortMultipart::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
@@ -6356,11 +6402,21 @@ int RGWAbortMultipart::verify_permission()
 
 void RGWAbortMultipart::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWAbortMultipart::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   op_ret = -EINVAL;
   string upload_id;
   string meta_oid;
@@ -6379,11 +6435,15 @@ void RGWAbortMultipart::execute()
     return;
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-  op_ret = abort_multipart_upload(store, s->cct, obj_ctx, s->bucket->get_info(), mp);
+  op_ret = abort_multipart_upload(store, s->cct, obj_ctx, s->bucket->get_info(), mp, this_parent_span);
 }
 
 int RGWListMultipart::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   if (!verify_object_permission(this, s, rgw::IAM::s3ListMultipartUploadParts))
     return -EACCES;
 
@@ -6392,11 +6452,20 @@ int RGWListMultipart::verify_permission()
 
 void RGWListMultipart::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListMultipart::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   string meta_oid;
   RGWMPObj mp;
 
@@ -6417,6 +6486,11 @@ void RGWListMultipart::execute()
 
 int RGWListBucketMultiparts::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (!verify_bucket_permission(this,
                                 s,
 				rgw::IAM::s3ListBucketMultipartUploads))
@@ -6427,11 +6501,21 @@ int RGWListBucketMultiparts::verify_permission()
 
 void RGWListBucketMultiparts::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListBucketMultiparts::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   vector<rgw_bucket_dir_entry> objs;
   string marker_meta;
 
@@ -6454,7 +6538,7 @@ void RGWListBucketMultiparts::execute()
   marker_meta = marker.get_meta();
 
   op_ret = list_bucket_multiparts(store, s->bucket->get_info(), prefix, marker_meta, delimiter,
-                                  max_uploads, &objs, &common_prefixes, &is_truncated);
+                                  max_uploads, &objs, &common_prefixes, &is_truncated, this_parent_span);
   if (op_ret < 0) {
     return;
   }

@@ -2418,6 +2418,13 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;
@@ -3864,6 +3871,12 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
 
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   op_ret = create_s3_policy(s, store, s3policy, s->owner);
   if (op_ret < 0)
@@ -3876,6 +3889,12 @@ int RGWInitMultipart_ObjStore_S3::get_params()
 
 void RGWInitMultipart_ObjStore_S3::send_response()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3904,6 +3923,11 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 
 int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+
   int res = 0;
   res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
   return res;
@@ -3911,6 +3935,12 @@ int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& at
 
 int RGWCompleteMultipart_ObjStore_S3::get_params()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   int ret = RGWCompleteMultipart_ObjStore::get_params();
   if (ret < 0) {
     return ret;
@@ -3923,6 +3953,12 @@ int RGWCompleteMultipart_ObjStore_S3::get_params()
 
 void RGWCompleteMultipart_ObjStore_S3::send_response()
 {
+  req_state_span ss_1;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss_1), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3957,6 +3993,13 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
 
 void RGWAbortMultipart_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;
@@ -3968,6 +4011,13 @@ void RGWAbortMultipart_ObjStore_S3::send_response()
 
 void RGWListMultipart_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -4020,6 +4070,13 @@ void RGWListMultipart_ObjStore_S3::send_response()
 
 void RGWListBucketMultiparts_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
