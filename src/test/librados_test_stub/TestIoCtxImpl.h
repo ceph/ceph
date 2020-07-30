@@ -99,6 +99,7 @@ public:
   virtual int append(const std::string& oid, const bufferlist &bl,
                      const SnapContext &snapc) = 0;
   virtual int assert_exists(const std::string &oid, uint64_t snap_id) = 0;
+  virtual int assert_version(const std::string &oid, uint64_t ver) = 0;
 
   virtual int create(const std::string& oid, bool exclusive,
                      const SnapContext &snapc) = 0;
