@@ -40,6 +40,12 @@
 
 int RGWListBuckets_ObjStore_SWIFT::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
   end_marker = s->info.args.get("end_marker");
@@ -162,6 +168,12 @@ static void dump_account_metadata(struct req_state * const s,
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret) {
     set_req_state_err(s, op_ret);
   } else if (!has_buckets && s->format == RGW_FORMAT_PLAIN) {
@@ -193,6 +205,11 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 
 void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList&& buckets)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (wants_reversed) {
     /* Just store in the reversal buffer. Its content will be handled later,
      * in send_response_end(). */
@@ -204,6 +221,12 @@ void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (! sent_data) {
     return;
   }
@@ -222,6 +245,11 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& 
 
 void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWBucket& obj)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   s->formatter->open_object_section("container");
   s->formatter->dump_string("name", obj.get_name());
 
@@ -239,6 +267,12 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWBucket&
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBucketList& buckets)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (! sent_data) {
     return;
   }
@@ -265,6 +299,12 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBuc
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (wants_reversed) {
     for (auto& buckets : reverse_buffer) {
       send_response_data_reversed(buckets);

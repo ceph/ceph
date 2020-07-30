@@ -1254,6 +1254,13 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1272,6 +1279,13 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 
 void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (!sent_data)
     return;
 
@@ -1286,6 +1300,13 @@ void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buc
 
 void RGWListBuckets_ObjStore_S3::send_response_end()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+  set_span_tag(s->root_span, "success", "true");
+
   if (sent_data) {
     s->formatter->close_section();
     list_all_buckets_end(s);
@@ -2219,6 +2240,12 @@ public:
 
 int RGWCreateBucket_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 

@@ -2305,6 +2305,11 @@ int RGWGetObj::init_common()
 
 int RGWListBuckets::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
 
@@ -2326,6 +2331,12 @@ int RGWGetUsage::verify_permission()
 
 void RGWListBuckets::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   bool done;
   bool started = false;
   uint64_t total_count = 0;

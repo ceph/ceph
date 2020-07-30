@@ -101,8 +101,8 @@ class RGWUser {
     RGWUser(const RGWUserInfo& _i) : info(_i) {}
     virtual ~RGWUser() = default;
 
-    virtual int list_buckets(const std::string& marker, const std::string& end_marker,
-			     uint64_t max, bool need_stats, RGWBucketList& buckets) = 0;
+    virtual int list_buckets(const string& marker, const string& end_marker,
+			     uint64_t max, bool need_stats, RGWBucketList& buckets, const Span& parent_span = nullptr) = 0;
     virtual RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
     friend class RGWBucket;
     virtual std::string& get_display_name() { return info.display_name; }
@@ -433,8 +433,8 @@ class RGWRadosUser : public RGWUser {
     RGWRadosUser(RGWRadosStore *_st) : store(_st) { }
     RGWRadosUser() {}
 
-    int list_buckets(const std::string& marker, const std::string& end_marker,
-				uint64_t max, bool need_stats, RGWBucketList& buckets);
+    int list_buckets(const string& marker, const string& end_marker,
+				uint64_t max, bool need_stats, RGWBucketList& buckets, const Span& parent_span = nullptr);
     RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time);
 
     /* Placeholders */

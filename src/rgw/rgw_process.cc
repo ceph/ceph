@@ -91,6 +91,17 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               req_state * const s,
                               const bool skip_retarget)
 {
+  RGWOpType type = op->get_type();
+  #ifdef WITH_JAEGER
+    Span span = new_span(op->name());
+    if(type>0)
+      set_span_tag(span, "operation_type", op->name());
+    s->root_span = std::move(span);
+  #else
+    char *a="a";
+    s->stack_span.push(a);
+  #endif
+
   ldpp_dout(op, 2) << "init permissions" << dendl;
   int ret = handler->init_permissions(op);
   if (ret < 0) {

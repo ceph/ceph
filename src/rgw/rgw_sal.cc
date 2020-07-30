@@ -38,15 +38,22 @@
 namespace rgw::sal {
 
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets)
+			       uint64_t max, bool need_stats, RGWBucketList &buckets, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWUserBuckets ulist;
   bool is_truncated = false;
   int ret;
 
   buckets.clear();
+  Span span_2 = trace(this_parent_span, "rgw_user.cc : RGWUSerCtl::list_buckets");
   ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
 					 need_stats, &ulist, &is_truncated);
+  finish_trace(span_2);
   if (ret < 0)
     return ret;
 
