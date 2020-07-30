@@ -107,9 +107,9 @@
                     *ngIf="form.showError('pgNum', formDir, '34')"
                     i18n>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</span>
               <span class="form-text text-muted">
-                <a i18n
-                   target="_blank"
-                   href="http://ceph.com/pgcalc">Calculation help</a>
+                <cd-doc section="pgs"
+                        docText="Calculation help"
+                        i18n-docText></cd-doc>
               </span>
               <span class="form-text text-muted"
                     *ngIf="externalPgChange"

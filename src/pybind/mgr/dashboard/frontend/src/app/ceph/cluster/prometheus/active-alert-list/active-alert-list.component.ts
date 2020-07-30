@@ -8,10 +8,8 @@ import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
-import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
-import { SummaryService } from '../../../../shared/services/summary.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
 import { PrometheusListHelper } from '../prometheus-list-helper';
 
@@ -43,11 +41,9 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
     private cdDatePipe: CdDatePipe,
-    @Inject(PrometheusService) prometheusService: PrometheusService,
-    @Inject(SummaryService) summaryService: SummaryService,
-    @Inject(CephReleaseNamePipe) cephReleaseNamePipe: CephReleaseNamePipe
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
-    super(prometheusService, summaryService, cephReleaseNamePipe);
+    super(prometheusService);
     this.permission = this.authStorageService.getPermissions().prometheus;
     this.tableActions = [
       {

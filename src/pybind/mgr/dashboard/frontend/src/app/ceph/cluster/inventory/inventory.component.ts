@@ -16,7 +16,6 @@ export class InventoryComponent implements OnChanges, OnInit {
   icons = Icons;
 
   hasOrchestrator = false;
-  docsUrl: string;
 
   devices: Array<InventoryDevice> = [];
 

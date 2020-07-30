@@ -2,8 +2,6 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 
 import { Icons } from '../../../shared/enum/icons.enum';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
 import { SettingsService } from '../../api/settings.service';
 
 @Component({
@@ -36,14 +34,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   @Input()
   uid: string;
 
-  docsUrl: string;
-
-  constructor(
-    private summaryService: SummaryService,
-    private sanitizer: DomSanitizer,
-    private settingsService: SettingsService,
-    private cephReleaseNamePipe: CephReleaseNamePipe
-  ) {
+  constructor(private sanitizer: DomSanitizer, private settingsService: SettingsService) {
     this.grafanaTimes = [
       {
         name: $localize`Last 5 minutes`,
@@ -175,13 +166,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
       two: 'grafana_two',
       three: 'grafana_three'
     };
-
-    this.summaryService.subscribeOnce((summary) => {
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl =
-        `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/` +
-        `#enabling-the-embedding-of-grafana-dashboards`;
-    });
 
     this.settingsService.ifSettingConfigured('api/grafana/url', (url) => {
       this.grafanaExist = true;
