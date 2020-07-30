@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd inject bad map crc probability: 0.1
+    log-whitelist:
+      - failed to encode map
