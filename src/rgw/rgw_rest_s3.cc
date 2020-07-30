@@ -180,6 +180,12 @@ int RGWGetObj_ObjStore_S3::get_params()
 
 int RGWGetObj_ObjStore_S3::send_response_data_error()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   bufferlist bl;
   return send_response_data(bl, 0 , 0);
 }
@@ -218,6 +224,12 @@ inline bool str_has_cntrl(const char* s) {
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   const char *content_type = NULL;
   string content_type_str;
   map<string, string> response_attrs;
@@ -442,6 +454,11 @@ send_data:
 
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (skip_decrypt) { // bypass decryption for multisite sync requests
     return 0;
   }
@@ -464,6 +481,11 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
 }
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry) 
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   int ret = -EINVAL;
   ret = RGWOp::verify_requester(auth_registry);
   if(!s->user->get_caps().check_cap("amz-cache", RGW_CAP_READ) && !ret && s->info.env->exists("HTTP_X_AMZ_CACHE"))
@@ -472,6 +494,11 @@ int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& a
 }
 int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   int ret = -EINVAL;
   ldpp_dout(this, 10) << "cache override headers" << dendl;
   RGWEnv* rgw_env = const_cast<RGWEnv *>(s->info.env);

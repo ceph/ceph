@@ -97,6 +97,11 @@ static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 
 int RGWGetObj::parse_range(void)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   int r = -ERANGE;
   string rs(range_str);
   string ofs_str;
@@ -905,7 +910,12 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
 // general, they should just return op_ret.
 namespace {
 template<typename F>
-int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f) {
+int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   auto r = f();
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
     r = b->try_refresh_info(nullptr);
@@ -920,6 +930,11 @@ int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f) {
 
 int RGWGetObj::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   s->object->set_atomic(s->obj_ctx);
 
   if (get_data) {
@@ -983,6 +998,11 @@ void populate_metadata_in_request(req_state* s, std::map<std::string, bufferlist
 
 int RGWOp::verify_op_mask()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   uint32_t required_mask = op_mask();
 
   ldpp_dout(this, 20) << "required_mask= " << required_mask
@@ -1532,6 +1552,12 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
                                        const off_t end_ofs,
                                        bool swift_slo)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   ldpp_dout(this, 20) << "user manifest obj=" << ent.key.name
       << "[" << ent.key.instance << "]" << dendl;
   RGWGetObj_CB cb(this);
@@ -1559,14 +1585,16 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
     read_op->params.if_match = ent.meta.etag.c_str();
   }
 
-  op_ret = read_op->prepare(s->yield);
+  op_ret = read_op.prepare(s->yield, this_parent_span);
   if (op_ret < 0)
     return op_ret;
   op_ret = part->range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
   if (op_ret < 0)
     return op_ret;
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(part->get_attrs().attrs, need_decompress, cs_info);
+  Span span_1 = trace(this_parent_span, "rgw_compression.cc : rgw_compression_info_from_attrset");
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  finish_trace(span_1);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
@@ -1819,6 +1847,12 @@ static int get_obj_user_manifest_iterate_cb(rgw::sal::RGWBucket* bucket,
 
 int RGWGetObj::handle_user_manifest(const char *prefix)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   const std::string_view prefix_view(prefix);
   ldpp_dout(this, 2) << "RGWGetObj::handle_user_manifest() prefix="
                    << prefix_view << dendl;
@@ -1842,7 +1876,10 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    r = store->get_bucket(s->user, s->user->get_tenant(), bucket_name, &ubucket);
+    auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+    int r = store->getRados()->get_bucket_info(store->svc(), s->user->get_tenant(),
+				  bucket_name, bucket_info, NULL,
+				  s->yield, &bucket_attrs, this_parent_span);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 		       << bucket_name << dendl;
@@ -1914,6 +1951,11 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
 int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   RGWSLOInfo slo_info;
   auto bliter = bl.cbegin();
   try {
@@ -2047,6 +2089,11 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   /* garbage collection related handling */
   utime_t start_time = ceph_clock_now();
   if (start_time > gc_invalidate_time) {
@@ -2062,6 +2109,11 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 
 bool RGWGetObj::prefetch_data()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   /* HEAD request, stop prefetch*/
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
     return false;
@@ -2079,6 +2131,11 @@ bool RGWGetObj::prefetch_data()
 
 void RGWGetObj::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -2100,6 +2157,12 @@ static inline void rgw_cond_decode_objtags(
 
 void RGWGetObj::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
@@ -2135,7 +2198,7 @@ void RGWGetObj::execute()
   read_op->params.if_nomatch = if_nomatch;
   read_op->params.lastmod = &lastmod;
 
-  op_ret = read_op->prepare(s->yield);
+  op_ret = read_op.prepare(s->yield, this_parent_span);
   if (op_ret < 0)
     goto done_err;
   version_id = s->object->get_instance();
@@ -2160,9 +2223,11 @@ void RGWGetObj::execute()
       op_ret = -EINVAL;
       goto done_err;
     }
+    Span span_1 = trace(this_parent_span, "started torrent");
     torrent.init(s, store);
     rgw_obj obj = s->object->get_obj();
-    op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
+    op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
+    finish_trace(span_1);
     if (op_ret < 0)
     {
       ldpp_dout(this, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
@@ -2258,7 +2323,7 @@ void RGWGetObj::execute()
   ofs_x = ofs;
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
-  op_ret = read_op->iterate(ofs_x, end_x, filter, s->yield);
+  op_ret = read_op.iterate(ofs_x, end_x, filter, s->yield, this_parent_span);
 
   if (op_ret >= 0)
     op_ret = filter->flush();
@@ -2280,6 +2345,11 @@ done_err:
 
 int RGWGetObj::init_common()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (range_str) {
     /* range parsed error when prefetch */
     if (!range_parsed) {
