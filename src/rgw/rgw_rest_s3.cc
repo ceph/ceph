@@ -2066,6 +2066,13 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
 
 void RGWGetBucketVersioning_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -2118,6 +2125,12 @@ struct ver_config_status {
 
 int RGWSetBucketVersioning_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   int r = 0;
   bufferlist data;
   std::tie(r, data) =
@@ -2182,6 +2195,12 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
 
 void RGWSetBucketVersioning_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -2190,6 +2209,12 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
 
 int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
   int r = 0;
@@ -2264,6 +2289,12 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
 
 void RGWSetBucketWebsite_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -2272,6 +2303,13 @@ void RGWSetBucketWebsite_ObjStore_S3::send_response()
 
 void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret == 0) {
     op_ret = STATUS_NO_CONTENT;
   }
@@ -2282,6 +2320,13 @@ void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
 
 void RGWGetBucketWebsite_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
