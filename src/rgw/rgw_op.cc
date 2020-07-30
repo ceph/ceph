@@ -209,7 +209,7 @@ static int get_user_policy_from_attr(CephContext * const cct,
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-				       rgw::sal::RGWRadosStore *store,
+				       rgw::sal::RGWStore *store,
 				       RGWBucketInfo& bucket_info,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy *policy)
@@ -222,13 +222,13 @@ int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
       return ret;
   } else {
     ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    rgw::sal::RGWRadosUser user(store, bucket_info.owner);
+    std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(bucket_info.owner);
     /* object exists, but policy is broken */
-    int r = user.load_by_id(null_yield);
+    int r = user->load_by_id(null_yield);
     if (r < 0)
       return r;
 
-    policy->create_default(bucket_info.owner, user.get_display_name());
+    policy->create_default(bucket_info.owner, user->get_display_name());
   }
   return 0;
 }
@@ -446,7 +446,7 @@ static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *
   return get_multipart_info(store, s, meta_obj, policy, attrs, upload_info);
 }
 
-static int read_bucket_policy(rgw::sal::RGWRadosStore *store,
+static int read_bucket_policy(rgw::sal::RGWStore *store,
                               struct req_state *s,
                               RGWBucketInfo& bucket_info,
                               map<string, bufferlist>& bucket_attrs,
@@ -1524,7 +1524,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   return true;
 }
 
-int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
+int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
                                        const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy * const bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
@@ -1541,38 +1541,32 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   int64_t cur_ofs = start_ofs;
   int64_t cur_end = end_ofs;
 
-  rgw_obj part(bucket, ent.key);
+  std::unique_ptr<rgw::sal::RGWObject> part = bucket->get_object(ent.key);
 
-  map<string, bufferlist> attrs;
-
-  uint64_t obj_size;
   RGWObjectCtx obj_ctx(store);
   RGWAccessControlPolicy obj_policy(s->cct);
 
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
 
-  obj_ctx.set_atomic(part);
-  store->getRados()->set_prefetch_data(&obj_ctx, part);
+  part->set_atomic(&obj_ctx);
+  part->set_prefetch_data(&obj_ctx);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), obj_ctx, part);
-  RGWRados::Object::Read read_op(&op_target);
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op = part->get_read_op(&obj_ctx);
 
   if (!swift_slo) {
     /* SLO etag is optional */
-    read_op.conds.if_match = ent.meta.etag.c_str();
+    read_op->params.if_match = ent.meta.etag.c_str();
   }
-  read_op.params.attrs = &attrs;
-  read_op.params.obj_size = &obj_size;
 
-  op_ret = read_op.prepare(s->yield);
+  op_ret = read_op->prepare(s->yield);
   if (op_ret < 0)
     return op_ret;
-  op_ret = read_op.range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
+  op_ret = part->range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
   if (op_ret < 0)
     return op_ret;
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(part->get_attrs().attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
@@ -1591,15 +1585,15 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   }
   else
   {
-    if (obj_size != ent.meta.size) {
+    if (part->get_obj_size() != ent.meta.size) {
       // hmm.. something wrong, object not as expected, abort!
-      ldpp_dout(this, 0) << "ERROR: expected obj_size=" << obj_size
+      ldpp_dout(this, 0) << "ERROR: expected obj_size=" << part->get_obj_size()
           << ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
 	  }
   }
 
-  op_ret = rgw_policy_from_attrset(s->cct, attrs, &obj_policy);
+  op_ret = rgw_policy_from_attrset(s->cct, part->get_attrs().attrs, &obj_policy);
   if (op_ret < 0)
     return op_ret;
 
@@ -1609,8 +1603,9 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
     ldpp_dout(this, 2) << "overriding permissions due to system operation" << dendl;
   } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
-  } else if (!verify_object_permission(this, s, part, s->user_acl.get(), bucket_acl,
-				       &obj_policy, bucket_policy, s->iam_user_policies, action)) {
+  } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl.get(),
+				       bucket_acl, &obj_policy, bucket_policy,
+				       s->iam_user_policies, action)) {
     return -EPERM;
   }
   if (ent.meta.size == 0) {
@@ -1619,14 +1614,14 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   filter->fixup_range(cur_ofs, cur_end);
-  op_ret = read_op.iterate(cur_ofs, cur_end, filter, s->yield);
+  op_ret = read_op->iterate(cur_ofs, cur_end, filter, s->yield);
   if (op_ret >= 0)
 	  op_ret = filter->flush();
   return op_ret;
 }
 
 static int iterate_user_manifest_parts(CephContext * const cct,
-                                       rgw::sal::RGWRadosStore * const store,
+                                       rgw::sal::RGWStore* const store,
                                        const off_t ofs,
                                        const off_t end,
                                        rgw::sal::RGWBucket* bucket,
@@ -1636,7 +1631,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
                                        string * const pobj_sum,
-                                       int (*cb)(rgw_bucket& bucket,
+                                       int (*cb)(rgw::sal::RGWBucket* bucket,
                                                  const rgw_bucket_dir_entry& ent,
                                                  RGWAccessControlPolicy * const bucket_acl,
                                                  const boost::optional<Policy>& bucket_policy,
@@ -1693,7 +1688,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
         len_count += end_ofs - start_ofs;
 
         if (cb) {
-          r = cb(bucket->get_key(), ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
+          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
 		 cb_param, false /* swift_slo */);
           if (r < 0) {
             return r;
@@ -1722,18 +1717,18 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 struct rgw_slo_part {
   RGWAccessControlPolicy *bucket_acl = nullptr;
   Policy* bucket_policy = nullptr;
-  rgw_bucket bucket;
+  rgw::sal::RGWBucket* bucket;
   string obj_name;
   uint64_t size = 0;
   string etag;
 };
 
 static int iterate_slo_parts(CephContext *cct,
-                             rgw::sal::RGWRadosStore *store,
+                             rgw::sal::RGWStore*store,
                              off_t ofs,
                              off_t end,
                              map<uint64_t, rgw_slo_part>& slo_parts,
-                             int (*cb)(rgw_bucket& bucket,
+                             int (*cb)(rgw::sal::RGWBucket* bucket,
                                        const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy *bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
@@ -1808,7 +1803,7 @@ static int iterate_slo_parts(CephContext *cct,
   return 0;
 }
 
-static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
+static int get_obj_user_manifest_iterate_cb(rgw::sal::RGWBucket* bucket,
                                             const rgw_bucket_dir_entry& ent,
                                             RGWAccessControlPolicy * const bucket_acl,
                                             const boost::optional<Policy>& bucket_policy,
@@ -1931,7 +1926,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   vector<RGWAccessControlPolicy> allocated_acls;
   map<string, pair<RGWAccessControlPolicy *, boost::optional<Policy>>> policies;
-  map<string, rgw_bucket> buckets;
+  map<string, std::unique_ptr<rgw::sal::RGWBucket>> buckets;
 
   map<uint64_t, rgw_slo_part> slo_parts;
 
@@ -1961,7 +1956,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     string bucket_name = path.substr(pos_init, pos_sep - pos_init);
     string obj_name = path.substr(pos_sep + 1);
 
-    rgw_bucket bucket;
+    rgw::sal::RGWBucket* bucket;
     RGWAccessControlPolicy *bucket_acl;
     Policy* bucket_policy;
 
@@ -1970,39 +1965,36 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
       if (piter != policies.end()) {
         bucket_acl = piter->second.first;
         bucket_policy = piter->second.second.get_ptr();
-	bucket = buckets[bucket_name];
+	bucket = buckets[bucket_name].get();
       } else {
 	allocated_acls.push_back(RGWAccessControlPolicy(s->cct));
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
 
-        RGWBucketInfo bucket_info;
-        map<string, bufferlist> bucket_attrs;
+	std::unique_ptr<rgw::sal::RGWBucket> tmp_bucket;
         auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-        int r = store->getRados()->get_bucket_info(store->svc(), s->user->get_tenant(),
-                                       bucket_name, bucket_info, nullptr,
-                                       s->yield, &bucket_attrs);
+	int r = store->get_bucket(s->user, s->user->get_tenant(), bucket_name, &tmp_bucket);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
           return r;
         }
-        bucket = bucket_info.bucket;
+        bucket = tmp_bucket.get();
         bucket_acl = &_bucket_acl;
-        r = read_bucket_policy(store, s, bucket_info, bucket_attrs, bucket_acl,
-                               bucket);
+        r = read_bucket_policy(store, s, tmp_bucket->get_info(), tmp_bucket->get_attrs().attrs, bucket_acl,
+                               tmp_bucket->get_key());
         if (r < 0) {
           ldpp_dout(this, 0) << "failed to read bucket ACL for bucket "
                            << bucket << dendl;
           return r;
 	}
 	auto _bucket_policy = get_iam_policy_from_attr(
-	  s->cct, store, bucket_attrs, bucket_info.bucket.tenant);
+	  s->cct, store, tmp_bucket->get_attrs().attrs, tmp_bucket->get_tenant());
         bucket_policy = _bucket_policy.get_ptr();
-	buckets[bucket_name] = bucket;
+	buckets[bucket_name].swap(tmp_bucket);
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
       }
     } else {
-      bucket = s->bucket->get_key();
+      bucket = s->bucket.get();
       bucket_acl = s->bucket_acl.get();
       bucket_policy = s->iam_policy.get_ptr();
     }

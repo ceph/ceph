@@ -75,7 +75,7 @@ class StrategyRegistry;
 }
 
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-				       rgw::sal::RGWRadosStore *store,
+				       rgw::sal::RGWStore *store,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy);
@@ -341,7 +341,7 @@ public:
   void execute() override;
   int parse_range();
   int read_user_manifest_part(
-    rgw_bucket& bucket,
+    rgw::sal::RGWBucket* bucket,
     const rgw_bucket_dir_entry& ent,
     RGWAccessControlPolicy * const bucket_acl,
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
