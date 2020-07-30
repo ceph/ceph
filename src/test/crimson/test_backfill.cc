@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
@@ -42,6 +44,13 @@ struct FakeStore {
 
   void push(const hobject_t& obj, eversion_t version) {
     objs[obj] = version;
+  }
+
+  void drop(const hobject_t& obj, const eversion_t version) {
+    auto it = objs.find(obj);
+    ceph_assert(it != std::end(objs));
+    ceph_assert(it->second == version);
+    objs.erase(it);
   }
 
   template <class Func>
@@ -138,6 +147,12 @@ public:
     while (how_many-- > 0) {
       backfill_state.process_event(std::move(events_to_dispatch.front()));
       events_to_dispatch.pop_front();
+    }
+  }
+
+  void next_till_done() {
+    while (!events_to_dispatch.empty()) {
+      next_round();
     }
   }
 
@@ -279,7 +294,7 @@ void BackfillFixture::enqueue_drop(
   const hobject_t& obj,
   const eversion_t& v)
 {
-  std::cout << __func__ << std::endl;
+  backfill_targets.at(target).store.drop(obj, v);
 }
 
 void BackfillFixture::update_peers_last_backfill(
@@ -358,5 +373,84 @@ TEST(backfill, single_empty_replica)
   cluster_fixture.next_round(2);
   EXPECT_CALL(cluster_fixture, backfilled);
   cluster_fixture.next_round();
+  EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
+}
+
+namespace StoreRandomizer {
+  // FIXME: copied & pasted from test/test_snap_mapper.cc. We need to
+  // find a way to avoid code duplication in test. A static library?
+  std::string random_string(std::size_t size) {
+    std::string name;
+    for (size_t j = 0; j < size; ++j) {
+      name.push_back('a' + (std::rand() % 26));
+    }
+    return name;
+  }
+
+  hobject_t random_hobject() {
+    uint32_t mask{0};
+    uint32_t bits{0};
+    return hobject_t(
+      random_string(1+(std::rand() % 16)),
+      random_string(1+(std::rand() % 16)),
+      snapid_t(std::rand() % 1000),
+      (std::rand() & ((~0)<<bits)) | (mask & ~((~0)<<bits)),
+      0, random_string(std::rand() % 16));
+  }
+
+  eversion_t random_eversion() {
+    return eversion_t{ std::rand() % 512U, std::rand() % 256UL };
+  }
+
+  FakeStore create() {
+    FakeStore store;
+    for (std::size_t i = std::rand() % 2048; i > 0; --i) {
+      store.push(random_hobject(), random_eversion());
+    }
+    return store;
+  }
+
+  template <class... Args>
+  void execute_random(Args&&... args) {
+    std::array<std::function<void()>, sizeof...(Args)> funcs = {
+      std::forward<Args>(args)...
+    };
+    return std::move(funcs[std::rand() % std::size(funcs)])();
+  }
+
+  FakeStore mutate(const FakeStore& source_store) {
+    FakeStore mutated_store;
+    source_store.list(hobject_t{}, [&] (const auto& kv) {
+      const auto& [ oid, version ] = kv;
+      execute_random(
+        []  { /* just drop the entry */ },
+        [&] { mutated_store.push(oid, version); },
+        [&] { mutated_store.push(oid, random_eversion()); },
+        [&] { mutated_store.push(random_hobject(), version); },
+        [&] {
+          for (auto how_many = std::rand() % 8; how_many > 0; --how_many) {
+            mutated_store.push(random_hobject(), random_eversion());
+          }
+        }
+      );
+    });
+    return mutated_store;
+  }
+}
+
+// The name might suggest randomness is involved here. Well, that's true
+// but till we know the seed the test still is repeatable.
+TEST(backfill, one_pseudorandomized_replica)
+{
+  const auto reference_store = StoreRandomizer::create();
+  auto cluster_fixture = BackfillFixtureBuilder::add_source(
+    reference_store.objs
+  ).add_target(
+    StoreRandomizer::mutate(reference_store).objs
+  ).get_result();
+
+  EXPECT_CALL(cluster_fixture, backfilled);
+  cluster_fixture.next_till_done();
+
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
 }
