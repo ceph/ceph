@@ -594,6 +594,13 @@ that aren't seeing scrub errors, a count of read repairs is maintained.  If
 it exceeds a config value threshold *mon_osd_warn_num_repaired* default 10,
 this health warning is generated.
 
+In order to allow clearing of the warning, a new command
+``ceph tell osd.# clear_shards_repaired [count]`` has been added.
+By default it will set the repair count to 0.  If the administrator wanted
+to re-enable the warning if any additional repairs are performed you can provide
+a value to the command and specify the value of ``mon_osd_warn_num_repaired``.
+This command will be replaced in future releases by the health mute/unmute feature.
+
 LARGE_OMAP_OBJECTS
 __________________
 

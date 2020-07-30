@@ -15,4 +15,9 @@
 
 * Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
   If any OSD has repaired more than this many I/O errors in stored data a
- ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
+  ``OSD_TOO_MANY_REPAIRS`` health warning is generated.  In order to allow
+  clearing of the warning, a new command ``ceph tell osd.# clear_shards_repaired [count]``
+  has been added.  By default it will set the repair count to 0.  If you wanted
+  to be warned again if additional repairs are performed you can provide a value
+  to the command and specify the value of ``mon_osd_warn_num_repaired``.
+  This command will be replaced in future releases by the health mute/unmute feature.
