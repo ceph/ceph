@@ -881,7 +881,7 @@ class MDCache {
   bool is_any_uncommitted_fragment() const {
     return !uncommitted_fragments.empty();
   }
-  void wait_for_uncommitted_fragments(MDSGather *gather);
+  void wait_for_uncommitted_fragments(MDSContext* finisher);
   void rollback_uncommitted_fragments();
 
   void split_dir(CDir *dir, int byn);

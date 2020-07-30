@@ -12311,10 +12311,13 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& 
   }
 }
 
-void MDCache::wait_for_uncommitted_fragments(MDSGather *gather)
+void MDCache::wait_for_uncommitted_fragments(MDSContext* finisher)
 {
-  for (auto& p : uncommitted_fragments)
-    p.second.waiters.push_back(gather->new_sub());
+  MDSGatherBuilder gather(g_ceph_context, finisher);
+  for (auto& p : uncommitted_fragments) {
+    p.second.waiters.push_back(gather.new_sub());
+  }
+  gather.activate();
 }
 
 struct C_MDC_FragmentRollback : public MDCacheLogContext {
