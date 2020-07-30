@@ -401,29 +401,8 @@ int md_config_t::parse_config_files(ConfigValues& values,
       }
     }
   }
-
-  // Warn about section names that look like old-style section names
-  std::deque < std::string > old_style_section_names;
-  for (auto& [name, section] : cf) {
-    if (((name.find("mds") == 0) || (name.find("mon") == 0) ||
-	 (name.find("osd") == 0)) && (name.size() > 3) && (name[3] != '.')) {
-      old_style_section_names.push_back(name);
-    }
-  }
-  if (!old_style_section_names.empty()) {
-    ostringstream oss;
-    cerr << "ERROR! old-style section name(s) found: ";
-    string sep;
-    for (std::deque < std::string >::const_iterator os = old_style_section_names.begin();
-	 os != old_style_section_names.end(); ++os) {
-      cerr << sep << *os;
-      sep = ", ";
-    }
-    cerr << ". Please use the new style section names that include a period.";
-  }
-
+  cf.check_old_style_section_names({"mds", "mon", "osd"}, cerr);
   update_legacy_vals(values);
-
   return 0;
 }
 
