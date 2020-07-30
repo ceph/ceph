@@ -34,7 +34,7 @@
           {{ selectedFilter.column.name }}
         </a>
         <ul *dropdownMenu
-            class="dropdown-menu px-1"
+            class="dropdown-menu dropdown-menu-right px-1"
             role="menu">
           <li *ngFor="let filter of columnFilters"
               role="menuitem">
@@ -53,7 +53,7 @@
            {{ selectedFilter.value ? selectedFilter.value.formatted: 'Any' }}
         </a>
         <ul *dropdownMenu
-            class="dropdown-menu px-1"
+            class="dropdown-menu dropdown-menu-right px-1"
             role="menu">
           <li *ngFor="let option of selectedFilter.options"
               role="menuitem">
