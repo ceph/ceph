@@ -242,6 +242,12 @@ void Op::assert_exists() {
     &librados::TestIoCtxImpl::assert_exists, _1, _2, _4));
 }
 
+void Op::assert_version(uint64_t ver) {
+  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  o->ops.push_back(std::bind(
+          &librados::TestIoCtxImpl::assert_version, _1, _2, ver));
+}
+
 void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op = std::bind(

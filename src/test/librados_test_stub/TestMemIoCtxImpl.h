@@ -27,6 +27,7 @@ public:
              const SnapContext &snapc) override;
 
   int assert_exists(const std::string &oid, uint64_t snap_id) override;
+  int assert_version(const std::string &oid, uint64_t ver) override;
 
   int create(const std::string& oid, bool exclusive,
              const SnapContext &snapc) override;

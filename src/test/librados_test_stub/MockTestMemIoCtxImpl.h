@@ -68,6 +68,11 @@ public:
     return TestMemIoCtxImpl::assert_exists(oid, snap_id);
   }
 
+  MOCK_METHOD2(assert_version, int(const std::string &, uint64_t));
+  int do_assert_version(const std::string &oid, uint64_t ver) {
+    return TestMemIoCtxImpl::assert_version(oid, ver);
+  }
+
   MOCK_METHOD3(create, int(const std::string&, bool, const SnapContext &));
   int do_create(const std::string& oid, bool exclusive,
                 const SnapContext &snapc) {
@@ -213,6 +218,7 @@ public:
     ON_CALL(*this, aio_watch(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_watch));
     ON_CALL(*this, aio_unwatch(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_unwatch));
     ON_CALL(*this, assert_exists(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_exists));
+    ON_CALL(*this, assert_version(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_version));
     ON_CALL(*this, create(_, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_create));
     ON_CALL(*this, cmpext(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_cmpext));
     ON_CALL(*this, exec(_, _, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
