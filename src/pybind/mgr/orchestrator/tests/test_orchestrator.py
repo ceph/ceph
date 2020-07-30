@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import datetime
 import json
 
 import pytest
@@ -279,3 +280,12 @@ events:
 
         j = json.loads(to_format(object, 'json', False, cls))
         assert to_format(cls.from_json(j), 'yaml', False, cls) == y
+
+
+def test_event_multiline():
+    from .._interface import OrchestratorEvent
+    e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', 'subject', 'ERROR', 'message')
+    assert OrchestratorEvent.from_json(e.to_json()) == e
+
+    e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', 'subject', 'ERROR', 'multiline\nmessage')
+    assert OrchestratorEvent.from_json(e.to_json()) == e
