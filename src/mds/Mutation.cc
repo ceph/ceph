@@ -493,26 +493,28 @@ void MDRequestImpl::_dump(Formatter *f) const
       f->dump_stream("client") << _client_request->get_orig_source();
       f->dump_int("tid", _client_request->get_tid());
       f->close_section(); // client_info
-    } else if (is_peer() && _peer_request) { // replies go to an existing mdr
+    } else if (is_peer()) { // replies go to an existing mdr
       f->dump_string("op_type", "peer_request");
       f->open_object_section("leader_info");
-      f->dump_stream("leader") << _peer_request->get_orig_source();
+      f->dump_stream("leader") << peer_to_mds;
       f->close_section(); // leader_info
 
-      f->open_object_section("request_info");
-      f->dump_int("attempt", _peer_request->get_attempt());
-      f->dump_string("op_type",
-	  MMDSPeerRequest::get_opname(_peer_request->get_op()));
-      f->dump_int("lock_type", _peer_request->get_lock_type());
-      f->dump_stream("object_info") << _peer_request->get_object_info();
-      f->dump_stream("srcdnpath") << _peer_request->srcdnpath;
-      f->dump_stream("destdnpath") << _peer_request->destdnpath;
-      f->dump_stream("witnesses") << _peer_request->witnesses;
-      f->dump_bool("has_inode_export",
-	  _peer_request->inode_export_v != 0);
-      f->dump_int("inode_export_v", _peer_request->inode_export_v);
-      f->dump_stream("op_stamp") << _peer_request->op_stamp;
-      f->close_section(); // request_info
+      if (_peer_request) {
+        f->open_object_section("request_info");
+        f->dump_int("attempt", _peer_request->get_attempt());
+        f->dump_string("op_type",
+           MMDSPeerRequest::get_opname(_peer_request->get_op()));
+        f->dump_int("lock_type", _peer_request->get_lock_type());
+        f->dump_stream("object_info") << _peer_request->get_object_info();
+        f->dump_stream("srcdnpath") << _peer_request->srcdnpath;
+        f->dump_stream("destdnpath") << _peer_request->destdnpath;
+        f->dump_stream("witnesses") << _peer_request->witnesses;
+        f->dump_bool("has_inode_export",
+           _peer_request->inode_export_v != 0);
+        f->dump_int("inode_export_v", _peer_request->inode_export_v);
+        f->dump_stream("op_stamp") << _peer_request->op_stamp;
+        f->close_section(); // request_info
+      }
     }
     else if (internal_op != -1) { // internal request
       f->dump_string("op_type", "internal_op");
@@ -544,6 +546,8 @@ void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
     _client_request->print(stream);
   } else if (_peer_request) {
     _peer_request->print(stream);
+  } else if (is_peer()) {
+    stream << "peer_request:" << reqid;
   } else if (internal_op >= 0) {
     stream << "internal op " << ceph_mds_op_name(internal_op) << ":" << reqid;
   } else {
