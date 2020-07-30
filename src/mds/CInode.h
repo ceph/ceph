@@ -644,6 +644,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     get_subtree_dirfrags(v);
     return v;
   }
+  int get_num_subtree_roots() const {
+    return num_subtree_roots;
+  }
 
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
   CDir *add_dirfrag(CDir *dir);
