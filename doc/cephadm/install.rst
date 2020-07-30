@@ -382,18 +382,6 @@ that configuration isn't already in place (usually in the
 daemons will start up with default settings (e.g., binding to port
 80).
 
-If a realm has not been created yet, first create a realm::
-
-  # radosgw-admin realm create --rgw-realm=<realm-name> --default
-
-Next create a new zonegroup::
-
-  # radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
-
-Next create a zone::
-
-  # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
-
 To deploy a set of radosgw daemons for a particular realm and zone::
 
   # ceph orch apply rgw *<realm-name>* *<zone-name>* --placement="*<num-daemons>* [*<host1>* ...]"
@@ -401,10 +389,17 @@ To deploy a set of radosgw daemons for a particular realm and zone::
 For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1*
 zone on *myhost1* and *myhost2*::
 
-  # radosgw-admin realm create --rgw-realm=myorg --default
-  # radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
-  # radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=us-east-1 --master --default
   # ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
+
+Cephadm will wait for a healthy cluster and automatically create the supplied realm and zone if they do not exist before deploying the rgw daemon(s)
+
+Alternatively, the realm, zonegroup, and zone can be manually created using ``radosgw-admin`` commands::
+
+  # radosgw-admin realm create --rgw-realm=<realm-name> --default
+
+  # radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
+
+  # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
