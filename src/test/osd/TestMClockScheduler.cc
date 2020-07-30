@@ -2,6 +2,11 @@
 
 #include "gtest/gtest.h"
 
+#define BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
+#if !defined(BOOST_MPL_LIMIT_LIST_SIZE)
+#   define BOOST_MPL_LIMIT_LIST_SIZE 30
+#endif
+
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
