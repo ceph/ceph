@@ -1487,6 +1487,12 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   dest_policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   return 0;
@@ -1494,6 +1500,12 @@ int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 
 int RGWCopyObj_ObjStore_SWIFT::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_COPY_IF_MATCH");
@@ -1524,6 +1536,12 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
 
 void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (! sent_header) {
     if (! op_ret)
       op_ret = STATUS_CREATED;
@@ -1560,6 +1578,12 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 
 void RGWCopyObj_ObjStore_SWIFT::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (! sent_header) {
     string content_type;
     if (! op_ret)

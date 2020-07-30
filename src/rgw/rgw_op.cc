@@ -333,6 +333,11 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
 
 static int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs, rgw_obj *target_obj = nullptr)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
 
@@ -441,6 +446,11 @@ static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *
 			      map<string, bufferlist> *attrs,
                               multipart_upload_info *upload_info)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
@@ -458,6 +468,12 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
                               RGWAccessControlPolicy *policy,
                               rgw_bucket& bucket)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
     ldpp_dout(s, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
@@ -468,7 +484,9 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
     return 0;
   }
 
+  Span span_1 = trace(this_parent_span, "rgw_op.cc : rgw_op_get_bucket_policy_from_attr");
   int ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy);
+  finish_trace(span_1);
   if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -486,6 +504,12 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
                            rgw_bucket& bucket,
                            rgw_obj_key& object)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   string upload_id;
   upload_id = s->info.args.get("uploadId");
   rgw_obj obj;
@@ -508,13 +532,17 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
   policy = get_iam_policy_from_attr(s->cct, store, bucket_attrs, bucket.tenant);
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
+  Span span_1 = trace(this_parent_span, "rgw_op.cc : rgw_op_get_bucket_policy_from_attr");
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
                                      bucket_info, bucket_attrs, acl, storage_class, obj, s->yield);
+  finish_trace(span_1);
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
+    Span span_2 = trace(this_parent_span, "rgw_op.cc : rgw_op_get_bucket_policy_from_attr");
     ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy);
+    finish_trace(span_2);
     if (ret < 0) {
       return ret;
     }
@@ -548,6 +576,12 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
  */
 int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   int ret = 0;
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
@@ -579,9 +613,11 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     RGWBucketInfo source_info;
 
     if (s->bucket_instance_id.empty()) {
-      ret = store->getRados()->get_bucket_info(store->svc(), s->src_tenant_name, s->src_bucket_name, source_info, NULL, s->yield);
+      ret = store->getRados()->get_bucket_info(store->svc(), s->src_tenant_name, s->src_bucket_name, source_info, NULL, s->yield, NULL, this_parent_span);
     } else {
+      Span span_1 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_bucket_instance_info");
       ret = store->getRados()->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL, s->yield);
+      finish_trace(span_1);
     }
     if (ret == 0) {
       string& zonegroup = source_info.zonegroup;
@@ -746,6 +782,11 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
 int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			      bool prefetch_data)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   int ret = 0;
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
@@ -1476,6 +1517,11 @@ int RGWOp::do_aws4_auth_completion()
 
 int RGWOp::init_quota()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   /* no quota enforcement for system requests */
   if (s->system_request)
     return 0;
@@ -1559,6 +1605,11 @@ static bool validate_cors_rule_header(RGWCORSRule *rule, const char *req_hdrs) {
 
 int RGWOp::read_bucket_cors()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   bufferlist bl;
 
   map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_CORS);
@@ -2567,7 +2618,7 @@ void RGWListBuckets::execute()
       read_count = max_buckets;
     }
 
-    op_ret = s->user->list_buckets(marker, end_marker, read_count, should_get_stats(), buckets);
+    op_ret = s->user->list_buckets(marker, end_marker, read_count, should_get_stats(), buckets, this_parent_span);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -5168,6 +5219,11 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
 
 int RGWCopyObj::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   RGWAccessControlPolicy src_acl(s->cct);
   boost::optional<Policy> src_policy;
   op_ret = get_params();
@@ -5318,6 +5374,11 @@ int RGWCopyObj::verify_permission()
 
 int RGWCopyObj::init_common()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0) {
       op_ret = -EINVAL;
@@ -5368,11 +5429,21 @@ void RGWCopyObj::progress_cb(off_t ofs)
 
 void RGWCopyObj::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWCopyObj::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   if (init_common() < 0)
     return;
 
@@ -5413,7 +5484,7 @@ void RGWCopyObj::execute()
                                         dest_bucket.get(),
                                         dest_object.get(),
                                         this,
-                                        s->yield);
+                                        s->yield, this_parent_span);
   if (op_ret < 0) {
     return;
   }
@@ -5444,7 +5515,7 @@ void RGWCopyObj::execute()
 	   &etag,
 	   copy_obj_progress_cb, (void *)this,
 	   this,
-	   s->yield);
+	   s->yield, this_parent_span);
 
   const auto ret = rgw::notify::publish(s, s->object.get(), mtime, etag, rgw::notify::ObjectCreatedCopy, store);
   if (ret < 0) {
@@ -5488,6 +5559,10 @@ int RGWGetACLs::verify_permission()
 
 void RGWGetACLs::pre_exec()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   rgw_bucket_object_pre_exec(s);
 }
 

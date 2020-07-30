@@ -2762,8 +2762,13 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                                     rgw::sal::RGWBucket* bucket,
                                     rgw::sal::RGWObject* obj,
                                     const DoutPrefixProvider *dpp,
-                                    optional_yield y)
+                                    optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   if (! swift_versioning_enabled(bucket)) {
     return 0;
   }
@@ -2788,7 +2793,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   RGWBucketInfo dest_bucket_info;
 
-  r = get_bucket_info(&svc, bucket->get_tenant(), bucket->get_info().swift_ver_location, dest_bucket_info, NULL, null_yield, NULL);
+  r = get_bucket_info(&svc, bucket->get_tenant(), bucket->get_info().swift_ver_location, dest_bucket_info, NULL, null_yield, NULL, this_parent_span);
   if (r < 0) {
     ldout(cct, 10) << "failed to read dest bucket info: r=" << r << dendl;
     if (r == -ENOENT) {
@@ -2840,7 +2845,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
                dpp,
-               null_yield);
+               null_yield, this_parent_span);
   if (r == -ECANCELED || r == -ENOENT) {
     /* Has already been overwritten, meaning another rgw process already
      * copied it out */
@@ -4189,8 +4194,13 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
-               optional_yield y)
+               optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   int ret;
   uint64_t obj_size;
   rgw_obj shadow_obj = dest_obj->get_obj();
@@ -4237,7 +4247,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   read_op.params.lastmod = src_mtime;
   read_op.params.obj_size = &obj_size;
 
-  ret = read_op.prepare(y);
+  ret = read_op.prepare(y, this_parent_span);
   if (ret < 0) {
     return ret;
   }
@@ -4278,11 +4288,13 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
   uint64_t max_chunk_size;
 
+  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_max_chunk_size");
   ret = get_max_chunk_size(dest_bucket->get_placement_rule(), dest_obj->get_obj(), &max_chunk_size);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj->get_bucket() << dendl;
     return ret;
   }
+  finish_trace(span_2);
 
   rgw_pool src_pool;
   rgw_pool dest_pool;
@@ -4342,7 +4354,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(obj_ctx, dest_bucket, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y, this_parent_span);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest->obj_begin();
@@ -4393,7 +4405,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       auto& ioctx = ref.pool.ioctx();
       ioctx.locator_set_key(loc.loc);
 
-      ret = rgw_rados_operate(ioctx, loc.oid, &op, null_yield);
+      ret = rgw_rados_operate(ioctx, loc.oid, &op, null_yield, this_parent_span);
       if (ret < 0) {
         goto done_ret;
       }
@@ -4430,7 +4442,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
 
-  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, y);
+  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, y, this_parent_span);
   if (ret < 0) {
     goto done_ret;
   }
@@ -4449,7 +4461,7 @@ done_ret:
 
       ref.pool.ioctx().locator_set_key(riter->loc);
 
-      int r = rgw_rados_operate(ref.pool.ioctx(), riter->oid, &op, null_yield);
+      int r = rgw_rados_operate(ref.pool.ioctx(), riter->oid, &op, null_yield, this_parent_span);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
       }
@@ -4471,8 +4483,13 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *petag,
                const DoutPrefixProvider *dpp,
-               optional_yield y)
+               optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
@@ -4483,7 +4500,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   AtomicObjectProcessor processor(&aio, this->store, bucket, &dest_placement,
                                   bucket->get_info().owner, obj_ctx,
                                   dest_obj->get_obj(), olh_epoch, tag, dpp, null_yield);
-  int ret = processor.prepare(y);
+  int ret = processor.prepare(y, this_parent_span);
   if (ret < 0)
     return ret;
 
@@ -4491,7 +4508,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   do {
     bufferlist bl;
+    Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Object::Read::read");
     ret = read_op.read(ofs, end, bl, y);
+    finish_trace(span_2);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: fail to read object data, ret = " << ret << dendl;
       return ret;
@@ -4507,7 +4526,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   } while (ofs <= end);
 
   // flush
+  Span span_3 = trace(this_parent_span, "rgw_putobj_processor.cc : HeadObjectProcesssor::processor");
   ret = processor.process({}, ofs);
+  finish_trace(span_3);
   if (ret < 0) {
     return ret;
   }
@@ -4536,7 +4557,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, y);
+                            nullptr, nullptr, nullptr, nullptr, nullptr, y, this_parent_span);
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -7781,8 +7802,13 @@ int RGWRados::get_bucket_info(RGWServices *svc,
                               const string& tenant, const string& bucket_name,
                               RGWBucketInfo& info,
                               real_time *pmtime,
-                              optional_yield y, map<string, bufferlist> *pattrs)
+                              optional_yield y, map<string, bufferlist> *pattrs, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   auto obj_ctx = svc->sysobj->init_obj_ctx();
   RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
   rgw_bucket bucket;
@@ -8414,8 +8440,12 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      bool* cls_filtered,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
-				      check_filter_t force_check_filter)
+				      check_filter_t force_check_filter, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
   /* expansion_factor allows the number of entries to read to grow
    * exponentially; this is used when earlier reads are producing too
    * few results, perhaps due to filtering or to a series of
@@ -8438,7 +8468,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   map<int, string> shard_oids;
   int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id,
 					  &index_pool, &shard_oids,
-					  nullptr);
+					  nullptr, this_parent_span);
   if (r < 0) {
     return r;
   }

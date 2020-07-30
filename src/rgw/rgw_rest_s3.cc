@@ -3494,6 +3494,11 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
 int RGWCopyObj_ObjStore_S3::init_dest_policy()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
   /* build a policy for the target object */
@@ -3508,6 +3513,12 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
 
 int RGWCopyObj_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
@@ -3556,6 +3567,11 @@ int RGWCopyObj_ObjStore_S3::get_params()
 
 int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_placement)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+
   if (src_placement == s->dest_placement) {
     /* can only copy object into itself if replacing attrs */
     s->err.message = "This copy request is illegal because it is trying to copy "
@@ -3569,6 +3585,12 @@ int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_pl
 
 void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (! sent_header) {
     if (op_ret)
     set_req_state_err(s, op_ret);
@@ -3593,6 +3615,12 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 
 void RGWCopyObj_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (!sent_header)
     send_partial_response(0);
 
