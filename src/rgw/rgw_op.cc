@@ -5994,11 +5994,19 @@ void RGWDeleteLC::execute()
 
 int RGWGetCORS::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketCORS);
 }
 
 void RGWGetCORS::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   op_ret = read_bucket_cors();
   if (op_ret < 0)
     return ;
@@ -6012,11 +6020,21 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWPutCORS::execute()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
   rgw_raw_obj obj;
 
   op_ret = get_params();
@@ -6029,29 +6047,43 @@ void RGWPutCORS::execute()
     return;
   }
 
-  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
-      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &this_parent_span] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
       attrs[RGW_ATTR_CORS] = cors_bl;
-      return s->bucket->set_instance_attrs(attrs, s->yield);
+      return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
+							  &s->bucket->get_info().objv_tracker,
+							  s->yield, this_parent_span);
     });
 }
 
 int RGWDeleteCORS::verify_permission()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   // No separate delete permission
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWDeleteCORS::execute()
 {
-  bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    return;
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  const Span& this_parent_span(s->stack_span.top());
+
+  if (!store->svc()->zone->is_meta_master()) {
+    bufferlist data;
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
   }
 
-  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &this_parent_span] {
       op_ret = read_bucket_cors();
       if (op_ret < 0)
 	return op_ret;
@@ -6064,7 +6096,9 @@ void RGWDeleteCORS::execute()
 
       rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_CORS);
-      op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
+      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
+							    &s->bucket->get_info().objv_tracker,
+							    s->yield, this_parent_span);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket->get_name()
 			 << " returned err=" << op_ret << dendl;

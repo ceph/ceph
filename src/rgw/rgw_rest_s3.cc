@@ -3835,6 +3835,13 @@ void RGWDeleteLC_ObjStore_S3::send_response()
 
 void RGWGetCORS_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   if (op_ret) {
     if (op_ret == -ENOENT)
       set_req_state_err(s, ERR_NO_SUCH_CORS_CONFIGURATION);
@@ -3858,6 +3865,12 @@ void RGWGetCORS_ObjStore_S3::send_response()
 
 int RGWPutCORS_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "swift");
+
   RGWCORSXMLParser_S3 parser(s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
@@ -3926,6 +3939,12 @@ int RGWPutCORS_ObjStore_S3::get_params()
 
 void RGWPutCORS_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3935,6 +3954,13 @@ void RGWPutCORS_ObjStore_S3::send_response()
 
 void RGWDeleteCORS_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+  set_span_tag(s->root_span, "gateway", "s3");
+
   int r = op_ret;
   if (!r || r == -ENOENT)
     r = STATUS_NO_CONTENT;
