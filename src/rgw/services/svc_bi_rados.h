@@ -127,7 +127,7 @@ public:
                         std::optional<int> shard_id,
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,
-                        map<int, string> *bucket_instance_ids);
+                        map<int, string> *bucket_instance_ids, const Span& parent_span = nullptr);
 };
 
 

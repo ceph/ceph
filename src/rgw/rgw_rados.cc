@@ -1733,8 +1733,13 @@ int RGWRados::Bucket::List::list_objects_ordered(
   vector<rgw_bucket_dir_entry> *result,
   map<string, bool> *common_prefixes,
   bool *is_truncated,
-  optional_yield y)
+  optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
   int shard_id = target->get_shard_id();
@@ -1809,7 +1814,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
 					   &truncated,
 					   &cls_filtered,
 					   &cur_marker,
-                                           y);
+                                           y, NULL, this_parent_span);
     if (r < 0) {
       return r;
     }
@@ -2013,8 +2018,13 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 						   vector<rgw_bucket_dir_entry> *result,
 						   map<string, bool> *common_prefixes,
 						   bool *is_truncated,
-                                                   optional_yield y)
+                                                   optional_yield y, const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
   int shard_id = target->get_shard_id();
@@ -2065,7 +2075,7 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 					     ent_list,
 					     &truncated,
 					     &cur_marker,
-                                             y);
+                                             y, NULL, this_parent_span);
     if (r < 0)
       return r;
 
@@ -8543,7 +8553,13 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
-					check_filter_t force_check_filter) {
+					check_filter_t force_check_filter, const Span& parent_span) {
+  
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
+  Span span_1 = trace(parent_span, buffer);
+  const Span& this_parent_span(span_1);
+
   ldout(cct, 10) << "cls_bucket_list_unordered " << bucket_info.bucket <<
     " start_after " << start_after.name << "[" << start_after.instance <<
     "] num_entries " << num_entries << dendl;
@@ -8555,7 +8571,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
   RGWSI_RADOS::Pool index_pool;
 
   map<int, string> oids;
-  int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, &index_pool, &oids, nullptr);
+  int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, &index_pool, &oids, nullptr, this_parent_span);
   if (r < 0)
     return r;
 
@@ -8599,7 +8615,9 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     } else {
       // so now we have the key used to compute the bucket index shard
       // and can extract the specific shard from it
+      Span span_2 = trace(this_parent_span, "svc_bi_rados.cc : RGWSI_BucketIndex_RADOS::bucket_shard_index");
       current_shard = svc.bi_rados->bucket_shard_index(obj_key.name, num_shards);
+      finish_trace(span_2);
     }
   }
 
@@ -8617,7 +8635,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
-    r = rgw_rados_operate(ioctx, oid, &op, nullptr, null_yield);
+    r = rgw_rados_operate(ioctx, oid, &op, nullptr, null_yield, this_parent_span);
     if (r < 0)
       return r;
 
@@ -8671,6 +8689,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 check_updates:
 
   // suggest updates if there is any
+  Span span_4 = trace(this_parent_span, "svc_rados.cc : RGWSI_RADOS::Obj::aio_operate");
   map<string, bufferlist>::iterator miter = updates.begin();
   for (; miter != updates.end(); ++miter) {
     if (miter->second.length()) {
@@ -8682,6 +8701,7 @@ check_updates:
       c->release();
     }
   }
+  finish_trace(span_4);
 
   if (last_entry && !ent_list.empty()) {
     *last_entry = last_added_entry;

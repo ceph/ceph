@@ -1458,6 +1458,12 @@ void RGWGetUsage_ObjStore_S3::send_response()
 
 int RGWListBucket_ObjStore_S3::get_common_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
 
@@ -1489,6 +1495,12 @@ int RGWListBucket_ObjStore_S3::get_common_params()
 
 int RGWListBucket_ObjStore_S3::get_params()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "gateway", "s3");
+
   int ret = get_common_params();
   if (ret < 0) {
     return ret;
@@ -1521,6 +1533,12 @@ return 0;
 
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (!s->bucket_tenant.empty()) {
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
@@ -1551,6 +1569,12 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 
 void RGWListBucket_ObjStore_S3::send_versioned_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
@@ -1631,6 +1655,12 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 
 void RGWListBucket_ObjStore_S3::send_common_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (!s->bucket_tenant.empty()) {
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
@@ -1660,6 +1690,12 @@ void RGWListBucket_ObjStore_S3::send_common_response()
 
 void RGWListBucket_ObjStore_S3::send_response()
 {
+  req_state_span ss;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
+  set_span_tag(s->root_span, "success", "true");
+
   if (op_ret < 0) {
     set_req_state_err(s, op_ret);
   }

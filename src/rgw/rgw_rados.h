@@ -1033,13 +1033,13 @@ public:
 		       vector<rgw_bucket_dir_entry> *result,
 		       map<string, bool> *common_prefixes,
 		       bool *is_truncated,
-                       optional_yield y) {
+                       optional_yield y, const Span& parent_span = nullptr) {
 	if (params.allow_unordered) {
 	  return list_objects_unordered(max, result, common_prefixes,
-					is_truncated, y);
+					is_truncated, y, parent_span);
 	} else {
 	  return list_objects_ordered(max, result, common_prefixes,
-				      is_truncated, y);
+				      is_truncated, y, parent_span);
 	}
       }
       rgw_obj_key& get_next_marker() {
@@ -1389,7 +1389,7 @@ public:
 			      bool* cls_filtered,
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
-			      check_filter_t force_check_filter = nullptr);
+			      check_filter_t force_check_filter = nullptr, const Span& parent_span = nullptr);
   int cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 				int shard_id,
 				const rgw_obj_index_key& start_after,
@@ -1400,7 +1400,7 @@ public:
 				bool *is_truncated,
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
-				check_filter_t = nullptr);
+				check_filter_t = nullptr, const Span& parent_span = nullptr);
   int cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
 

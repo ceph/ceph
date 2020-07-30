@@ -224,8 +224,12 @@ int RGWRadosBucket::sync_user_stats()
       return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, &ent);
 }
 
-int RGWRadosBucket::update_container_stats(void)
+int RGWRadosBucket::update_container_stats(const Span& parent_span)
 {
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
+  Span span_1 = trace(parent_span, buffer);
+
   int ret;
   map<std::string, RGWBucketEnt> m;
 

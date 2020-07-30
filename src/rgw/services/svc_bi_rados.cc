@@ -166,10 +166,14 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
                                                std::optional<int> _shard_id,
                                                RGWSI_RADOS::Pool *index_pool,
                                                map<int, string> *bucket_objs,
-                                               map<int, string> *bucket_instance_ids)
+                                               map<int, string> *bucket_instance_ids, const Span& parent_span)
 {
-  int shard_id = _shard_id.value_or(-1);
   string bucket_oid_base;
+  char buffer[1000];
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  Span span_1 = trace(parent_span, buffer);
+
+  int shard_id = _shard_id.value_or(-1);
   int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "

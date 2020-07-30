@@ -183,7 +183,7 @@ class RGWBucket {
 				 bool *syncstopped = nullptr) = 0;
     virtual int read_bucket_stats(optional_yield y) = 0;
     virtual int sync_user_stats() = 0;
-    virtual int update_container_stats(void) = 0;
+    virtual int update_container_stats(const Span& parent_span = nullptr) = 0;
     virtual int check_bucket_shards(void) = 0;
     virtual int link(RGWUser* new_user, optional_yield y) = 0;
     virtual int unlink(RGWUser* new_user, optional_yield y) = 0;
@@ -580,7 +580,7 @@ class RGWRadosBucket : public RGWBucket {
 				 bool *syncstopped = nullptr) override;
     virtual int read_bucket_stats(optional_yield y) override;
     virtual int sync_user_stats() override;
-    virtual int update_container_stats(void) override;
+    virtual int update_container_stats(const Span& parent_span = nullptr) override;
     virtual int check_bucket_shards(void) override;
     virtual int link(RGWUser* new_user, optional_yield y) override;
     virtual int unlink(RGWUser* new_user, optional_yield y) override;
