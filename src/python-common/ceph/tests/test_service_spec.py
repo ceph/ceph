@@ -62,7 +62,8 @@ def test_parse_placement_specs(test_input, expected):
 )
 def test_parse_placement_specs_raises(test_input):
     with pytest.raises(ServiceSpecValidationError):
-        PlacementSpec.from_string(test_input)
+        ps = PlacementSpec.from_string(test_input)
+        ps.validate()
 
 @pytest.mark.parametrize("test_input",
                          # wrong subnet

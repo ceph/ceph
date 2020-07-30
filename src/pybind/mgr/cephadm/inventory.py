@@ -128,6 +128,7 @@ class SpecStore():
 
     def save(self, spec):
         # type: (ServiceSpec) -> None
+        spec.validate()
         if spec.preview_only:
             self.spec_preview[spec.service_name()] = spec
             return None
