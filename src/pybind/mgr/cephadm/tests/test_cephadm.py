@@ -66,6 +66,25 @@ def with_daemon(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, ho
     assert False, 'Daemon not found'
 
 
+@contextmanager
+def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str):
+    if spec.placement.is_empty():
+        spec.placement = PlacementSpec(hosts=[host], count=1)
+    c = meth(cephadm_module, spec)
+    assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
+    assert spec in specs
+
+    cephadm_module._apply_all_services()
+
+    dds = wait(cephadm_module, cephadm_module.list_daemons())
+    names = {dd.service_name() for dd in dds}
+    assert spec.service_name() in names
+
+    yield
+
+    assert_rm_service(cephadm_module, spec.service_name())
+
 
 class TestCephadm(object):
 
@@ -99,71 +118,62 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _,__,___: None)
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
 
-            ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_mds(ServiceSpec('mds', 'name', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed mds.name.* on host 'test'")
+            with with_daemon(cephadm_module, ServiceSpec('mds', 'name'), CephadmOrchestrator.add_mds, 'test'):
 
-            c = cephadm_module.list_daemons()
+                c = cephadm_module.list_daemons()
 
-            def remove_id_events(dd):
-                out = dd.to_json()
-                del out['daemon_id']
-                del out['events']
-                return out
+                def remove_id_events(dd):
+                    out = dd.to_json()
+                    del out['daemon_id']
+                    del out['events']
+                    return out
 
-            assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
-                {
-                    'daemon_type': 'mds',
-                    'hostname': 'test',
-                    'status': 1,
-                    'status_desc': 'starting'}
-            ]
+                assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
+                    {
+                        'daemon_type': 'mds',
+                        'hostname': 'test',
+                        'status': 1,
+                        'status_desc': 'starting'}
+                ]
 
-            ps = PlacementSpec(hosts=['test'], count=1)
-            spec = ServiceSpec('rgw', 'r.z', placement=ps)
-            c = cephadm_module.apply_rgw(spec)
-            assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
+                with with_service(cephadm_module, ServiceSpec('rgw', 'r.z'), CephadmOrchestrator.apply_rgw, 'test'):
 
-            c = cephadm_module.describe_service()
-            out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
-            expected = [
-                {
-                    'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
-                    'service_id': 'name',
-                    'service_name': 'mds.name',
-                    'service_type': 'mds',
-                    'status': {'running': 1, 'size': 0},
-                    'unmanaged': True
-                },
-                {
-                    'placement': {
-                        'count': 1,
-                        'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
-                    },
-                    'spec': {
-                        'rgw_realm': 'r',
-                        'rgw_zone': 'z',
-                    },
-                    'service_id': 'r.z',
-                    'service_name': 'rgw.r.z',
-                    'service_type': 'rgw',
-                    'status': {'running': 0, 'size': 1},
-                }
-            ]
-            for o in out:
-                if 'events' in o:
-                    del o['events']  # delete it, as it contains a timestamp
-            assert out == expected
-            assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
-
-            assert_rm_service(cephadm_module, 'rgw.r.z')
-            assert_rm_daemon(cephadm_module, 'mds.name', 'test')
+                    c = cephadm_module.describe_service()
+                    out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
+                    expected = [
+                        {
+                            'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
+                            'service_id': 'name',
+                            'service_name': 'mds.name',
+                            'service_type': 'mds',
+                            'status': {'running': 1, 'size': 0},
+                            'unmanaged': True
+                        },
+                        {
+                            'placement': {
+                                'count': 1,
+                                'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
+                            },
+                            'spec': {
+                                'rgw_realm': 'r',
+                                'rgw_zone': 'z',
+                            },
+                            'service_id': 'r.z',
+                            'service_name': 'rgw.r.z',
+                            'service_type': 'rgw',
+                            'status': {'created': mock.ANY, 'running': 1, 'size': 1},
+                        }
+                    ]
+                    for o in out:
+                        if 'events' in o:
+                            del o['events']  # delete it, as it contains a timestamp
+                    assert out == expected
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_device_ls(self, cephadm_module):
@@ -234,6 +244,27 @@ class TestCephadm(object):
                     evs = [e.message for e in cephadm_module.events.get_for_daemon(f'rgw.{daemon_id}')]
 
                     assert 'myerror' in ''.join(evs)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test'):
+
+                # Make sure, _check_daemons does a redeploy due to monmap change:
+                cephadm_module._store['_ceph_get/mon_map'] = {
+                    'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                    'fsid': 'foobar',
+                }
+                cephadm_module.notify('mon_map', None)
+                cephadm_module._store['_ceph_get/mgr_map'] = {
+                    'modules': ['dashboard']
+                }
+
+                with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
+
+                    cephadm_module._check_daemons()
+                    _mon_cmd.assert_any_call({'prefix': 'dashboard set-grafana-api-url', 'value': 'https://test:3000'})
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_mon_add(self, cephadm_module):
@@ -586,22 +617,11 @@ class TestCephadm(object):
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _,__,___: None)
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
-            if not spec.placement:
-                spec.placement = PlacementSpec(hosts=['test'], count=1)
-            c = meth(cephadm_module, spec)
-            assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
-            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
-
-            cephadm_module._apply_all_services()
-
-            dds = wait(cephadm_module, cephadm_module.list_daemons())
-            for dd in dds:
-                assert dd.service_name() == spec.service_name()
-
-
-            assert_rm_service(cephadm_module, spec.service_name())
+            with with_service(cephadm_module, spec, meth, 'test'):
+                pass
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
