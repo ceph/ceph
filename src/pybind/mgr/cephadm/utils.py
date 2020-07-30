@@ -1,7 +1,8 @@
 import logging
+import re
+import json
 from functools import wraps
 from typing import Optional, Callable, TypeVar, List
-
 from orchestrator import OrchestratorError
 
 
@@ -43,7 +44,6 @@ def name_to_auth_entity(daemon_type,  # type: str
     else:
         raise OrchestratorError("unknown auth entity name")
 
-
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
     @wraps(f)
     def forall_hosts_wrapper(*args) -> List[T]:
@@ -74,3 +74,16 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
 
 
     return forall_hosts_wrapper
+
+def get_cluster_health(mgr):
+    # check cluster health
+    ret, out, err = mgr.check_mon_command({
+        'prefix': 'health',
+        'format': 'json',
+    })
+    try:
+        j = json.loads(out)
+    except Exception as e:
+        raise OrchestratorError('failed to parse health status')
+
+    return j['status']

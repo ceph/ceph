@@ -7,6 +7,7 @@ from orchestrator import ServiceDescription
 from tests import mock
 
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+@mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _,__,___: None)
 def test_service_ls(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         with with_host(cephadm_module, 'host2'):
