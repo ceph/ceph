@@ -9978,6 +9978,10 @@ int BlueStore::_collection_list(
 	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
+          if (it->valid() && it->key() < temp_end_key) {
+            *pnext = it->oid();
+            set_next = true;
+          }
 	  break;
 	}
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
@@ -9989,6 +9993,10 @@ int BlueStore::_collection_list(
           pend = end;
 	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
+      }
+      if (it->valid() && it->key() < end_key) {
+        *pnext = it->oid();
+        set_next = true;
       }
       break;
     }
