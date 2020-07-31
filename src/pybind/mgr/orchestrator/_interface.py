@@ -1312,6 +1312,9 @@ class DaemonDescription(object):
         return False
 
     def service_id(self):
+        if self.daemon_type == 'osd' and self.osdspec_affinity:
+            return self.osdspec_affinity
+
         def _match():
             err = OrchestratorError("DaemonDescription: Cannot calculate service_id: " \
                     f"daemon_id='{self.daemon_id}' hostname='{self.hostname}'")
