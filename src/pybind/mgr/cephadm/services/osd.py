@@ -605,7 +605,7 @@ class OSD:
     def pg_count_str(self):
         return 'n/a' if self.get_pg_count() < 0 else str(self.get_pg_count())
 
-    def to_json(self) -> str:
+    def to_json(self) -> dict:
         out = dict()
         out['osd_id'] = self.osd_id
         out['started'] = self.started
@@ -620,7 +620,7 @@ class OSD:
                 out[k] = getattr(self, k).strftime(DATEFMT)
             else:
                 out[k] = getattr(self, k)
-        return json.dumps(out)
+        return out
 
     @classmethod
     def from_json(cls, inp: Optional[Dict[str, Any]], ctx: Optional[RemoveUtil] = None) -> Optional["OSD"]:
