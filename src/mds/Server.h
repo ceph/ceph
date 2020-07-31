@@ -319,7 +319,7 @@ private:
   friend class Batch_Getattr_Lookup;
 
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
+  void flush_session(Session *session, MDSGatherBuilder& gather);
 
   MDSRank *mds;
   MDCache *mdcache;
