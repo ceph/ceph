@@ -285,6 +285,34 @@ We added 2 npm scripts to help run these tools:
 - ``npm run lint``, will check frontend files against all linters
 - ``npm run fix``, will try to fix all the detected linting errors
 
+Ceph Dashboard and Bootstrap
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Currently we are using Bootstrap on the Ceph Dashboard as a CSS framework. This means that most of our SCSS and HTML
+code can make use of all the utilities and other advantages Bootstrap is offering. In the past we often have used our
+own custom styles and this lead to more and more variables with a single use and double defined variables which
+sometimes are forgotten to be removed or it led to styling be inconsistent because people forgot to change a color or to
+adjust a custom SCSS class.
+
+To get the current version of Bootstrap used inside Ceph please refer to the ``package.json`` and search for:
+
+- ``bootstrap``: For the Boostrap version used.
+- ``@ng-bootstrap``: For the version of the Angular bindings which we are using.
+
+So for the future please do the following when visiting a component:
+
+- Does this HTML/SCSS code use custom code? - If yes: Is it needed? --> Clean it up before changing the things you want
+  to fix or change.
+- If you are creating a new component: Please make use of Bootstrap as much as reasonably possible! Don't try to
+  reinvent the wheel.
+- If possible please look up if Bootstrap has guidelines on how to extend it properly to do achieve what you want to
+  achieve.
+
+The more bootstrap alike our code is the easier it is to theme, to maintain and the less bugs we will have. Also since
+Bootstrap is a framework which tries to have usability and user experience in mind we increase both points
+exponentially. The biggest benefit of all is that there is less code for us to maintain which makes it easier to read
+for beginners and even more easy for people how are already familiar with the code.
+
 Writing Unit Tests
 ~~~~~~~~~~~~~~~~~~
 
