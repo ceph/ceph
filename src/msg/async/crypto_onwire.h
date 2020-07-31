@@ -53,8 +53,6 @@ struct TxHandlerError : public std::runtime_error {
 struct TxHandler {
   virtual ~TxHandler() = default;
 
-  virtual std::uint32_t calculate_segment_size(std::uint32_t size) = 0;
-
   // Instance of TxHandler must be reset before doing any encrypt-update
   // step. This applies also to situation when encrypt-final was already
   // called and another round of update-...-update-final will take place.
@@ -67,8 +65,17 @@ struct TxHandler {
   // It's undefined what will happen if client doesn't follow the order.
   //
   // TODO: switch to always_aligned_t
-  virtual void reset_tx_handler(
-    std::initializer_list<std::uint32_t> update_size_sequence) = 0;
+  virtual void reset_tx_handler(const uint32_t* first,
+                                const uint32_t* last) = 0;
+
+  void reset_tx_handler(std::initializer_list<uint32_t> update_size_sequence) {
+    if (update_size_sequence.size() > 0) {
+      const uint32_t* first = &*update_size_sequence.begin();
+      reset_tx_handler(first, first + update_size_sequence.size());
+    } else {
+      reset_tx_handler(nullptr, nullptr);
+    }
+  }
 
   // Perform encryption. Client gives full ownership right to provided
   // bufferlist. The method MUST NOT be called after _final() if there
@@ -96,17 +103,12 @@ public:
   virtual void reset_rx_handler() = 0;
 
   // Perform decryption ciphertext must be ALWAYS aligned to 16 bytes.
-  // TODO: switch to always_aligned_t
-  virtual ceph::bufferlist authenticated_decrypt_update(
-    ceph::bufferlist&& ciphertext,
-    std::uint32_t alignment) = 0;
+  virtual void authenticated_decrypt_update(ceph::bufferlist& bl) = 0;
 
   // Perform decryption of last cipertext's portion and verify signature
   // for overall decryption sequence.
   // Throws on integrity/authenticity checks
-  virtual ceph::bufferlist authenticated_decrypt_update_final(
-    ceph::bufferlist&& ciphertext,
-    std::uint32_t alignment) = 0;
+  virtual void authenticated_decrypt_update_final(ceph::bufferlist& bl) = 0;
 };
 
 struct rxtx_t {
@@ -119,6 +121,7 @@ struct rxtx_t {
   static rxtx_t create_handler_pair(
     CephContext* ctx,
     const class AuthConnectionMeta& auth_meta,
+    bool new_nonce_format,
     bool crossed);
 };
 
