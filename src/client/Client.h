@@ -745,6 +745,9 @@ public:
 
   xlist<Inode*> &get_dirty_list() { return dirty_list; }
 
+  /* timer_lock for 'timer' and 'tick_event' */
+  ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
+  Context *tick_event = nullptr;
   SafeTimer timer;
 
   std::unique_ptr<PerfCounters> logger;
@@ -1212,7 +1215,6 @@ private:
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
-  Context *tick_event = nullptr;
   utime_t last_cap_renew;
 
   CommandHook m_command_hook;
