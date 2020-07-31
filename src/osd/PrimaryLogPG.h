@@ -601,7 +601,7 @@ public:
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
-    bool cache_evict;     ///< true if this is a cache eviction
+    bool cache_operation;     ///< true if this is a cache eviction
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is std::set
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
@@ -708,7 +708,7 @@ public:
       obs(&obc->obs),
       snapset(0),
       new_obs(obs->oi, obs->exists),
-      modify(false), user_modify(false), undirty(false), cache_evict(false),
+      modify(false), user_modify(false), undirty(false), cache_operation(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
@@ -727,7 +727,7 @@ public:
     OpContext(OpRequestRef _op, osd_reqid_t _reqid,
               std::vector<OSDOp>* _ops, PrimaryLogPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
-      modify(false), user_modify(false), undirty(false), cache_evict(false),
+      modify(false), user_modify(false), undirty(false), cache_operation(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
