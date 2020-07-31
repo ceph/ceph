@@ -375,7 +375,7 @@ class HostCache():
         result = []   # type: List[orchestrator.DaemonDescription]
         for host, dm in self.daemons.items():
             for name, d in dm.items():
-                if name.startswith(service_name + '.'):
+                if d.service_name() == service_name:
                     result.append(d)
         return result
 
