@@ -959,11 +959,13 @@ void MonClient::_un_backoff()
 void MonClient::schedule_tick()
 {
   auto do_tick = make_lambda_context([this](int) { tick(); });
-  if (_hunting()) {
+  if (!is_connected()) {
+    // start another round of hunting
     const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
 				reopen_interval_multiplier);
     timer.add_event_after(hunt_interval, do_tick);
   } else {
+    // keep in touch
     timer.add_event_after(std::min(cct->_conf->mon_client_ping_interval,
 				   cct->_conf->mon_client_log_interval),
 			  do_tick);
