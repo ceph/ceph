@@ -63,6 +63,8 @@ class CephFSTestCase(CephTestCase):
     def setUp(self):
         super(CephFSTestCase, self).setUp()
 
+        self.config_set('mon', 'mon_allow_pool_delete', True)
+
         if len(self.mds_cluster.mds_ids) < self.MDSS_REQUIRED:
             self.skipTest("Only have {0} MDSs, require {1}".format(
                 len(self.mds_cluster.mds_ids), self.MDSS_REQUIRED
