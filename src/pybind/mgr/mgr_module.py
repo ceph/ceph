@@ -14,6 +14,7 @@ import rados
 import re
 import time
 
+# Full list of strings in "osd_types.cc:pg_state_string()"
 PG_STATES = [
     "active",
     "clean",
@@ -44,7 +45,10 @@ PG_STATES = [
     "snaptrim_wait",
     "snaptrim_error",
     "creating",
-    "unknown"]
+    "unknown",
+    "premerge",
+    "failed_repair",
+]
 
 
 class CPlusPlusHandler(logging.Handler):
