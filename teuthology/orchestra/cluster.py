@@ -63,7 +63,7 @@ class Cluster(object):
         remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
         return [remote.run(**kwargs) for remote in remotes]
 
-    def sh(self, **kwargs):
+    def sh(self, script, **kwargs):
         """
         Run a command on all the nodes in this cluster.
 
@@ -72,7 +72,7 @@ class Cluster(object):
         Returns a list of the command outputs correspondingly.
         """
         remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
-        return [remote.sh(**kwargs) for remote in remotes]
+        return [remote.sh(script, **kwargs) for remote in remotes]
 
     def write_file(self, file_name, content, sudo=False, perms=None, owner=None):
         """
