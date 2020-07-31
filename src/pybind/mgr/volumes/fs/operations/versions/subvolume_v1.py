@@ -8,18 +8,34 @@ from datetime import datetime
 import cephfs
 
 from .metadata_manager import MetadataManager
-from .subvolume_base import SubvolumeBase, SubvolumeFeatures
-from ..op_sm import OpSm
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
+from .op_sm import SubvolumeOpSm
+from .subvolume_base import SubvolumeBase
 from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
 from ...fs_util import listdir
+from ..template import SubvolumeOpType
 
 from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
 class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
+    """
+    Version 1 subvolumes creates a subvolume with path as follows,
+        volumes/<group-name>/<subvolume-name>/<uuid>/
+
+    - The directory under which user data resides is <uuid>
+    - Snapshots of the subvolume are taken within the <uuid> directory
+    - A meta file is maintained under the <subvolume-name> directory as a metadata store, typically storing,
+        - global information about the subvolume (version, path, type, state)
+        - snapshots attached to an ongoing clone operation
+        - clone snapshot source if subvolume is a clone of a snapshot
+    - It retains backward compatability with legacy subvolumes by creating the meta file for legacy subvolumes under
+    /volumes/_legacy/ (see legacy_config_path), thus allowing cloning of older legacy volumes that lack the <uuid>
+    component in the path.
+    """
     VERSION = 1
 
     @staticmethod
@@ -30,7 +46,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def path(self):
         try:
             # no need to stat the path -- open() does that
-            return self.metadata_mgr.get_global_option('path').encode('utf-8')
+            return self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH).encode('utf-8')
         except MetadataMgrException as me:
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
 
@@ -38,10 +54,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value]
 
+    def snapshot_base_path(self):
+        """ Base path for all snapshots """
+        return os.path.join(self.path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+
+    def snapshot_path(self, snapname):
+        """ Path to a specific snapshot named 'snapname' """
+        return os.path.join(self.snapshot_base_path(), snapname.encode('utf-8'))
+
+    def snapshot_data_path(self, snapname):
+        """ Path to user data directory within a subvolume snapshot named 'snapname' """
+        return self.snapshot_path(snapname)
+
     def create(self, size, isolate_nspace, pool, mode, uid, gid):
-        subvolume_type = SubvolumeBase.SUBVOLUME_TYPE_NORMAL
+        subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
-            initial_state = OpSm.get_init_state(subvolume_type)
+            initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
         except OpSmException as oe:
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
@@ -84,9 +112,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.flush()
 
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
-        subvolume_type = SubvolumeBase.SUBVOLUME_TYPE_CLONE
+        subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
-            initial_state = OpSm.get_init_state(subvolume_type)
+            initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
         except OpSmException as oe:
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
@@ -98,7 +126,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
-            self.metadata_mgr.init(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
+            self.metadata_mgr.init(SubvolumeV1.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
@@ -115,21 +143,48 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
 
-    def open(self, need_complete=True, expected_types=[]):
+    def allowed_ops_by_type(self, vol_type):
+        if vol_type == SubvolumeTypes.TYPE_CLONE:
+            return {op_type for op_type in SubvolumeOpType}
+
+        if vol_type == SubvolumeTypes.TYPE_NORMAL:
+            return {op_type for op_type in SubvolumeOpType} - {SubvolumeOpType.CLONE_STATUS,
+                                                               SubvolumeOpType.CLONE_CANCEL,
+                                                               SubvolumeOpType.CLONE_INTERNAL}
+
+        return {}
+
+    def allowed_ops_by_state(self, vol_state):
+        if vol_state == SubvolumeStates.STATE_COMPLETE:
+            return {op_type for op_type in SubvolumeOpType}
+
+        return {SubvolumeOpType.REMOVE_FORCE,
+                SubvolumeOpType.CLONE_CREATE,
+                SubvolumeOpType.CLONE_STATUS,
+                SubvolumeOpType.CLONE_CANCEL,
+                SubvolumeOpType.CLONE_INTERNAL}
+
+    def open(self, op_type):
+        if not isinstance(op_type, SubvolumeOpType):
+            raise VolumeException(-errno.ENOTSUP, "operation {0} not supported on subvolume '{1}'".format(
+                                  op_type.value, self.subvolname))
         try:
             self.metadata_mgr.refresh()
+
+            etype = self.subvol_type
+            if op_type not in self.allowed_ops_by_type(etype):
+                raise VolumeException(-errno.ENOTSUP, "operation '{0}' is not allowed on subvolume '{1}' of type {2}".format(
+                                      op_type.value, self.subvolname, etype.value))
+
+            estate = self.state
+            if op_type not in self.allowed_ops_by_state(estate):
+                raise VolumeException(-errno.EAGAIN, "subvolume '{0}' is not ready for operation {1}".format(
+                                      self.subvolname, op_type.value))
+
             subvol_path = self.path
             log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
             st = self.fs.stat(subvol_path)
-            etype = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
-            if len(expected_types) and not etype in expected_types:
-                raise VolumeException(-errno.ENOTSUP, "subvolume '{0}' is not {1}".format(
-                    self.subvolname, "a {0}".format(expected_types[0]) if len(expected_types) == 1 else \
-                    "one of types ({0})".format(",".join(expected_types))))
-            if need_complete:
-                estate = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE)
-                if not OpSm.is_final_state(estate):
-                    raise VolumeException(-errno.EAGAIN, "subvolume '{0}' is not ready for use".format(self.subvolname))
+
             self.uid = int(st.st_uid)
             self.gid = int(st.st_gid)
             self.mode = int(st.st_mode & ~stat.S_IFMT(st.st_mode))
@@ -164,38 +219,37 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
     @property
     def status(self):
-        state = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE)
-        subvolume_type = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
+        state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
+        subvolume_type = self.subvol_type
         subvolume_status = {
-            'state' : state
+            'state' : state.value
         }
-        if not OpSm.is_final_state(state) and subvolume_type == SubvolumeBase.SUBVOLUME_TYPE_CLONE:
+        if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
             subvolume_status["source"] = self._get_clone_source()
         return subvolume_status
 
     @property
     def state(self):
-        return self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE)
+        return SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
 
     @state.setter
     def state(self, val):
-        state = val[0]
+        state = val[0].value
         flush = val[1]
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, state)
         if flush:
             self.metadata_mgr.flush()
 
-    def remove(self):
+    def remove(self, retainsnaps=False):
+        if retainsnaps:
+            raise VolumeException(-errno.EINVAL, "subvolume '{0}' does not support snapshot retention on delete".format(self.subvolname))
+        if self.list_snapshots():
+            raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(self.subvolname))
         self.trash_base_dir()
 
     def resize(self, newsize, noshrink):
         subvol_path = self.path
         return self._resize(subvol_path, newsize, noshrink)
-
-    def snapshot_path(self, snapname):
-        return os.path.join(self.path,
-                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
-                            snapname.encode('utf-8'))
 
     def create_snapshot(self, snapname):
         snappath = self.snapshot_path(snapname)
@@ -216,7 +270,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         rmsnap(self.fs, snappath)
 
     def snapshot_info(self, snapname):
-        snappath = self.snapshot_path(snapname)
+        snappath = self.snapshot_data_path(snapname)
         snap_info = {}
         try:
             snap_attrs = {'created_at':'ceph.snap.btime', 'size':'ceph.dir.rbytes',
@@ -230,13 +284,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         except cephfs.Error as e:
             if e.errno == errno.ENOENT:
                 raise VolumeException(-errno.ENOENT,
-                                      "snapshot '{0}' doesnot exist".format(snapname))
+                                      "snapshot '{0}' does not exist".format(snapname))
             raise VolumeException(-e.args[0], e.args[1])
 
     def list_snapshots(self):
         try:
-            dirpath = os.path.join(self.path,
-                                   self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+            dirpath = self.snapshot_base_path()
             return listdir(self.fs, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
