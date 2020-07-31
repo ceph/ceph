@@ -3,7 +3,8 @@ import random
 from typing import List, Optional, Callable, Iterable, Tuple, TypeVar, Set
 
 import orchestrator
-from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, \
+        ServiceSpec, ServiceSpecValidationError
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
 
@@ -67,7 +68,10 @@ class HostAssignment(object):
         self.daemons = get_daemons_func(self.service_name)
 
     def validate(self):
-        self.spec.validate()
+        try:
+            self.spec.validate()
+        except Exception as e:
+            raise ServiceSpecValidationError(str(e))
 
         if self.spec.placement.count == 0:
             raise OrchestratorValidationError(

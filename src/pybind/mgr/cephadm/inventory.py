@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Se
 
 import orchestrator
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, ServiceSpecValidationError
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent
 
 if TYPE_CHECKING:
@@ -128,10 +128,15 @@ class SpecStore():
 
     def save(self, spec):
         # type: (ServiceSpec) -> None
-        spec.validate()
+        try:
+            spec.validate()
+        except Exception as e:
+            raise ServiceSpecValidationError(str(e))
+
         if spec.preview_only:
             self.spec_preview[spec.service_name()] = spec
             return None
+
         self.specs[spec.service_name()] = spec
         self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
         self.mgr.set_store(
