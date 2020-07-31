@@ -1959,9 +1959,7 @@ void MDSRank::rejoin_done()
 
   if (mdcache->is_any_uncommitted_fragment()) {
     dout(1) << " waiting for uncommitted fragments" << dendl;
-    MDSGatherBuilder gather(g_ceph_context, new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
-    mdcache->wait_for_uncommitted_fragments(gather.get());
-    gather.activate();
+    mdcache->wait_for_uncommitted_fragments(new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
     return;
   }
 
