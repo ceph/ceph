@@ -107,33 +107,33 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
 """,
 """
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
-    inet6 ::1/128 scope host 
+    inet6 ::1/128 scope host
        valid_lft forever preferred_lft forever
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
-    inet6 fdd8:591e:4969:6363:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic 
+    inet6 fdd8:591e:4969:6363:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic
        valid_lft 86394sec preferred_lft 14394sec
-    inet6 fdbc:7574:21fe:9200:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic 
+    inet6 fdbc:7574:21fe:9200:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic
        valid_lft 6745sec preferred_lft 3145sec
-    inet6 fdd8:591e:4969:6363:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic 
+    inet6 fdd8:591e:4969:6363:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic
        valid_lft 86394sec preferred_lft 0sec
-    inet6 fdbc:7574:21fe:9200:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic 
+    inet6 fdbc:7574:21fe:9200:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic
        valid_lft 6745sec preferred_lft 0sec
-    inet6 fdd8:591e:4969:6363:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic 
+    inet6 fdd8:591e:4969:6363:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic
        valid_lft 86394sec preferred_lft 0sec
-    inet6 fdbc:7574:21fe:9200:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic 
+    inet6 fdbc:7574:21fe:9200:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic
        valid_lft 6745sec preferred_lft 0sec
-    inet6 fdd8:591e:4969:6363:d581:4321:380b:3905/64 scope global temporary deprecated dynamic 
+    inet6 fdd8:591e:4969:6363:d581:4321:380b:3905/64 scope global temporary deprecated dynamic
        valid_lft 86394sec preferred_lft 0sec
-    inet6 fdbc:7574:21fe:9200:d581:4321:380b:3905/64 scope global temporary deprecated dynamic 
+    inet6 fdbc:7574:21fe:9200:d581:4321:380b:3905/64 scope global temporary deprecated dynamic
        valid_lft 6745sec preferred_lft 0sec
-    inet6 fe80::1111:2222:3333:4444/64 scope link noprefixroute 
+    inet6 fe80::1111:2222:3333:4444/64 scope link noprefixroute
        valid_lft forever preferred_lft forever
     inet6 fde4:8dba:82e1:0:ec4a:e402:e9df:b357/64 scope global temporary dynamic
        valid_lft 1074sec preferred_lft 1074sec
     inet6 fde4:8dba:82e1:0:5054:ff:fe72:61af/64 scope global dynamic mngtmpaddr
        valid_lft 1074sec preferred_lft 1074sec
 12: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 state UNKNOWN qlen 100
-    inet6 fe80::cafe:cafe:cafe:cafe/64 scope link stable-privacy 
+    inet6 fe80::cafe:cafe:cafe:cafe/64 scope link stable-privacy
        valid_lft forever preferred_lft forever
 """,
             {
@@ -164,7 +164,19 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
                     "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffg",
                     "1:2:3:4:5:6:7:8:9", "fd00::1::1", "[fg::1]"):
             assert not cd.is_ipv6(bad)
-    
+
+    def test_unwrap_ipv6(self):
+        def unwrap_test(address, expected):
+            assert cd.unwrap_ipv6(address) == expected
+
+        tests = [
+            ('::1', '::1'), ('[::1]', '::1'),
+            ('[fde4:8dba:82e1:0:5054:ff:fe6a:357]', 'fde4:8dba:82e1:0:5054:ff:fe6a:357'),
+            ('can actually be any string', 'can actually be any string'),
+            ('[but needs to be stripped] ', '[but needs to be stripped] ')]
+        for address, expected in tests:
+            unwrap_test(address, expected)
+
     @mock.patch('cephadm.call_throws')
     @mock.patch('cephadm.get_parm')
     def test_registry_login(self, get_parm, call_throws):
@@ -205,7 +217,7 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
                           " \"password\": \"REGISTRY_PASSWORD\"\n"
                         "}\n")
 
-        # test login attempt with valid arguments where login command fails    
+        # test login attempt with valid arguments where login command fails
         call_throws.side_effect = Exception
         args = cd._parse_args(['registry-login', '--registry-url', 'sample-url', '--registry-username', 'sample-user', '--registry-password', 'sample-pass'])
         cd.args = args
