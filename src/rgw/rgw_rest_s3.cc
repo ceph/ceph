@@ -650,7 +650,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   start_trace(std::move(ss), {}, s, buffer);
-  set_span_tag(s->root, "gateway", "s3");
+  set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -1276,10 +1276,10 @@ void RGWGetBucketReplication_ObjStore_S3::send_response_data()
 
 int RGWPutBucketReplication_ObjStore_S3::get_params()
 {
+  req_state_span ss;
   char buffer[1000];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
-  Span span_1 = trace(parent_span, buffer);
-  const Span& this_parent_span(span_1);
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   set_span_tag(s->root_span, "gateway", "s3");
 
   RGWXMLParser parser;
@@ -1326,10 +1326,10 @@ int RGWPutBucketReplication_ObjStore_S3::get_params()
 
 void RGWPutBucketReplication_ObjStore_S3::send_response()
 {
+  req_state_span ss;
   char buffer[1000];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
-  Span span_1 = trace(parent_span, buffer);
-  const Span& this_parent_span(span_1);
+  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
+  start_trace(std::move(ss), {}, s, buffer);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -2358,7 +2358,7 @@ void RGWStatBucket_ObjStore_S3::send_response()
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   start_trace(std::move(ss), {}, s, buffer);
   set_span_tag(s->root_span, "success", "true");
-  set_span_tag(s->root_span, "gateway", 's3');
+  set_span_tag(s->root_span, "gateway", "s3");
 
   if (op_ret >= 0) {
     dump_bucket_metadata(s, bucket.get());
@@ -3735,10 +3735,10 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store
 						  struct req_state *s,
 						  stringstream& ss)
 {
-  req_state_span ss;
+  req_state_span ss_1;
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+  start_trace(std::move(ss_1), {}, s, buffer);
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 

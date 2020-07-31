@@ -5207,7 +5207,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
   index_op.set_zones_trace(params.zones_trace);
   index_op.set_bilog_flags(params.bilog_flags);
 
-  r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag, y);
+  r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag, y, this_parent_span);
   if (r < 0)
     return r;
 
@@ -5228,7 +5228,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
+    Span span_11 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Bucket::UpdateIndex::complete_del()");
     r = index_op.complete_del(poolid, ioctx.get_last_version(), state->mtime, params.remove_objs);
+    finish_trace(span_11);
     
     Span span_9 = trace(this_parent_span, "rgw_rados.cc : RGWRados::Object::complete_atomic_modification");
     int ret = target->complete_atomic_modification();
@@ -7807,7 +7809,6 @@ int RGWRados::get_bucket_info(RGWServices *svc,
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = trace(parent_span, buffer);
-  const Span& this_parent_span(span_1);
 
   auto obj_ctx = svc->sysobj->init_obj_ctx();
   RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
