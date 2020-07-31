@@ -246,9 +246,6 @@ namespace librbd {
                             bool read_only) {
       return new ImageCtx(image_name, image_id, snap_id, p, read_only);
     }
-    void destroy() {
-      delete this;
-    }
 
     /**
      * Either image_name or image_id must be set.

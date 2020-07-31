@@ -91,7 +91,6 @@ void RemoveRequest<I>::handle_close_image(int r) {
     ldout(m_cct, 5) << "failed to close image:" << cpp_strerror(r) << dendl;
   }
 
-  m_image_ctx->destroy();
   m_image_ctx = nullptr;
   finish(m_ret_val);
 }

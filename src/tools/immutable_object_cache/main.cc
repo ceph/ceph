@@ -14,7 +14,7 @@
 ceph::immutable_obj_cache::CacheController *cachectl = nullptr;
 
 void usage() {
-  std::cout << "usage: cache controller [options...]" << std::endl;
+  std::cout << "usage: ceph-immutable-object-cache [options...]" << std::endl;
   std::cout << "options:\n";
   std::cout << "  -m monaddress[:port]      connect to specified monitor\n";
   std::cout << "  --keyring=<path>          path to keyring for local "

@@ -291,6 +291,24 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
   return vals->size();
 }
 
+int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,
+				 const std::set<std::string> &keys,
+				 std::map<std::string, ceph::bufferlist> *vals)
+{
+  OSDOp op{CEPH_OSD_OP_OMAPGETVALSBYKEYS};
+  encode(keys, op.indata);
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*vals, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 {
   OSDOp op{CEPH_OSD_OP_OMAPGETHEADER};
@@ -411,6 +429,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   } catch (crimson::osd::error& e) {
     return -e.code().value();
   }
+}
+
+uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
+{
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  return ox->get_pool_stripe_width();
 }
 
 ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx)

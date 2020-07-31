@@ -903,10 +903,6 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
   }
   vector<unsigned> ranks;
   for (auto [name, info] : monmap.mon_info) {
-    // TODO: #msgr-v2
-    if (info.public_addrs.legacy_addr().is_blank_ip()) {
-      continue;
-    }
     if (info.priority == min_priority) {
       ranks.push_back(monmap.get_rank(name));
     }
@@ -957,14 +953,7 @@ seastar::future<> Client::reopen_session(int rank)
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
 #warning fixme
-    auto peer = [&] {
-      auto& mon_addrs = monmap.get_addrs(rank);
-      if (msgr.get_myaddr().is_legacy()) {
-        return mon_addrs.legacy_addr();
-      } else {
-        return mon_addrs.msgr2_addr();
-      }
-    }();
+    auto peer = monmap.get_addrs(rank).pick_addr(msgr.get_myaddr().get_type());
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
       logger().warn("mon.{} does not have an addr compatible with me", rank);

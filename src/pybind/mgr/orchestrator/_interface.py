@@ -48,8 +48,12 @@ class OrchestratorError(Exception):
 
     It's not intended for programming errors or orchestrator internal errors.
     """
-    def __init__(self, msg, event_kind_subject: Optional[Tuple[str, str]]=None):
+    def __init__(self,
+                 msg: str,
+                 errno: int = -errno.EINVAL,
+                 event_kind_subject: Optional[Tuple[str, str]] = None):
         super(Exception, self).__init__(msg)
+        self.errno = errno
         # See OrchestratorEvent.subject
         self.event_subject = event_kind_subject
 
@@ -59,7 +63,7 @@ class NoOrchestrator(OrchestratorError):
     No orchestrator in configured.
     """
     def __init__(self, msg="No orchestrator configured (try `ceph orch set backend`)"):
-        super(NoOrchestrator, self).__init__(msg)
+        super(NoOrchestrator, self).__init__(msg, errno=-errno.ENOENT)
 
 
 class OrchestratorValidationError(OrchestratorError):
@@ -83,8 +87,10 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (OrchestratorError, ImportError, ServiceSpecValidationError) as e:
+        except (OrchestratorError, ServiceSpecValidationError) as e:
             # Do not print Traceback for expected errors.
+            return HandleCommandResult(e.errno, stderr=str(e))
+        except ImportError as e:
             return HandleCommandResult(-errno.ENOENT, stderr=str(e))
         except NotImplementedError:
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
@@ -837,6 +843,14 @@ class Orchestrator(object):
         # type: (str, str) -> Completion[str]
         """
         Remove a host label
+        """
+        raise NotImplementedError()
+
+    def host_ok_to_stop(self, hostname:str) -> Completion:
+        """
+        Check if the specified host can be safely stopped without reducing availability
+
+        :param host: hostname
         """
         raise NotImplementedError()
 
@@ -1604,7 +1618,7 @@ class OrchestratorEvent:
     """
     INFO = 'INFO'
     ERROR = 'ERROR'
-    regex_v1 = re.compile(r'^([^ ]+) ([^:]+):([^ ]+) \[([^\]]+)\] "(.*)"$')
+    regex_v1 = re.compile(r'^([^ ]+) ([^:]+):([^ ]+) \[([^\]]+)\] "((?:.|\n)*)"$', re.MULTILINE)
 
     def __init__(self, created: Union[str, datetime.datetime], kind, subject, level, message):
         if isinstance(created, str):
@@ -1633,7 +1647,6 @@ class OrchestratorEvent:
         created = self.created.strftime(DATEFMT)
         return f'{created} {self.kind_subject()} [{self.level}] "{self.message}"'
 
-
     @classmethod
     @handle_type_error
     def from_json(cls, data) -> "OrchestratorEvent":
@@ -1648,6 +1661,13 @@ class OrchestratorEvent:
         if match:
             return cls(*match.groups())
         raise ValueError(f'Unable to match: "{data}"')
+
+    def __eq__(self, other):
+        if not isinstance(other, OrchestratorEvent):
+            return False
+
+        return self.created == other.created and self.kind == other.kind \
+            and self.subject == other.subject and self.message == other.message
 
 
 def _mk_orch_methods(cls):

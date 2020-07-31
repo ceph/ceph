@@ -11,8 +11,6 @@
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -82,49 +80,6 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
 ObjectCopyRequest<librbd::MockTestImageCtx>* ObjectCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace deep_copy
-
-namespace image {
-
-template <>
-struct CloseRequest<MockTestImageCtx> {
-  Context* on_finish = nullptr;
-  static CloseRequest* s_instance;
-  static CloseRequest* create(MockTestImageCtx *image_ctx, Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  CloseRequest() {
-    s_instance = this;
-  }
-};
-
-CloseRequest<MockTestImageCtx>* CloseRequest<MockTestImageCtx>::s_instance = nullptr;
-
-template <>
-struct OpenRequest<MockTestImageCtx> {
-  Context* on_finish = nullptr;
-  static OpenRequest* s_instance;
-  static OpenRequest* create(MockTestImageCtx *image_ctx,
-                             bool skip_open_parent, Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  OpenRequest() {
-    s_instance = this;
-  }
-};
-
-OpenRequest<MockTestImageCtx>* OpenRequest<MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace image
 
 namespace object_map {
 

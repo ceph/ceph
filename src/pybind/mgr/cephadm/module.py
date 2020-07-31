@@ -22,7 +22,7 @@ import subprocess
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
+    NFSServiceSpec, RGWSpec, ServiceSpec, PlacementSpec, assert_valid_host
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult
@@ -253,6 +253,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def __init__(self, *args, **kwargs):
         super(CephadmOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid = self.get('mon_map')['fsid']
+        self.last_monmap: Optional[datetime.datetime] = None
 
         # for serve()
         self.run = True
@@ -289,6 +290,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
+
+        self.notify('mon_map', None)
         self.config_notify()
 
         path = self.get_ceph_option('cephadm_path')
@@ -539,35 +542,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         TODO: this method should be moved into mgr_module.py
         """
-        module_options_changed: List[str] = []
         for opt in self.MODULE_OPTIONS:
-            old_val = getattr(self, opt['name'], None)
-            new_val = self.get_module_option(opt['name'])
             setattr(self,
                     opt['name'],  # type: ignore
-                    new_val)  # type: ignore
+                    self.get_module_option(opt['name']))  # type: ignore
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
-            if old_val != new_val:
-                module_options_changed.append(opt['name'])
         for opt in self.NATIVE_OPTIONS:
             setattr(self,
                     opt,  # type: ignore
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
 
-        for what in module_options_changed:
-            self.config_notify_one(what)
-
         self.event.set()
-
-    def config_notify_one(self, what):
-        if what == 'manage_etc_ceph_ceph_conf' and self.manage_etc_ceph_ceph_conf:
-            self.cache.distribute_new_etc_ceph_ceph_conf()
 
     def notify(self, notify_type, notify_id):
         if notify_type == "mon_map":
-            self.cache.distribute_new_etc_ceph_ceph_conf()
+            # get monmap mtime so we can refresh configs when mons change
+            monmap = self.get('mon_map')
+            self.last_monmap = datetime.datetime.strptime(
+                monmap['modified'], CEPH_DATEFMT)
+            if self.last_monmap and self.last_monmap > datetime.datetime.utcnow():
+                self.last_monmap = None  # just in case clocks are skewed
 
     def pause(self):
         if not self.paused:
@@ -1222,6 +1218,29 @@ you may want to run:
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
 
+    @trivial_completion
+    def host_ok_to_stop(self, hostname: str):
+        if hostname not in self.cache.get_hosts():
+            raise OrchestratorError(f'Cannot find host "{hostname}"')
+
+        daemons = self.cache.get_daemons()
+        daemon_map = defaultdict(lambda: [])
+        for dd in daemons:
+            if dd.hostname == hostname:
+                daemon_map[dd.daemon_type].append(dd.daemon_id)
+
+        for daemon_type,daemon_ids in daemon_map.items():
+            r = self.cephadm_services[daemon_type].ok_to_stop(daemon_ids)
+            if r.retval:
+                self.log.error(f'It is NOT safe to stop host {hostname}')
+                raise orchestrator.OrchestratorError(
+                        r.stderr,
+                        errno=r.retval)
+
+        msg = f'It is presumed safe to stop host {hostname}'
+        self.log.info(msg)
+        return msg
+
     def update_osdspec_previews(self, search_host: str = ''):
         # Set global 'pending' flag for host
         self.cache.loading_osdspec_preview.add(search_host)
@@ -1413,7 +1432,8 @@ you may want to run:
                 )
                 if code:
                     return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
-                self.cache.remove_host_needs_new_etc_ceph_ceph_conf(host)
+                self.cache.update_last_etc_ceph_ceph_conf(host)
+                self.cache.save_host(host)
         except OrchestratorError as e:
             return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
@@ -1979,12 +1999,18 @@ you may want to run:
         self.log.debug('Hosts that will loose daemons: %s' % remove_daemon_hosts)
 
         for host, network, name in add_daemon_hosts:
-            if not did_config and config_func:
-                config_func(spec)
-                did_config = True
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
                                              forcename=name)
+
+            if not did_config and config_func:
+                if daemon_type == 'rgw':
+                    rgw_config_func = cast(Callable[[RGWSpec, str], None], config_func)
+                    rgw_config_func(cast(RGWSpec, spec), daemon_id)
+                else:
+                    config_func(spec)
+                did_config = True
+
             daemon_spec = self.cephadm_services[daemon_type].make_daemon_spec(host, daemon_id, network, spec)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
@@ -2001,8 +2027,12 @@ you may want to run:
             r = True
 
         # remove any?
-        while remove_daemon_hosts and not self.cephadm_services[daemon_type].ok_to_stop(
-                [d.daemon_id for d in remove_daemon_hosts]):
+        def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
+            daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
+            r = self.cephadm_services[daemon_type].ok_to_stop(daemon_ids)
+            return not r.retval
+
+        while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
             # let's find a subset that is ok-to-stop
             remove_daemon_hosts.pop()
         for d in remove_daemon_hosts:
@@ -2036,12 +2066,6 @@ you may want to run:
                                     f'service {service_name}')
 
     def _check_daemons(self):
-        # get monmap mtime so we can refresh configs when mons change
-        monmap = self.get('mon_map')
-        last_monmap: Optional[datetime.datetime] = datetime.datetime.strptime(
-            monmap['modified'], CEPH_DATEFMT)
-        if last_monmap and last_monmap > datetime.datetime.utcnow():
-            last_monmap = None   # just in case clocks are skewed
 
         daemons = self.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
@@ -2078,8 +2102,8 @@ you may want to run:
                 self.log.info('Reconfiguring %s (dependencies changed)...' % (
                     dd.name()))
                 reconfig = True
-            elif last_monmap and \
-               last_monmap > last_config and \
+            elif self.last_monmap and \
+                    self.last_monmap > last_config and \
                dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
                 reconfig = True
@@ -2119,14 +2143,21 @@ you may want to run:
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
 
-        if config_func:
-            config_func(spec)
+        did_config = False
 
         args = []  # type: List[CephadmDaemonSpec]
         for host, network, name in hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
                                              forcename=name)
+
+            if not did_config and config_func:
+                if daemon_type == 'rgw':
+                    config_func(spec, daemon_id)
+                else:
+                    config_func(spec)
+                did_config = True
+
             daemon_spec = self.cephadm_services[daemon_type].make_daemon_spec(host, daemon_id, network, spec)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))

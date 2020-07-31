@@ -28,6 +28,7 @@
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "messages/MOSDRepOpReply.h"
+#include "messages/MOSDScrub2.h"
 #include "messages/MPGStats.h"
 
 #include "os/Transaction.h"
@@ -644,6 +645,8 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
       return handle_rep_op(conn, boost::static_pointer_cast<MOSDRepOp>(m));
     case MSG_OSD_REPOPREPLY:
       return handle_rep_op_reply(conn, boost::static_pointer_cast<MOSDRepOpReply>(m));
+    case MSG_OSD_SCRUB2:
+      return handle_scrub(conn, boost::static_pointer_cast<MOSDScrub2>(m));
     default:
       logger().info("ms_dispatch unhandled message {}", *m);
       return seastar::now();
@@ -1109,6 +1112,28 @@ seastar::future<> OSD::handle_rep_op_reply(crimson::net::Connection* conn,
     logger().warn("stale reply: {}", *m);
   }
   return seastar::now();
+}
+
+seastar::future<> OSD::handle_scrub(crimson::net::Connection* conn,
+				    Ref<MOSDScrub2> m)
+{
+  if (m->fsid != superblock.cluster_fsid) {
+    logger().warn("fsid mismatched");
+    return seastar::now();
+  }
+  return seastar::parallel_for_each(std::move(m->scrub_pgs),
+    [m, conn=conn->get_shared(), this](spg_t pgid) {
+    pg_shard_t from_shard{static_cast<int>(m->get_source().num()),
+                          pgid.shard};
+    PeeringState::RequestScrub scrub_request{m->deep, m->repair};
+    return shard_services.start_operation<RemotePeeringEvent>(
+      *this,
+      conn,
+      shard_services,
+      from_shard,
+      pgid,
+      PGPeeringEvent{m->epoch, m->epoch, scrub_request}).second;
+  });
 }
 
 seastar::future<> OSD::handle_mark_me_down(crimson::net::Connection* conn,

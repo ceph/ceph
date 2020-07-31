@@ -55,7 +55,6 @@ void SnapshotPurgeRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << "failed to open image '" << m_image_id << "': " << cpp_strerror(r)
          << dendl;
-    m_image_ctx->destroy();
     m_image_ctx = nullptr;
 
     finish(r);
@@ -264,7 +263,6 @@ template <typename I>
 void SnapshotPurgeRequest<I>::handle_close_image(int r) {
   dout(10) << "r=" << r << dendl;
 
-  m_image_ctx->destroy();
   m_image_ctx = nullptr;
 
   if (r < 0) {

@@ -260,10 +260,6 @@ public:
                 }));
   }
 
-  void expect_destroy(librbd::MockTestImageCtx& mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, destroy());
-  }
-
   void expect_mirror_image_set(const std::string& image_id,
                                const cls::rbd::MirrorImage& mirror_image,
                                int r) {
@@ -362,7 +358,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, SuccessJournal) {
   expect_mirror_image_remove(m_local_io_ctx, 0);
 
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   MockTrashWatcher mock_trash_watcher;
   expect_notify_image_added(mock_trash_watcher, "image id");
@@ -404,7 +399,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, SuccessSnapshot) {
   expect_mirror_image_remove(m_local_io_ctx, 0);
 
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   MockTrashWatcher mock_trash_watcher;
   expect_notify_image_added(mock_trash_watcher, "image id");
@@ -581,7 +575,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, OpenImageError) {
 
   expect_set_journal_policy(mock_image_ctx);
   expect_open(mock_image_ctx, -EINVAL);
-  expect_destroy(mock_image_ctx);
 
   C_SaferCond ctx;
   auto req = MockTrashMoveRequest::create(m_local_io_ctx, "global image id",
@@ -620,7 +613,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, ResetJournalError) {
   expect_journal_reset(mock_journal_reset_request, -EINVAL);
 
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   C_SaferCond ctx;
   auto req = MockTrashMoveRequest::create(m_local_io_ctx, "global image id",
@@ -662,7 +654,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, AcquireLockError) {
   expect_acquire_lock(mock_image_ctx, -EINVAL);
 
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   C_SaferCond ctx;
   auto req = MockTrashMoveRequest::create(m_local_io_ctx, "global image id",
@@ -708,7 +699,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, TrashMoveError) {
                     {}, -EINVAL);
 
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   C_SaferCond ctx;
   auto req = MockTrashMoveRequest::create(m_local_io_ctx, "global image id",
@@ -755,7 +745,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, RemoveMirrorImageError) {
   expect_mirror_image_remove(m_local_io_ctx, -EINVAL);
 
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   MockTrashWatcher mock_trash_watcher;
   expect_notify_image_added(mock_trash_watcher, "image id");
@@ -805,7 +794,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, CloseImageError) {
   expect_mirror_image_remove(m_local_io_ctx, 0);
 
   expect_close(mock_image_ctx, -EINVAL);
-  expect_destroy(mock_image_ctx);
 
   MockTrashWatcher mock_trash_watcher;
   expect_notify_image_added(mock_trash_watcher, "image id");
@@ -856,7 +844,6 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, DelayedDelation) {
 
   expect_mirror_image_remove(m_local_io_ctx, 0);
   expect_close(mock_image_ctx, 0);
-  expect_destroy(mock_image_ctx);
 
   MockTrashWatcher mock_trash_watcher;
   expect_notify_image_added(mock_trash_watcher, "image id");

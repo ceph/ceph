@@ -10,6 +10,7 @@ from ceph.deployment.drive_selection.selector import DriveSelection
 logger = logging.getLogger(__name__)
 
 
+# TODO refactor this to a DriveSelection method
 class to_ceph_volume(object):
 
     def __init__(self,

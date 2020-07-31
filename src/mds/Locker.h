@@ -259,7 +259,7 @@ private:
   friend class LockerLogContext;
 
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
-  uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
+  uint64_t calc_new_max_size(const CInode::inode_const_ptr& pi, uint64_t size);
 
   MDSRank *mds;
   MDCache *mdcache;
