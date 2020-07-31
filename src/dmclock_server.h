@@ -296,7 +296,8 @@ namespace crimson {
 
     protected:
 
-      using TimePoint = decltype(std::chrono::steady_clock::now());
+      using Clock = std::chrono::steady_clock;
+      using TimePoint = Clock::time_point;
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
