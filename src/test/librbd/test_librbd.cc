@@ -19,6 +19,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/event_type.h"
 #include "include/err.h"
+#include "common/ceph_mutex.h"
 
 #include "gtest/gtest.h"
 
@@ -710,8 +711,8 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
   uint64_t size = 2 << 20;
   struct Watcher {
     rbd_image_t &m_image;
-    mutex m_lock;
-    condition_variable m_cond;
+    std::mutex m_lock;
+    std::condition_variable m_cond;
     size_t m_size = 0;
     static void cb(void *arg) {
       Watcher *watcher = static_cast<Watcher *>(arg);
@@ -721,12 +722,12 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
     void handle_notify() {
       rbd_image_info_t info;
       ASSERT_EQ(0, rbd_stat(m_image, &info, sizeof(info)));
-      lock_guard<mutex> locker(m_lock);
+      std::lock_guard<std::mutex> locker(m_lock);
       m_size = info.size;
       m_cond.notify_one();
     }
     void wait_for_size(size_t size) {
-      unique_lock<mutex> locker(m_lock);
+      std::unique_lock<std::mutex> locker(m_lock);
       ASSERT_TRUE(m_cond.wait_for(locker, seconds(5),
       				  [size, this] {
 				    return this->m_size == size;}));
@@ -768,19 +769,19 @@ TEST_F(TestLibRBD, UpdateWatchAndResizePP)
       void handle_notify() override {
         librbd::image_info_t info;
 	ASSERT_EQ(0, m_image.stat(info, sizeof(info)));
-        lock_guard<mutex> locker(m_lock);
+        std::lock_guard<std::mutex> locker(m_lock);
         m_size = info.size;
 	m_cond.notify_one();
       }
       void wait_for_size(size_t size) {
-	unique_lock<mutex> locker(m_lock);
+	std::unique_lock<std::mutex> locker(m_lock);
 	ASSERT_TRUE(m_cond.wait_for(locker, seconds(5),
 				    [size, this] {
 				      return this->m_size == size;}));
       }
       librbd::Image &m_image;
-      mutex m_lock;
-      condition_variable m_cond;
+      std::mutex m_lock;
+      std::condition_variable m_cond;
       size_t m_size = 0;
     } watcher(image);
     uint64_t handle;
@@ -6755,11 +6756,11 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_FALSE(lock_owner);
 
   int owner_id = -1;
-  mutex lock;
+  std::mutex lock;
   const auto pingpong = [&](int m_id, rbd_image_t &m_image) {
       for (int i = 0; i < 10; i++) {
 	{
-	  lock_guard<mutex> locker(lock);
+	  std::lock_guard<std::mutex> locker(lock);
 	  if (owner_id == m_id) {
 	    std::cout << m_id << ": releasing exclusive lock" << std::endl;
 	    EXPECT_EQ(0, rbd_lock_release(m_image));
@@ -6787,13 +6788,13 @@ TEST_F(TestLibRBD, ExclusiveLock)
 	EXPECT_TRUE(lock_owner);
 	std::cout << m_id << ": exclusive lock acquired" << std::endl;
 	{
-	  lock_guard<mutex> locker(lock);
+	  std::lock_guard<std::mutex> locker(lock);
 	  owner_id = m_id;
 	}
 	usleep(rand() % 50000);
       }
 
-      lock_guard<mutex> locker(lock);
+      std::lock_guard<std::mutex> locker(lock);
       if (owner_id == m_id) {
 	EXPECT_EQ(0, rbd_lock_release(m_image));
 	int lock_owner;
@@ -8204,6 +8205,9 @@ TEST_F(TestLibRBD, QuiesceWatch)
     size_t quiesce_count = 0;
     size_t unquiesce_count = 0;
 
+    ceph::mutex lock = ceph::make_mutex("lock");
+    ceph::condition_variable cv;
+
     Watcher(rbd_image_t &image) : image(image) {
     }
 
@@ -8213,8 +8217,15 @@ TEST_F(TestLibRBD, QuiesceWatch)
       rbd_quiesce_complete(image, 0);
     }
     void handle_unquiesce() {
+      std::unique_lock locker(lock);
       unquiesce_count++;
       ASSERT_EQ(quiesce_count, unquiesce_count);
+      cv.notify_one();
+    }
+    bool wait_for_unquiesce(size_t c) {
+      std::unique_lock locker(lock);
+      return cv.wait_for(locker, seconds(60),
+                         [this, c]() { return unquiesce_count >= c; });
     }
   } watcher1(image1), watcher2(image2);
 
@@ -8225,15 +8236,15 @@ TEST_F(TestLibRBD, QuiesceWatch)
 
   ASSERT_EQ(0, rbd_snap_create(image1, "snap1"));
   ASSERT_EQ(1U, watcher1.quiesce_count);
-  ASSERT_EQ(1U, watcher1.unquiesce_count);
+  ASSERT_TRUE(watcher1.wait_for_unquiesce(1U));
   ASSERT_EQ(1U, watcher2.quiesce_count);
-  ASSERT_EQ(1U, watcher2.unquiesce_count);
+  ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
 
   ASSERT_EQ(0, rbd_snap_create(image2, "snap2"));
   ASSERT_EQ(2U, watcher1.quiesce_count);
-  ASSERT_EQ(2U, watcher1.unquiesce_count);
+  ASSERT_TRUE(watcher1.wait_for_unquiesce(2U));
   ASSERT_EQ(2U, watcher2.quiesce_count);
-  ASSERT_EQ(2U, watcher2.unquiesce_count);
+  ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
   ASSERT_EQ(0, rbd_quiesce_unwatch(image1, handle1));
 
@@ -8241,7 +8252,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
   ASSERT_EQ(2U, watcher1.quiesce_count);
   ASSERT_EQ(2U, watcher1.unquiesce_count);
   ASSERT_EQ(3U, watcher2.quiesce_count);
-  ASSERT_EQ(3U, watcher2.unquiesce_count);
+  ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
   ASSERT_EQ(0, rbd_quiesce_unwatch(image2, handle2));
 
@@ -8274,6 +8285,9 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
+      ceph::mutex lock = ceph::make_mutex("lock");
+      ceph::condition_variable cv;
+
       Watcher(librbd::Image &image) : image(image) {
       }
 
@@ -8283,8 +8297,15 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
         image.quiesce_complete(0);
       }
       void handle_unquiesce() override {
+        std::unique_lock locker(lock);
         unquiesce_count++;
         ASSERT_EQ(quiesce_count, unquiesce_count);
+        cv.notify_one();
+      }
+      bool wait_for_unquiesce(size_t c) {
+        std::unique_lock locker(lock);
+        return cv.wait_for(locker, seconds(60),
+                           [this, c]() { return unquiesce_count >= c; });
       }
     } watcher1(image1), watcher2(image2);
     uint64_t handle1, handle2;
@@ -8294,15 +8315,15 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
 
     ASSERT_EQ(0, image1.snap_create("snap1"));
     ASSERT_EQ(1U, watcher1.quiesce_count);
-    ASSERT_EQ(1U, watcher1.unquiesce_count);
+    ASSERT_TRUE(watcher1.wait_for_unquiesce(1U));
     ASSERT_EQ(1U, watcher2.quiesce_count);
-    ASSERT_EQ(1U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
 
     ASSERT_EQ(0, image2.snap_create("snap2"));
     ASSERT_EQ(2U, watcher1.quiesce_count);
-    ASSERT_EQ(2U, watcher1.unquiesce_count);
+    ASSERT_TRUE(watcher1.wait_for_unquiesce(2U));
     ASSERT_EQ(2U, watcher2.quiesce_count);
-    ASSERT_EQ(2U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
     ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
 
@@ -8310,7 +8331,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
     ASSERT_EQ(2U, watcher1.quiesce_count);
     ASSERT_EQ(2U, watcher1.unquiesce_count);
     ASSERT_EQ(3U, watcher2.quiesce_count);
-    ASSERT_EQ(3U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
     ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
 
@@ -8344,6 +8365,9 @@ TEST_F(TestLibRBD, QuiesceWatchError)
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
+      ceph::mutex lock = ceph::make_mutex("lock");
+      ceph::condition_variable cv;
+
       Watcher(librbd::Image &image, int r) : image(image), r(r) {
       }
 
@@ -8353,7 +8377,15 @@ TEST_F(TestLibRBD, QuiesceWatchError)
       }
 
       void handle_unquiesce() override {
+        std::unique_lock locker(lock);
         unquiesce_count++;
+        cv.notify_one();
+      }
+
+      bool wait_for_unquiesce(size_t c) {
+        std::unique_lock locker(lock);
+        return cv.wait_for(locker, seconds(60),
+                           [this, c]() { return unquiesce_count >= c; });
       }
     } watcher1(image1, -EINVAL), watcher2(image2, 0);
     uint64_t handle1, handle2;
@@ -8365,7 +8397,7 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_LT(0U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
     ASSERT_EQ(1U, watcher2.quiesce_count);
-    ASSERT_EQ(1U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
 
     PrintProgress prog_ctx;
     watcher1.quiesce_count = 0;
@@ -8375,13 +8407,13 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_LT(0U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
     ASSERT_EQ(2U, watcher2.quiesce_count);
-    ASSERT_EQ(2U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
     ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
 
     ASSERT_EQ(0, image1.snap_create("snap3"));
     ASSERT_EQ(3U, watcher2.quiesce_count);
-    ASSERT_EQ(3U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
     ASSERT_EQ(0, image2.snap_create2("snap4", RBD_SNAP_CREATE_SKIP_QUIESCE,
                                      prog_ctx));
@@ -8419,8 +8451,8 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     struct Watcher : public librbd::QuiesceWatchCtx {
       librbd::Image &image;
-      mutex m_lock;
-      condition_variable m_cond;
+      std::mutex m_lock;
+      std::condition_variable m_cond;
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
@@ -8428,19 +8460,19 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
       }
 
       void handle_quiesce() override {
-        lock_guard<mutex> locker(m_lock);
+        std::lock_guard<std::mutex> locker(m_lock);
         quiesce_count++;
         m_cond.notify_one();
       }
 
       void handle_unquiesce() override {
-        lock_guard<mutex> locker(m_lock);
+        std::lock_guard<std::mutex> locker(m_lock);
         unquiesce_count++;
         m_cond.notify_one();
       }
 
       void wait_for_quiesce_count(size_t count) {
-        unique_lock<mutex> locker(m_lock);
+        std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
                                     [this, count] {
                                       return this->quiesce_count == count;
@@ -8448,7 +8480,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
       }
 
       void wait_for_unquiesce_count(size_t count) {
-        unique_lock<mutex> locker(m_lock);
+        std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
                                     [this, count] {
                                       return this->unquiesce_count == count;

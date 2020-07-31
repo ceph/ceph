@@ -992,6 +992,8 @@ void ImageState<I>::notify_unquiesce(Context *on_finish) {
 
 template <typename I>
 void ImageState<I>::quiesce_complete(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << __func__ << ": r=" << r << dendl;
   m_quiesce_watchers->quiesce_complete(r);
 }
 
