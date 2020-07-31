@@ -100,3 +100,7 @@
 * Alpine build related script, documentation and test have been removed since
   the most updated APKBUILD script of Ceph is already included by Alpine Linux's
   aports repository.
+
+* fs: Names of new FSs, volumes, subvolumes and subvolume groups can only
+  contain alphanumeric and ``-``, ``_`` and ``.`` characters. Some commands
+  or CephX credentials may not work with old FSs with non-conformant names.
