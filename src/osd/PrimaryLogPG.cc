@@ -5786,6 +5786,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
+    case CEPH_OSD_OP_SET_CHUNK:
     case CEPH_OSD_OP_TIER_PROMOTE:
     case CEPH_OSD_OP_TIER_FLUSH:
       break;
@@ -6123,7 +6124,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result >= 0) {
 	  // mark that this is a cache eviction to avoid triggering normal
 	  // make_writeable() clone creation in finish_ctx()
-	  ctx->cache_evict = true;
+	  ctx->cache_operation = true;
 	}
 	osd->logger->inc(l_osd_tier_evict);
       }
@@ -6983,10 +6984,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EOPNOTSUPP;
 	  break;
 	}
-	if (ctx->snapc.snaps.size() || 
-	    (ctx->obc->ssc && ctx->obc->ssc->snapset.clones.size()) ) {
-	  result = -EOPNOTSUPP;
-	  break;
+	if (oi.manifest.is_redirect()) {
+	  result = -EINVAL;
+	  goto fail;
 	}
 
 	object_locator_t tgt_oloc;
@@ -7067,6 +7067,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_HAS_FINGERPRINT);
 	  }
 	  ctx->modify = true;
+	  ctx->cache_operation = true;
 
 	  dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
 		   << " chunk_info: " << chunk_info << dendl;
@@ -8224,7 +8225,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
-      !ctx->cache_evict &&
+      !ctx->cache_operation &&
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
     // clone
     hobject_t coid = soid;
