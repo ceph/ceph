@@ -8,7 +8,6 @@ usr/share/ceph/mgr/iostat
 usr/share/ceph/mgr/localpool
 usr/share/ceph/mgr/orchestrator
 usr/share/ceph/mgr/osd_perf_query
-usr/share/ceph/mgr/osd_support
 usr/share/ceph/mgr/pg_autoscaler
 usr/share/ceph/mgr/progress
 usr/share/ceph/mgr/prometheus

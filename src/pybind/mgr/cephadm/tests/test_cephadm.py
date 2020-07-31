@@ -6,7 +6,7 @@ from unittest.mock import ANY
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from cephadm.services.osd import OSDRemoval
+from cephadm.services.osd import OSD, OSDQueue
 
 try:
     from typing import Any, List
@@ -362,6 +362,7 @@ class TestCephadm(object):
             )
         ])
     ))
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
     @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
     def test_remove_osds(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
@@ -372,14 +373,20 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
 
-            osd_removal_op = OSDRemoval(0, False, False, 'test', 'osd.0', datetime.datetime.utcnow(), -1)
-            cephadm_module.rm_util.queue_osds_for_removal({osd_removal_op})
-            cephadm_module.rm_util._remove_osds_bg()
-            assert cephadm_module.rm_util.to_remove_osds == set()
+            cephadm_module.to_remove_osds.enqueue(OSD(osd_id=0,
+                                                      replace=False,
+                                                      force=False,
+                                                      hostname='test',
+                                                      fullname='osd.0',
+                                                      process_started_at=datetime.datetime.utcnow(),
+                                                      remove_util=cephadm_module.rm_util
+                                                      ))
+            cephadm_module.rm_util.process_removal_queue()
+            assert cephadm_module.to_remove_osds == OSDQueue()
 
             c = cephadm_module.remove_osds_status()
             out = wait(cephadm_module, c)
-            assert out == set()
+            assert out == []
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _,__,___: None)
