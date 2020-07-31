@@ -3339,7 +3339,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_target_pg_log_entries_per_osd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(3000 * 100)
-    .set_description("target number of PG entries total on an OSD")
+    .set_description("target number of PG entries total on an OSD - limited per pg by the min and max options below")
     .add_see_also("osd_max_pg_log_entries")
     .add_see_also("osd_min_pg_log_entries"),
 
@@ -3348,14 +3348,16 @@ std::vector<Option> get_global_options() {
     .set_description("minimum number of entries to maintain in the PG log")
     .add_service("osd")
     .add_see_also("osd_max_pg_log_entries")
-    .add_see_also("osd_pg_log_dups_tracked"),
+    .add_see_also("osd_pg_log_dups_tracked")
+    .add_see_also("osd_target_pg_log_entries_per_osd"),
 
     Option("osd_max_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(10000)
-    .set_description("maximum number of entries to maintain in the PG log when degraded before we trim")
+    .set_description("maximum number of entries to maintain in the PG log")
     .add_service("osd")
     .add_see_also("osd_min_pg_log_entries")
-    .add_see_also("osd_pg_log_dups_tracked"),
+    .add_see_also("osd_pg_log_dups_tracked")
+    .add_see_also("osd_target_pg_log_entries_per_osd"),
 
     Option("osd_pg_log_dups_tracked", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(3000)
