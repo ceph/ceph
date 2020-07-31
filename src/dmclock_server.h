@@ -1757,14 +1757,17 @@ namespace crimson {
 	std::unique_lock<std::mutex> l(sched_ahead_mtx);
 
 	while (!this->finishing) {
+	  // predicate for cond.wait()
+	  const auto pred = [this] () -> bool { return this->finishing; };
+
 	  if (TimeZero == sched_ahead_when) {
-	    sched_ahead_cv.wait(l);
+	    sched_ahead_cv.wait(l, pred);
 	  } else {
 	    Time now;
 	    while (!this->finishing && (now = get_time()) < sched_ahead_when) {
 	      long microseconds_l = long(1 + 1000000 * (sched_ahead_when - now));
 	      auto microseconds = std::chrono::microseconds(microseconds_l);
-	      sched_ahead_cv.wait_for(l, microseconds);
+	      sched_ahead_cv.wait_for(l, microseconds, pred);
 	    }
 	    sched_ahead_when = TimeZero;
 	    if (this->finishing) return;
