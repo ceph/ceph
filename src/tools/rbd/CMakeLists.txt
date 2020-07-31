@@ -1,5 +1,6 @@
 set(CURSES_NEED_NCURSES TRUE)
-find_package(Curses REQUIRED)
+# libcurses may not be available on some platforms (e.g. Windows).
+find_package(Curses)
 
 set(rbd_srcs
   rbd.cc
@@ -61,8 +62,12 @@ target_link_libraries(rbd librbd
   journal
   libneorados
   librados
-  ceph-common global ${CURSES_LIBRARIES}
+  ceph-common global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(CURSES_FOUND)
+  target_compile_definitions(rbd PRIVATE HAVE_CURSES)
+  target_link_libraries(rbd ${CURSES_LIBRARIES})
+endif()
 if(WITH_KRBD)
   target_link_libraries(rbd 
     krbd)
