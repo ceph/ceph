@@ -62,7 +62,8 @@ public:
     m_object_cache_store = new ObjectCacheStore(m_ceph_context);
   }
 
-  void init_object_cache_store(std::string pool_name, std::string vol_name, uint64_t vol_size, bool reset) {
+  void init_object_cache_store(std::string pool_name, std::string vol_name,
+                              uint64_t vol_size, bool reset) {
     ASSERT_EQ(0, m_object_cache_store->init(reset));
     ASSERT_EQ(0, m_object_cache_store->init_cache());
   }
@@ -71,10 +72,11 @@ public:
     ASSERT_EQ(0, m_object_cache_store->shutdown());
   }
 
-  void lookup_object_cache_store(std::string pool_name, std::string vol_name, std::string obj_name, int& ret) {
+  void lookup_object_cache_store(std::string pool_name, std::string vol_name,
+                                std::string obj_name, int& ret) {
     std::string cache_path;
-    ret = m_object_cache_store->lookup_object(pool_name, 1, 2, obj_name, true,
-                                              cache_path);
+    ret = m_object_cache_store->lookup_object(pool_name, 1, 2, 3,
+                                            obj_name, true, cache_path);
   }
 
   void TearDown() override {

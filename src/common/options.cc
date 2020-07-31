@@ -49,6 +49,9 @@ public:
   void operator()(const std::chrono::seconds v) const {
     out << v.count();
   }
+  void operator()(const std::chrono::milliseconds v) const {
+    out << v.count();
+  }
 };
 }
 
@@ -200,6 +203,13 @@ int Option::parse_value(
     try {
       *out = parse_timespan(val);
     } catch (const std::invalid_argument& e) {
+      *error_message = e.what();
+      return -EINVAL;
+    }
+  } else if (type == Option::TYPE_MILLISECS) {
+    try {
+      *out = boost::lexical_cast<uint64_t>(val);
+    } catch (const boost::bad_lexical_cast& e) {
       *error_message = e.what();
       return -EINVAL;
     }
@@ -7886,6 +7896,37 @@ static std::vector<Option> get_immutable_object_cache_options() {
     Option("immutable_object_cache_watermark", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.1)
     .set_description("immutable object cache water mark"),
+
+    Option("immutable_object_cache_qos_schedule_tick_min", Option::TYPE_MILLISECS, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_min(1)
+    .set_description("minimum schedule tick for immutable object cache"),
+
+    Option("immutable_object_cache_qos_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired immutable object cache IO operations limit per second"),
+
+    Option("immutable_object_cache_qos_iops_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of immutable object cache IO operations"),
+
+    Option("immutable_object_cache_qos_iops_burst_seconds", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of immutable object cache IO operations"),
+
+    Option("immutable_object_cache_qos_bps_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired immutable object cache IO bytes limit per second"),
+
+    Option("immutable_object_cache_qos_bps_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of immutable object cache IO bytes"),
+
+    Option("immutable_object_cache_qos_bps_burst_seconds", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of immutable object cache IO bytes"),
   });
 }
 
