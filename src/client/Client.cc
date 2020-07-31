@@ -6717,11 +6717,11 @@ int Client::path_walk(const filepath& origpath, InodeRef *end,
 
 int Client::link(const char *relexisting, const char *relpath, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "link" << std::endl;
   tout(cct) << relexisting << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -6760,9 +6760,10 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
 
 int Client::unlink(const char *relpath, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
+
+  std::scoped_lock lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -6787,11 +6788,11 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
 
 int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relfrom << std::endl;
   tout(cct) << relto << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -6830,12 +6831,12 @@ out:
 
 int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << __func__ << ": " << relpath << dendl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -6859,12 +6860,12 @@ int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
 
 int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 10) << "Client::mkdirs " << relpath << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -6914,10 +6915,10 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 
 int Client::rmdir(const char *relpath, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -6940,13 +6941,13 @@ int Client::rmdir(const char *relpath, const UserPerm& perms)
 }
 
 int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t rdev) 
-{ 
-  std::lock_guard lock(client_lock);
+{
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -6972,11 +6973,11 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   
 int Client::symlink(const char *target, const char *relpath, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << target << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7000,10 +7001,10 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
 
 int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7306,11 +7307,11 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 int Client::setattr(const char *relpath, struct stat *attr, int mask,
 		    const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7325,11 +7326,11 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask,
 int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 		     const UserPerm& perms, int flags)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7343,11 +7344,11 @@ int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 
 int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7363,11 +7364,11 @@ int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
 
 int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7385,10 +7386,10 @@ int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
 		 frag_info_t *dirstat, int mask)
 {
   ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " mask " << mask << ")" << dendl;
-  std::lock_guard lock(client_lock);
   tout(cct) << "stat" << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7434,10 +7435,10 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 		  unsigned int want, unsigned int flags)
 {
   ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " want " << want << ")" << dendl;
-  std::lock_guard lock(client_lock);
   tout(cct) << "statx" << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7465,10 +7466,10 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 		  const UserPerm& perms, frag_info_t *dirstat, int mask)
 {
   ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " mask " << mask << ")" << dendl;
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7640,11 +7641,11 @@ void Client::touch_dn(Dentry *dn)
 
 int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7660,11 +7661,11 @@ int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 
 int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mode << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7682,11 +7683,11 @@ int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 
 int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7704,12 +7705,12 @@ int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
 int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		  const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7726,12 +7727,12 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7754,12 +7755,12 @@ int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
 int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		   const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7829,7 +7830,6 @@ int Client::futime(int fd, struct utimbuf *buf, const UserPerm& perms)
 int Client::utimes(const char *relpath, struct timeval times[2],
                    const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_usec
@@ -7837,6 +7837,7 @@ int Client::utimes(const char *relpath, struct timeval times[2],
   tout(cct) << "mtime: " << times[1].tv_sec << "." << times[1].tv_usec
             << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7856,7 +7857,6 @@ int Client::utimes(const char *relpath, struct timeval times[2],
 int Client::lutimes(const char *relpath, struct timeval times[2],
                     const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_usec
@@ -7864,6 +7864,7 @@ int Client::lutimes(const char *relpath, struct timeval times[2],
   tout(cct) << "mtime: " << times[1].tv_sec << "." << times[1].tv_usec
             << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7893,7 +7894,6 @@ int Client::futimes(int fd, struct timeval times[2], const UserPerm& perms)
 
 int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_nsec
@@ -7901,6 +7901,7 @@ int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
   tout(cct) << "mtime: " << times[1].tv_sec << "." << times[1].tv_nsec
             << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7921,12 +7922,12 @@ int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
 
 int Client::flock(int fd, int operation, uint64_t owner)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << operation << std::endl;
   tout(cct) << owner << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7939,10 +7940,10 @@ int Client::flock(int fd, int operation, uint64_t owner)
 
 int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -7976,11 +7977,11 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
 
 int Client::closedir(dir_result_t *dir) 
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << (unsigned long)dir << std::endl;
 
   ldout(cct, 3) << __func__ << "(" << dir << ") = 0" << dendl;
+  std::scoped_lock lock(client_lock);
   _closedir(dir);
   return 0;
 }
@@ -7988,6 +7989,7 @@ int Client::closedir(dir_result_t *dir)
 void Client::_closedir(dir_result_t *dirp)
 {
   ldout(cct, 10) << __func__ << "(" << dirp << ")" << dendl;
+
   if (dirp->inode) {
     ldout(cct, 10) << __func__ << " detaching inode " << dirp->inode << dendl;
     dirp->inode.reset();
@@ -8627,11 +8629,8 @@ int Client::getdir(const char *relpath, list<string>& contents,
 		   const UserPerm& perms)
 {
   ldout(cct, 3) << "getdir(" << relpath << ")" << dendl;
-  {
-    std::lock_guard lock(client_lock);
-    tout(cct) << "getdir" << std::endl;
-    tout(cct) << relpath << std::endl;
-  }
+  tout(cct) << "getdir" << std::endl;
+  tout(cct) << relpath << std::endl;
 
   dir_result_t *d;
   int r = opendir(relpath, &d, perms);
@@ -8657,11 +8656,11 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
 		 int object_size, const char *data_pool)
 {
   ldout(cct, 3) << "open enter(" << relpath << ", " << ceph_flags_sys2wire(flags) << "," << mode << ")" << dendl;
-  std::lock_guard lock(client_lock);
   tout(cct) << "open" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -9060,10 +9059,10 @@ int Client::_renew_caps(Inode *in)
 int Client::close(int fd)
 {
   ldout(cct, 3) << "close enter(" << fd << ")" << dendl;
-  std::lock_guard lock(client_lock);
   tout(cct) << "close" << std::endl;
   tout(cct) << fd << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -9083,12 +9082,12 @@ int Client::close(int fd)
 
 loff_t Client::lseek(int fd, loff_t offset, int whence)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "lseek" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -9255,12 +9254,12 @@ int Client::uninline_data(Inode *in, Context *onfinish)
 
 int Client::read(int fd, char *buf, loff_t size, loff_t offset)
 {
-  std::unique_lock lock(client_lock);
   tout(cct) << "read" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << size << std::endl;
   tout(cct) << offset << std::endl;
 
+  std::unique_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -9583,12 +9582,12 @@ void Client::_sync_write_commit(Inode *in)
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "write" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << size << std::endl;
   tout(cct) << offset << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -9662,10 +9661,10 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
 
 int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
 {
-    std::lock_guard lock(client_lock);
     tout(cct) << fd << std::endl;
     tout(cct) << offset << std::endl;
 
+    std::scoped_lock lock(client_lock);
     if (unmounting)
      return -ENOTCONN;
 
@@ -9931,11 +9930,11 @@ int Client::truncate(const char *relpath, loff_t length, const UserPerm& perms)
 
 int Client::ftruncate(int fd, loff_t length, const UserPerm& perms) 
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << length << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -9953,11 +9952,11 @@ int Client::ftruncate(int fd, loff_t length, const UserPerm& perms)
 
 int Client::fsync(int fd, bool syncdataonly) 
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "fsync" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << syncdataonly << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -10062,10 +10061,10 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
 int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "fstat mask " << hex << mask << dec << std::endl;
   tout(cct) << fd << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -10083,10 +10082,10 @@ int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
 int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
 		   unsigned int want, unsigned int flags)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "fstatx flags " << hex << flags << " want " << want << dec << std::endl;
   tout(cct) << fd << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -10115,10 +10114,10 @@ int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
 int Client::chdir(const char *relpath, std::string &new_cwd,
 		  const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "chdir" << std::endl;
   tout(cct) << relpath << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -10189,10 +10188,10 @@ void Client::getcwd(string& dir, const UserPerm& perms)
 int Client::statfs(const char *path, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
-  std::lock_guard l(client_lock);
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -10748,10 +10747,10 @@ int Client::lazyio(int fd, int enable)
 
 int Client::ll_lazyio(Fh *fh, int enable)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << !!enable << dendl;
   tout(cct) << __func__ << std::endl;
 
+  std::scoped_lock lock(client_lock);
   return _lazyio(fh, enable);
 }
 
@@ -10909,12 +10908,12 @@ Inode *Client::open_snapdir(Inode *diri)
 int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		      Inode **out, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   vinodeno_t vparent = _get_vino(parent);
   ldout(cct, 3) << __func__ << " " << vparent << " " << name << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << name << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -11004,12 +11003,12 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 		       struct ceph_statx *stx, unsigned want, unsigned flags,
 		       const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
   vinodeno_t vparent = _get_vino(parent);
   ldout(cct, 3) << __func__ << " " << vparent << " " << name << dendl;
   tout(cct) << "ll_lookupx" << std::endl;
   tout(cct) << name << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -11044,11 +11043,6 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
 		    unsigned int want, unsigned int flags, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   filepath fp(name, 0);
   InodeRef in;
   int rc;
@@ -11057,6 +11051,10 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   ldout(cct, 3) << __func__ << " " << name << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << name << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   rc = path_walk(fp, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask);
   if (rc < 0) {
@@ -11597,17 +11595,16 @@ int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
 int Client::ll_getxattr(Inode *in, const char *name, void *value,
 			size_t size, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = xattr_permission(in, name, MAY_READ, perms);
@@ -11651,17 +11648,16 @@ out:
 int Client::ll_listxattr(Inode *in, char *names, size_t size,
 			 const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << __func__ << " " << vino << " size " << size << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << size << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   return _listxattr(in, names, size, perms);
 }
@@ -11856,17 +11852,16 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 {
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = xattr_permission(in, name, MAY_WRITE, perms);
@@ -11920,17 +11915,16 @@ int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 
 int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_removexattr " << vino << " " << name << dendl;
   tout(cct) << "ll_removexattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = xattr_permission(in, name, MAY_WRITE, perms);
@@ -12201,16 +12195,15 @@ const Client::VXattr *Client::_match_vxattr(Inode *in, const char *name)
 
 int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_readlink " << vino << dendl;
   tout(cct) << "ll_readlink" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   for (auto dn : in->dentries) {
     touch_dn(dn);
@@ -12279,11 +12272,6 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
 		     dev_t rdev, struct stat *attr, Inode **out,
 		     const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_mknod " << vparent << " " << name << dendl;
@@ -12292,6 +12280,10 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
@@ -12318,11 +12310,6 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
 		      const UserPerm& perms)
 {
   unsigned caps = statx_to_mask(flags, want);
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_mknodx " << vparent << " " << name << dendl;
@@ -12331,6 +12318,10 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
@@ -12506,11 +12497,6 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
 int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
 		     struct stat *attr, Inode **out, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_mkdir " << vparent << " " << name << dendl;
@@ -12518,6 +12504,10 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_create(parent, perm);
@@ -12542,11 +12532,6 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
 		      struct ceph_statx *stx, unsigned want, unsigned flags,
 		      const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_mkdirx " << vparent << " " << name << dendl;
@@ -12554,6 +12539,10 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
@@ -12626,11 +12615,6 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
 int Client::ll_symlink(Inode *parent, const char *name, const char *value,
 		       struct stat *attr, Inode **out, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_symlink " << vparent << " " << name << " -> " << value
@@ -12639,6 +12623,10 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << value << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
@@ -12663,11 +12651,6 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
 			Inode **out, struct ceph_statx *stx, unsigned want,
 			unsigned flags, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_symlinkx " << vparent << " " << name << " -> " << value
@@ -12676,6 +12659,10 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << value << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_create(parent, perms);
@@ -12748,17 +12735,16 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 
 int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_unlink " << vino << " " << name << dendl;
   tout(cct) << "ll_unlink" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_delete(in, name, perm);
@@ -12823,17 +12809,16 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 
 int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_rmdir " << vino << " " << name << dendl;
   tout(cct) << "ll_rmdir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_delete(in, name, perms);
@@ -13003,11 +12988,6 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
 		      const char *newname, const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vparent = _get_vino(parent);
   vinodeno_t vnewparent = _get_vino(newparent);
 
@@ -13018,6 +12998,10 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   tout(cct) << name << std::endl;
   tout(cct) << vnewparent.ino.val << std::endl;
   tout(cct) << newname << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_delete(parent, name, perm);
@@ -13079,11 +13063,6 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
 int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 		    const UserPerm& perm)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
   vinodeno_t vnewparent = _get_vino(newparent);
 
@@ -13093,6 +13072,10 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << vnewparent << std::endl;
   tout(cct) << newname << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   InodeRef target;
 
@@ -13214,16 +13197,15 @@ uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
 int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
 		       const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_opendir " << vino << dendl;
   tout(cct) << "ll_opendir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (!fuse_default_permissions) {
     int r = may_open(in, flags, perms);
@@ -13241,11 +13223,11 @@ int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
 
 int Client::ll_releasedir(dir_result_t *dirp)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_releasedir " << dirp << dendl;
   tout(cct) << "ll_releasedir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13255,11 +13237,11 @@ int Client::ll_releasedir(dir_result_t *dirp)
 
 int Client::ll_fsyncdir(dir_result_t *dirp)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_fsyncdir " << dirp << dendl;
   tout(cct) << "ll_fsyncdir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13270,17 +13252,16 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
 {
   ceph_assert(!(flags & O_CREAT));
 
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) << dendl;
   tout(cct) << "ll_open" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   int r;
   if (!fuse_default_permissions) {
@@ -13444,11 +13425,11 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
 
 loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << "ll_lseek" << std::endl;
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13457,13 +13438,13 @@ loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
   tout(cct) << "ll_read" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13601,7 +13582,6 @@ int Client::ll_commit_blocks(Inode *in,
 
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_write " << fh << " " << fh->inode->ino << " " << off <<
     "~" << len << dendl;
   tout(cct) << "ll_write" << std::endl;
@@ -13609,6 +13589,7 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13638,11 +13619,11 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
 
 int Client::ll_flush(Fh *fh)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_flush " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_flush" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13651,11 +13632,11 @@ int Client::ll_flush(Fh *fh)
 
 int Client::ll_fsync(Fh *fh, bool syncdataonly)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_fsync " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_fsync" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13669,11 +13650,11 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
 
 int Client::ll_sync_inode(Inode *in, bool syncdataonly)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_sync_inode " << *in << " " << dendl;
   tout(cct) << "ll_sync_inode" << std::endl;
   tout(cct) << (unsigned long)in << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13814,11 +13795,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
 int Client::ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
-  std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << __func__ << " " << mode << " " << offset << " " << length << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13827,9 +13808,9 @@ int Client::ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
 int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 {
-  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << " " << " " << fd << mode << " " << offset << " " << length << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13845,15 +13826,14 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 
 int Client::ll_release(Fh *fh)
 {
-  std::lock_guard lock(client_lock);
-
-  if (unmounting)
-    return -ENOTCONN;
-
   ldout(cct, 3) << __func__ << " (fh)" << fh << " " << fh->inode->ino << " " <<
     dendl;
   tout(cct) << __func__ << " (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  if (unmounting)
+    return -ENOTCONN;
 
   if (ll_unclosed_fh_set.count(fh))
     ll_unclosed_fh_set.erase(fh);
@@ -13862,11 +13842,10 @@ int Client::ll_release(Fh *fh)
 
 int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
 {
-  std::lock_guard lock(client_lock);
-
   ldout(cct, 3) << "ll_getlk (fh)" << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_getk (fh)" << (unsigned long)fh << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13875,11 +13854,10 @@ int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
 
 int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 {
-  std::lock_guard lock(client_lock);
-
   ldout(cct, 3) << __func__ << "  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << __func__ << " (fh)" << (unsigned long)fh << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
@@ -13888,11 +13866,10 @@ int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 
 int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 {
-  std::lock_guard lock(client_lock);
-
   ldout(cct, 3) << __func__ << "  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << __func__ << " (fh)" << (unsigned long)fh << std::endl;
 
+  std::scoped_lock lock(client_lock);
   if (unmounting)
     return -ENOTCONN;
 
