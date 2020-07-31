@@ -1,6 +1,5 @@
 set(kv_srcs
   KeyValueDB.cc
-  MemDB.cc
   RocksDBStore.cc
   rocksdb_cache/ShardedCache.cc
   rocksdb_cache/BinnedLRUCache.cc)

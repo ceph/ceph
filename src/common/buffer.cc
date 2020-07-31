@@ -83,15 +83,9 @@ static ceph::spinlock debug_lock;
    * raw_combined at the end.
    */
   class buffer::raw_combined : public buffer::raw {
-    size_t alignment;
   public:
-    raw_combined(char *dataptr, unsigned l, unsigned align,
-		 int mempool)
-      : raw(dataptr, l, mempool),
-	alignment(align) {
-    }
-    raw* clone_empty() override {
-      return create(len, alignment).release();
+    raw_combined(char *dataptr, unsigned l, int mempool)
+      : raw(dataptr, l, mempool) {
     }
 
     static ceph::unique_leakable_ptr<buffer::raw>
@@ -119,7 +113,7 @@ static ceph::spinlock debug_lock;
       // actual data first, since it has presumably larger alignment restriction
       // then put the raw_combined at the end
       return ceph::unique_leakable_ptr<buffer::raw>(
-	new (ptr + datalen) raw_combined(ptr, len, align, mempool));
+	new (ptr + datalen) raw_combined(ptr, len, mempool));
     }
 
     static void operator delete(void *ptr) {
@@ -149,19 +143,14 @@ static ceph::spinlock debug_lock;
       free(data);
       bdout << "raw_malloc " << this << " free " << (void *)data << " " << bendl;
     }
-    raw* clone_empty() override {
-      return new raw_malloc(len);
-    }
   };
 
 #ifndef __CYGWIN__
   class buffer::raw_posix_aligned : public buffer::raw {
-    unsigned align;
   public:
     MEMPOOL_CLASS_HELPERS();
 
-    raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
+    raw_posix_aligned(unsigned l, unsigned align) : raw(l) {
       ceph_assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
 #ifdef DARWIN
       data = (char *) valloc(len);
@@ -179,19 +168,14 @@ static ceph::spinlock debug_lock;
       ::free(data);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << bendl;
     }
-    raw* clone_empty() override {
-      return new raw_posix_aligned(len, align);
-    }
   };
 #endif
 
 #ifdef __CYGWIN__
   class buffer::raw_hack_aligned : public buffer::raw {
-    unsigned align;
     char *realdata;
   public:
-    raw_hack_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
+    raw_hack_aligned(unsigned l, unsigned align) : raw(l) {
       realdata = new char[len+align-1];
       unsigned off = ((uintptr_t)realdata) & (align-1);
       if (off)
@@ -205,9 +189,6 @@ static ceph::spinlock debug_lock;
     }
     ~raw_hack_aligned() {
       delete[] realdata;
-    }
-    raw* clone_empty() {
-      return new raw_hack_aligned(len, align);
     }
   };
 #endif
@@ -233,9 +214,6 @@ static ceph::spinlock debug_lock;
       delete[] data;
       bdout << "raw_char " << this << " free " << (void *)data << bendl;
     }
-    raw* clone_empty() override {
-      return new raw_char(len);
-    }
   };
 
   class buffer::raw_claimed_char : public buffer::raw {
@@ -250,9 +228,6 @@ static ceph::spinlock debug_lock;
       bdout << "raw_claimed_char " << this << " free " << (void *)data
 	    << bendl;
     }
-    raw* clone_empty() override {
-      return new raw_char(len);
-    }
   };
 
   class buffer::raw_static : public buffer::raw {
@@ -261,9 +236,6 @@ static ceph::spinlock debug_lock;
 
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
     ~raw_static() override {}
-    raw* clone_empty() override {
-      return new buffer::raw_char(len);
-    }
   };
 
   class buffer::raw_claim_buffer : public buffer::raw {
@@ -272,9 +244,6 @@ static ceph::spinlock debug_lock;
     raw_claim_buffer(const char *b, unsigned l, deleter d)
         : raw((char*)b, l), del(std::move(d)) { }
     ~raw_claim_buffer() override {}
-    raw* clone_empty() override {
-      return new buffer::raw_char(len);
-    }
   };
 
   ceph::unique_leakable_ptr<buffer::raw> buffer::copy(const char *c, unsigned len) {
@@ -435,11 +404,6 @@ static ceph::spinlock debug_lock;
       _off = _len = 0;
     }
     return *this;
-  }
-
-  ceph::unique_leakable_ptr<buffer::raw> buffer::ptr::clone()
-  {
-    return _raw->clone();
   }
 
   void buffer::ptr::swap(ptr& other) noexcept
