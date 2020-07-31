@@ -2473,11 +2473,16 @@ def command_inspect_image():
 
 ##################################
 
+def unwrap_ipv6(address):
+    # type: (str) -> str
+    if address.startswith('[') and address.endswith(']'):
+        return address[1:-1]
+    return address
+
 
 def is_ipv6(address):
     # type: (str) -> bool
-    if address.startswith('[') and address.endswith(']'):
-        address = address[1:-1]
+    address = unwrap_ipv6(address)
     try:
         return ipaddress.ip_address(unicode(address)).version == 6
     except ValueError:
@@ -2527,7 +2532,7 @@ def command_bootstrap():
 
     # ip
     r = re.compile(r':(\d+)$')
-    base_ip = None
+    base_ip = ''
     if args.mon_ip:
         ipv6 = is_ipv6(args.mon_ip)
         hasport = r.findall(args.mon_ip)
@@ -2573,7 +2578,7 @@ def command_bootstrap():
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks().items():
-            if ipaddress.ip_address(unicode(base_ip)) in \
+            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
                     [ipaddress.ip_address(unicode(ip)) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
