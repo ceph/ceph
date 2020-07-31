@@ -30,6 +30,23 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
 
+Notification Reliability
+------------------------
+
+Notifications may be sent synchronously, as part of the operation that triggered them. 
+In this mode, the operation is acked only after the notification is sent to the topic's configured endpoint, which means that the
+round trip time of the notification is added to the latency of the operation itself.
+
+.. note:: The original triggering operation will still be considered as sucessful even if the notification fail with an error, cannot be deliverd or times out
+
+Notifications may also be sent asynchronously. They will be committed into persistent storage and then asynchronously sent to the topic's configured endpoint.
+In this case, the only latency added to the original operation is of committing the notification to persistent storage.
+
+.. note:: If the notification fail with an error, cannot be deliverd or times out, it will be retried until successfully acked
+
+.. tip:: To minimize the added latency in case of asynchronous notifications, it is recommended to place the "log" pool on fast media
+
+
 Topic Management via CLI
 ------------------------
 
@@ -103,11 +120,13 @@ To update a topic, use the same command used for topic creation, with the topic 
    [&Attributes.entry.6.key=ca-location&Attributes.entry.6.value=<file path>]
    [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
+   [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
 - OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
+- persistent: indication whether notifications to this endpoint are persistent (=asynchronous) or not ("false" by default)
 
 - HTTP endpoint 
 
@@ -206,9 +225,9 @@ Response will have the following format:
 
 - User: name of the user that created the topic
 - Name: name of the topic
-- EndPoinjtAddress: the push-endpoint URL
+- EndpointAddress: the push-endpoint URL
 - if endpoint URL contain user/password information, request must be made over HTTPS. Topic get request will be rejected if not 
-- EndPointArgs: the push-endpoint args
+- EndpointArgs: the push-endpoint args
 - EndpointTopic: the topic name that should be sent to the endpoint (mat be different than the above topic name)
 - TopicArn: topic ARN
 
