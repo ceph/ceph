@@ -442,6 +442,11 @@ RGWCoroutine *SIProviderCRMgr_REST::get_cur_state_cr(const SIProvider::stage_id_
                                                   nullptr, marker);
 }
 
+SIProvider::TypeHandler *SIProviderCRMgr_REST::get_type_handler()
+{
+  return type_provider->get_type_handler();
+}
+
 class SIPClientCRMgr
 {
   friend class InitMarkersCR;

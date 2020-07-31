@@ -488,27 +488,33 @@ struct sip_data_list_result {
   vector<entry> entries;
 };
 
-class RGWDataSyncInfoCRHandler {
-protected:
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
-
+template <class T>
+class RGWSyncInfoCRHandler {
 public:
-
-  RGWDataSyncInfoCRHandler(RGWDataSyncCtx *_sc) : sc(_sc),
-                                                  sync_env(_sc->env) {}
-
-  virtual ~RGWDataSyncInfoCRHandler() {}
+  virtual ~RGWSyncInfoCRHandler() {}
 
   virtual string get_sip_name() const = 0;
-  virtual int validate_sync_marker(rgw_data_sync_marker& marker) const = 0;
 
   virtual RGWCoroutine *init_cr() = 0;
 
   virtual RGWCoroutine *get_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) = 0;
   virtual RGWCoroutine *fetch_cr(int shard_id,
                                  const string& marker,
-                                 sip_data_list_result *result) = 0;
+                                 T *result) = 0;
+};
+
+class RGWDataSyncInfoCRHandler : virtual public RGWSyncInfoCRHandler<sip_data_list_result> {
+protected:
+  RGWDataSyncCtx *sc;
+  RGWDataSyncEnv *sync_env;
+
+public:
+  RGWDataSyncInfoCRHandler(RGWDataSyncCtx *_sc) : sc(_sc),
+                                                  sync_env(_sc->env) {}
+
+  virtual ~RGWDataSyncInfoCRHandler() {}
+
+  virtual int validate_sync_marker(rgw_data_sync_marker& marker) const = 0;
 };
 
 using RGWDataSyncInfoCRHandlerRef = std::shared_ptr<RGWDataSyncInfoCRHandler>;
@@ -1082,27 +1088,28 @@ public:
   }
 };
 
-class RGWDataSyncInfoCRHandler_SIP_Base : public RGWDataSyncInfoCRHandler {
+template <class T>
+class RGWSyncInfoCRHandler_SIP : virtual public RGWSyncInfoCRHandler<T> {
   friend class InitCR;
 
 protected:
   static constexpr int max_entries = 1000;
 
-  string sip_name;
+  CephContext *cct;
 
   std::unique_ptr<SIProviderCRMgr_REST> sip;
   std::vector<SIProvider::stage_id_t> stages;
 
-  SIProvider::TypeHandlerProviderRef type_provider;
   SIProvider::TypeHandler *type_handler;
 
+  string sip_name;
+
   class InitCR : public RGWCoroutine {
-    RGWDataSyncInfoCRHandler_SIP_Base *siph;
+    RGWSyncInfoCRHandler_SIP *siph;
 
   public:
-    InitCR(RGWDataSyncCtx *_sc,
-           RGWDataSyncInfoCRHandler_SIP_Base *_siph) : RGWCoroutine(_sc->cct),
-                                                       siph(_siph) {}
+    InitCR(RGWSyncInfoCRHandler_SIP *_siph) : RGWCoroutine(_siph->ctx()),
+                                              siph(_siph) {}
 
     int operate() {
       reenter(this) {
@@ -1112,7 +1119,7 @@ protected:
           return set_cr_error(retcode);
         }
         if (siph->stages.empty()) {
-          ldout(cct, 0) << "ERROR: sip (data.full) has no stages, likely a bug!" << dendl;
+          ldout(cct, 0) << "ERROR: sip (" << siph->sip_name << ") has no stages, likely a bug!" << dendl;
           return set_cr_error(-EIO);
         }
         return set_cr_done();
@@ -1122,32 +1129,29 @@ protected:
   };
 
   class FetchCR : public RGWCoroutine {
-    RGWDataSyncInfoCRHandler_SIP_Base *handler;
+    RGWSyncInfoCRHandler_SIP *handler;
 
-    RGWDataSyncCtx *sc;
     SIProviderCRMgr_REST *provider;
     SIProvider::stage_id_t sid;
     int shard_id;
     string marker;
-    sip_data_list_result *result;
+    T *result;
 
     SIProvider::fetch_result provider_result;
     vector<SIProvider::Entry>::iterator iter;
   public:
-    FetchCR(RGWDataSyncInfoCRHandler_SIP_Base *_handler,
-            RGWDataSyncCtx *_sc,
+    FetchCR(RGWSyncInfoCRHandler_SIP *_handler,
             SIProviderCRMgr_REST *_provider,
             const SIProvider::stage_id_t& _sid,
             int _shard_id,
             const string& _marker,
-            sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
-                                             handler(_handler),
-                                             sc(_sc),
-                                             provider(_provider),
-                                             sid(_sid),
-                                             shard_id(_shard_id),
-                                             marker(_marker),
-                                             result(_result) {}
+            T *_result) : RGWCoroutine(_handler->ctx()),
+                          handler(_handler),
+                          provider(_provider),
+                          sid(_sid),
+                          shard_id(_shard_id),
+                          marker(_marker),
+                          result(_result) {}
 
     int operate() {
       reenter(this) {
@@ -1165,32 +1169,10 @@ protected:
         result->entries.clear();
 
         for (iter = provider_result.entries.begin(); iter != provider_result.entries.end(); ++iter) {
-          auto& log_entry = *iter;
 
-          sip_data_list_result::entry e;
+          typename T::entry e;
 
-          e.entry_id = log_entry.key;
-
-          int r = handler->type_handler->handle_entry(sid, log_entry, [&](SIProvider::EntryInfoBase& _info) {
-            auto& info = static_cast<siprovider_data_info&>(_info);
-
-            e.key = info.key;
-
-            int r = rgw_bucket_parse_bucket_key(sc->cct, info.key,
-                                                &e.bucket, &e.shard_id);
-            if (r < 0) {
-              ldout(sc->cct, 0) << "ERROR: " << __func__ << "(): failed to parse bucket key: " << info.key << ", r=" << r << ", skipping entry" << dendl;
-              return r;
-            }
-
-            e.shard_id = info.shard_id;
-            e.num_shards = info.num_shards;
-            if (info.timestamp) {
-              e.timestamp = *info.timestamp;
-            }
-
-            return 0;
-          });
+          int r = handler->handle_fetched_entry(sid, *iter, &e);
           if (r < 0) {
             continue;
           }
@@ -1202,22 +1184,86 @@ protected:
     }
   };
 
+  virtual int handle_fetched_entry(const SIProvider::stage_id_t& sid, SIProvider::Entry& fetched_entry, typename T::entry *pe) = 0;
+
+  void sip_init(std::unique_ptr<SIProviderCRMgr_REST>&& _sip) {
+    sip = std::move(_sip);
+    type_handler = sip->get_type_handler();
+  }
+
 public:
-  RGWDataSyncInfoCRHandler_SIP_Base(RGWDataSyncCtx *_sc,
-                                    const string& _sip_name) : RGWDataSyncInfoCRHandler(_sc),
-                                                               sip_name(_sip_name) {
-    type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
-    type_handler = type_provider->get_type_handler();
-    sip.reset(new SIProviderCRMgr_REST(sync_env->cct,
-                                       sc->conn,
-                                       sync_env->http_manager,
-                                       sip_name,
-                                       type_provider.get(),
-                                       nullopt));
+  RGWSyncInfoCRHandler_SIP(CephContext *_cct,
+                           const string& _sip_name) : cct(_cct),
+                                                      sip_name(_sip_name) {
+  }
+
+  CephContext *ctx() {
+    return cct;
   }
 
   string get_sip_name() const override {
     return sip_name;
+  }
+
+  RGWCoroutine *init_cr() override {
+    return new InitCR(this);
+  }
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         const string& marker,
+                         T *result) override {
+    auto& sid = stages.front();
+    return new FetchCR(this, sip.get(), sid, shard_id, marker, result);
+  }
+};
+
+class RGWDataSyncInfoCRHandler_SIP_Base : public RGWSyncInfoCRHandler_SIP<sip_data_list_result>,
+                                          public RGWDataSyncInfoCRHandler
+{
+  SIProvider::TypeHandlerProviderRef type_provider;
+
+protected:
+  int handle_fetched_entry(const SIProvider::stage_id_t& sid, SIProvider::Entry& fetched_entry, sip_data_list_result::entry *pe) override {
+    sip_data_list_result::entry& e = *pe;
+
+    e.entry_id = fetched_entry.key;
+
+    int r = type_handler->handle_entry(sid, fetched_entry, [&](SIProvider::EntryInfoBase& _info) {
+      auto& info = static_cast<siprovider_data_info&>(_info);
+
+      e.key = info.key;
+
+      int r = rgw_bucket_parse_bucket_key(sc->cct, info.key,
+                                          &e.bucket, &e.shard_id);
+      if (r < 0) {
+        ldout(sc->cct, 0) << "ERROR: " << __func__ << "(): failed to parse bucket key: " << info.key << ", r=" << r << ", skipping entry" << dendl;
+        return r;
+      }
+
+      e.shard_id = info.shard_id;
+      e.num_shards = info.num_shards;
+      if (info.timestamp) {
+        e.timestamp = *info.timestamp;
+      }
+
+      return 0;
+    });
+
+    return r;
+  }
+
+public:
+  RGWDataSyncInfoCRHandler_SIP_Base(RGWDataSyncCtx *_sc,
+                                    const string& _sip_name) : RGWSyncInfoCRHandler_SIP(_sc->cct,
+                                                                                        _sip_name),
+                                                               RGWDataSyncInfoCRHandler(_sc) {
+    type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
+    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
+                                                    _sc->conn,
+                                                    _sc->env->http_manager,
+                                                    _sip_name,
+                                                    type_provider.get(),
+                                                    nullopt));
   }
 
   int validate_sync_marker(rgw_data_sync_marker& marker) const override {
@@ -1237,17 +1283,6 @@ public:
     /* unsupported marker type */
 
     return -ENOTSUP;
-  }
-
-  RGWCoroutine *init_cr() override {
-    return new InitCR(sc, this);
-  }
-
-  RGWCoroutine *fetch_cr(int shard_id,
-                         const string& marker,
-                         sip_data_list_result *result) {
-    auto& sid = stages.front();
-    return new FetchCR(this, sc, sip.get(), sid, shard_id, marker, result);
   }
 };
 
