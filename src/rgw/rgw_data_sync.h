@@ -595,7 +595,7 @@ struct rgw_bucket_index_marker_info {
   }
 };
 
-class RGWBucketPipeSyncInfoCRHandler;
+class RGWBucketShardSIPCRWrapper;
 class RGWBucketPipeSyncStatusCRHandler;
 
 struct RGWBucketSyncCtx {
@@ -603,16 +603,16 @@ struct RGWBucketSyncCtx {
   RGWDataSyncCtx *sc{nullptr};
   RGWDataSyncEnv *env{nullptr};
   struct {
-    RGWBucketPipeSyncInfoCRHandler *full{nullptr};     /* handler for full sync info */
-    RGWBucketPipeSyncInfoCRHandler *inc{nullptr};     /* handler for incremental sync info */
+    RGWBucketShardSIPCRWrapper *full{nullptr};           /* handler for full sync info */
+    RGWBucketShardSIPCRWrapper *inc{nullptr};            /* handler for incremental sync info */
   } hsi;
   RGWBucketPipeSyncStatusCRHandler *hst{nullptr};   /* hst: handler for status */
   rgw_bucket_sync_pair_info sync_pair;
 
   void init(RGWDataSyncCtx *_sc,
             const rgw_bucket_sync_pair_info& _sync_pair,
-            RGWBucketPipeSyncInfoCRHandler *_full,
-            RGWBucketPipeSyncInfoCRHandler *_inc,
+            RGWBucketShardSIPCRWrapper *_full,
+            RGWBucketShardSIPCRWrapper *_inc,
             RGWBucketPipeSyncStatusCRHandler *_hst) {
     cct = _sc->cct;
     sc = _sc;
@@ -637,8 +637,8 @@ class RGWRemoteBucketManager {
 
   struct _handlers {
     struct {
-      std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> full;
-      std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> inc;
+      std::shared_ptr<RGWBucketShardSIPCRWrapper> full;
+      std::shared_ptr<RGWBucketShardSIPCRWrapper> inc;
     } info;
     std::shared_ptr<RGWBucketPipeSyncStatusCRHandler> status;
   };

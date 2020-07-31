@@ -488,7 +488,12 @@ struct sip_data_list_result {
   vector<entry> entries;
 };
 
-template <class T>
+struct sip_data_inc_pos {
+  string marker;
+  ceph::real_time timestamp;
+};
+
+template <class T, class M>
 class RGWSyncInfoCRHandler {
 public:
   virtual ~RGWSyncInfoCRHandler() {}
@@ -497,13 +502,13 @@ public:
 
   virtual RGWCoroutine *init_cr() = 0;
 
-  virtual RGWCoroutine *get_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) = 0;
+  virtual RGWCoroutine *get_pos_cr(int shard_id, M *pos) = 0;
   virtual RGWCoroutine *fetch_cr(int shard_id,
                                  const string& marker,
                                  T *result) = 0;
 };
 
-class RGWDataSyncInfoCRHandler : virtual public RGWSyncInfoCRHandler<sip_data_list_result> {
+class RGWDataSyncInfoCRHandler : virtual public RGWSyncInfoCRHandler<sip_data_list_result, sip_data_inc_pos> {
 protected:
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -534,11 +539,7 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   string cookie;
   rgw_data_sync_status *status;
 
-  struct marker_timestamp {
-    string marker;
-    ceph::real_time timestamp;
-  };
-  vector<marker_timestamp> shards_info;
+  vector<sip_data_inc_pos> shards_info;
 
   RGWSyncTraceNodeRef tn;
 public:
@@ -606,7 +607,7 @@ public:
         }
         shards_info.resize(num_shards);
         for (uint32_t i = 0; i < num_shards; i++) {
-          spawn(dsi.inc->get_pos_cr(i, &shards_info[i].marker, &shards_info[i].timestamp), true);
+          spawn(dsi.inc->get_pos_cr(i, &shards_info[i]), true);
         }
       }
       while (collect(&ret, NULL)) {
@@ -943,9 +944,9 @@ public:
 
   }
 
-  RGWCoroutine *get_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
-    marker->clear();
-    *timestamp = ceph::real_time();
+  RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
+    pos->marker.clear();
+    pos->timestamp = ceph::real_time();
     return nullptr;
   }
 };
@@ -1077,8 +1078,8 @@ public:
     return nullptr;
   }
 
-  RGWCoroutine *get_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
-    return new ReadDatalogStatusCR(sc, shard_id, marker, timestamp);
+  RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
+    return new ReadDatalogStatusCR(sc, shard_id, &pos->marker, &pos->timestamp);
   }
 
   RGWCoroutine *fetch_cr(int shard_id,
@@ -1088,8 +1089,8 @@ public:
   }
 };
 
-template <class T>
-class RGWSyncInfoCRHandler_SIP : virtual public RGWSyncInfoCRHandler<T> {
+template <class T, class M>
+class RGWSyncInfoCRHandler_SIP : virtual public RGWSyncInfoCRHandler<T, M> {
   friend class InitCR;
 
 protected:
@@ -1217,7 +1218,7 @@ public:
   }
 };
 
-class RGWDataSyncInfoCRHandler_SIP_Base : public RGWSyncInfoCRHandler_SIP<sip_data_list_result>,
+class RGWDataSyncInfoCRHandler_SIP_Base : public RGWSyncInfoCRHandler_SIP<sip_data_list_result, sip_data_inc_pos>,
                                           public RGWDataSyncInfoCRHandler
 {
   SIProvider::TypeHandlerProviderRef type_provider;
@@ -1291,9 +1292,9 @@ public:
   RGWDataFullSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, "data.full") {
   }
 
-  RGWCoroutine *get_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
-    marker->clear();
-    *timestamp = ceph::real_time();
+  RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
+    pos->marker.clear();
+    pos->timestamp = ceph::real_time();
     return nullptr;
   }
 };
@@ -1303,7 +1304,7 @@ public:
   RGWDataIncSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler_SIP_Base(_sc, "data.inc") {
   }
 
-  RGWCoroutine *get_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
+  RGWCoroutine *get_pos_cr(int shard_id, sip_data_inc_pos *pos) override {
 #warning FIXME
     return nullptr;
   }
@@ -1517,33 +1518,16 @@ struct sip_bucket_fetch_result {
   vector<entry> entries;
 };
 
-class RGWBucketPipeSyncInfoCRHandler {
+class RGWBucketPipeSyncInfoCRHandler : virtual public RGWSyncInfoCRHandler<sip_bucket_fetch_result, rgw_bucket_index_marker_info> {
 protected:
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  rgw_bucket_sync_pair_info sync_pair;
 
 public:
 
-  RGWBucketPipeSyncInfoCRHandler(RGWDataSyncCtx *_sc,
-                                 const rgw_bucket_sync_pair_info& _sync_pair) : sc(_sc),
-                                                                                sync_env(_sc->env),
-                                                                                sync_pair(_sync_pair) {}
-
+  RGWBucketPipeSyncInfoCRHandler(RGWDataSyncCtx *_sc) : sc(_sc),
+                                                        sync_env(_sc->env) {}
   virtual ~RGWBucketPipeSyncInfoCRHandler() {}
-
-  virtual RGWCoroutine *get_pos_cr(rgw_bucket_index_marker_info *info) = 0;
-  virtual RGWCoroutine *fetch_cr(const string& list_marker,
-                                 sip_bucket_fetch_result *result) = 0;
-
-  const rgw_bucket_sync_pair_info& get_sync_pair() const {
-    return sync_pair;
-  }
-
-  rgw_bucket_sync_pair_info& get_sync_pair() {
-    return sync_pair;
-  }
-
 };
 
 class RGWBucketPipeSyncStatusCRHandler {
@@ -1590,7 +1574,7 @@ public:
                             ceph::real_time* progress)
     : RGWCoroutine(_bsc->sc->cct), bsc(_bsc), sync_env(_bsc->sc->env),
       lease_cr(std::move(lease_cr)),
-      sync_pair(_bsc->hsi.full->get_sync_pair()), progress(progress),
+      sync_pair(_bsc->sync_pair), progress(progress),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
                                          SSTR(bucket_shard_str{sync_pair.dest_bs} << "<-" << bucket_shard_str{sync_pair.source_bs} ))) {
   }
@@ -1780,6 +1764,9 @@ public:
   int operate(const DoutPrefixProvider *dpp) override;
 };
 
+class RGWBucketFullSyncInfoCRHandler_Legacy;
+class RGWBucketIncSyncInfoCRHandler_Legacy;
+
 class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -1802,8 +1789,8 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   struct stack_info {
     ceph::real_time progress;
     struct {
-      RGWBucketPipeInfoHandlerRef full;
-      RGWBucketPipeInfoHandlerRef inc;
+      std::shared_ptr<RGWBucketShardSIPCRWrapper> full;
+      std::shared_ptr<RGWBucketShardSIPCRWrapper> inc;
     } bsi;
     RGWBucketPipeStatusHandlerRef bst;
     RGWBucketSyncCtx bsc;
@@ -1823,6 +1810,9 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   int num_shards{0};
   int cur_shard{0};
   bool again = false;
+
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> bsi_full;
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> bsi_inc;
 
 public:
   RGWRunBucketSourcesSyncCR(RGWDataSyncCtx *_sc,
@@ -3364,29 +3354,74 @@ public:
   }
 };
 
-class RGWBucketFullSyncInfoCRHandler_Legacy : public RGWBucketPipeSyncInfoCRHandler {
-public:
-  RGWBucketFullSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc,
-                                        const rgw_bucket_sync_pair_info& _sync_pair) : RGWBucketPipeSyncInfoCRHandler(_sc, _sync_pair) {}
+class RGWBucketShardSIPCRWrapper
+{
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> handler;
+  rgw_bucket_shard source_bs;
 
-  RGWCoroutine *get_pos_cr(rgw_bucket_index_marker_info *info) override {
-    return nullptr;
+public:
+  RGWBucketShardSIPCRWrapper(std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> _handler,
+                             const rgw_bucket_shard& _source_bs) : handler(_handler),
+                                                                   source_bs(_source_bs) {}
+
+  RGWCoroutine *get_pos_cr(rgw_bucket_index_marker_info *info) {
+    return handler->get_pos_cr(source_bs.shard_id, info);
   }
 
   RGWCoroutine *fetch_cr(const string& list_marker,
+                         sip_bucket_fetch_result *result) {
+    return handler->fetch_cr(source_bs.shard_id, list_marker, result);
+  }
+};
+
+
+class RGWBucketFullSyncInfoCRHandler_Legacy : public RGWBucketPipeSyncInfoCRHandler {
+  rgw_bucket source_bucket;
+public:
+  RGWBucketFullSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc, const rgw_bucket& _source_bucket) : RGWBucketPipeSyncInfoCRHandler(_sc),
+                                                                                                 source_bucket(_source_bucket) {}
+
+  string get_sip_name() const override {
+    return "legacy/bucket.full";
+  }
+
+  RGWCoroutine *init_cr() override {
+    /* nothing to init */
+    return nullptr;
+  }
+
+  RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *info) override {
+    return nullptr;
+  }
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         const string& list_marker,
                          sip_bucket_fetch_result *result) override;
 };
 
 class RGWBucketIncSyncInfoCRHandler_Legacy : public RGWBucketPipeSyncInfoCRHandler {
+  rgw_bucket source_bucket;
 public:
   RGWBucketIncSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc,
-                                       const rgw_bucket_sync_pair_info& _sync_pair) : RGWBucketPipeSyncInfoCRHandler(_sc, _sync_pair) {}
+                                       const rgw_bucket& _source_bucket) : RGWBucketPipeSyncInfoCRHandler(_sc),
+                                                                           source_bucket(_source_bucket) {}
 
-  RGWCoroutine *get_pos_cr(rgw_bucket_index_marker_info *info) override {
-    return new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs, info);
+  string get_sip_name() const override {
+    return "legacy/bucket.inc";
   }
 
-  RGWCoroutine *fetch_cr(const string& marker,
+  RGWCoroutine *init_cr() override {
+    /* nothing to init */
+    return nullptr;
+  }
+
+  RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *info) override {
+    rgw_bucket_shard source_bs(source_bucket, shard_id);
+    return new RGWReadRemoteBucketIndexLogInfoCR(sc, source_bs, info);
+  }
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         const string& marker,
                          sip_bucket_fetch_result *result) override;
 };
 
@@ -3557,10 +3592,13 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
   bh.resize(num_shards);
   bscs.resize(num_shards);
 
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> info_full(new RGWBucketFullSyncInfoCRHandler_Legacy(&sc, source_bucket_info.bucket));
+  std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> info_inc(new RGWBucketIncSyncInfoCRHandler_Legacy(&sc, source_bucket_info.bucket));
+
   for (int i = 0; i < num_shards; ++i) {
     auto& handlers = bh[i];
-    handlers.info.full.reset(new RGWBucketFullSyncInfoCRHandler_Legacy(&sc, sync_pairs[i]));
-    handlers.info.inc.reset(new RGWBucketIncSyncInfoCRHandler_Legacy(&sc, sync_pairs[i]));
+    handlers.info.full = std::make_shared<RGWBucketShardSIPCRWrapper>(info_full, sync_pairs[i].source_bs);
+    handlers.info.inc = std::make_shared<RGWBucketShardSIPCRWrapper>(info_inc, sync_pairs[i].source_bs);
     handlers.status.reset(new RGWBucketSyncStatusCRHandler_Legacy(&sc, sync_pairs[i]));
     bscs[i].init(&sc, sync_pairs[i], handlers.info.full.get(), handlers.info.inc.get(), handlers.status.get());
   }
@@ -3936,8 +3974,8 @@ struct bucket_list_result {
 class RGWListBucketShardCR: public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
-  const rgw_bucket_shard& bs;
-  const string instance_key;
+  string instance_key;
+  string path;
   rgw_obj_key marker_key;
 
   sip_bucket_fetch_result *result;
@@ -3947,9 +3985,11 @@ class RGWListBucketShardCR: public RGWCoroutine {
 public:
   RGWListBucketShardCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& bs,
                        const string& _marker, sip_bucket_fetch_result *_result)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), bs(bs),
+    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       instance_key(bs.get_key()), marker_key(rgw_obj_key::from_escaped_str(_marker)),
-      result(_result) {}
+      result(_result) {
+    path = string("/") + bs.bucket.name;
+  }
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
@@ -3962,8 +4002,7 @@ public:
 					{ "version-id-marker" , marker_key.instance.c_str() },
 	                                { NULL, NULL } };
         // don't include tenant in the url, it's already part of instance_key
-        string p = string("/") + bs.bucket.name;
-        call(new RGWReadRESTResourceCR<bucket_list_result>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, &list_result));
+        call(new RGWReadRESTResourceCR<bucket_list_result>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, &list_result));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -4005,10 +4044,12 @@ public:
   }
 };
 
-RGWCoroutine *RGWBucketFullSyncInfoCRHandler_Legacy::fetch_cr(const string& list_marker,
-                                                             sip_bucket_fetch_result *result)
+RGWCoroutine *RGWBucketFullSyncInfoCRHandler_Legacy::fetch_cr(int shard_id,
+                                                              const string& list_marker,
+                                                              sip_bucket_fetch_result *result)
 {
-  return new RGWListBucketShardCR(sc, sync_pair.source_bs, list_marker, result);
+  rgw_bucket_shard source_bs(source_bucket, shard_id);
+  return new RGWListBucketShardCR(sc, source_bs, list_marker, result);
 }
 
 class RGWListBucketIndexLogCR: public RGWCoroutine {
@@ -4086,10 +4127,12 @@ public:
   }
 };
 
-RGWCoroutine *RGWBucketIncSyncInfoCRHandler_Legacy::fetch_cr(const string& marker,
+RGWCoroutine *RGWBucketIncSyncInfoCRHandler_Legacy::fetch_cr(int shard_id,
+                                                             const string& marker,
                                                              sip_bucket_fetch_result *result)
 {
-  return new RGWListBucketIndexLogCR(sc, sync_pair.source_bs,
+  rgw_bucket_shard source_bs(source_bucket, shard_id);
+  return new RGWListBucketIndexLogCR(sc, source_bs,
                                      marker, result);
 }
 
@@ -5160,6 +5203,9 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
 
       ldpp_dout(dpp, 20) << __func__ << "(): num shards=" << num_shards << " cur_shard=" << cur_shard << dendl;
 
+      bsi_full.reset(new RGWBucketFullSyncInfoCRHandler_Legacy(sc, sync_pair.source_bs.bucket));
+      bsi_inc.reset(new RGWBucketIncSyncInfoCRHandler_Legacy(sc, sync_pair.source_bs.bucket));
+
       for (; num_shards > 0; --num_shards, ++cur_shard) {
         /*
          * use a negatvie shard_id for backward compatibility,
@@ -5176,9 +5222,9 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
 
         cur_stack = &stacks_info[prealloc_stack_id()];
 
-        cur_stack->bsi.full.reset(new RGWBucketFullSyncInfoCRHandler_Legacy(sc, sync_pair));
-        cur_stack->bsi.inc.reset(new RGWBucketIncSyncInfoCRHandler_Legacy(sc, sync_pair));
-        cur_stack->bst.reset(new RGWBucketSyncStatusCRHandler_Legacy(sc, sync_pair));
+        cur_stack->bsi.full = std::make_shared<RGWBucketShardSIPCRWrapper>(bsi_full, sync_pair.source_bs);
+        cur_stack->bsi.inc = std::make_shared<RGWBucketShardSIPCRWrapper>(bsi_inc, sync_pair.source_bs);
+        cur_stack->bst = std::make_shared<RGWBucketSyncStatusCRHandler_Legacy>(sc, sync_pair);
         cur_stack->bsc.init(sc, sync_pair, cur_stack->bsi.full.get(), cur_stack->bsi.inc.get(), cur_stack->bst.get());
 
         yield_spawn_window(new RGWRunBucketSyncCoroutine(&cur_stack->bsc, lease_cr, tn,
