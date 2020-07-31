@@ -61,6 +61,7 @@
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientSnap.h"
+#include "messages/MClientMetrics.h"
 #include "messages/MCommandReply.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -2058,6 +2059,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   auto m = make_message<MClientSession>(CEPH_SESSION_REQUEST_OPEN);
   m->metadata = metadata;
   m->supported_features = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
+  m->metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
   session->con->send_message2(std::move(m));
   return session;
 }
@@ -3230,6 +3232,10 @@ void Client::put_cap_ref(Inode *in, int cap)
   }
 }
 
+// get caps for a given file handle -- the inode should have @need caps
+// issued by the mds and @want caps not revoked (or not under revocation).
+// this routine blocks till the cap requirement is satisfied. also account
+// (track) for capability hit when required (when cap requirement succeedes).
 int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 {
   Inode *in = fh->inode.get();
@@ -3304,6 +3310,7 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	if ((revoking & want) == 0) {
 	  *phave = need | (have & want);
 	  in->get_cap_ref(need);
+	  cap_hit();
 	  return 0;
 	}
       }
@@ -6354,6 +6361,8 @@ void Client::tick()
     check_caps(in, CHECK_CAPS_NODELAY);
   }
 
+  collect_and_send_metrics();
+
   trim_cache(true);
 
   if (blacklisted && mounted &&
@@ -6365,6 +6374,54 @@ void Client::tick()
     _kick_stale_sessions();
     last_auto_reconnect = now;
   }
+}
+
+void Client::collect_and_send_metrics() {
+  ldout(cct, 20) << __func__ << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  // right now, we only track and send global metrics. its sufficient
+  // to send these metrics to MDS rank0.
+  collect_and_send_global_metrics();
+}
+
+void Client::collect_and_send_global_metrics() {
+  ldout(cct, 20) << __func__ << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  if (!have_open_session((mds_rank_t)0)) {
+    ldout(cct, 5) << __func__ << ": no session with rank=0 -- not sending metric"
+                  << dendl;
+    return;
+  }
+  auto session = _get_or_open_mds_session((mds_rank_t)0);
+  if (!session->mds_features.test(CEPHFS_FEATURE_METRIC_COLLECT)) {
+    ldout(cct, 5) << __func__ << ": rank=0 does not support metrics" << dendl;
+    return;
+  }
+
+  ClientMetricMessage metric;
+  std::vector<ClientMetricMessage> message;
+
+  // read latency
+  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+  message.push_back(metric);
+
+  // write latency
+  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+  message.push_back(metric);
+
+  // metadata latency
+  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+  message.push_back(metric);
+
+  // cap hit ratio -- nr_caps is unused right now
+  auto [cap_hits, cap_misses] = get_cap_hit_rates();
+  metric = ClientMetricMessage(CapInfoPayload(cap_hits, cap_misses, 0));
+  message.push_back(metric);
+
+  session->con->send_message2(make_message<MClientMetrics>(std::move(message)));
 }
 
 void Client::renew_caps()
