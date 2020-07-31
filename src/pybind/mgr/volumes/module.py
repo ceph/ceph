@@ -11,6 +11,8 @@ from .fs.nfs import NFSCluster, FSExport
 
 log = logging.getLogger(__name__)
 
+goodchars = '[A-Za-z0-9-_.]'
+
 class VolumesInfoWrapper():
     def __init__(self, f, context):
         self.f = f
@@ -42,7 +44,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs volume create '
-                   'name=name,type=CephString '
+                   f'name=name,type=CephString,goodchars={goodchars} '
                    'name=placement,type=CephString,req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
@@ -63,7 +65,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
-                   'name=group_name,type=CephString '
+                   f'name=group_name,type=CephString,goodchars={goodchars} '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
@@ -90,7 +92,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolume create '
                    'name=vol_name,type=CephString '
-                   'name=sub_name,type=CephString '
+                   f'name=sub_name,type=CephString,goodchars={goodchars} '
                    'name=size,type=CephInt,req=false '
                    'name=group_name,type=CephString,req=false '
                    'name=pool_layout,type=CephString,req=false '
@@ -315,7 +317,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
-                   'name=clusterid,type=CephString,goodchars=[A-Za-z0-9-_.] '
+                   f'name=clusterid,type=CephString,goodchars={goodchars} '
                    'name=placement,type=CephString,req=false ',
             'desc': "Create an NFS Cluster",
             'perm': 'rw'
