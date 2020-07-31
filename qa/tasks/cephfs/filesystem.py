@@ -643,6 +643,12 @@ class Filesystem(MDSCluster):
             self.data_pool_name = None
             self.data_pools = None
 
+    def recreate(self):
+        self.destroy(reset_obj_attrs=False)
+
+        self.create()
+        self.getinfo(refresh=True)
+
     def check_pool_application(self, pool_name):
         osd_map = self.mon_manager.get_osd_dump_json()
         for pool in osd_map['pools']:
@@ -967,12 +973,6 @@ class Filesystem(MDSCluster):
                 raise ValueError("Explicit MDS argument required when multiple MDSs in use")
         else:
             return self.mds_ids[0]
-
-    def recreate(self):
-        log.info("Creating new filesystem")
-        self.delete_all_filesystems()
-        self.id = None
-        self.create()
 
     def put_metadata_object_raw(self, object_id, infile):
         """
