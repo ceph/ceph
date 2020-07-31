@@ -3378,7 +3378,9 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pg_log_trim_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
-    .set_description(""),
+    .set_description("Minimum number of log entries to trim at once. This lets us trim in larger batches rather than with each write.")
+    .add_see_also("osd_max_pg_log_entries")
+    .add_see_also("osd_min_pg_log_entries"),
 
     Option("osd_force_auth_primary_missing_objects", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
