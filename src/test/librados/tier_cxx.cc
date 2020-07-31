@@ -4465,6 +4465,97 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestTestSnapCreate) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("base chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CHUNKS CHUNKS");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+
+  // set-chunk
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, cache_ioctx, "bar", 0);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // try to create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+							 my_snaps));
+
+  // set-chunk
+  {
+    ObjectReadOperation op;
+    op.set_chunk(2, 2, cache_ioctx, "bar", 2);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // check whether clone is created
+  ioctx.snap_set_read(librados::SNAP_DIR);
+  {
+    snap_set_t snap_set;
+    int snap_ret;
+    ObjectReadOperation op;
+    op.list_snaps(&snap_set, &snap_ret);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+      "foo", completion, &op,
+      0, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, snap_ret);
+    ASSERT_LT(0u, snap_set.clones.size());
+    ASSERT_EQ(1, snap_set.clones.size());
+  }
+
+  // create a clone
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    bl.append("B");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 0));
+  }
+
+  ioctx.snap_set_read(my_snaps[0]);
+  // set-chunk to clone
+  {
+    ObjectReadOperation op;
+    op.set_chunk(6, 2, cache_ioctx, "bar", 6);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
