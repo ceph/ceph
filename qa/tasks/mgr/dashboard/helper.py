@@ -149,6 +149,7 @@ class DashboardTestCase(MgrTestCase):
             cls.login('admin', 'admin')
 
     def setUp(self):
+        super(DashboardTestCase, self).setUp()
         if not self._loggedin and self.AUTO_AUTHENTICATE:
             self.login('admin', 'admin')
         self.wait_for_health_clear(20)

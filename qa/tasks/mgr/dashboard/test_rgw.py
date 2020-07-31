@@ -67,6 +67,7 @@ class RgwApiCredentialsTest(RgwTestCase):
     AUTH_ROLES = ['rgw-manager']
 
     def setUp(self):
+        super(RgwApiCredentialsTest, self).setUp()
         # Restart the Dashboard module to ensure that the connection to the
         # RGW Admin Ops API is re-established with the new credentials.
         self.logout()

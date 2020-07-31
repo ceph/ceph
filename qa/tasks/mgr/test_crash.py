@@ -13,6 +13,7 @@ DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 class TestCrash(MgrTestCase):
 
     def setUp(self):
+        super(TestCrash, self).setUp()
         self.setup_mgrs()
         self._load_module('crash')
 

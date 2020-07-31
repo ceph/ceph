@@ -12,6 +12,7 @@ DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 
 class TestInsights(MgrTestCase):
     def setUp(self):
+        super(TestInsights, self).setUp()
         self.setup_mgrs()
         self._load_module("insights")
         self._load_module("selftest")
