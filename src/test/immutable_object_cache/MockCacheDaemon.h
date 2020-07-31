@@ -24,8 +24,8 @@ class MockCacheClient {
   MOCK_METHOD0(stop, void());
   MOCK_METHOD0(connect, int());
   MOCK_METHOD1(connect, void(Context*));
-  MOCK_METHOD5(lookup_object, void(std::string, uint64_t, uint64_t, std::string,
-                                   CacheGenContextURef));
+  MOCK_METHOD6(lookup_object, void(std::string, uint64_t, uint64_t, uint64_t,
+                                  std::string, CacheGenContextURef));
   MOCK_METHOD1(register_client, int(Context*));
 };
 

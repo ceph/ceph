@@ -369,7 +369,7 @@ class ClusterConfigurationTest(DashboardTestCase):
         self.assertIn('type', data)
         self.assertIn('desc', data)
         self.assertIn(data['type'], ['str', 'bool', 'float', 'int', 'size', 'uint', 'addr',
-                                     'addrvec', 'uuid', 'secs'])
+                                     'addrvec', 'uuid', 'secs', 'millisecs'])
 
         if 'value' in data:
             self.assertIn('source', data)
