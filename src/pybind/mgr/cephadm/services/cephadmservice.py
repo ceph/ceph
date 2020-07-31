@@ -97,12 +97,14 @@ class CephadmService(metaclass=ABCMeta):
 
         return cephadm_config, []
 
-
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
-            self.config_dashboard(daemon_descrs)
-    
+            if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+                self.config_dashboard(daemon_descrs)
+            else:
+                logger.debug('Dashboard is not enabled. Skip configuration.')
+
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         """Config dashboard settings."""
         raise NotImplementedError()
