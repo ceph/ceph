@@ -76,11 +76,6 @@ if(WIN32)
   add_definitions(-include winsock_wrapper.h)
 endif()
 
-if(OFED_PREFIX)
-  include_directories(SYSTEM ${OFED_PREFIX}/include)
-  link_directories(${OFED_PREFIX}/lib)
-endif()
-
 if(FREEBSD)
   include_directories(SYSTEM /usr/local/include)
   link_directories(/usr/local/lib)
