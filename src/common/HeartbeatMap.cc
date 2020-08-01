@@ -70,13 +70,13 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who,
 			  ceph::coarse_mono_time now)
 {
   bool healthy = true;
-  if (auto was = h->timeout.load();
+  if (auto was = h->timeout.load(std::memory_order_relaxed);
       !clock::is_zero(was) && was < now) {
     ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
     healthy = false;
   }
-  if (auto was = h->suicide_timeout.load();
+  if (auto was = h->suicide_timeout.load(std::memory_order_relaxed);
       !clock::is_zero(was) && was < now) {
     ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had suicide timed out after " << h->suicide_grace << dendl;
@@ -96,13 +96,13 @@ void HeartbeatMap::reset_timeout(heartbeat_handle_d *h,
   const auto now = clock::now();
   _check(h, "reset_timeout", now);
 
-  h->timeout = now + grace;
+  h->timeout.store(now + grace, std::memory_order_relaxed);
   h->grace = grace;
 
   if (suicide_grace > ceph::timespan::zero()) {
-    h->suicide_timeout = now + suicide_grace;
+    h->suicide_timeout.store(now + suicide_grace, std::memory_order_relaxed);
   } else {
-    h->suicide_timeout = clock::zero();
+    h->suicide_timeout.store(clock::zero(), std::memory_order_relaxed);
   }
   h->suicide_grace = suicide_grace;
 }
@@ -112,8 +112,8 @@ void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
   ldout(m_cct, 20) << "clear_timeout '" << h->name << "'" << dendl;
   auto now = clock::now();
   _check(h, "clear_timeout", now);
-  h->timeout = clock::zero();
-  h->suicide_timeout = clock::zero();
+  h->timeout.store(clock::zero(), std::memory_order_relaxed);
+  h->suicide_timeout.store(clock::zero(), std::memory_order_relaxed);
 }
 
 bool HeartbeatMap::is_healthy()
