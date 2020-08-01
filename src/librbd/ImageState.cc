@@ -220,8 +220,9 @@ private:
       ThreadPoolSingleton>("librbd::ImageUpdateWatchers::thread_pool",
 			   false, m_cct);
     m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::work_queue",
-				 m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
-				 &thread_pool);
+                                 ceph::make_timespan(
+                                   m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout")),
+                                 &thread_pool);
   }
 
   void destroy_work_queue() {

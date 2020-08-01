@@ -59,7 +59,8 @@ protected:
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
-    RGWWQ(RGWProcess* p, time_t timeout, time_t suicide_timeout, ThreadPool* tp)
+    RGWWQ(RGWProcess* p, ceph::timespan timeout, ceph::timespan suicide_timeout,
+	  ThreadPool* tp)
       : ThreadPool::WorkQueue<RGWRequest>("RGWWQ", timeout, suicide_timeout,
 					  tp), process(p) {}
 
@@ -101,8 +102,10 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
-      req_wq(this, g_conf()->rgw_op_thread_timeout,
-	     g_conf()->rgw_op_thread_suicide_timeout, &m_tp) {
+      req_wq(this,
+	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
+	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
+	     &m_tp) {
   }
   
   virtual ~RGWProcess() = default;
