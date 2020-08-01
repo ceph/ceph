@@ -350,6 +350,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   if (_shared_bdev_alloc) {
     ceph_assert(shared_bdev_alloc == nullptr);
     alloc[id] = shared_bdev_alloc = _shared_bdev_alloc;
+    need_shared_alloc_init = true;
   }
   return 0;
 }
@@ -583,8 +584,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   vselector.reset(nullptr);
   _stop_alloc();
   _shutdown_logger();
-
-  after_mkfs = true;
+  need_shared_alloc_init = false;
 
   dout(10) << __func__ << " success" << dendl;
   return 0;
@@ -698,15 +698,16 @@ int BlueFS::mount()
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
       if (alloc[q.bdev] == shared_bdev_alloc) {
-        if (!after_mkfs) {
+        if (need_shared_alloc_init) {
           alloc[q.bdev]->init_rm_free(q.offset, q.length);
+          shared_bdev_used += q.length;
         }
-        shared_bdev_used += q.length;
       } else {
         alloc[q.bdev]->init_rm_free(q.offset, q.length);
       }
     }
   }
+  need_shared_alloc_init = false;
   dout(1) << __func__ << " shared_bdev_used = " << shared_bdev_used << dendl;
 
   // set up the log for future writes
@@ -716,8 +717,6 @@ int BlueFS::mount()
   dout(10) << __func__ << " log write pos set to 0x"
            << std::hex << log_writer->pos << std::dec
            << dendl;
-
-  after_mkfs = false;
 
   return 0;
 
@@ -1291,7 +1290,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  if (!noop) {
 	    block_all[id].erase(offset, length);
 	    _adjust_granularity(id, &offset, &length, false);
-	    if (length) {
+	    if (length && alloc[id] != shared_bdev_alloc) {
 	      alloc[id]->init_rm_free(offset, length);
 	    }
             if (cct->_conf->bluefs_log_replay_check_allocations) {

@@ -309,13 +309,13 @@ private:
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
+  bool need_shared_alloc_init = false;
   Allocator* shared_bdev_alloc = nullptr;
   std::atomic<uint64_t> shared_bdev_used = 0;
 
+
   class SocketHook;
   SocketHook* asok_hook = nullptr;
-
-  bool after_mkfs = false;
 
   void _init_logger();
   void _shutdown_logger();
