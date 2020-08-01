@@ -328,6 +328,7 @@ struct MockImageCtx {
   bool cache;
 
   ConfigProxy config;
+  std::set<std::string> config_overrides;
 };
 
 } // namespace librbd
