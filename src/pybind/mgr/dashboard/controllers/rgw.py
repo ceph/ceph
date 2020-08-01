@@ -364,9 +364,10 @@ class RgwUser(RgwRESTController):
             marker = result['marker']
         return users
 
-    def get(self, uid, daemon_name=None):
-        # type: (str, Optional[str]) -> dict
-        result = self.proxy(daemon_name, 'GET', 'user', {'uid': uid})
+    def get(self, uid, daemon_name=None, stats=True) -> dict:
+        query_params = '?stats' if stats else ''
+        result = self.proxy(daemon_name, 'GET', 'user{}'.format(query_params),
+                            {'uid': uid, 'stats': stats})
         if not self._keys_allowed():
             del result['keys']
             del result['swift_keys']
