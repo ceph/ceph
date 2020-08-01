@@ -59,8 +59,8 @@ public:
     friend class ThreadPool;
     CephContext *cct;
     ceph::heartbeat_handle_d *hb;
-    ceph::coarse_mono_clock::rep grace;
-    ceph::coarse_mono_clock::rep suicide_grace;
+    ceph::timespan grace;
+    ceph::timespan suicide_grace;
   public:
     TPHandle(
       CephContext *cct,
