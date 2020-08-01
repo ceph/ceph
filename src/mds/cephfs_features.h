@@ -15,6 +15,8 @@
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
 
+#include "include/cephfs/metrics/Types.h"
+
 class feature_bitset_t;
 namespace ceph {
   class Formatter;
@@ -56,6 +58,13 @@ namespace ceph {
   CEPHFS_FEATURE_DELEG_INO,             \
   CEPHFS_FEATURE_OCTOPUS,               \
   CEPHFS_FEATURE_METRIC_COLLECT,        \
+}
+
+#define CEPHFS_METRIC_FEATURES_ALL {		\
+    CLIENT_METRIC_TYPE_CAP_INFO,		\
+    CLIENT_METRIC_TYPE_READ_LATENCY,		\
+    CLIENT_METRIC_TYPE_WRITE_LATENCY,		\
+    CLIENT_METRIC_TYPE_METADATA_LATENCY,	\
 }
 
 #define CEPHFS_FEATURES_MDS_SUPPORTED CEPHFS_FEATURES_ALL

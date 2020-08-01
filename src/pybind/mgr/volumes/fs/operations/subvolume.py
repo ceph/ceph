@@ -2,11 +2,8 @@ import os
 import errno
 from contextlib import contextmanager
 
-import cephfs
-
-from .snapshot_util import mksnap, rmsnap
-from ..fs_util import listdir, get_ancestor_xattr
 from ..exception import VolumeException
+from .template import SubvolumeOpType
 
 from .versions import loaded_subvolumes
 
@@ -45,7 +42,7 @@ def create_clone(fs, vol_spec, group, subvolname, pool, source_volume, source_su
     subvolume = loaded_subvolumes.get_subvolume_object_max(fs, vol_spec, group, subvolname)
     subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
 
-def remove_subvol(fs, vol_spec, group, subvolname, force=False):
+def remove_subvol(fs, vol_spec, group, subvolname, force=False, retainsnaps=False):
     """
     remove a subvolume.
 
@@ -56,14 +53,12 @@ def remove_subvol(fs, vol_spec, group, subvolname, force=False):
     :param force: force remove subvolumes
     :return: None
     """
-    nc_flag = True if not force else False
-    with open_subvol(fs, vol_spec, group, subvolname, need_complete=nc_flag) as subvolume:
-        if subvolume.list_snapshots():
-            raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(subvolname))
-        subvolume.remove()
+    op_type = SubvolumeOpType.REMOVE if not force else SubvolumeOpType.REMOVE_FORCE
+    with open_subvol(fs, vol_spec, group, subvolname, op_type) as subvolume:
+        subvolume.remove(retainsnaps)
 
 @contextmanager
-def open_subvol(fs, vol_spec, group, subvolname, need_complete=True, expected_types=[]):
+def open_subvol(fs, vol_spec, group, subvolname, op_type):
     """
     open a subvolume. This API is to be used as a context manager.
 
@@ -71,12 +66,9 @@ def open_subvol(fs, vol_spec, group, subvolname, need_complete=True, expected_ty
     :param vol_spec: volume specification
     :param group: group object for the subvolume
     :param subvolname: subvolume name
-    :param need_complete: check if the subvolume is usable (since cloned subvolumes can
-                          be in transient state). defaults to True.
-    :param expected_types: check if the subvolume is one the provided types. defaults to
-                           all.
+    :param op_type: operation type for which subvolume is being opened
     :return: yields a subvolume object (subclass of SubvolumeTemplate)
     """
     subvolume = loaded_subvolumes.get_subvolume_object(fs, vol_spec, group, subvolname)
-    subvolume.open(need_complete, expected_types)
+    subvolume.open(op_type)
     yield subvolume

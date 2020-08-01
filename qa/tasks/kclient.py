@@ -76,6 +76,9 @@ def task(ctx, config):
 
     test_dir = misc.get_testdir(ctx)
 
+    for id_, remote in clients:
+        KernelMount.cleanup_stale_netnses_and_bridge(remote)
+
     mounts = {}
     for id_, remote in clients:
         client_config = config.get("client.%s" % id_)
@@ -114,6 +117,9 @@ def task(ctx, config):
                     log.warning("Ordinary umount failed, forcing...")
                     forced = True
                     mount.umount_wait(force=True)
+
+        for id_, remote in clients:
+            KernelMount.cleanup_stale_netnses_and_bridge(remote)
 
         return forced
 
