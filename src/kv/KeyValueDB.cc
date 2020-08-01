@@ -6,9 +6,7 @@
 #include "LevelDBStore.h"
 #endif
 #include "MemDB.h"
-#ifdef HAVE_LIBROCKSDB
 #include "RocksDBStore.h"
-#endif
 
 using std::map;
 using std::string;
@@ -23,12 +21,9 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
     return new LevelDBStore(cct, dir);
   }
 #endif
-#ifdef HAVE_LIBROCKSDB
   if (type == "rocksdb") {
     return new RocksDBStore(cct, dir, options, p);
   }
-#endif
-
   if ((type == "memdb") && 
     cct->check_experimental_feature_enabled("memdb")) {
     return new MemDB(cct, dir, p);
@@ -43,12 +38,9 @@ int KeyValueDB::test_init(const string& type, const string& dir)
     return LevelDBStore::_test_init(dir);
   }
 #endif
-#ifdef HAVE_LIBROCKSDB
   if (type == "rocksdb") {
     return RocksDBStore::_test_init(dir);
   }
-#endif
-
   if (type == "memdb") {
     return MemDB::_test_init(dir);
   }

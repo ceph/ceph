@@ -466,8 +466,6 @@ if(WITH_REENTRANT_STRSIGNAL)
   set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
 endif()
 
-set(HAVE_LIBROCKSDB 1)
-
 # -lz link into kv
 find_package(ZLIB REQUIRED)
 
