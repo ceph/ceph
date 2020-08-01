@@ -39,7 +39,8 @@ void RadosTestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
 
   CephContext* cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
-  m_work_queue = new ContextWQ("RadosTestFixture::m_work_queue", 60,
+  m_work_queue = new ContextWQ("RadosTestFixture::m_work_queue",
+                               ceph::make_timespan(60),
                                _thread_pool);
 
   m_timer = new SafeTimer(cct, m_timer_lock, true);

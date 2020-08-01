@@ -65,8 +65,8 @@ public:
     TPHandle(
       CephContext *cct,
       ceph::heartbeat_handle_d *hb,
-      time_t grace,
-      time_t suicide_grace)
+      ceph::timespan grace,
+      ceph::timespan suicide_grace)
       : cct(cct), hb(hb), grace(grace), suicide_grace(suicide_grace) {}
     void reset_tp_timeout() override final;
     void suspend_tp_timeout() override final;
@@ -76,8 +76,9 @@ protected:
   /// Basic interface to a work queue used by the worker threads.
   struct WorkQueue_ {
     std::string name;
-    time_t timeout_interval, suicide_interval;
-    WorkQueue_(std::string n, time_t ti, time_t sti)
+    ceph::timespan timeout_interval;
+    ceph::timespan suicide_interval;
+    WorkQueue_(std::string n, ceph::timespan ti, ceph::timespan sti)
       : name(std::move(n)), timeout_interval(ti), suicide_interval(sti)
     { }
     virtual ~WorkQueue_() {}
@@ -243,7 +244,10 @@ public:
     void _clear() override {}
 
   public:
-    WorkQueueVal(std::string n, time_t ti, time_t sti, ThreadPool *p)
+    WorkQueueVal(std::string n,
+		 ceph::timespan ti,
+		 ceph::timespan sti,
+		 ThreadPool *p)
       : WorkQueue_(std::move(n), ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
@@ -306,7 +310,9 @@ public:
     virtual void _process(T *t, TPHandle &) = 0;
 
   public:
-    WorkQueue(std::string n, time_t ti, time_t sti, ThreadPool* p)
+    WorkQueue(std::string n,
+	      ceph::timespan ti, ceph::timespan sti,
+	      ThreadPool* p)
       : WorkQueue_(std::move(n), ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
@@ -383,7 +389,9 @@ public:
       return _empty();
     }
   protected:
-    PointerWQ(std::string n, time_t ti, time_t sti, ThreadPool* p)
+    PointerWQ(std::string n,
+	      ceph::timespan ti, ceph::timespan sti,
+	      ThreadPool* p)
       : WorkQueue_(std::move(n), ti, sti), m_pool(p), m_processing(0) {
     }
     void register_work_queue() {
@@ -553,7 +561,7 @@ class GenContextWQ :
   public ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*> {
   std::list<GenContext<ThreadPool::TPHandle&>*> _queue;
 public:
-  GenContextWQ(const std::string &name, time_t ti, ThreadPool *tp)
+  GenContextWQ(const std::string &name, ceph::timespan ti, ThreadPool *tp)
     : ThreadPool::WorkQueueVal<
       GenContext<ThreadPool::TPHandle&>*>(name, ti, ti*10, tp) {}
   
@@ -593,8 +601,8 @@ public:
 /// @see Finisher
 class ContextWQ : public ThreadPool::PointerWQ<Context> {
 public:
-  ContextWQ(const std::string &name, time_t ti, ThreadPool *tp)
-    : ThreadPool::PointerWQ<Context>(name, ti, 0, tp) {
+  ContextWQ(const std::string &name, ceph::timespan ti, ThreadPool *tp)
+    : ThreadPool::PointerWQ<Context>(name, ti, ceph::timespan::zero(), tp) {
     this->register_work_queue();
   }
 
@@ -654,8 +662,9 @@ public:
   class BaseShardedWQ {
   
   public:
-    time_t timeout_interval, suicide_interval;
-    BaseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
+    ceph::timespan timeout_interval, suicide_interval;
+    BaseShardedWQ(ceph::timespan ti, ceph::timespan sti)
+      :timeout_interval(ti), suicide_interval(sti) {}
     virtual ~BaseShardedWQ() {}
 
     virtual void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb ) = 0;
@@ -675,8 +684,9 @@ public:
 
 
   public:
-    ShardedWQ(time_t ti, time_t sti, ShardedThreadPool* tp): BaseShardedWQ(ti, sti), 
-                                                                 sharded_pool(tp) {
+    ShardedWQ(ceph::timespan ti,
+	      ceph::timespan sti, ShardedThreadPool* tp)
+      : BaseShardedWQ(ti, sti), sharded_pool(tp) {
       tp->set_wq(this);
     }
     ~ShardedWQ() override {}
