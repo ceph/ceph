@@ -1,11 +1,4 @@
-import {
-  ChangeDetectorRef,
-  Component,
-  NgZone,
-  OnInit,
-  TemplateRef,
-  ViewChild
-} from '@angular/core';
+import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
@@ -60,39 +53,13 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    private ngZone: NgZone,
-    private changeDetectorRef: ChangeDetectorRef
+    private ngZone: NgZone
   ) {
     super();
-    this.permission = this.authStorageService.getPermissions().rgw;
-    const getBucketUri = () =>
-      this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
-    const addAction: CdTableAction = {
-      permission: 'create',
-      icon: Icons.add,
-      routerLink: () => this.urlBuilder.getCreate(),
-      name: this.actionLabels.CREATE,
-      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-    };
-    const editAction: CdTableAction = {
-      permission: 'update',
-      icon: Icons.edit,
-      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
-      name: this.actionLabels.EDIT
-    };
-    const deleteAction: CdTableAction = {
-      permission: 'delete',
-      icon: Icons.destroy,
-      click: () => this.deleteAction(),
-      disable: () => !this.selection.hasSelection,
-      name: this.actionLabels.DELETE,
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
-    };
-    this.tableActions = [addAction, editAction, deleteAction];
-    this.timeConditionReached();
   }
 
   ngOnInit() {
+    this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
         name: $localize`Name`,
@@ -129,6 +96,31 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
         flexGrow: 0.8
       }
     ];
+    const getBucketUri = () =>
+      this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
+      name: this.actionLabels.EDIT
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteAction(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
+    this.timeConditionReached();
   }
 
   transformBucketData() {
@@ -171,7 +163,6 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
       (resp: object[]) => {
         this.buckets = resp;
         this.transformBucketData();
-        this.changeDetectorRef.detectChanges();
       },
       () => {
         context.error();
