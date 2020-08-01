@@ -88,7 +88,7 @@ void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
   double opduration = op->get_duration();
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
-  if (opduration >= history_slow_op_threshold.load())
+  if (opduration >= (double)history_slow_op_threshold.load()/(double)1000.0)
     slow_op.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
 }
@@ -193,7 +193,7 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
   cleanup(now);
   f->open_object_section("OpHistory slow ops");
   f->dump_int("num to keep", history_slow_op_size.load());
-  f->dump_int("threshold to keep", history_slow_op_threshold.load());
+  f->dump_unsigned("threshold to keep(millisecond)", history_slow_op_threshold.load());
   {
     f->open_array_section("Ops");
     for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =

@@ -238,7 +238,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
       g_conf().get_val<std::chrono::seconds>("mon_op_history_duration").count());
   op_tracker.set_history_slow_op_size_and_threshold(
       g_conf().get_val<uint64_t>("mon_op_history_slow_op_size"),
-      g_conf().get_val<std::chrono::seconds>("mon_op_history_slow_op_threshold").count());
+      g_conf().get_val<uint64_t>("mon_op_history_slow_op_threshold"));
 
   paxos = new Paxos(this, "paxos");
 

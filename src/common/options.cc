@@ -1299,10 +1299,10 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("max number of slow historical MON OPS to keep"),
 
-    Option("mon_op_history_slow_op_threshold", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
-    .set_default(10)
+    Option("mon_op_history_slow_op_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
     .add_service("mon")
-    .set_description("duration of an op to be considered as a historical slow op"),
+    .set_description("duration (millisecond)of an op to be considered as a historical slow op"),
 
     Option("mon_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
@@ -3533,9 +3533,9 @@ std::vector<Option> get_global_options() {
     .set_default(20)
     .set_description(""),
 
-    Option("osd_op_history_slow_op_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(10.0)
-    .set_description(""),
+    Option("osd_op_history_slow_op_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_description("duration (milliseconds) of an op to be considered as a historical slow op"),
 
     Option("osd_target_transaction_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
