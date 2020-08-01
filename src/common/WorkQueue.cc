@@ -133,8 +133,8 @@ void ThreadPool::worker(WorkThread *wt)
     ldout(cct,20) << "worker waiting" << dendl;
     cct->get_heartbeat_map()->reset_timeout(
       hb,
-      cct->_conf->threadpool_default_timeout,
-      0);
+      ceph::make_timespan(cct->_conf->threadpool_default_timeout),
+      ceph::make_timespan(0));
     auto wait = std::chrono::seconds(
       cct->_conf->threadpool_empty_queue_max_wait);
     _cond.wait_for(ul, wait);
@@ -278,7 +278,8 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
       while (pause_threads) {
        cct->get_heartbeat_map()->reset_timeout(
 	        hb,
-	        wq->timeout_interval, wq->suicide_interval);
+	        ceph::make_timespan(wq->timeout_interval),
+		ceph::make_timespan(wq->suicide_interval));
        shardedpool_cond.wait_for(
 	 ul,
 	 std::chrono::seconds(cct->_conf->threadpool_empty_queue_max_wait));
@@ -293,7 +294,8 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
         while (drain_threads) {
 	  cct->get_heartbeat_map()->reset_timeout(
 	    hb,
-	    wq->timeout_interval, wq->suicide_interval);
+	    ceph::make_timespan(wq->timeout_interval),
+	    ceph::make_timespan(wq->suicide_interval));
           shardedpool_cond.wait_for(
 	    ul,
 	    std::chrono::seconds(cct->_conf->threadpool_empty_queue_max_wait));
@@ -304,7 +306,8 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 
     cct->get_heartbeat_map()->reset_timeout(
       hb,
-      wq->timeout_interval, wq->suicide_interval);
+      ceph::make_timespan(wq->timeout_interval),
+      ceph::make_timespan(wq->suicide_interval));
     wq->_process(thread_index, hb);
 
   }
