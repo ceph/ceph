@@ -35,6 +35,7 @@ public:
 
   virtual RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) = 0;
   virtual RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) = 0;
+  virtual RGWCoroutine *get_info_cr(SIProvider::Info *info) = 0;
   virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
   virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) = 0;
   virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) = 0;
@@ -59,6 +60,7 @@ public:
 
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
+  RGWCoroutine *get_info_cr(SIProvider::Info *info) override;
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
@@ -98,6 +100,7 @@ public:
 
   RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
   RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
+  RGWCoroutine *get_info_cr(SIProvider::Info *info) override;
   RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
   RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;
   RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string *marker) override;

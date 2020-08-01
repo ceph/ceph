@@ -81,7 +81,8 @@ public:
 									     "meta.full",
                                                                              std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >(),
 									     SIProvider::StageType::FULL,
-									     1) {
+									     1,
+                                                                             false) {
     meta.mgr = meta_mgr;
   }
 

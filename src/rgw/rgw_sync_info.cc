@@ -37,6 +37,7 @@ void SIProvider::StageInfo::dump(Formatter *f) const
   encode_json("next_sid", next_sid, f);
   encode_json("type", stage_type_to_str(type), f);
   encode_json("num_shards", num_shards, f);
+  encode_json("disabled", disabled, f);
 }
 
 void SIProvider::StageInfo::decode_json(JSONObj *obj)
@@ -47,6 +48,7 @@ void SIProvider::StageInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("type", type_str, obj);
   type = stage_type_from_str(type_str);
   JSONDecoder::decode_json("num_shards", num_shards, obj);
+  JSONDecoder::decode_json("disabled", disabled, obj);
 }
 
 void SIProvider::Info::dump(Formatter *f) const

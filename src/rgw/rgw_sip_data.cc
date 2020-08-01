@@ -125,7 +125,8 @@ SIProvider_DataInc::SIProvider_DataInc(CephContext *_cct,
                                                                                            "data.inc",
                                                                                            std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
                                                                                            SIProvider::StageType::INC,
-                                                                                           _cct->_conf->rgw_data_log_num_shards) {
+                                                                                           _cct->_conf->rgw_data_log_num_shards,
+                                                                                           false) {
   svc.datalog = _datalog_svc;
   ctl.bucket = _bucket_ctl;
 }

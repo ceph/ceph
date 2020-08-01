@@ -23,6 +23,7 @@
 #include "rgw_datalog.h"
 #include "rgw_metadata.h"
 #include "rgw_sip_data.h"
+#include "rgw_sip_bucket.h"
 #include "rgw_sync_counters.h"
 #include "rgw_sync_error_repo.h"
 #include "rgw_sync_module.h"
@@ -1099,7 +1100,7 @@ protected:
   CephContext *cct;
 
   std::unique_ptr<SIProviderCRMgr_REST> sip;
-  std::vector<SIProvider::stage_id_t> stages;
+  SIProvider::Info info;
 
   SIProvider::TypeHandler *type_handler;
 
@@ -1114,12 +1115,12 @@ protected:
 
     int operate() {
       reenter(this) {
-        yield call(siph->sip->get_stages_cr(&siph->stages));
+        yield call(siph->sip->get_info_cr(&siph->info));
         if (retcode < 0) {
           ldout(cct, 0) << "ERROR: failed to fetch list of stages for sip (" << siph->sip_name << "): retcode=" << retcode << dendl;
           return set_cr_error(retcode);
         }
-        if (siph->stages.empty()) {
+        if (siph->info.stages.empty()) {
           ldout(cct, 0) << "ERROR: sip (" << siph->sip_name << ") has no stages, likely a bug!" << dendl;
           return set_cr_error(-EIO);
         }
@@ -1213,7 +1214,7 @@ public:
   RGWCoroutine *fetch_cr(int shard_id,
                          const string& marker,
                          T *result) override {
-    auto& sid = stages.front();
+    auto& sid = info.stages.front().sid;
     return new FetchCR(this, sip.get(), sid, shard_id, marker, result);
   }
 };
@@ -3325,6 +3326,7 @@ class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   const string instance_key;
 
+  rgw_bilog_marker_info bilog_info;
   rgw_bucket_index_marker_info *info;
 
 public:
@@ -3343,11 +3345,13 @@ public:
 	                                { NULL, NULL } };
 
         string p = "/admin/log/";
-        call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, info));
+        call(new RGWReadRESTResourceCR<rgw_bilog_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, &bilog_info));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
+      info->pos = bilog_info.max_marker;
+      info->syncstopped = bilog_info.syncstopped;
       return set_cr_done();
     }
     return 0;
@@ -3423,6 +3427,103 @@ public:
   RGWCoroutine *fetch_cr(int shard_id,
                          const string& marker,
                          sip_bucket_fetch_result *result) override;
+};
+
+class RGWBucketSyncInfoCRHandler_SIP_Base : public RGWSyncInfoCRHandler_SIP<sip_bucket_fetch_result, rgw_bucket_index_marker_info>,
+                                            public RGWBucketPipeSyncInfoCRHandler
+{
+  SIProvider::TypeHandlerProviderRef type_provider;
+
+protected:
+  int handle_fetched_entry(const SIProvider::stage_id_t& sid, SIProvider::Entry& fetched_entry, sip_bucket_fetch_result::entry *pe) override {
+    sip_bucket_fetch_result::entry& e = *pe;
+
+    int r = type_handler->handle_entry(sid, fetched_entry, [&](SIProvider::EntryInfoBase& _info) {
+      auto& info = static_cast<siprovider_bucket_entry_info&>(_info);
+      auto& le = info.entry;
+
+      e.id = fetched_entry.key;
+
+      if (!e.key.set(rgw_obj_index_key{le.object, le.instance})) {
+        ldout(cct, 0) << "ERROR: parse_raw_oid() on " << le.object << " returned false, skipping entry" << dendl;
+        return -EINVAL;
+      }
+      e.mtime = le.timestamp;
+      if (le.ver.pool < 0) {
+        e.versioned_epoch = le.ver.epoch;
+      }
+      e.op = le.op;
+      e.state = le.state;
+      e.tag = le.tag;
+      e.is_versioned = le.is_versioned();
+      e.owner = rgw_bucket_entry_owner(le.owner, le.owner_display_name);
+      e.zones_trace = le.zones_trace;
+
+      return 0;
+    });
+
+    return r;
+  }
+
+public:
+  RGWBucketSyncInfoCRHandler_SIP_Base(RGWDataSyncCtx *_sc,
+                                      const rgw_bucket& source_bucket,
+                                      const string& _sip_name) : RGWSyncInfoCRHandler_SIP(_sc->cct,
+                                                                                          _sip_name),
+                                                               RGWBucketPipeSyncInfoCRHandler(_sc) {
+    type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >();
+    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
+                                                    _sc->conn,
+                                                    _sc->env->http_manager,
+                                                    _sip_name,
+                                                    type_provider.get(),
+                                                    source_bucket.get_key()));
+  }
+
+#warning FIXME?
+#if 0
+  int validate_sync_marker(rgw_bucket_index_marker_info& marker) const override {
+    if (marker.sip_name == sip_name) {
+      return 0;
+    }
+
+    if (marker.sip_name.empty() ||
+        marker.sip_name == "legacy/bucket.inc") {
+      /* marker is compatible, no need to convert */
+      marker.sip_name = sip_name;
+      return 0;
+    }
+
+    /* unsupported marker type */
+
+    return -ENOTSUP;
+  }
+#endif
+};
+
+class RGWBucketFullSyncInfoCRHandler_SIP : public RGWBucketSyncInfoCRHandler_SIP_Base {
+public:
+  RGWBucketFullSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc,
+                                     const rgw_bucket& source_bucket) : RGWBucketSyncInfoCRHandler_SIP_Base(_sc, source_bucket, "bucket.full") {
+  }
+
+  RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *pos) override {
+    *pos = rgw_bucket_index_marker_info();
+    return nullptr;
+  }
+};
+
+class RGWBucketIncSyncInfoCRHandler_SIP : public RGWBucketSyncInfoCRHandler_SIP_Base {
+public:
+  RGWBucketIncSyncInfoCRHandler_SIP(RGWDataSyncCtx *_sc,
+                                    const rgw_bucket& source_bucket) : RGWBucketSyncInfoCRHandler_SIP_Base(_sc, source_bucket, "bucket.inc") {
+  }
+
+  RGWCoroutine *get_pos_cr(int shard_id, rgw_bucket_index_marker_info *pos) override {
+    auto& stage = info.stages.front();
+    pos->syncstopped = stage.disabled;
+    return sip->get_cur_state_cr(stage.sid, shard_id, &pos->pos);
+  }
 };
 
 class RGWBucketSyncStatusCRHandler_Legacy : public RGWBucketPipeSyncStatusCRHandler {
@@ -3522,7 +3623,7 @@ public:
           // whether or not to do full sync, incremental sync will follow anyway
           if (bsc->env->sync_module->should_full_sync()) {
             status.state = rgw_bucket_shard_sync_info::StateFullSync;
-            status.inc_marker.modify().position = info.max_marker;
+            status.inc_marker.modify().position = info.pos;
           } else {
             // clear the marker position unless we're resuming from SYNCSTOP
             if (!stopped) {

@@ -37,6 +37,7 @@ public:
     std::optional<stage_id_t> next_sid;
     StageType type{UNKNOWN};
     int num_shards{0};
+    bool disabled{false};
 
     void dump(Formatter *f) const;
     void decode_json(JSONObj *obj);
@@ -169,9 +170,10 @@ public:
                          const std::string& name,
                          SIProvider::TypeHandlerProviderRef _type_provider,
                          StageType type,
-                         int num_shards) : SIProviderCommon(_cct, name),
-                                           stage_info({name, nullopt, type, num_shards}),
-                                           type_provider(_type_provider) {}
+                         int num_shards,
+                         bool disabled) : SIProviderCommon(_cct, name),
+                                          stage_info({name, nullopt, type, num_shards, disabled}),
+                                          type_provider(_type_provider) {}
 
   SIProvider::TypeHandlerProvider *get_type_provider() override {
     return type_provider.get();

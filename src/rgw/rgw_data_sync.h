@@ -581,7 +581,7 @@ struct rgw_bucket_shard_sync_info {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
-struct rgw_bucket_index_marker_info {
+struct rgw_bilog_marker_info {
   std::string bucket_ver;
   std::string master_ver;
   std::string max_marker;
@@ -593,6 +593,11 @@ struct rgw_bucket_index_marker_info {
     JSONDecoder::decode_json("max_marker", max_marker, obj);
     JSONDecoder::decode_json("syncstopped", syncstopped, obj);
   }
+};
+
+struct rgw_bucket_index_marker_info {
+  string pos;
+  bool syncstopped{false};
 };
 
 class RGWBucketShardSIPCRWrapper;

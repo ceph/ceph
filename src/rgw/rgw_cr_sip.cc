@@ -108,6 +108,18 @@ RGWCoroutine *SIProviderCRMgr_Local::get_stage_info_cr(const SIProvider::stage_i
                                });
 }
 
+RGWCoroutine *SIProviderCRMgr_Local::get_info_cr(SIProvider::Info *info)
+{
+  auto pvd = provider; /* capture another reference */
+  return new RGWSafeRetAsyncCR<SIProvider::Info>(cct,
+                               async_rados,
+                               info,
+                               [=](SIProvider::Info *_info) {
+                                 *_info = pvd->get_info();
+                                 return 0;
+                               });
+}
+
 RGWCoroutine *SIProviderCRMgr_Local::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
 {
   auto pvd = provider; /* capture another reference */
@@ -422,6 +434,11 @@ RGWCoroutine *SIProviderCRMgr_REST::get_stages_cr(std::vector<SIProvider::stage_
 RGWCoroutine *SIProviderCRMgr_REST::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *sinfo)
 {
   return new SIProviderRESTCRs::GetStageInfoCR(this, sid, sinfo);
+}
+
+RGWCoroutine *SIProviderCRMgr_REST::get_info_cr(SIProvider::Info *info)
+{
+  return new SIProviderRESTCRs::GetStagesInfoCR(this, info);
 }
 
 RGWCoroutine *SIProviderCRMgr_REST::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)

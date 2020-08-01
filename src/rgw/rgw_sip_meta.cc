@@ -211,7 +211,8 @@ SIProvider_MetaInc::SIProvider_MetaInc(CephContext *_cct,
                                                                                           "meta.inc",
                                                                                           std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >(),
                                                                                           SIProvider::StageType::INC,
-                                                                                          _cct->_conf->rgw_md_log_max_shards),
+                                                                                          _cct->_conf->rgw_md_log_max_shards,
+                                                                                          false),
                                                                    mdlog(_mdlog),
                                                                    period_id(_period_id) {}
 
