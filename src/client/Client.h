@@ -1379,8 +1379,6 @@ private:
   int local_osd = -ENXIO;
   epoch_t local_osd_epoch = 0;
 
-  int unsafe_sync_write = 0;
-
   // mds requests
   ceph_tid_t last_tid = 0;
   ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
