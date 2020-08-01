@@ -6250,14 +6250,6 @@ void Client::_unmount(bool abort)
 
   _ll_drop_pins();
 
-  mount_cond.wait(lock, [this] {
-    if (unsafe_sync_write > 0) {
-      ldout(cct, 0) << unsafe_sync_write << " unsafe_sync_writes, waiting"
-		    << dendl;
-    }
-    return unsafe_sync_write <= 0;
-  });
-
   if (cct->_conf->client_oc) {
     // flush/release all buffered data
     std::list<InodeRef> anchor;
@@ -9664,16 +9656,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
  */
 void Client::_sync_write_commit(Inode *in)
 {
-  ceph_assert(unsafe_sync_write > 0);
-  unsafe_sync_write--;
-
   put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-
-  ldout(cct, 15) << __func__ << " unsafe_sync_write = " << unsafe_sync_write << dendl;
-  if (unsafe_sync_write == 0 && is_unmounting()) {
-    ldout(cct, 10) << __func__ << " -- no more unsafe writes, unmount can proceed" << dendl;
-    mount_cond.notify_all();
-  }
 }
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
@@ -9934,7 +9917,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
     // simple, non-atomic sync write
     C_SaferCond onfinish("Client::_write flock");
-    unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
@@ -13922,7 +13904,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
       C_SaferCond onfinish("Client::_punch_hole flock");
 
-      unsafe_sync_write++;
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
       _invalidate_inode_cache(in, offset, length);
