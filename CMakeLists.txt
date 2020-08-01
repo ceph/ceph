@@ -71,9 +71,9 @@ include_directories(
 
 if(WIN32)
   include_directories(
-  ${PROJECT_SOURCE_DIR}/src/include/win32)
+    ${PROJECT_SOURCE_DIR}/src/include/win32)
   # Boost complains if winsock2.h (or windows.h) is included before asio.hpp.
-  add_definitions(-include winsock_wrapper.h)
+  add_compile_options(-include winsock_wrapper.h)
 endif()
 
 if(FREEBSD)
