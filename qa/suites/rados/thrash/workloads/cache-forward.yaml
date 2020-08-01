@@ -1,0 +1,25 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - must scrub before tier agent can activate
+tasks:
+- exec:
+    client.0:
+      - ceph osd pool create pool 16 16
+      - ceph osd pool application enable pool rados
+      - ceph osd pool create newpool 8 8
+      - ceph osd pool application enable newpool rados
+      - ceph osd tier add newpool pool --force-nonempty
+      - ceph osd tier cache-mode pool forward --yes-i-really-mean-it
+      - ceph osd tier set-overlay newpool pool
+      - rados -p pool stat doesnotexist
+- rados:
+    clients: [client.0]
+    pools: [pool]
+    ops: 4000
+    objects: 500
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      copy_from: 50
