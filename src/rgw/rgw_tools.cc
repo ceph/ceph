@@ -36,11 +36,11 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
 		   bool mostly_omap, const Span& parent_span)
 { 
-  Span span_1 = trace(parent_span, "rgw_tools.cc : rados->ioctx_create");
+  Span span_1 = child_span("rgw_tools.cc : rados->ioctx_create", parent_span);
   int r = rados->ioctx_create(pool.name.c_str(), ioctx);
   finish_trace(span_1);
 
-  Span span_2 = trace(parent_span, "rgw_tools.cc :rados->pool_create");
+  Span span_2 = child_span("rgw_tools.cc :rados->pool_create", parent_span);
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
   finish_trace(span_2);
@@ -68,7 +68,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
     if (mostly_omap) {
       // set pg_autoscale_bias
-      Span span_3 = trace(parent_span, "rados->mon_command:rgw_rados_pool_autoscale_bias");
+      Span span_3 = child_span("rados->mon_command:rgw_rados_pool_autoscale_bias", parent_span);
       bufferlist inbl;
       float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
       int r = rados->mon_command(
@@ -81,7 +81,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
-      Span span_4 = trace(parent_span, "rados->mon_command:rgw_rados_pool_autoscale_bias");
+      Span span_4 = child_span("rados->mon_command:rgw_rados_pool_autoscale_bias", parent_span);
       // set pg_num_min
       int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
       r = rados->mon_command(
@@ -95,7 +95,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 		 << pool.name << dendl;
       }
       // set recovery_priority
-      Span span_5 = trace(parent_span, "rgw_rados_pool_recovery_priority");
+      Span span_5 = child_span("rgw_rados_pool_recovery_priority", parent_span);
       int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
@@ -262,7 +262,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
 #ifdef HAVE_BOOST_CONTEXT
@@ -284,7 +284,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
-  Span span_2 = trace(this_parent_span, "librados_cxx.cc IoCtx::operate()");
+  Span span_2 = child_span("librados_cxx.cc IoCtx::operate()", this_parent_span);
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
@@ -294,7 +294,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
 #ifdef HAVE_BOOST_CONTEXT
@@ -309,7 +309,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
-  Span span_2 = trace(this_parent_span, "librados_cxx.cc IoCtx::operate()");
+  Span span_2 = child_span("librados_cxx.cc IoCtx::operate()", this_parent_span);
   return ioctx.operate(oid, op, flags);
 }
 

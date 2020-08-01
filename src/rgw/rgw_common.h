@@ -19,6 +19,7 @@
 
 #include <array>
 #include <string_view>
+#include<stack>
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"

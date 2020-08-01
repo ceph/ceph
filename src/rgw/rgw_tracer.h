@@ -22,15 +22,15 @@ struct req_state;
 
     //jaeger initializer
     static inline void init_jager(){
-        init_tracer("RGW_Client_Process","/home/abhinav/GSOC/ceph/src/tracerConfig.yaml");
+        init_tracer("RGW_Client_Process","/home/abhinav/Desktop/tracerConfig.yaml");
     }
 #else
     #define __FILENAME__ ""
     typedef char* Span;
     typedef char req_state_span;
-    static inline Span trace(...) {return NULL;}
+    static inline Span child_span(...) {}
     static inline void finish_trace(...) {}
-    static inline void start_trace(req_state_span&& ss, Span&& sp, req_state* const s, const char* name) {}
+    static inline void start_trace(...) {}
     static inline void init_jager(...) {}
     static inline void set_span_tag(...) {}
     static inline void get_span_name(...) {}

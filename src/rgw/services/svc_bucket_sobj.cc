@@ -244,7 +244,7 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   bufferlist bl;
@@ -252,7 +252,7 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  Span span_2 = trace(this_parent_span, "RGWSI_MetaBackend::put()");
+  Span span_2 = child_span("RGWSI_MetaBackend::put()", this_parent_span);
   int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y);
   finish_trace(span_2);
   if (ret < 0) {
@@ -493,7 +493,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 {
   char buffer[1000];
   get_span_name(buffer,  __FILENAME__, "function",  __PRETTY_FUNCTION__);  
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   bufferlist bl;
@@ -509,7 +509,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
      * we're here because orig_info wasn't passed in
      * we don't have info about what was there before, so need to fetch first
      */
-    Span span_2 = trace(this_parent_span, "RGWSI_Bucket_SObj::read_bucket_instance_info");
+    Span span_2 = child_span("RGWSI_Bucket_SObj::read_bucket_instance_info", this_parent_span);
     int r  = read_bucket_instance_info(ctx,
                                        key,
                                        &shared_bucket_info,
@@ -528,7 +528,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   if (orig_info && *orig_info && !exclusive) {
-    Span span_3 = trace(this_parent_span, "RGWSI_BucketIndex::handle_overwrite");
+    Span span_3 = child_span("RGWSI_BucketIndex::handle_overwrite", this_parent_span);
     int r = svc.bi->handle_overwrite(info, *(orig_info.value()));
     finish_trace(span_3);
     if (r < 0) {

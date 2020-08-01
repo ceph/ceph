@@ -204,7 +204,7 @@ int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   uint64_t max_head_chunk_size;
@@ -213,13 +213,13 @@ int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
   uint64_t alignment;
   rgw_pool head_pool;
 
-  Span span_2 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_obj_data_pool");
+  Span span_2 = child_span("rgw_rados.cc : RGWRados::get_obj_data_pool", this_parent_span);
   if (!store->getRados()->get_obj_data_pool(bucket->get_placement_rule(), head_obj, &head_pool)) {
     return -EIO;
   }
   finish_trace(span_2);
 
-  Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_max_chunk_size");
+  Span span_3 = child_span("rgw_rados.cc : RGWRados::get_max_chunk_size", this_parent_span);
   int r = store->getRados()->get_max_chunk_size(head_pool, &max_head_chunk_size, &alignment);
   finish_trace(span_3);
   if (r < 0) {
@@ -230,7 +230,7 @@ int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
 
   if (bucket->get_placement_rule() != tail_placement_rule) {
     rgw_pool tail_pool;
-    Span span_4 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_obj_data_pool");
+    Span span_4 = child_span("rgw_rados.cc : RGWRados::get_obj_data_pool", this_parent_span);
     if (!store->getRados()->get_obj_data_pool(tail_placement_rule, head_obj, &tail_pool)) {
       return -EIO;
     }
@@ -239,7 +239,7 @@ int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
     if (tail_pool != head_pool) {
       same_pool = false;
 
-      Span span_5 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_max_chunk_size");
+      Span span_5 = child_span("rgw_rados.cc : RGWRados::get_max_chunk_size", this_parent_span);
       r = store->getRados()->get_max_chunk_size(tail_pool, &chunk_size);
       finish_trace(span_5);
       if (r < 0) {
@@ -258,13 +258,13 @@ int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
   uint64_t stripe_size;
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
 
-  Span span_6 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_max_aligned_size");
+  Span span_6 = child_span("rgw_rados.cc : RGWRados::get_max_aligned_size", this_parent_span);
   store->getRados()->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
   finish_trace(span_6);
 
   manifest.set_trivial_rule(head_max_size, stripe_size);
 
-  Span span_7 = trace(this_parent_span, "rgw_obj_manifest.cc : RGWObjManifest::generator::create_begin");
+  Span span_7 = child_span("rgw_obj_manifest.cc : RGWObjManifest::generator::create_begin", this_parent_span);
   r = manifest_gen.create_begin(store->ctx(), &manifest,
                                 bucket->get_placement_rule(),
                                 &tail_placement_rule,
@@ -302,7 +302,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   int r = writer.drain();
@@ -386,7 +386,7 @@ int MultipartObjectProcessor::prepare_head(const Span& parent_span)
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
@@ -394,20 +394,20 @@ int MultipartObjectProcessor::prepare_head(const Span& parent_span)
   uint64_t stripe_size;
   uint64_t alignment;
 
-  Span span_2 = trace(parent_span, "RGWRados::get_max_chunk_size");
+  Span span_2 = child_span("RGWRados::get_max_chunk_size", parent_span);
   int r = store->getRados()->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
   finish_trace(span_2);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
   }
-  Span span_3 = trace(this_parent_span, "RGWRados::get_max_aligned_size");
+  Span span_3 = child_span("RGWRados::get_max_aligned_size", this_parent_span);
   store->getRados()->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
   finish_trace(span_3);
 
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
-  Span span_4 = trace(this_parent_span, "RGWObjManifest::generator::create_begin");
+  Span span_4 = child_span("RGWObjManifest::generator::create_begin", this_parent_span);
   r = manifest_gen.create_begin(store->ctx(), &manifest,
                                 bucket->get_placement_rule(),
                                 &tail_placement_rule,
@@ -454,7 +454,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
   int r = writer.drain();
   if (r < 0) {
@@ -644,7 +644,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   int r = writer.drain();

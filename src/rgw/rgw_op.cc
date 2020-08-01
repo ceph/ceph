@@ -484,7 +484,7 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
     return 0;
   }
 
-  Span span_1 = trace(this_parent_span, "rgw_op.cc : rgw_op_get_bucket_policy_from_attr");
+  Span span_1 = child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", this_parent_span);
   int ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy);
   finish_trace(span_1);
   if (ret == -ENOENT) {
@@ -532,7 +532,7 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
   policy = get_iam_policy_from_attr(s->cct, store, bucket_attrs, bucket.tenant);
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-  Span span_1 = trace(this_parent_span, "rgw_op.cc : rgw_op_get_bucket_policy_from_attr");
+  Span span_1 = child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", this_parent_span);
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
                                      bucket_info, bucket_attrs, acl, storage_class, obj, s->yield);
   finish_trace(span_1);
@@ -540,7 +540,7 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    Span span_2 = trace(this_parent_span, "rgw_op.cc : rgw_op_get_bucket_policy_from_attr");
+    Span span_2 = child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", this_parent_span);
     ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy);
     finish_trace(span_2);
     if (ret < 0) {
@@ -615,7 +615,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     if (s->bucket_instance_id.empty()) {
       ret = store->getRados()->get_bucket_info(store->svc(), s->src_tenant_name, s->src_bucket_name, source_info, NULL, s->yield, NULL, this_parent_span);
     } else {
-      Span span_1 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_bucket_instance_info");
+      Span span_1 = child_span("rgw_rados.cc : RGWRados::get_bucket_instance_info", this_parent_span);
       ret = store->getRados()->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL, s->yield);
       finish_trace(span_1);
     }
@@ -1775,7 +1775,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
   if (op_ret < 0)
     return op_ret;
   bool need_decompress;
-  Span span_1 = trace(this_parent_span, "rgw_compression.cc : rgw_compression_info_from_attrset");
+  Span span_1 = child_span("rgw_compression.cc : rgw_compression_info_from_attrset", this_parent_span);
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   finish_trace(span_1);
   if (op_ret < 0) {
@@ -2406,7 +2406,7 @@ void RGWGetObj::execute()
       op_ret = -EINVAL;
       goto done_err;
     }
-    Span span_1 = trace(this_parent_span, "started torrent");
+    Span span_1 = child_span("started torrent", this_parent_span);
     torrent.init(s, store);
     rgw_obj obj = s->object->get_obj();
     op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
@@ -3255,7 +3255,7 @@ int RGWCreateBucket::verify_permission()
   if (s->user->get_max_buckets()) {
     rgw::sal::RGWBucketList buckets;
     string marker;
-    Span span_1 = trace(this_parent_span, "rgw_bucket.cc : rgw_read_user_buckets");
+    Span span_1 = child_span("rgw_bucket.cc : rgw_read_user_buckets", this_parent_span);
     op_ret = rgw_read_user_buckets(store, s->user->get_id(), buckets,
 				   marker, string(), s->user->get_max_buckets(),
 				   false);
@@ -3498,7 +3498,7 @@ void RGWCreateBucket::execute()
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  Span span_1 = trace(this_parent_span, "rgw_sal.cc : RGWRadosStore::get_bucket");
+  Span span_1 = child_span("rgw_sal.cc : RGWRadosStore::get_bucket", this_parent_span);
   op_ret = store->get_bucket(s->user, s->bucket_tenant, s->bucket_name, &s->bucket);
   finish_trace(span_1);
   if (op_ret < 0 && op_ret != -ENOENT)
@@ -3600,7 +3600,7 @@ void RGWCreateBucket::execute()
     }
   }
 
-  Span span_3 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::link_bucket");
+  Span span_3 = child_span("rgw_bucket.cc : RGWBucketCtl::link_bucket", this_parent_span);
   op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_bi(),
                                           s->bucket->get_creation_time(), s->yield, false);
   finish_trace(span_3);
@@ -3732,7 +3732,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  Span span_1 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::sync_user_stats");
+  Span span_1 = child_span("rgw_bucket.cc : RGWBucketCtl::sync_user_stats", this_parent_span);
   op_ret = s->bucket->sync_user_stats();
   finish_trace(span_1);
   if ( op_ret < 0) {
@@ -4106,7 +4106,7 @@ void RGWPutObj::execute()
       return;
     }
 
-    Span span_2 = trace(this_parent_span, "rgw_common.h : buf_to_hex");
+    Span span_2 = child_span("rgw_common.h : buf_to_hex", this_parent_span);
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
     finish_trace(span_2);
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
@@ -4114,7 +4114,7 @@ void RGWPutObj::execute()
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::check_quota");
+    Span span_3 = child_span("rgw_rados.cc : RGWRados::check_quota", this_parent_span);
     op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
 				user_quota, bucket_quota, s->content_length);
     finish_trace(span_3);
@@ -4134,7 +4134,7 @@ void RGWPutObj::execute()
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    Span span_4 = trace(this_parent_span, "rgw_rados.cc : RGWRados::swift_versioning_copy");
+    Span span_4 = child_span("rgw_rados.cc : RGWRados::swift_versioning_copy", this_parent_span);
     op_ret = store->getRados()->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket.get(),
@@ -4216,7 +4216,7 @@ void RGWPutObj::execute()
     rgw::sal::RGWRadosBucket bucket(store, copy_source_bucket_info);
 
     RGWObjState *astate;
-    Span span_5 = trace(this_parent_span, "rgw_rados.cc : RGWRados::get_obj_state");
+    Span span_5 = child_span("rgw_rados.cc : RGWRados::get_obj_state", this_parent_span);
     op_ret = obj.get_obj_state(&obj_ctx, bucket, &astate, s->yield);
     finish_trace(span_5);
     if (op_ret < 0) {
@@ -4262,7 +4262,7 @@ void RGWPutObj::execute()
     }
   }
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
-  Span span_6 = trace(this_parent_span, "rgw_op.cc : RGWPutObj-data transfer");
+  Span span_6 = child_span("rgw_op.cc : RGWPutObj-data transfer", this_parent_span);
   do {
     bufferlist data;
     if (fst > lst)
@@ -4325,7 +4325,7 @@ void RGWPutObj::execute()
     return;
   }
 
-  Span span_7 = trace(this_parent_span, "rgw_rados.cc : RGWRados::check_quota");
+  Span span_7 = child_span("rgw_rados.cc : RGWRados::check_quota", this_parent_span);
   op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
                               user_quota, bucket_quota, s->obj_size);
   finish_trace(span_7);  
@@ -5177,7 +5177,7 @@ void RGWDeleteObj::execute()
     s->object->set_atomic(s->obj_ctx);
 
     bool ver_restored = false;
-    Span span_1 = trace(this_parent_span, "rgw_rados.cc : RGWRados::swift_versoning_restore");
+    Span span_1 = child_span("rgw_rados.cc : RGWRados::swift_versoning_restore", this_parent_span);
     op_ret = store->getRados()->swift_versioning_restore(*obj_ctx, s->bucket_owner.get_id(),
 							 s->bucket.get(),
 							 s->object.get(),
@@ -5844,7 +5844,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  Span span_1 = trace(this_parent_span, "rgw_acl_s3.cc RGWAccessControlPolicy_S3::rebuild");
+  Span span_1 = child_span("rgw_acl_s3.cc RGWAccessControlPolicy_S3::rebuild", this_parent_span);
   op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy, s->err.message);
   finish_trace(span_1);
   if (op_ret < 0)
@@ -5862,7 +5862,7 @@ void RGWPutACLs::execute()
     op_ret = -EACCES;
     return;
   }
-  Span span_2 = trace(this_parent_span, "rgw_acl.h : RGWAccessControlPolicy::encode");
+  Span span_2 = child_span("rgw_acl.h : RGWAccessControlPolicy::encode", this_parent_span);
   new_policy.encode(bl);
   finish_trace(span_2);
   map<string, bufferlist> attrs;
@@ -5874,7 +5874,7 @@ void RGWPutACLs::execute()
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
-    Span span_3 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::set_bucket_instance_attrs");
+    Span span_3 = child_span("rgw_bucket.cc : RGWBucketCtl::set_bucket_instance_attrs", this_parent_span);
     op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
 							  &s->bucket->get_info().objv_tracker,
 							  s->yield);
@@ -6276,7 +6276,7 @@ void RGWInitMultipart::execute()
   if (rgw::sal::RGWObject::empty(s->object.get()))
     return;
 
-  Span span_1 = trace(this_parent_span, "rgw_acl.h : RGWAccessControlPolicy::encode");
+  Span span_1 = child_span("rgw_acl.h : RGWAccessControlPolicy::encode", this_parent_span);
   policy.encode(aclbl);
   finish_trace(span_1);
   attrs[RGW_ATTR_ACL] = aclbl;
@@ -6322,7 +6322,7 @@ void RGWInitMultipart::execute()
     upload_info.dest_placement = s->dest_placement;
 
     bufferlist bl;
-    Span span_2 = trace(this_parent_span, "rgw_op.cc : encode");
+    Span span_2 = child_span("rgw_op.cc : encode", this_parent_span);
     encode(upload_info, bl);
     finish_trace(span_2);
     obj_op.meta.data = &bl;
@@ -6542,7 +6542,7 @@ void RGWCompleteMultipart::execute()
         return;
       }
 
-       Span span_1 = trace(this_parent_span, "rgw_common.h : hex_to_buf");
+       Span span_1 = child_span("rgw_common.h : hex_to_buf", this_parent_span);
       hex_to_buf(obj_iter->second.etag.c_str(), petag,
 		CEPH_CRYPTO_MD5_DIGESTSIZE);
     finish_trace(span_1);
@@ -6605,7 +6605,7 @@ void RGWCompleteMultipart::execute()
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
 
-  Span span_2 = trace(this_parent_span, "rgw_op.cc : buf_to_hex");
+  Span span_2 = child_span("rgw_op.cc : buf_to_hex", this_parent_span);
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
   finish_trace(span_2);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,

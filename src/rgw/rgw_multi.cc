@@ -209,7 +209,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   rgw_obj meta_obj;
@@ -225,7 +225,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   uint64_t parts_accounted_size = 0;
 
   do {
-    Span span_2 = trace(this_parent_span, "rgw_multi.cc : list_multipart_parts");
+    Span span_2 = child_span("rgw_multi.cc : list_multipart_parts", this_parent_span);
     ret = list_multipart_parts(store, bucket_info, cct,
 			       mp_obj.get_upload_id(), mp_obj.get_meta(),
 			       1000, marker, obj_parts, &marker, &truncated);
@@ -249,7 +249,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
-        Span span_3 = trace(this_parent_span, "rgw_rados.cc : RGWRados::update_gc_chain");
+        Span span_3 = child_span("rgw_rados.cc : RGWRados::update_gc_chain", this_parent_span);
         store->getRados()->update_gc_chain(meta_obj, obj_part.manifest, &chain);
         finish_trace(span_3);
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
@@ -268,7 +268,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   } while (truncated);
 
   /* use upload id as tag and do it synchronously */
-  Span span_4 = trace(this_parent_span, "rgw_rados.cc : RGWRados::send_chain_to_gc");
+  Span span_4 = child_span("rgw_rados.cc : RGWRados::send_chain_to_gc", this_parent_span);
   ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
   finish_trace(span_4);
   if (ret < 0) {
@@ -309,7 +309,7 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
@@ -330,7 +330,7 @@ int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RG
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   constexpr int max = 1000;

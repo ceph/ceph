@@ -325,7 +325,7 @@ int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucke
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   RGWObjectCtx rctx(store);
@@ -3122,7 +3122,7 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
@@ -3248,7 +3248,7 @@ int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
@@ -3372,7 +3372,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
 {
   char buffer[1000];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
-  Span span_1 = trace(parent_span, buffer);
+  Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
 
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
@@ -3380,7 +3380,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
 
     if (!bucket_info.has_instance_obj) {
       /* an old bucket object, need to convert it */
-        Span span_2 = trace(this_parent_span, "rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info");
+        Span span_2 = child_span("rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info", this_parent_span);
         int ret = convert_old_bucket_info(ctx, bucket, y);
         finish_trace(span_2);
 

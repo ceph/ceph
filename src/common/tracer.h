@@ -48,25 +48,18 @@ static inline void init_tracer(const char* tracerName,const char* filePath){
       jager_initialized = true;
   }
 
-static inline Span new_span(const char* spanName){
-      Span span=opentracing::Tracer::Global()->StartSpan(spanName);
+static inline Span new_span(const char* span_name){
+      Span span=opentracing::Tracer::Global()->StartSpan(span_name);
       return span;
   }
-static inline Span child_span(const char* spanName,const Span& parentSpan){
-      Span span = opentracing::Tracer::Global()->StartSpan(spanName, {opentracing::ChildOf(&parentSpan->context())});
-      return span;
-  }
-
-//method to start tracing of a single Span
-static inline Span trace(const Span& parent_span, const char* span_name)
+static inline Span child_span(const char* span_name,const Span& parent_span)
 {
-    if(parent_span)
-    {
-      Span span = child_span(span_name, parent_span);
-      return span;
+    if(parent_span){
+        Span span = opentracing::Tracer::Global()->StartSpan(span_name, {opentracing::ChildOf(&parent_span->context())});
+        return span;
     }
     return NULL;
-}
+  }
 
 //method to finish tracing of a single Span
 static inline void finish_trace(Span& span)
