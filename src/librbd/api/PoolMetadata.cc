@@ -36,6 +36,8 @@ int PoolMetadata<I>::set(librados::IoCtx& io_ctx, const std::string &key,
                          const std::string &value) {
   CephContext *cct = (CephContext *)io_ctx.cct();
 
+  bool update_pool_timestamp = false;
+
   std::string config_key;
   if (util::is_metadata_config_override(key, &config_key)) {
     if (!librbd::api::Config<I>::is_option_name(io_ctx, config_key)) {
@@ -49,6 +51,8 @@ int PoolMetadata<I>::set(librados::IoCtx& io_ctx, const std::string &key,
                  << dendl;
       return -EINVAL;
     }
+
+    update_pool_timestamp = true;
   }
 
   ceph::bufferlist bl;
@@ -59,6 +63,26 @@ int PoolMetadata<I>::set(librados::IoCtx& io_ctx, const std::string &key,
     lderr(cct) << "failed setting metadata " << key << ": " << cpp_strerror(r)
                << dendl;
     return r;
+  }
+
+  if (update_pool_timestamp) {
+    auto now = ceph_clock_now();
+    std::string cmd =
+      R"({)"
+        R"("prefix": "config set", )"
+        R"("who": "global", )"
+        R"("name": "rbd_config_pool_override_update_timestamp", )"
+        R"("value": ")" + stringify(now.sec()) + R"(")"
+      R"(})";
+
+    librados::Rados rados(io_ctx);
+    bufferlist in_bl;
+    std::string ss;
+    r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+    if (r < 0) {
+      lderr(cct) << "failed to notify clients of pool config update: "
+                 << cpp_strerror(r) << dendl;
+    }
   }
 
   return 0;
