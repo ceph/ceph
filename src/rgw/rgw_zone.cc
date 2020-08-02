@@ -2123,6 +2123,14 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
   if (config.exists("secret")) {
     key.key = config["secret"];
   }
+  if (config.exists("retain_object")) {
+    string s = config["retain_object"];
+    if (s == "true") {
+      retain_object = true;
+    } else {
+      retain_object = false;
+    }
+  }
 
   if (config.exists("multipart_sync_threshold")) {
     r = conf_to_uint64(config, "multipart_sync_threshold", &multipart_sync_threshold);
@@ -2178,6 +2186,9 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
   }
   if (config.exists("secret")) {
     key.key.clear();
+  }
+  if (config.exists("retain_object")) {
+    retain_object = false;
   }
   if (config.exists("multipart_sync_threshold")) {
     multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;

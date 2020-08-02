@@ -1274,12 +1274,23 @@ public:
    return 0;
  }
 
+  int delete_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
+    int ret = -1;
+
+    /* XXX: do we need to check for retention/versioning attributes
+     * as done in RGWDeleteObj?
+     */
+    ret = oc.store->getRados()->delete_obj(oc.rctx, oc.bucket_info, oc.obj, 0);
+
+    return ret;
+  }
+
   int update_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
 
     map<string, bufferlist> attrs;
     RGWRados::Object op_target(tier_ctx.store->getRados(),
                                tier_ctx.bucket_info,
-                                tier_ctx.rctx, tier_ctx.obj);
+                               tier_ctx.rctx, tier_ctx.obj);
 
     RGWRados::Object::Read read_op(&op_target);
 
@@ -1387,10 +1398,18 @@ public:
       return ret;
     }
 
-    ret = update_tier_obj(oc, tier_ctx);
-    if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "Updating tier object failed ret=" << ret << dendl;
-      return ret;
+    if (oc.tier.retain_object) {
+      ret = update_tier_obj(oc, tier_ctx);
+      if (ret < 0) {
+        ldpp_dout(oc.dpp, 0) << "Updating tier object failed ret=" << ret << dendl;
+        return ret;
+      }
+    } else {
+      ret = delete_tier_obj(oc, tier_ctx);
+      if (ret < 0) {
+        ldpp_dout(oc.dpp, 0) << "Deleting tier object failed ret=" << ret << dendl;
+        return ret;
+      }
     }
 
     return 0;
