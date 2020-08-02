@@ -815,6 +815,11 @@ void ObjectOperation::assert_exists() {
   o->ops.push_back(std::bind(&TestIoCtxImpl::assert_exists, _1, _2, _4));
 }
 
+void ObjectOperation::assert_version(uint64_t ver) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::assert_version, _1, _2, ver));
+}
+
 void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
