@@ -2,7 +2,7 @@ import json
 from io import StringIO
 from os.path import join as os_path_join
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run import CommandFailedError, Raw
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import FileLayout
@@ -432,6 +432,25 @@ class TestSubCmdFsAuthorize(CapsHelper):
 
         self.run_mon_cap_tests(moncap, keyring)
         self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+
+    def test_single_path_rootsquash(self):
+        filedata, filename = 'some data on fs 1', 'file_on_fs1'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+
+        keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
+        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
+                                                keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+
+        if filepath.find(self.mount_a.hostfs_mntpt) != -1:
+            # can read, but not write as root
+            contents = self.mount_a.read_file(filepath)
+            self.assertEqual(filedata, contents)
+            cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
+            self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
 
     def test_multiple_path_r(self):
         perm, paths = 'r', ('/dir1', '/dir2/dir22')
