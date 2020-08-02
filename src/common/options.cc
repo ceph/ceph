@@ -2349,6 +2349,12 @@ std::vector<Option> get_global_options() {
     .set_default(10.0)
     .set_description("Seconds before in-flight op is considered 'laggy' and we query mon for the latest OSDMap"),
 
+    Option("objecter_homeless_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Timeout homeless session : Duration (in seconds) after which the op is cancelled")
+    .set_long_description("It will cancel the op associated with a homeless session after the specified duration. "
+                          "Homeless session means that there is no availiable osd in the PG to process the I/O"),
+
     Option("objecter_inflight_op_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Max in-flight data in bytes (both directions)"),

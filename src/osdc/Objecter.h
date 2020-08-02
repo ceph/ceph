@@ -1913,7 +1913,7 @@ public:
     std::variant<std::unique_ptr<OpComp>, fu2::unique_function<OpSig>,
 		 Context*> onfinish;
     uint64_t ontimeout = 0;
-
+    uint64_t on_noosd_timeout = 0;
     ceph_tid_t tid = 0;
     int attempts = 0;
 
