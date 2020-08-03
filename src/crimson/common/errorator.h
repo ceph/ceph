@@ -964,6 +964,8 @@ namespace ct_error {
   using value_too_large = ct_error_code<std::errc::value_too_large>;
   using eagain =
     ct_error_code<std::errc::resource_unavailable_try_again>;
+  using file_too_large =
+    ct_error_code<std::errc::file_too_large>;
 
   struct pass_further_all {
     template <class ErrorT>
