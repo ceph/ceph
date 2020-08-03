@@ -286,29 +286,6 @@ def is_ceph_device(lv):
 
 PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
-def get_api_pvs():
-    """
-    Return the list of physical volumes configured for lvm and available in the
-    system using flags to include common metadata associated with them like the uuid
-
-    This will only return physical volumes set up to work with LVM.
-
-    Command and delimited output should look like::
-
-        $ pvs --noheadings --readonly --separator=';' -o pv_name,pv_tags,pv_uuid
-          /dev/sda1;;
-          /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
-
-    """
-    stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o',
-         PV_FIELDS],
-        verbose_on_failure=False
-    )
-
-    return _output_parser(stdout, PV_FIELDS)
-
-
 class PVolume(object):
     """
     Represents a Physical Volume from LVM, with some top-level attributes like
