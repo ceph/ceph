@@ -5134,9 +5134,13 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   ldpp_dout(s, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
   RGWBWRoutingRule rrule;
-  bool should_redirect =
-    s->bucket->get_info().website_conf.should_redirect(original_object_name,
-                                                http_error_code, &rrule);
+  bool have_bucket = !rgw::sal::RGWBucket::empty(s->bucket.get());
+  bool should_redirect = false;
+  if (have_bucket) {
+    should_redirect =
+      s->bucket->get_info().website_conf.should_redirect(original_object_name,
+							 http_error_code, &rrule);
+  }
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
@@ -5155,7 +5159,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   } else if (err_no == -ERR_WEBSITE_REDIRECT) {
     // Do nothing here, this redirect will be handled in abort_early's ERR_WEBSITE_REDIRECT block
     // Do NOT fire the ErrorDoc handler
-  } else if (!s->bucket->get_info().website_conf.error_doc.empty()) {
+  } else if (have_bucket && !s->bucket->get_info().website_conf.error_doc.empty()) {
     /* This serves an entire page!
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler
