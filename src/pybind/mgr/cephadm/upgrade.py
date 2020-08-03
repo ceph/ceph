@@ -217,7 +217,8 @@ class CephadmUpgrade:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_name)
             try:
-                target_id, target_version = self.mgr._get_container_image_id(target_name)
+                target_id, target_version, repo_digest = self.mgr._get_container_image_info(
+                    target_name)
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
                     'severity': 'warning',
