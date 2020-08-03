@@ -31,26 +31,6 @@ class TestParseTags(object):
         assert result['ceph.fsid'] == '0000'
 
 
-class TestGetAPILvs(object):
-
-    def test_report_is_emtpy(self, monkeypatch):
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: ('', '', 0))
-        assert api.get_api_lvs() == []
-
-    def test_report_has_stuff(self, monkeypatch):
-        report = ['  ;/path;VolGroup00;root']
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (report, '', 0))
-        result = api.get_api_lvs()
-        assert result[0]['lv_name'] == 'VolGroup00'
-
-    def test_report_has_multiple_items(self, monkeypatch):
-        report = ['  ;/path;VolName;root', ';/dev/path;ceph_lv;ceph_vg']
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (report, '', 0))
-        result = api.get_api_lvs()
-        assert result[0]['lv_name'] == 'VolName'
-        assert result[1]['lv_name'] == 'ceph_lv'
-
-
 class TestVolume(object):
 
     def test_is_ceph_device(self):
