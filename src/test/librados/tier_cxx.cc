@@ -3001,8 +3001,10 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
 
   // create object
   {
+    bufferlist bl;
+    bl.append("There hi");
     ObjectWriteOperation op;
-    op.create(true);
+    op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
@@ -3012,14 +3014,6 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
     op.write_full(bl);
     ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
   }
-
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -3039,13 +3033,17 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
     completion->release();
   }
 
-  // make all chunks dirty --> full flush --> all chunks are evicted
+  // flush
   {
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 
   // read and verify the object
@@ -3054,11 +3052,6 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
     ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('T', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
