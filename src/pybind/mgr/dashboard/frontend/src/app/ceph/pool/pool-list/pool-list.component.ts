@@ -6,6 +6,7 @@ import * as _ from 'lodash';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
+import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -55,7 +56,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
   tableActions: CdTableAction[];
-  viewCacheStatusList: any[];
+  tableStatus = new TableStatusViewCache();
   cacheTiers: any[] = [];
   monAllowPoolDelete = false;
 
@@ -63,7 +64,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private poolService: PoolService,
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
-    private taskListService: TaskListService,
+    public taskListService: TaskListService,
     private modalService: ModalService,
     private pgCategoryService: PgCategoryService,
     private dimlessPipe: DimlessPipe,
@@ -202,10 +203,13 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     this.taskListService.init(
       () => this.poolService.getList(),
       undefined,
-      (pools) => (this.pools = this.transformPoolsData(pools)),
+      (pools) => {
+        this.pools = this.transformPoolsData(pools);
+        this.tableStatus = new TableStatusViewCache();
+      },
       () => {
         this.table.reset(); // Disable loading indicator.
-        this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
+        this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
       },
       (task) => task.name.startsWith(`${BASE_URL}/`),
       (pool, task) => task.metadata['pool_name'] === pool.pool_name,

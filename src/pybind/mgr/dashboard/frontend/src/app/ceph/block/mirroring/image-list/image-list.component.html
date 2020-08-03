@@ -10,7 +10,8 @@
                 columnMode="flex"
                 [columns]="image_error.columns"
                 [autoReload]="-1"
-                (fetchData)="refresh()">
+                (fetchData)="refresh()"
+                [status]="tableStatus">
       </cd-table>
     </ng-template>
   </li>
@@ -22,7 +23,8 @@
                 columnMode="flex"
                 [columns]="image_syncing.columns"
                 [autoReload]="-1"
-                (fetchData)="refresh()">
+                (fetchData)="refresh()"
+                [status]="tableStatus">
       </cd-table>
     </ng-template>
   </li>
@@ -34,7 +36,8 @@
                 columnMode="flex"
                 [columns]="image_ready.columns"
                 [autoReload]="-1"
-                (fetchData)="refresh()">
+                (fetchData)="refresh()"
+                [status]="tableStatus">
       </cd-table>
     </ng-template>
   </li>
