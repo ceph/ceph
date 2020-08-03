@@ -4073,8 +4073,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     bufferlist bl;
     bl.append("Thabe cd");
     ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
   // flush
   {
@@ -4299,8 +4298,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
     bufferlist bl;
     bl.append("There");
     ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
   }
 
   // create a snapshot, clone
