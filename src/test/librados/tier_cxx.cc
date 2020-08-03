@@ -2957,14 +2957,6 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
     ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
   }
 
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
@@ -2983,11 +2975,6 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
     ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('t', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -3093,14 +3080,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
     ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
   }
 
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
@@ -3157,11 +3136,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
     ASSERT_EQ(1, ioctx.read("foo-chunk", bl, 1, 0));
     ASSERT_EQ('C', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
