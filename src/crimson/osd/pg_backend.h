@@ -68,6 +68,9 @@ public:
     const ObjectState& os,
     OSDOp& osd_op);
 
+  // TODO: switch the entire write family to errorator.
+  using write_ertr = crimson::errorator<
+    crimson::ct_error::file_too_large>;
   seastar::future<> create(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -81,6 +84,11 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
   seastar::future<> writefull(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
+  write_ertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
