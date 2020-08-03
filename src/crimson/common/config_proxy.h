@@ -155,6 +155,14 @@ public:
     });
   }
 
+  seastar::future<> inject_args(const std::string& s) {
+    return do_change([s, this](ConfigValues& values) {
+      std::stringstream err;
+      if (get_config().injectargs(values, obs_mgr, s, &err)) {
+        throw std::invalid_argument(err.str());
+      }
+    });
+  }
   void show_config(ceph::Formatter* f) const;
 
   seastar::future<> parse_argv(std::vector<const char*>& argv) {

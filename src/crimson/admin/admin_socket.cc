@@ -3,6 +3,7 @@
 
 #include "crimson/admin/admin_socket.h"
 
+#include <boost/algorithm/string/join.hpp>
 #include <fmt/format.h>
 #include <seastar/net/api.hh>
 #include <seastar/net/inet_address.hh>
@@ -390,6 +391,30 @@ class GetdescsHook final : public AdminSocketHook {
   }
 };
 
+class InjectArgsHook final : public AdminSocketHook {
+public:
+  InjectArgsHook()
+    : AdminSocketHook("injectargs",
+		      "injectargs name=injected_args,type=CephString,n=N",
+		      "inject configuration arguments into running daemon")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
+  {
+    std::vector<std::string> argv;
+    [[maybe_unused]] bool found = cmd_getval(cmdmap, "injected_args", argv);
+    assert(found);
+    const std::string args = boost::algorithm::join(argv, " ");
+    return local_conf().inject_args(args).then([] {
+      return seastar::make_ready_future<tell_result_t>();
+    }).handle_exception_type([] (const std::invalid_argument& e) {
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{-EINVAL, e.what()});
+    });
+  }
+};
+
 /// the hooks that are served directly by the admin_socket server
 seastar::future<> AdminSocket::register_admin_commands()
 {
@@ -397,7 +422,8 @@ seastar::future<> AdminSocket::register_admin_commands()
     register_command(std::make_unique<VersionHook>()),
     register_command(std::make_unique<GitVersionHook>()),
     register_command(std::make_unique<HelpHook>(*this)),
-    register_command(std::make_unique<GetdescsHook>(*this)));
+    register_command(std::make_unique<GetdescsHook>(*this)),
+    register_command(std::make_unique<InjectArgsHook>()));
 }
 
 }  // namespace crimson::admin
