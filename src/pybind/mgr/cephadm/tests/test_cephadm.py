@@ -845,3 +845,30 @@ class TestCephadm(object):
             code, out, err = cephadm_module.registry_login('fail-url', 'fail-user', 'fail-password')
             assert err == 'Host test failed to login to fail-url as fail-user with given password'
             check_registry_credentials('json-url', 'json-user', 'json-pass')
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(json.dumps({
+        'image_id': 'image_id',
+                    'repo_digest': 'image@repo_digest',
+    })))
+    @pytest.mark.parametrize("use_repo_digest",
+                             [
+                                 False,
+                                 True
+                             ])
+    def test_upgrade_run(self, use_repo_digest, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.set_container_image('global', 'image')
+            if use_repo_digest:
+                cephadm_module.use_repo_digest = True
+
+            cephadm_module.convert_tags_to_repo_digest()
+
+            _, image, _ = cephadm_module.check_mon_command({
+                'prefix': 'config get',
+                'who': 'global',
+                'key': 'container_image',
+            })
+            if use_repo_digest:
+                assert image == 'image@repo_digest'
+            else:
+                assert image == 'image'

@@ -103,3 +103,10 @@ def get_cluster_health(mgr: 'CephadmOrchestrator') -> str:
         raise OrchestratorError('failed to parse health status')
 
     return j['status']
+
+
+def is_repo_digest(image_name: str) -> bool:
+    """
+    repo digest are something like "ceph/ceph@sha256:blablabla"
+    """
+    return '@' in image_name

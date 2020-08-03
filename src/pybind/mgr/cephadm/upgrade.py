@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Dict
 
 import orchestrator
 from cephadm.utils import name_to_config_section
@@ -205,6 +205,19 @@ class CephadmUpgrade:
             return
         self.mgr.set_store('upgrade_state', json.dumps(self.upgrade_state.to_json()))
 
+    def get_distinct_container_image_settings(self) -> Dict[str, str]:
+        # get all distinct container_image settings
+        image_settings = {}
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config dump',
+            'format': 'json',
+        })
+        config = json.loads(out)
+        for opt in config:
+            if opt['name'] == 'container_image':
+                image_settings[opt['section']] = opt['value']
+        return image_settings
+
     def _do_upgrade(self):
         # type: () -> None
         if not self.upgrade_state:
@@ -234,16 +247,7 @@ class CephadmUpgrade:
         logger.info('Upgrade: Target is %s with id %s' % (target_name,
                                                           target_id))
 
-        # get all distinct container_image settings
-        image_settings = {}
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config dump',
-            'format': 'json',
-        })
-        config = json.loads(out)
-        for opt in config:
-            if opt['name'] == 'container_image':
-                image_settings[opt['section']] = opt['value']
+        image_settings = self.get_distinct_container_image_settings()
 
         daemons = self.mgr.cache.get_daemons()
         done = 0
