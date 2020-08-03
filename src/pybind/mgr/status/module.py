@@ -30,7 +30,7 @@ class Module(MgrModule):
         },
     ]
 
-        
+
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         #self.log.error("get_latest {0} data={1}".format(stat, data))
@@ -113,6 +113,10 @@ class Module(MgrModule):
                             activity = "Reqs: " + mgr_util.format_dimless(rate, 5) + "/s"
 
                     metadata = self.get_metadata('mds', info['name'])
+                    if metadata is None:
+                        self.log.error("get_metadata for daemon {} returned nothing".format(info['name']))
+                        metadata = {}
+
                     mds_versions[metadata.get('ceph_version', "unknown")].append(info['name'])
                     if output_format in ('json', 'json-pretty'):
                         json_output['mdsmap'].append({
@@ -160,6 +164,10 @@ class Module(MgrModule):
                     activity = "Evts: " + mgr_util.format_dimless(events, 5) + "/s"
 
                 metadata = self.get_metadata('mds', daemon_info['name'])
+                if metadata is None:
+                    self.log.error("get_metadata for daemon {} returned nothing".format(info['name']))
+                    metadata = {}
+
                 mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
 
                 if output_format in ('json', 'json-pretty'):
@@ -197,7 +205,7 @@ class Module(MgrModule):
             for pool_id in [metadata_pool_id] + data_pool_ids:
                 pool_type = "metadata" if pool_id == metadata_pool_id else "data"
                 stats = pool_stats[pool_id]
-                
+
                 if output_format in ('json', 'json-pretty'):
                     json_output['pools'].append({
                         'id': pool_id,
@@ -212,7 +220,7 @@ class Module(MgrModule):
                         mgr_util.format_bytes(stats['bytes_used'], 5),
                         mgr_util.format_bytes(stats['max_avail'], 5)
                     ])
-            
+
             if output_format in ('json', 'json-pretty'):
                 json_output['clients'].append({
                     'fs': mdsmap['fs_name'],
@@ -233,6 +241,10 @@ class Module(MgrModule):
         standby_table.right_padding_width = 2
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
+            if metadata is None:
+                self.log.error("get_metadata for daemon {} returned nothing".format(info['name']))
+                metadata = {}
+
             mds_versions[metadata.get('ceph_version', "unknown")].append(standby['name'])
 
             if output_format in ('json', 'json-pretty'):
