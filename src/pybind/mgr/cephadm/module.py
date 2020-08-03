@@ -10,7 +10,7 @@ from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator, Union
+    Any, Set, TYPE_CHECKING, cast, Iterator, Union, NamedTuple
 
 import datetime
 import six
@@ -105,6 +105,12 @@ def trivial_completion(f: Callable[..., T]) -> Callable[..., CephadmCompletion[T
         return CephadmCompletion(on_complete=lambda _: f(*args, **kwargs))
 
     return wrapper
+
+
+class ContainerInspectInfo(NamedTuple):
+    image_id: str
+    ceph_version: Optional[str]
+    repo_digest: Optional[str]
 
 
 @six.add_metaclass(CLICommandMeta)
@@ -2511,7 +2517,7 @@ To check that the host is reachable:
     def apply_alertmanager(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
-    def _get_container_image_id(self, image_name):
+    def _get_container_image_info(self, image_name) -> ContainerInspectInfo:
         # pick a random host...
         host = None
         for host_name in self.inventory.keys():
@@ -2530,12 +2536,19 @@ To check that the host is reachable:
         if code:
             raise OrchestratorError('Failed to pull %s on %s: %s' % (
                 image_name, host, '\n'.join(out)))
-        j = json.loads('\n'.join(out))
-        image_id = j.get('image_id')
-        ceph_version = j.get('ceph_version')
-        self.log.debug('image %s -> id %s version %s' %
-                       (image_name, image_id, ceph_version))
-        return image_id, ceph_version
+        try:
+            j = json.loads('\n'.join(out))
+            r = ContainerInspectInfo(
+                j['image_id'],
+                j.get('ceph_version'),
+                j.get('repo_digest')
+            )
+            self.log.debug(f'image {image_name} -> {r}')
+            return r
+        except (ValueError, KeyError) as _:
+            msg = 'Failed to pull %s on %s: %s' % (image_name, host, '\n'.join(out))
+            self.log.exception(msg)
+            raise OrchestratorError(msg)
 
     @trivial_completion
     def upgrade_check(self, image, version) -> str:
@@ -2546,19 +2559,18 @@ To check that the host is reachable:
         else:
             raise OrchestratorError('must specify either image or version')
 
-        target_id, target_version = self._get_container_image_id(target_name)
-        self.log.debug('Target image %s id %s version %s' % (
-            target_name, target_id, target_version))
+        image_info = self._get_container_image_info(target_name)
+        self.log.debug(f'image info {image} -> {image_info}')
         r = {
             'target_name': target_name,
-            'target_id': target_id,
-            'target_version': target_version,
+            'target_id': image_info.image_id,
+            'target_version': image_info.ceph_version,
             'needs_update': dict(),
             'up_to_date': list(),
         }
         for host, dm in self.cache.daemons.items():
             for name, dd in dm.items():
-                if target_id == dd.container_image_id:
+                if image_info.image_id == dd.container_image_id:
                     r['up_to_date'].append(dd.name())
                 else:
                     r['needs_update'][dd.name()] = {
