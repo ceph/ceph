@@ -205,9 +205,6 @@
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1
 
-/* Defined if you have librocksdb enabled */
-#cmakedefine HAVE_LIBROCKSDB
-
 /* Define to 1 if you have the <valgrind/helgrind.h> header file. */
 #cmakedefine HAVE_VALGRIND_HELGRIND_H 1
 
