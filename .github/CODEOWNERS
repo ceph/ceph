@@ -7,6 +7,15 @@
 /monitoring/prometheus                          @ceph/dashboard
 /doc/mgr/dashboard.rst                          @ceph/dashboard
 
+# Dashboard API team
+/src/pybind/mgr/dashboard/controllers                  @ceph/api
+/src/pybind/mgr/dashboard/frontend/src/app/shared/api  @ceph/api
+/src/pybind/mgr/dashboard/run-backend-api-tests.sh     @ceph/api
+/qa/suites/rados/dashboard                             @ceph/api
+/qa/tasks/mgr/test_dashboard.py                        @ceph/api
+/qa/tasks/mgr/dashboard                                @ceph/api
+/qa/tasks/mgr/test_module_selftest.py                  @ceph/api
+
 # For Orchestrator related PRs
 /src/cephadm                                    @ceph/orchestrators
 /src/pybind/mgr/orchestrator                    @ceph/orchestrators
