@@ -391,7 +391,7 @@ int get_actual_key_from_kms(CephContext *cct,
   std::string kms_backend;
 
   kms_backend = cct->_conf->rgw_crypt_s3_kms_backend;
-  ldout(cct, 20) << "Getting KMS encryption key for key " << key_id << dendl;
+  ldout(cct, 20) << "Getting KMS encryption key for key_id " << key_id << dendl;
   ldout(cct, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
   if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend)
