@@ -2490,18 +2490,33 @@ def command_inspect_image():
     # type: () -> int
     out, err, ret = call_throws([
         container_path, 'inspect',
-        '--format', '{{.Id}}',
+        '--format', '{{.ID}},{{json .RepoDigests}}',
         args.image])
     if ret:
         return errno.ENOENT
-    image_id = normalize_container_id(out.strip())
+    info_from = get_image_info_from_inspect(out.strip(), args.image)
+
     ver = CephContainer(args.image, 'ceph', ['--version']).run().strip()
-    r = {
-        'image_id': image_id,
-        'ceph_version': ver,
-    }
-    print(json.dumps(r, indent=4, sort_keys=True))
+    info_from['ceph_version'] = ver
+
+    print(json.dumps(info_from, indent=4, sort_keys=True))
     return 0
+
+
+def get_image_info_from_inspect(out, image):
+    # type: (str, str) -> Dict[str, str]
+    image_id, digests = out.split(',', 1)
+    if not out:
+        raise Error('inspect {}: empty result'.format(image))
+    r = {
+        'image_id': normalize_container_id(image_id)
+    }
+    if digests:
+        json_digests = json.loads(digests)
+        if json_digests:
+            r['repo_digest'] = json_digests[0]
+    return r
+
 
 ##################################
 
