@@ -112,11 +112,11 @@ class Device(object):
         '''
         devName = self.path.split('/')[-1]
         if not os.path.exists('/sys/block/{}'.format(devName)):
-            return dict()
+            return {}
 
         lsm_disk = LSMDisk(self.path)
         if not lsm_disk.lsm_available:
-            return dict()
+            return {}
 
         lsm_json = lsm_disk.json_report()
         

@@ -7,8 +7,8 @@ a critical component of ceph-volume.
 import logging
 
 try:
-    import lsm
-    from lsm._local_disk import LocalDisk, LsmError
+    from lsm import LocalDisk, LsmError
+    from lsm import Disk as lsm_Disk
 except ImportError:
     lsm_available = False
 else:
@@ -36,7 +36,7 @@ class LSMDisk:
     @property
     def errors(self):
         """show any errors that the LSM interaction has encountered (str)"""
-        return ",".join(self.error_list)
+        return ", ".join(self.error_list)
 
     def _query_lsm(self, func, path):
         """Common method used to call the LSM functions, returning the function's result or None"""
@@ -49,7 +49,7 @@ class LSMDisk:
         try:
             output = method(path)
         except LsmError as err:
-            # logger.exception("LSM Error: {}".format(err._msg))
+            logger.error("LSM Error: {}".format(err._msg))
             self.error_list.add(err._msg)
             return None
         else:
@@ -59,9 +59,8 @@ class LSMDisk:
     def led_status(self):
         """Fetch LED status, store in the LSMDisk object and return current status (int)"""
         if self.led_bits is None:
-            bitfield = self._query_lsm('led_status_get', self.dev_path) or 1
-            self.led_bits = bitfield
-            return bitfield
+            self.led_bits = self._query_lsm('led_status_get', self.dev_path) or 1
+            return self.led_bits
         else:
             return self.led_bits
 
@@ -71,11 +70,11 @@ class LSMDisk:
         led_state = self.led_status
         if led_state == 1:
             return "Unsupported"
-        if led_state & lsm.Disk.LED_STATUS_IDENT_ON == lsm.Disk.LED_STATUS_IDENT_ON:
+        if led_state & lsm_Disk.LED_STATUS_IDENT_ON == lsm_Disk.LED_STATUS_IDENT_ON:
             return "On"
-        elif led_state & lsm.Disk.LED_STATUS_IDENT_OFF == lsm.Disk.LED_STATUS_IDENT_OFF:
+        elif led_state & lsm_Disk.LED_STATUS_IDENT_OFF == lsm_Disk.LED_STATUS_IDENT_OFF:
             return "Off"
-        elif led_state & lsm.Disk.LED_STATUS_IDENT_UNKNOWN == lsm.Disk.LED_STATUS_IDENT_UNKNOWN:
+        elif led_state & lsm_Disk.LED_STATUS_IDENT_UNKNOWN == lsm_Disk.LED_STATUS_IDENT_UNKNOWN:
             return "Unknown"
         
         return "Unsupported"
@@ -86,11 +85,11 @@ class LSMDisk:
         led_state = self.led_status
         if led_state == 1:
             return "Unsupported"
-        if led_state & lsm.Disk.LED_STATUS_FAULT_ON == lsm.Disk.LED_STATUS_FAULT_ON:
+        if led_state & lsm_Disk.LED_STATUS_FAULT_ON == lsm_Disk.LED_STATUS_FAULT_ON:
             return "On"
-        elif led_state & lsm.Disk.LED_STATUS_FAULT_OFF == lsm.Disk.LED_STATUS_FAULT_OFF:
+        elif led_state & lsm_Disk.LED_STATUS_FAULT_OFF == lsm_Disk.LED_STATUS_FAULT_OFF:
             return "Off"
-        elif led_state & lsm.Disk.LED_STATUS_FAULT_UNKNOWN == lsm.Disk.LED_STATUS_FAULT_UNKNOWN:
+        elif led_state & lsm_Disk.LED_STATUS_FAULT_UNKNOWN == lsm_Disk.LED_STATUS_FAULT_UNKNOWN:
             return "Unknown"
         
         return "Unsupported"
@@ -103,9 +102,9 @@ class LSMDisk:
             return "Unknown"
 
         ident_states = (
-            lsm.Disk.LED_STATUS_IDENT_ON + 
-            lsm.Disk.LED_STATUS_IDENT_OFF + 
-            lsm.Disk.LED_STATUS_IDENT_UNKNOWN
+            lsm_Disk.LED_STATUS_IDENT_ON + 
+            lsm_Disk.LED_STATUS_IDENT_OFF + 
+            lsm_Disk.LED_STATUS_IDENT_UNKNOWN
         )
 
         if (led_state & ident_states) == 0:
@@ -121,9 +120,9 @@ class LSMDisk:
             return "Unknown"
 
         fail_states = (
-            lsm.Disk.LED_STATUS_FAULT_ON + 
-            lsm.Disk.LED_STATUS_FAULT_OFF + 
-            lsm.Disk.LED_STATUS_FAULT_UNKNOWN
+            lsm_Disk.LED_STATUS_FAULT_ON + 
+            lsm_Disk.LED_STATUS_FAULT_OFF + 
+            lsm_Disk.LED_STATUS_FAULT_UNKNOWN
         )
 
         if led_state & fail_states == 0:
@@ -152,18 +151,18 @@ class LSMDisk:
 
         if _link_type is not None:
             _transport_map = {
-                lsm.Disk.LINK_TYPE_UNKNOWN: "Unavailable",
-                lsm.Disk.LINK_TYPE_FC: "Fibre Channel",
-                lsm.Disk.LINK_TYPE_SSA: "IBM SSA",
-                lsm.Disk.LINK_TYPE_SBP: "Serial Bus",
-                lsm.Disk.LINK_TYPE_SRP: "SCSI RDMA",
-                lsm.Disk.LINK_TYPE_ISCSI: "iSCSI",
-                lsm.Disk.LINK_TYPE_SAS: "SAS",
-                lsm.Disk.LINK_TYPE_ADT: "ADT (Tape)",
-                lsm.Disk.LINK_TYPE_ATA: "ATA/SATA",
-                lsm.Disk.LINK_TYPE_USB: "USB",
-                lsm.Disk.LINK_TYPE_SOP: "SCSI over PCI-E",
-                lsm.Disk.LINK_TYPE_PCIE: "PCI-E",
+                lsm_Disk.LINK_TYPE_UNKNOWN: "Unavailable",
+                lsm_Disk.LINK_TYPE_FC: "Fibre Channel",
+                lsm_Disk.LINK_TYPE_SSA: "IBM SSA",
+                lsm_Disk.LINK_TYPE_SBP: "Serial Bus",
+                lsm_Disk.LINK_TYPE_SRP: "SCSI RDMA",
+                lsm_Disk.LINK_TYPE_ISCSI: "iSCSI",
+                lsm_Disk.LINK_TYPE_SAS: "SAS",
+                lsm_Disk.LINK_TYPE_ADT: "ADT (Tape)",
+                lsm_Disk.LINK_TYPE_ATA: "ATA/SATA",
+                lsm_Disk.LINK_TYPE_USB: "USB",
+                lsm_Disk.LINK_TYPE_SOP: "SCSI over PCI-E",
+                lsm_Disk.LINK_TYPE_PCIE: "PCI-E",
             }
             return _transport_map.get(_link_type, "Unknown")
         else:
@@ -200,4 +199,4 @@ class LSMDisk:
                 "errors": list(self.error_list)
             }
         else:
-            return dict()
+            return {}
