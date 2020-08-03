@@ -32,8 +32,6 @@
 enum {
   l_rocksdb_first = 34300,
   l_rocksdb_gets,
-  l_rocksdb_txns,
-  l_rocksdb_txns_sync,
   l_rocksdb_get_latency,
   l_rocksdb_submit_latency,
   l_rocksdb_submit_sync_latency,
