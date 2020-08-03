@@ -3486,13 +3486,17 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
   }
+  // flush
   {
-    // do flush
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+      "foo-dedup", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
   {
     // make a dirty chunks
@@ -3502,13 +3506,17 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
+  // flush
   {
-    // do flush
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
   // chunk's refcount 
   {
