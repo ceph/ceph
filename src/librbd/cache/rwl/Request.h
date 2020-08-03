@@ -233,31 +233,6 @@ private:
                                   const C_FlushRequest<U> &req);
 };
 
-class C_ReadRequest : public Context {
-public:
-  io::Extents miss_extents; // move back to caller
-  ImageExtentBufs read_extents;
-  bufferlist miss_bl;
-
-  C_ReadRequest(CephContext *cct, utime_t arrived, PerfCounters *perfcounter, bufferlist *out_bl, Context *on_finish)
-    : m_cct(cct), m_on_finish(on_finish), m_out_bl(out_bl),
-      m_arrived_time(arrived), m_perfcounter(perfcounter) {}
-  ~C_ReadRequest() {}
-
-  void finish(int r) override;
-
-  const char *get_name() const {
-    return "C_ReadRequest";
-  }
-
-private:
-  CephContext *m_cct;
-  Context *m_on_finish;
-  bufferlist *m_out_bl;
-  utime_t m_arrived_time;
-  PerfCounters *m_perfcounter;
-};
-
 /**
  * This is the custodian of the BlockGuard cell for this discard. As in the
  * case of write, the block guard is not released until the discard persists
@@ -380,21 +355,31 @@ struct BlockGuardReqState {
   bool detained = false;
   bool queued = false; /* Queued for barrier */
   friend std::ostream &operator<<(std::ostream &os,
-                                  const BlockGuardReqState &r);
+                                  const BlockGuardReqState &r) {
+    os << "barrier=" << r.barrier << ", "
+       << "current_barrier=" << r.current_barrier << ", "
+       << "detained=" << r.detained << ", "
+       << "queued=" << r.queued;
+    return os;
+  }
 };
 
 class GuardedRequestFunctionContext : public Context {
 public:
   BlockGuardCell *cell = nullptr;
   BlockGuardReqState state;
-  GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback);
-  ~GuardedRequestFunctionContext(void) override;
+  GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback)
+    : m_callback(std::move(callback)){ }
+  ~GuardedRequestFunctionContext(void) override { };
   GuardedRequestFunctionContext(const GuardedRequestFunctionContext&) = delete;
   GuardedRequestFunctionContext &operator=(const GuardedRequestFunctionContext&) = delete;
 
 private:
   boost::function<void(GuardedRequestFunctionContext&)> m_callback;
-  void finish(int r) override;
+  void finish(int r) override {
+    ceph_assert(cell);
+    m_callback(*this);
+  }
 };
 
 class GuardedRequest {
@@ -408,7 +393,12 @@ public:
     guard_ctx->state.barrier = barrier;
   }
   friend std::ostream &operator<<(std::ostream &os,
-                                  const GuardedRequest &r);
+                                  const GuardedRequest &r) {
+    os << "guard_ctx->state=[" << r.guard_ctx->state << "], "
+       << "block_extent.block_start=" << r.block_extent.block_start << ", "
+       << "block_extent.block_start=" << r.block_extent.block_end;
+    return os;
+  }
 };
 
 } // namespace rwl

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/cache/Utils.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
@@ -203,8 +204,10 @@ void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
       on_finish->complete(r);
     });
 
+  bool rwl_enabled = cache::util::is_rwl_enabled(m_image_ctx);
   if (m_image_ctx.clone_copy_on_read ||
-      (features & RBD_FEATURE_JOURNALING) != 0) {
+      (features & RBD_FEATURE_JOURNALING) != 0 ||
+      rwl_enabled) {
     m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, on_finish);
   } else {
     m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, on_finish);

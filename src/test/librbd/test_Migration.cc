@@ -271,8 +271,8 @@ struct TestMigration : public TestFixture {
   }
 
   void flush() {
-    ASSERT_EQ(0, api::Io<>::flush(*m_ref_ictx));
-    ASSERT_EQ(0, api::Io<>::flush(*m_ictx));
+    ASSERT_EQ(0, TestFixture::flush_writeback_cache(m_ref_ictx));
+    ASSERT_EQ(0, TestFixture::flush_writeback_cache(m_ictx));
   }
 
   void snap_create(const std::string &snap_name) {
@@ -540,6 +540,7 @@ librados::IoCtx TestMigration::_other_pool_ioctx;
 TEST_F(TestMigration, Empty)
 {
   uint64_t features = m_ictx->features ^ RBD_FEATURE_LAYERING;
+  features &= ~RBD_FEATURE_DIRTY_CACHE;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FEATURES, features));
 
   migrate(m_ioctx, m_image_name);

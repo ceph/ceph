@@ -43,6 +43,8 @@ set(librbd_internal_srcs
   cache/ObjectCacherObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
   cache/PassthroughImageCache.cc
+  cache/rwl/InitRequest.cc
+  cache/rwl/ShutdownRequest.cc
   cache/WriteAroundObjectDispatch.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
@@ -197,6 +199,7 @@ if(WITH_RBD_RWL)
     cache/rwl/LogEntry.cc
     cache/rwl/LogMap.cc
     cache/rwl/LogOperation.cc
+    cache/rwl/ReadRequest.cc
     cache/rwl/Request.cc
     cache/rwl/SyncPoint.cc
     cache/rwl/Types.cc
