@@ -307,17 +307,12 @@ class CephadmUpgrade:
                     return
                 logger.info('Upgrade: Redeploying %s.%s' %
                             (d.daemon_type, d.daemon_id))
-                ret, out, err = self.mgr.check_mon_command({
-                    'prefix': 'config set',
-                    'name': 'container_image',
-                    'value': target_name,
-                    'who': name_to_config_section(daemon_type + '.' + d.daemon_id),
-                })
                 self.mgr._daemon_action(
                     d.daemon_type,
                     d.daemon_id,
                     d.hostname,
-                    'redeploy'
+                    'redeploy',
+                    image=target_name
                 )
                 return
 
