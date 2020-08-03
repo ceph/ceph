@@ -401,27 +401,6 @@ VG_FIELDS = 'vg_name,pv_count,lv_count,vg_attr,vg_extent_count,vg_free_count,vg_
 VG_CMD_OPTIONS = ['--noheadings', '--readonly', '--units=b', '--nosuffix', '--separator=";"']
 
 
-def get_api_vgs():
-    """
-    Return the list of group volumes available in the system using flags to
-    include common metadata associated with them
-
-    Command and sample delimited output should look like::
-
-        $ vgs --noheadings --units=b --readonly --separator=';' \
-          -o vg_name,pv_count,lv_count,vg_attr,vg_free_count,vg_extent_size
-          ubuntubox-vg;1;2;wz--n-;12;
-
-    To normalize sizing, the units are forced in 'g' which is equivalent to
-    gigabytes, which uses multiples of 1024 (as opposed to 1000)
-    """
-    stdout, stderr, returncode = process.call(
-        ['vgs'] + VG_CMD_OPTIONS + ['-o', VG_FIELDS],
-        verbose_on_failure=False
-    )
-    return _output_parser(stdout, VG_FIELDS)
-
-
 class VolumeGroup(object):
     """
     Represents an LVM group, with some top-level attributes like ``vg_name``
