@@ -1,11 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+#include "common/Cond.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Io.h"
 #include "cls/lock/cls_lock_client.h"
@@ -143,4 +145,20 @@ int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
   std::shared_lock owner_locker{ictx.owner_lock};
   ceph_assert(ictx.exclusive_lock != nullptr);
   return ictx.exclusive_lock->is_lock_owner() ? 0 : -EINVAL;
+}
+
+int TestFixture::flush_writeback_cache(librbd::ImageCtx *image_ctx) {
+  if (image_ctx->test_features(RBD_FEATURE_DIRTY_CACHE)) {
+    // cache exists. Close to flush data
+    C_SaferCond ctx;
+    auto aio_comp = librbd::io::AioCompletion::create_and_start(
+      &ctx, image_ctx, librbd::io::AIO_TYPE_FLUSH);
+    auto req = librbd::io::ImageDispatchSpec<>::create_flush(
+      *image_ctx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+      librbd::io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+    return ctx.wait();
+  } else {
+    return librbd::api::Io<>::flush(*image_ctx);
+  }
 }
