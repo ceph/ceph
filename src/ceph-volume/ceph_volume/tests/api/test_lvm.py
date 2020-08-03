@@ -31,33 +31,6 @@ class TestParseTags(object):
         assert result['ceph.fsid'] == '0000'
 
 
-class TestGetAPIVgs(object):
-
-    def test_report_is_emtpy(self, monkeypatch):
-        monkeypatch.setattr(api.process, 'call', lambda x,**kw: ('\n\n', '', 0))
-        assert api.get_api_vgs() == []
-
-    def test_report_has_stuff(self, monkeypatch):
-        report = ['  VolGroup00']
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (report, '', 0))
-        assert api.get_api_vgs() == [{'vg_name': 'VolGroup00'}]
-
-    def test_report_has_stuff_with_empty_attrs(self, monkeypatch):
-        report = ['  VolGroup00 ;;;;;;4194304']
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (report, '', 0))
-        result = api.get_api_vgs()[0]
-        assert len(result.keys()) == 7
-        assert result['vg_name'] == 'VolGroup00'
-        assert result['vg_extent_size'] == '4194304'
-
-    def test_report_has_multiple_items(self, monkeypatch):
-        report = ['   VolGroup00;;;;;;;', '    ceph_vg;;;;;;;']
-        monkeypatch.setattr(api.process, 'call', lambda x, **kw: (report, '', 0))
-        result = api.get_api_vgs()
-        assert result[0]['vg_name'] == 'VolGroup00'
-        assert result[1]['vg_name'] == 'ceph_vg'
-
-
 class TestGetAPILvs(object):
 
     def test_report_is_emtpy(self, monkeypatch):
