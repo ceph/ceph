@@ -10306,7 +10306,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   ceph_statfs stats;
   C_SaferCond cond;
 
-  std::scoped_lock lock(client_lock);
+  std::unique_lock lock(client_lock);
   const vector<int64_t> &data_pools = mdsmap->get_data_pools();
   if (data_pools.size() == 1) {
     objecter->get_fs_stats(stats, data_pools[0], &cond);
@@ -10314,11 +10314,12 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     objecter->get_fs_stats(stats, boost::optional<int64_t>(), &cond);
   }
 
-  client_lock.unlock();
+  lock.unlock();
   int rval = cond.wait();
+  lock.lock();
+
   assert(root);
   total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
-  client_lock.lock();
 
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
