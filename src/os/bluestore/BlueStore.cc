@@ -4917,16 +4917,7 @@ void BlueStore::_validate_bdev()
   ceph_assert(bdev);
   ceph_assert(min_alloc_size); // _get_odisk_reserved depends on that
   uint64_t dev_size = bdev->get_size();
-  if (dev_size < 
-    _get_ondisk_reserved() + cct->_conf->bluestore_bluefs_min) {
-    dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
-            << " is too small, disable bluestore_bluefs_min for now"
-            << dendl;
-    ceph_assert(dev_size >= _get_ondisk_reserved());
-
-    int r = cct->_conf.set_val("bluestore_bluefs_min", "0");
-    ceph_assert(r == 0);
-  }
+  ceph_assert(dev_size > _get_ondisk_reserved());
 }
 
 void BlueStore::_close_bdev()
@@ -4965,17 +4956,9 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only)
 
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
-    // bluefs_extents.
+    // bluefs doing that itself.
     auto reserved = _get_ondisk_reserved();
     fm->allocate(0, reserved, t);
-
-    if (cct->_conf->bluestore_bluefs) {
-      ceph_assert(bluefs_extents.num_intervals() == 1);
-      interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      reserved = round_up_to(p.get_start() + p.get_len(), min_alloc_size);
-      dout(20) << __func__ << " reserved 0x" << std::hex << reserved << std::dec
-	       << " for bluefs" << dendl;
-    }
 
     if (cct->_conf->bluestore_debug_prefill > 0) {
       uint64_t end = bdev->get_size() - reserved;
@@ -5077,21 +5060,6 @@ int BlueStore::_open_alloc()
   ceph_assert(alloc == NULL);
   ceph_assert(bdev->get_size());
 
-  if (bluefs) {
-    bluefs_extents.clear();
-    auto r = bluefs->get_block_extents(bluefs_layout.shared_bdev,
-                                       &bluefs_extents);
-    if (r < 0) {
-      lderr(cct) << __func__ << " failed to retrieve bluefs_extents: "
-		 << cpp_strerror(r) << dendl;
-
-      return r;
-    }
-    dout(10) << __func__ << " bluefs extents 0x"
-             << std::hex << bluefs_extents << std::dec
-	     << dendl;
-  }
-
   uint64_t alloc_size = min_alloc_size;
   if (bdev->is_smr()) {
     alloc_size = _piggyback_zoned_device_parameters_onto(alloc_size);
@@ -5150,11 +5118,6 @@ int BlueStore::_open_alloc()
   }
   fm->enumerate_reset();
 
-  // also mark bluefs space as allocated
-  for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-    alloc->init_rm_free(e.get_start(), e.get_len());
-  }
-
   dout(1) << __func__ << " loaded " << byte_u_t(bytes)
     << " in " << num << " extents"
     << " available " << byte_u_t(alloc->get_free())
@@ -5172,7 +5135,6 @@ void BlueStore::_close_alloc()
   alloc->shutdown();
   delete alloc;
   alloc = NULL;
-  bluefs_extents.clear();
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -5364,6 +5326,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
     }
     if (create) {
       bluefs->add_block_extent(
+        create,
 	BlueFS::BDEV_DB,
 	SUPER_RESERVED,
 	bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
@@ -5386,44 +5349,21 @@ int BlueStore::_minimal_open_bluefs(bool create)
   bfn = path + "/block";
   // never trim here
   r = bluefs->add_block_device(bluefs_layout.shared_bdev, bfn, false,
-			       true /* shared with bluestore */);
+                               true,
+			       alloc);
   if (r < 0) {
     derr << __func__ << " add block device(" << bfn << ") returned: "
 	  << cpp_strerror(r) << dendl;
     goto free_bluefs;
   }
   if (create) {
-    // note: we always leave the first SUPER_RESERVED (8k) of the device unused
-    uint64_t start, initial;
-    if (bdev->is_smr()) {
-      // For now, we allocate all of the conventional region on HM-SMR drive to
-      // bluefs and assume that it never outgrows that region.
-      start = _get_ondisk_reserved();
-      initial = bdev->get_conventional_region_size() - start;
-    } else {
-      initial = bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
-				    cct->_conf->bluestore_bluefs_gift_ratio);
-      initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
-      uint64_t alloc_size = cct->_conf->bluefs_shared_alloc_size;
-      if (alloc_size % min_alloc_size) {
-	derr << __func__ << " bluefs_shared_alloc_size 0x" << std::hex
-	     << alloc_size << " is not a multiple of "
-	     << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-	r = -EINVAL;
-	goto free_bluefs;
-      }
-      // align to bluefs's alloc_size
-      initial = p2roundup(initial, alloc_size);
-      // put bluefs in the middle of the device in case it is an HDD
-      start = p2align((bdev->get_size() - initial) / 2, alloc_size);
-      //avoiding superblock overwrite
-      start = std::max(alloc_size, start);
-      ceph_assert(start >=_get_ondisk_reserved());
-    }
+    auto reserved = _get_ondisk_reserved();
 
-    bluefs->add_block_extent(bluefs_layout.shared_bdev, start, initial);
-    bluefs_extents.insert(start, initial);
-    ++out_of_sync_fm;
+    bluefs->add_block_extent(
+      create,
+      bluefs_layout.shared_bdev,
+      reserved,
+      p2align(bdev->get_size(), min_alloc_size) - reserved);
   }
 
   bfn = path + "/block.wal";
@@ -5450,6 +5390,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
 
     if (create) {
       bluefs->add_block_extent(
+        create,
         BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
 	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
 	  BDEV_LABEL_BLOCK_SIZE);
@@ -5584,17 +5525,18 @@ int BlueStore::_open_db_and_around(bool read_only)
     if (r < 0)
       goto out_fm;
 
-    // now open in R/W mode
-    if (!read_only) {
-      _close_db(true);
+    // Re-open in the proper mode.
+    // Can't simply bypass second open for read-only mode as we need to
+    // load allocated extents from bluefs into allocator.
+    // And now it's time to do that
+    //
+    _close_db(true);
 
-      r = _open_db(false, false, false);
-      if (r < 0) {
-	_close_alloc();
-	_close_fm();
-	return r;
-      }
-      fm->sync(db);
+    r = _open_db(false, false, read_only);
+    if (r < 0) {
+      _close_alloc();
+      _close_fm();
+      return r;
     }
   } else {
     r = _open_db(false, false);
@@ -5626,23 +5568,7 @@ int BlueStore::_open_db_and_around(bool read_only)
 void BlueStore::_close_db_and_around(bool read_only)
 {
   if (bluefs) {
-    if (!read_only && out_of_sync_fm.fetch_and(0)) {
-      _sync_bluefs_and_fm();
-    }
     _close_db(read_only);
-    while(!read_only && out_of_sync_fm.fetch_and(0)) {
-      // if seen some allocations during close - repeat open_db, sync fm, close
-      dout(0) << __func__ << " syncing FreelistManager" << dendl;
-      int r = _open_db(false, false, false);
-      if (r < 0) {
-	derr << __func__
-	      << " unable to open db, FreelistManager is probably out of sync"
-	      << dendl;
-	break;
-      }
-      _sync_bluefs_and_fm();
-      _close_db(false);
-    }
     if (!_kv_only) {
       _close_alloc();
       _close_fm();
@@ -5651,30 +5577,6 @@ void BlueStore::_close_db_and_around(bool read_only)
     _close_alloc();
     _close_fm();
     _close_db(read_only);
-  }
-}
-
-// updates legacy bluefs related recs in DB to a state valid for
-// downgrades from nautilus.
-void BlueStore::_sync_bluefs_and_fm()
-{
-  if (cct->_conf->bluestore_bluefs_db_compatibility) {
-    bufferlist bl;
-    encode(bluefs_extents, bl);
-    dout(20) << __func__ << " bluefs_extents at KV is now 0x"
-             << std::hex << bluefs_extents << std::dec
-	     << dendl;
-    KeyValueDB::Transaction synct = db->get_transaction();
-    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
-    synct->set(PREFIX_SUPER, "bluefs_extents_back", bl);
-
-    // Nice thing is that we don't need to update FreelistManager here.
-    // It always has corresponding bits set to 'Free' for both Nautilus+ and
-    // pre-Nautilis releases.
-    // So once we get an extent to bluefs_extents this means it's
-    // been free in allocator and hence it's free in FM too.
-
-    db->submit_transaction_sync(synct);
   }
 }
 
@@ -5803,7 +5705,6 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
       // simplify the dir names, too, as "seen" by rocksdb
       fn = "db";
     }
-    bluefs->set_slow_device_expander(this);
     BlueFSVolumeSelector::paths paths;
     bluefs->get_vselector_paths(fn, paths);
 
@@ -5957,234 +5858,6 @@ void BlueStore::_dump_alloc_on_failure()
     next_dump_on_bluefs_alloc_failure = ceph_clock_now();
     next_dump_on_bluefs_alloc_failure += dump_interval;
   }
-}
-
-
-int BlueStore::allocate_bluefs_freespace(
-  uint64_t min_size,
-  uint64_t size,
-  PExtentVector* extents_out)
-{
-  ceph_assert(min_size <= size);
-  if (size) {
-    // round up to alloc size
-    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_layout.shared_bdev);
-    min_size = p2roundup(min_size, alloc_size);
-    size = p2roundup(size, alloc_size);
-
-    PExtentVector extents_local;
-    PExtentVector* extents = extents_out ? extents_out : &extents_local;
-
-
-    uint64_t gift;
-    uint64_t allocated = 0;
-    int64_t alloc_len;
-    auto need = size;
-    auto extent_count0 = extents->size();
-    do {
-      // hard cap to fit into 32 bits
-      gift = std::min<uint64_t>(size, 1ull << 30);
-      dout(10) << __func__ << " gifting " << gift
-	       << " (" << byte_u_t(gift) << ")" << dendl;
-
-      alloc_len = alloc->allocate(gift, alloc_size, 0, 0, extents);
-      if (alloc_len > 0) {
-	allocated += alloc_len;
-	size -= alloc_len;
-      }
-
-      if (alloc_len < 0 || 
-          (alloc_len < (int64_t)gift && (min_size > allocated))) {
-	derr << __func__
-	      << " failed to allocate on 0x" << std::hex << gift
-	      << " min_size 0x" << min_size
-	      << " > allocated total 0x" << allocated
-	      << " bluefs_shared_alloc_size 0x" << alloc_size
-	      << " allocated 0x" << (alloc_len < 0 ? 0 : alloc_len)
-	      << " available 0x " << alloc->get_free()
-	      << std::dec << dendl;
-
-	_dump_alloc_on_failure();
-	alloc->release(*extents);
-	extents->clear();
-	return -ENOSPC;
-      }
-    } while (size && alloc_len > 0);
-    _collect_allocation_stats(need, alloc_size, extents->size() - extent_count0);
-
-    for (auto& e : *extents) {
-      dout(5) << __func__ << " gifting " << e << " to bluefs" << dendl;
-      bluefs_extents.insert(e.offset, e.length);
-      ++out_of_sync_fm;
-      // apply to bluefs if not requested from outside
-      if (!extents_out) {
-        bluefs->add_block_extent(bluefs_layout.shared_bdev, e.offset, e.length);
-      }
-    }
-  }
-  return 0;
-}
-
-uint64_t BlueStore::available_freespace(uint64_t alloc_size) {
-  uint64_t total = 0;
-  auto iterated_allocation = [&](uint64_t off, uint64_t len) {
-    //only count in size that is alloc_size aligned
-    uint64_t dist_to_alignment;
-    uint64_t offset_in_block = off & (alloc_size - 1);
-    if (offset_in_block == 0)
-      dist_to_alignment = 0;
-    else
-      dist_to_alignment = alloc_size - offset_in_block;
-    if (dist_to_alignment >= len)
-      return;
-    len -= dist_to_alignment;
-    total += p2align(len, alloc_size);
-  };
-  alloc->dump(iterated_allocation);
-  return total;
-}
-
-int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total)
-{
-  float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
-
-  uint64_t my_free = alloc->get_free();
-  uint64_t total = bdev->get_size();
-  float my_free_ratio = (float)my_free / (float)total;
-
-  uint64_t total_free = bluefs_free + my_free;
-
-  float bluefs_ratio = (float)bluefs_free / (float)total_free;
-
-  dout(10) << __func__
-	   << " bluefs " << byte_u_t(bluefs_free)
-	   << " free (" << bluefs_free_ratio
-	   << ") bluestore " << byte_u_t(my_free)
-	   << " free (" << my_free_ratio
-	   << "), bluefs_ratio " << bluefs_ratio
-	   << dendl;
-
-  uint64_t gift = 0;
-  uint64_t reclaim = 0;
-  if (bluefs_ratio < cct->_conf->bluestore_bluefs_min_ratio) {
-    gift = cct->_conf->bluestore_bluefs_gift_ratio * total_free;
-    if (gift >= my_free)
-      gift = my_free / 2;
-    dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
-	     << " < min_ratio " << cct->_conf->bluestore_bluefs_min_ratio
-	     << ", should gift " << byte_u_t(gift) << dendl;
-  } else if (bluefs_ratio > cct->_conf->bluestore_bluefs_max_ratio) {
-    reclaim = cct->_conf->bluestore_bluefs_reclaim_ratio * total_free;
-    if (bluefs_total - reclaim < cct->_conf->bluestore_bluefs_min)
-      reclaim = bluefs_total - cct->_conf->bluestore_bluefs_min;
-    if (reclaim >= bluefs_free)
-      reclaim = bluefs_free / 2;
-    dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
-	     << " > max_ratio " << cct->_conf->bluestore_bluefs_max_ratio
-	     << ", should reclaim " << byte_u_t(reclaim) << dendl;
-  }
-
-  // don't take over too much of the freespace
-  uint64_t free_cap = cct->_conf->bluestore_bluefs_max_ratio * total_free;
-  if (bluefs_total < cct->_conf->bluestore_bluefs_min &&
-      cct->_conf->bluestore_bluefs_min < free_cap) {
-    uint64_t g = cct->_conf->bluestore_bluefs_min - bluefs_total;
-    dout(10) << __func__ << " bluefs_total " << bluefs_total
-	     << " < min " << cct->_conf->bluestore_bluefs_min
-	     << ", should gift " << byte_u_t(g) << dendl;
-    if (g > gift)
-      gift = g;
-    reclaim = 0;
-  }
-  uint64_t min_free =
-    cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
-  if (bluefs_free < min_free &&
-      min_free < free_cap) {
-    uint64_t g = min_free - bluefs_free;
-    dout(10) << __func__ << " bluefs_free " << bluefs_free
-	     << " < min " << min_free
-	     << ", should gift " << byte_u_t(g) << dendl;
-    if (g > gift)
-      gift = g;
-    reclaim = 0;
-  }
-  uint64_t max_free =
-    cct->_conf.get_val<Option::size_t>("bluestore_bluefs_max_free");
-  if (bluefs_free > max_free) {
-    dout(10) << __func__ << " bluefs_free " << bluefs_free
-             << " > max " << max_free
-             << ", stop gifting for now" << dendl;
-    gift = 0;
-  }
-  ceph_assert((int64_t)gift >= 0);
-  ceph_assert((int64_t)reclaim >= 0);
-  return gift > 0 ? (int64_t)gift : -(int64_t)reclaim;
-}
-
-int BlueStore::_balance_bluefs_freespace()
-{
-  int ret = 0;
-  ceph_assert(bluefs);
-
-  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
-  bluefs->get_usage(&bluefs_usage);
-  ceph_assert(bluefs_usage.size() > bluefs_layout.shared_bdev);
-
-  bool clear_alert = true;
-  if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
-    auto& p = bluefs_usage[bluefs_layout.shared_bdev];
-    if (p.first != p.second) {
-      auto& db = bluefs_usage[BlueFS::BDEV_DB];
-      ostringstream ss;
-      ss << "spilled over " << byte_u_t(p.second - p.first)
-	 << " metadata from 'db' device (" << byte_u_t(db.second - db.first)
-	 << " used of " << byte_u_t(db.second) << ") to slow device";
-      _set_spillover_alert(ss.str());
-      clear_alert = false;
-    }
-  }
-  if (clear_alert) {
-    _clear_spillover_alert();
-  }
-
-  // fixme: look at primary bdev only for now
-  int64_t delta = _get_bluefs_size_delta(
-    bluefs_usage[bluefs_layout.shared_bdev].first,
-    bluefs_usage[bluefs_layout.shared_bdev].second);
-
-  // reclaim from bluefs?
-  if (delta < 0) {
-    // round up to alloc size
-    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_layout.shared_bdev);
-    auto reclaim = p2roundup(uint64_t(-delta), alloc_size);
-
-    // hard cap to fit into 32 bits
-    reclaim = std::min<uint64_t>(reclaim, 1ull << 30);
-    dout(10) << __func__ << " reclaiming " << reclaim
-	     << " (" << byte_u_t(reclaim) << ")" << dendl;
-
-    while (reclaim > 0) {
-      // NOTE: this will block and do IO.
-      PExtentVector extents;
-      int r = bluefs->reclaim_blocks(bluefs_layout.shared_bdev, reclaim,
-				     &extents);
-      if (r < 0) {
-	derr << __func__ << " failed to reclaim space from bluefs"
-	     << dendl;
-	break;
-      }
-      for (auto e : extents) {
-	++out_of_sync_fm;
-	bluefs_extents.erase(e.offset, e.length);
-	bluefs_extents_reclaiming.insert(e.offset, e.length);
-	reclaim -= e.length;
-      }
-    }
-
-    ret = 1;
-  }
-
-  return ret;
 }
 
 int BlueStore::_open_collections()
@@ -6398,7 +6071,7 @@ int BlueStore::mkfs()
   dout(1) << __func__ << " path " << path << dendl;
   int r;
   uuid_d old_fsid;
-
+  uint64_t reserved;
   if (cct->_conf->osd_max_object_size > OBJECT_MAX_SIZE) {
     derr << __func__ << " osd_max_object_size "
 	 << cct->_conf->osd_max_object_size << " > bluestore max "
@@ -6520,6 +6193,17 @@ int BlueStore::mkfs()
     goto out_close_bdev;
   }
 
+  alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
+    bdev->get_size(),
+    min_alloc_size, "block");
+  if (!alloc) {
+    r = -EINVAL;
+    goto out_close_bdev;
+  }
+  reserved = _get_ondisk_reserved();
+  alloc->init_add_free(reserved,
+    p2align(bdev->get_size(), min_alloc_size) - reserved);
+
   r = _open_db(true);
   if (r < 0)
     goto out_close_bdev;
@@ -6567,15 +6251,13 @@ int BlueStore::mkfs()
     }
   }
 
-  if (out_of_sync_fm.fetch_and(0)) {
-    _sync_bluefs_and_fm();
-  }
-
  out_close_fm:
   _close_fm();
  out_close_db:
   _close_db(false);
  out_close_bdev:
+  delete alloc;
+  alloc = nullptr;
   _close_bdev();
  out_close_fsid:
   _close_fsid();
@@ -6616,14 +6298,20 @@ int BlueStore::_mount_for_bluefs()
   ceph_assert(r == 0);
   r = _lock_fsid();
   ceph_assert(r == 0);
-  r = _open_bluefs(false);
+
+  r = _open_bdev(false);
   ceph_assert(r == 0);
+
+  r = _open_db_and_around(true);
+  ceph_assert(r == 0);
+
   return r;
 }
 
 void BlueStore::_umount_for_bluefs()
 {
-  _close_bluefs(false);
+  _close_db_and_around(true);
+  _close_bdev();
   _close_fsid();
   _close_path();
 }
@@ -6694,6 +6382,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
   bluefs->mount();
 
   bluefs->add_block_extent(
+    false,
     id,
     reserved,
     bluefs->get_block_device_size(id) - reserved, true);
@@ -6726,43 +6415,18 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
 
   int r = _mount_for_bluefs();
 
-  // require bluestore_bluefs_min_free to be free at target device!
-  uint64_t used_space = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  uint64_t used_space = 0;
   for(auto src_id : devs_source) {
-    used_space += bluefs->get_total(src_id) - bluefs->get_free(src_id);
+    used_space += bluefs->get_used(src_id);
   }
   uint64_t target_free = bluefs->get_free(id);
-  if (id == BlueFS::BDEV_SLOW && target_free < used_space) {
-    // will need to remount full BlueStore instance to allocate more space
-    _umount_for_bluefs();
-
-    r = mount();
-    ceph_assert(r == 0);
-    dout(1) << __func__
-            << " Allocating more space at slow device for BlueFS: +"
-	    << used_space - target_free << " bytes" << dendl;
-    r = allocate_bluefs_freespace(
-      used_space - target_free,
-      used_space - target_free,
-      nullptr);
-
-    umount();
-    if (r != 0) {
-      derr << __func__
-	   << " can't migrate, unable to allocate extra space: "
-	   << used_space - target_free << " at target:" << id
-	   << dendl;
-      return -ENOSPC;
-    }
-
-    r = _mount_for_bluefs();
-    ceph_assert(r == 0);
-  } else if (target_free < used_space) {
+  if (target_free < used_space) {
     derr << __func__
          << " can't migrate, free space at target: " << target_free
 	 << " is less than required space: " << used_space
 	 << dendl;
-    return -ENOSPC;
+    r = -ENOSPC;
+    goto shutdown;
   }
   if (devs_source.count(BlueFS::BDEV_DB)) {
     bluefs_layout.shared_bdev = BlueFS::BDEV_DB;
@@ -6867,6 +6531,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   bluefs->mount();
 
   bluefs->add_block_extent(
+    false,
     id, reserved, bluefs->get_block_device_size(id) - reserved);
 
   r = bluefs->device_migrate_to_new(cct, devs_source, id, bluefs_layout);
@@ -6962,7 +6627,7 @@ int BlueStore::expand_devices(ostream& out)
       out << devid
 	  <<" : expanding " << " from 0x" << std::hex
 	  << end << " to 0x" << size << std::dec << std::endl;
-      bluefs->add_block_extent(devid, end, size-end);
+      bluefs->add_block_extent(false, devid, end, size-end);
       string p = get_device_path(devid);
       const char* path = p.c_str();
       if (path == nullptr) {
@@ -6985,6 +6650,8 @@ int BlueStore::expand_devices(ostream& out)
     out << bluefs_layout.shared_bdev
       << " : expanding " << " from 0x" << std::hex
       << size0 << " to 0x" << size << std::dec << std::endl;
+    bluefs->add_block_extent(false,
+      bluefs_layout.shared_bdev, size0, size - size0);
     _write_out_fm_meta(size);
     if (bdev->supported_bdev_label()) {
       if (_set_bdev_label_size(path, size) >= 0) {
@@ -8323,7 +7990,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   uint64_t_btree_t used_omap_head;
   uint64_t_btree_t used_sbids;
 
-  mempool_dynamic_bitset used_blocks;
+  mempool_dynamic_bitset used_blocks, bluefs_used_blocks;
   KeyValueDB::Iterator it;
   store_statfs_t expected_store_statfs, actual_statfs;
   per_pool_statfs expected_pool_statfs;
@@ -8338,16 +8005,36 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   uint64_t num_sharded_objects = 0;
   BlueStoreRepairer repairer;
 
+  interval_set<uint64_t> bluefs_extents;
+  auto alloc_size = fm->get_alloc_size();
+
   utime_t start = ceph_clock_now();
 
   _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
+
+  int r = bluefs->get_block_extents(bluefs_layout.shared_bdev, &bluefs_extents);
+  ceph_assert(r == 0);
+  for (interval_set<uint64_t>::iterator it = bluefs_extents.begin(); it != bluefs_extents.end(); ++it) {
+
+    apply_for_bitset_range(it.get_start(), it.get_len(), alloc_size, used_blocks,
+      [&](uint64_t pos, mempool_dynamic_bitset& bs) {
+        ceph_assert(pos < bs.size());
+        bs.set(pos);
+      }
+    );
+  }
+
+  bluefs_used_blocks = used_blocks;
+
   apply_for_bitset_range(
-    0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
+    0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), alloc_size, used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
   );
+
+
   if (repair) {
     repairer.get_space_usage_tracker().init(
       bdev->get_size(),
@@ -8355,39 +8042,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   }
 
   if (bluefs) {
-    if( cct->_conf->bluestore_bluefs_db_compatibility) {
-      interval_set<uint64_t> bluefs_extents_db;
-      bufferlist bl;
-      db->get(PREFIX_SUPER, "bluefs_extents", &bl);
-      auto p = bl.cbegin();
-      auto prev_errors = errors;
-      try {
-        decode(bluefs_extents_db, p);
-	bluefs_extents_db.union_of(bluefs_extents);
-	bluefs_extents_db.subtract(bluefs_extents);
-	if (!bluefs_extents_db.empty()) {
-	  derr << "fsck error: bluefs_extents inconsistency, "
-	       << "downgrade to previous releases might be broken."
-	       << dendl;
-	  ++errors;
-	}
-      }
-      catch (ceph::buffer::error& e) {
-	derr << "fsck error: failed to retrieve bluefs_extents from kv" << dendl;
-	++errors;
-      }
-      if (errors != prev_errors && repair) {
-	repairer.fix_bluefs_extents(out_of_sync_fm);
-      }
-    }
-
-    for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-      apply_for_bitset_range(
-        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
-        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-          bs.set(pos);
-        });
-    }
     int r = bluefs->fsck();
     if (r < 0) {
       return r;
@@ -8858,7 +8512,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	         << " released 0x" << std::hex << wt.released << std::dec << dendl;
         for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
           apply_for_bitset_range(
-            e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
+            e.get_start(), e.get_len(), alloc_size, used_blocks,
             [&](uint64_t pos, mempool_dynamic_bitset &bs) {
               bs.set(pos);
             }
@@ -8869,24 +8523,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
     dout(1) << __func__ << " checking freelist vs allocated" << dendl;
     {
-      // remove bluefs_extents from used set since the freelist doesn't
-      // know they are allocated.
-      for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-        apply_for_bitset_range(
-          e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
-          [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	    bs.reset(pos);
-          }
-        );
-      }
       fm->enumerate_reset();
       uint64_t offset, length;
       while (fm->enumerate_next(db, &offset, &length)) {
         bool intersects = false;
         apply_for_bitset_range(
-          offset, length, fm->get_alloc_size(), used_blocks,
+          offset, length, alloc_size, used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-            if (bs.test(pos)) {
+	    ceph_assert(pos < bs.size());
+            if (bs.test(pos) && !bluefs_used_blocks.test(pos)) {
 	      if (offset == SUPER_RESERVED &&
 	          length == min_alloc_size - SUPER_RESERVED) {
 	        // this is due to the change just after luminous to min_alloc_size
@@ -9281,24 +8926,14 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   uint64_t bfree = alloc->get_free();
 
   if (bluefs) {
-    int64_t bluefs_total = bluefs->get_total(bluefs_layout.shared_bdev);
-    int64_t bluefs_free = bluefs->get_free(bluefs_layout.shared_bdev);
-    // part of our shared device is "free" according to BlueFS, but we
-    // can't touch bluestore_bluefs_min of it.
-    int64_t shared_available = std::min(
-      bluefs_free,
-      int64_t(bluefs_total - cct->_conf->bluestore_bluefs_min));
-    buf->internally_reserved = bluefs_total - shared_available;
-    if (shared_available > 0) {
-      bfree += shared_available;
-    }
+    buf->internally_reserved = 0;
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
       buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
     // call any non-omap bluefs space "internal metadata"
     buf->internal_metadata =
-      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      bluefs->get_used()
       - buf->omap_allocated;
   }
 
@@ -11021,7 +10656,7 @@ int BlueStore::_open_super_meta()
       derr << __func__ << " unable to read nid_max" << dendl;
       return -EIO;
     }
-    dout(10) << __func__ << " old nid_max " << nid_max << dendl;
+    dout(1) << __func__ << " old nid_max " << nid_max << dendl;
     nid_last = nid_max.load();
   }
 
@@ -11039,7 +10674,7 @@ int BlueStore::_open_super_meta()
       derr << __func__ << " unable to read blobid_max" << dendl;
       return -EIO;
     }
-    dout(10) << __func__ << " old blobid_max " << blobid_max << dendl;
+    dout(1) << __func__ << " old blobid_max " << blobid_max << dendl;
     blobid_last = blobid_max.load();
   }
 
@@ -11049,7 +10684,7 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "freelist_type", &bl);
     if (bl.length()) {
       freelist_type = std::string(bl.c_str(), bl.length());
-      dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
+      dout(1) << __func__ << " freelist_type " << freelist_type << dendl;
     } else {
       ceph_abort_msg("Not Support extent freelist manager");
     }
@@ -11087,7 +10722,7 @@ int BlueStore::_open_super_meta()
 	}
       }
     }
-    dout(10) << __func__ << " ondisk_format " << ondisk_format
+    dout(1) << __func__ << " ondisk_format " << ondisk_format
 	     << " compat_ondisk_format " << compat_ondisk_format
 	     << dendl;
   }
@@ -11113,7 +10748,7 @@ int BlueStore::_open_super_meta()
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
     }
-    dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+    dout(1) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
   }
 
@@ -12050,14 +11685,6 @@ void BlueStore::_kv_sync_thread()
       // transaction is ready for commit.
       throttle.release_kv_throttle(costs);
 
-      if (bluefs &&
-	  after_flush - bluefs_last_balance >
-	  ceph::make_timespan(cct->_conf->bluestore_bluefs_balance_interval)) {
-	bluefs_last_balance = after_flush;
-	int r = _balance_bluefs_freespace();
-	ceph_assert(r >= 0);
-      }
-
       // cleanup sync deferred keys
       for (auto b : deferred_stable) {
 	for (auto& txc : b->txcs) {
@@ -12162,28 +11789,6 @@ void BlueStore::_kv_sync_thread()
 	  l_bluestore_kv_sync_lat,
 	  dur,
 	  cct->_conf->bluestore_log_op_age);
-      }
-
-      if (bluefs) {
-	if (!bluefs_extents_reclaiming.empty()) {
-	  dout(0) << __func__ << " releasing old bluefs 0x" << std::hex
-		   << bluefs_extents_reclaiming << std::dec << dendl;
-	  int r = 0;
-	  if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
-	    r = bdev->queue_discard(bluefs_extents_reclaiming);
-	    if (r == 0) {
-	      goto clear;
-	    }
-	  } else if (cct->_conf->bdev_enable_discard) {
-	    for (auto p = bluefs_extents_reclaiming.begin(); p != bluefs_extents_reclaiming.end(); ++p) {
-	      bdev->discard(p.get_start(), p.get_len());
-	    }
-	  }
-
-	  alloc->release(bluefs_extents_reclaiming);
-clear:
-	  bluefs_extents_reclaiming.clear();
-	}
       }
 
       l.lock();
@@ -16096,16 +15701,6 @@ bool BlueStoreRepairer::fix_false_free(KeyValueDB *db,
   }
   ++to_repair_cnt;
   fm->allocate(offset, len, fix_fm_false_free_txn);
-  return true;
-}
-
-bool BlueStoreRepairer::fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_flag)
-{
-  // this is just a stub to count num of repairs properly,
-  // actual repair happens in BlueStore::_close_db_and_around()
-  // while doing _sync_bluefs_and_fm
-  ++out_of_sync_flag;
-  ++to_repair_cnt;
   return true;
 }
 
