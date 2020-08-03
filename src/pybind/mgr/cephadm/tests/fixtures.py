@@ -24,7 +24,7 @@ def get_ceph_option(_, key):
 
 def _run_cephadm(ret):
     def foo(*args, **kwargs):
-        return ret, '', 0
+        return [ret], '', 0
     return foo
 
 
