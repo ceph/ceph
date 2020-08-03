@@ -117,8 +117,9 @@ const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
-const string PREFIX_ZONED_META = "Z";  // (see ZonedFreelistManager)
-const string PREFIX_ZONED_INFO = "z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_FM_META = "Z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_FM_INFO = "z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_CL_INFO = "G";  // (per-zone cleaner metadata)
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
@@ -11128,6 +11129,36 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
       l_bluestore_commit_lat));
 }
 
+// For every object we maintain <zone_num+oid, offset> tuple in the key-value
+// store.  When a new object written to a zone, we insert the corresponding
+// tuple to the database.  When an object is truncated, we remove the
+// corresponding tuple.  When an object is overwritten, we remove the old tuple
+// and insert a new tuple corresponding to the new location of the object.  The
+// cleaner can now identify live objects within the zone <zone_num> by
+// enumerating all the keys starting with <zone_num> prefix.
+void BlueStore::zoned_update_cleaning_metadata(TransContext *txc) {
+  for (const auto &[o, offsets] : txc->zoned_onode_to_offset_map) {
+    std::string key;
+    get_object_key(cct, o->oid, &key);
+    for (auto offset : offsets) {
+      if (offset > 0) {
+	bufferlist offset_bl;
+	encode(offset, offset_bl);
+        txc->t->set(zoned_get_prefix(offset), key, offset_bl);
+      } else {
+        txc->t->rmkey(zoned_get_prefix(-offset), key);
+      }
+    }
+  }
+}
+
+std::string BlueStore::zoned_get_prefix(uint64_t offset) {
+  uint64_t zone_num = offset / bdev->get_zone_size();
+  std::string zone_key;
+  _key_encode_u64(zone_num, &zone_key);
+  return PREFIX_ZONED_CL_INFO + zone_key;
+}
+
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
   dout(20) << __func__ << " txc " << txc << std::hex
@@ -11171,6 +11202,10 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     dout(20) << __func__ << " release 0x" << std::hex << p.get_start()
 	     << "~" << p.get_len() << std::dec << dendl;
     fm->release(p.get_start(), p.get_len(), t);
+  }
+
+  if (bdev->is_smr()) {
+    zoned_update_cleaning_metadata(txc);
   }
 
   _txc_update_store_statfs(txc);
@@ -13995,6 +14030,15 @@ int BlueStore::_do_write(
 			  min_alloc_size);
   }
 
+  if (bdev->is_smr()) {
+    if (wctx.old_extents.empty()) {
+      txc->zoned_note_new_object(o);
+    } else {
+      int64_t old_ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
+      txc->zoned_note_updated_object(o, old_ondisk_offset);
+    }
+  }
+
   // NB: _wctx_finish() will empty old_extents
   // so we must do gc estimation before that
   _wctx_finish(txc, c, o, &wctx);
@@ -14121,8 +14165,8 @@ void BlueStore::_do_truncate(
   if (offset == o->onode.size)
     return;
 
+  WriteContext wctx;
   if (offset < o->onode.size) {
-    WriteContext wctx;
     uint64_t length = o->onode.size - offset;
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
@@ -14142,6 +14186,14 @@ void BlueStore::_do_truncate(
   }
 
   o->onode.size = offset;
+
+  if (bdev->is_smr()) {
+    // On zoned devices, we currently support only removing an object or
+    // truncating it to zero size, both of which fall through this code path.
+    ceph_assert(offset == 0 && !wctx.old_extents.empty());
+    int64_t ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
+    txc->zoned_note_truncated_object(o, ondisk_offset);
+  }
 
   txc->write_onode(o);
 }
