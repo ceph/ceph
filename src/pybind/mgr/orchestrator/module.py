@@ -1137,17 +1137,17 @@ Usage:
     @_cli_write_command(
         'orch apply',
         'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
-        'name=dry_run,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
+        'name=dry_run,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the size or placement for a service or apply a large yaml spec')
     def _apply_misc(self,
                     service_type: Optional[str] = None,
                     placement: Optional[str] = None,
-                    unmanaged: bool = False,
                     dry_run: bool = False,
                     format: str = 'plain',
+                    unmanaged: bool = False,
                     inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
@@ -1186,8 +1186,8 @@ Usage:
     @_cli_write_command(
         'orch apply mds',
         'name=fs_name,type=CephString '
-        'name=dry_run,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
+        'name=dry_run,type=CephBool,req=false '
         'name=unmanaged,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false',
         'Update the number of MDS instances for the given fs_name')
@@ -1195,8 +1195,8 @@ Usage:
                    fs_name: str,
                    placement: Optional[str] = None,
                    dry_run: bool = False,
-                   format: str = 'plain',
                    unmanaged: bool = False,
+                   format: str = 'plain',
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
