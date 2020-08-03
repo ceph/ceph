@@ -42,7 +42,7 @@ private:
 public:
   std::string_view get_type_name() const override { return "pg_stats"; }
   void print(std::ostream& out) const override {
-    out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
+    out << "pg_stats(" << pg_stat.size() << " pgs seq " << osd_stat.seq << " v " << version << ")";
   }
 
   void encode_payload(uint64_t features) override {
