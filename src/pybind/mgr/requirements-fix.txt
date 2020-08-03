@@ -1,1 +1,0 @@
-autopep8; python_version >= '3'
