@@ -3,7 +3,7 @@ meta:
    librbd python api tests
 tasks:
 - workunit:
-    tag: v15.2.1
+    tag: v15.2.4
     clients:
       client.0:
         - rbd/test_librbd_python.sh
