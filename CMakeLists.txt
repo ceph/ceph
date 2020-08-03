@@ -71,14 +71,9 @@ include_directories(
 
 if(WIN32)
   include_directories(
-  ${PROJECT_SOURCE_DIR}/src/include/win32)
+    ${PROJECT_SOURCE_DIR}/src/include/win32)
   # Boost complains if winsock2.h (or windows.h) is included before asio.hpp.
-  add_definitions(-include winsock_wrapper.h)
-endif()
-
-if(OFED_PREFIX)
-  include_directories(SYSTEM ${OFED_PREFIX}/include)
-  link_directories(${OFED_PREFIX}/lib)
+  add_compile_options(-include winsock_wrapper.h)
 endif()
 
 if(FREEBSD)
@@ -470,8 +465,6 @@ option(WITH_REENTRANT_STRSIGNAL "strsignal is reentrant" OFF)
 if(WITH_REENTRANT_STRSIGNAL)
   set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
 endif()
-
-set(HAVE_LIBROCKSDB 1)
 
 # -lz link into kv
 find_package(ZLIB REQUIRED)
