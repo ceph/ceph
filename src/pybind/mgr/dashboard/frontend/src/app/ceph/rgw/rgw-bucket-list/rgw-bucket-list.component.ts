@@ -12,6 +12,7 @@ import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
+import { TableStatus } from '../../../shared/classes/table-status';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -48,7 +49,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  isStale = false;
+  tableStatus = new TableStatus();
   staleTimeout: number;
 
   constructor(
@@ -154,14 +155,17 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     this.ngZone.runOutsideAngular(() => {
       this.staleTimeout = window.setTimeout(() => {
         this.ngZone.run(() => {
-          this.isStale = true;
+          this.tableStatus = new TableStatus(
+            'warning',
+            $localize`The bucket list data might be stale. If needed, you can manually reload it.`
+          );
         });
       }, 10000);
     });
   }
 
   getBucketList(context: CdTableFetchDataContext) {
-    this.isStale = false;
+    this.tableStatus = new TableStatus();
     this.timeConditionReached();
     this.rgwBucketService.list().subscribe(
       (resp: object[]) => {

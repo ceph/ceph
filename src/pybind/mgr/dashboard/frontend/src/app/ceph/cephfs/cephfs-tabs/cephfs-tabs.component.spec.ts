@@ -10,6 +10,7 @@ import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsClientsComponent } from '../cephfs-clients/cephfs-clients.component';
@@ -146,7 +147,7 @@ describe('CephfsTabsComponent', () => {
     };
     const defaultClients: Record<string, any> = {
       data: [],
-      status: ViewCacheStatus.ValueNone
+      status: new TableStatusViewCache(ViewCacheStatus.ValueNone)
     };
     component['subscribeInterval'] = () => undefined;
     updateData();

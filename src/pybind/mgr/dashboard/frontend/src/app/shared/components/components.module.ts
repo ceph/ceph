@@ -42,7 +42,6 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
-import { ViewCacheComponent } from './view-cache/view-cache.component';
 
 @NgModule({
   imports: [
@@ -66,7 +65,6 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     NgbTimepickerModule
   ],
   declarations: [
-    ViewCacheComponent,
     SparklineComponent,
     HelperComponent,
     SelectBadgesComponent,
@@ -93,7 +91,6 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
   ],
   providers: [],
   exports: [
-    ViewCacheComponent,
     SparklineComponent,
     HelperComponent,
     SelectBadgesComponent,

@@ -3,11 +3,11 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -28,7 +28,7 @@ export class CephfsClientsComponent implements OnInit {
   @Input()
   clients: {
     data: any[];
-    status: ViewCacheStatus;
+    status: TableStatusViewCache;
   };
 
   @Output()

@@ -1,7 +1,3 @@
-<cd-alert-panel type="error"
-                *ngIf="loadingError"
-                i18n>Failed to load data.</cd-alert-panel>
-
 <div class="dataTables_wrapper">
 
   <div *ngIf="onlyActionHeader"
@@ -133,7 +129,8 @@
          *ngIf="fetchData.observers.length > 0">
 
       <button type="button"
-              class="btn btn-light"
+              [class]="'btn btn-' + status.type"
+              [ngbTooltip]="status.msg"
               (click)="refreshBtn()">
         <i [ngClass]="[icons.large, icons.refresh]"
            [class.fa-spin]="updating || loadingIndicator"></i>

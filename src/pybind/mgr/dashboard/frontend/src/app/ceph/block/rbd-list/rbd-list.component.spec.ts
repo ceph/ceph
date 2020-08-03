@@ -13,6 +13,7 @@ import {
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
+import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -91,7 +92,9 @@ describe('RbdListComponent', () => {
       spyOn(component.table, 'reset');
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
-      expect(component.viewCacheStatusList).toEqual([{ status: ViewCacheStatus.ValueException }]);
+      expect(component.tableStatus).toEqual(
+        new TableStatusViewCache(ViewCacheStatus.ValueException)
+      );
     });
   });
 
