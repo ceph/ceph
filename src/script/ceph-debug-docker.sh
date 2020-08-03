@@ -112,6 +112,9 @@ EOF
                 ceph_debuginfo="ceph-base-debuginfo"
                 ;;
         esac
+        if [ "${FLAVOR}" = "crimson" ]; then
+            ceph_debuginfo+=" ceph-crimson-osd-debuginfo ceph-crimson-osd"
+        fi
         time run docker build $CACHE --tag "$tag" - <<EOF
 FROM ${env}
 
