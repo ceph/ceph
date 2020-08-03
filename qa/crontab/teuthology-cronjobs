@@ -168,7 +168,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 47 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous
 50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch mimic
-50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-nautilus-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch nautilus
+50 01 * * 5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-nautilus-octopus -k distro -e $CEPH_QA_EMAIL --suite-branch nautilus
 
 #********** octopus branch END
 
@@ -176,5 +176,5 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 ###### on smithi
 23 14 * * 3,4 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/nautilus-x -e $CEPH_QA_EMAIL -p 70
 
-20 01 * * 3,4  CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
+20 01 * * 3,4  CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
 
