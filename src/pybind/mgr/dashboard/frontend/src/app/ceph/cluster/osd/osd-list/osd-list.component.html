@@ -1,9 +1,7 @@
 <tabset>
   <tab i18n-heading
        heading="OSDs List">
-
-    <cd-table [autoReload]="false"
-              [data]="osds"
+    <cd-table [data]="osds"
               (fetchData)="getOsdList()"
               [columns]="columns"
               selectionType="multiClick"
