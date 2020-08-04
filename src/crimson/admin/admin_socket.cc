@@ -452,25 +452,21 @@ public:
                                       ceph::bufferlist&& input) const final
   {
     std::string var;
-    if (!cmd_getval(cmdmap, "var", var)) {
-      // should have been caught by 'validate()'
+    [[maybe_unused]] bool found = cmd_getval(cmdmap, "var", var);
+    assert(found);
+    std::string conf_val;
+    if (int r = local_conf().get_val(var, &conf_val); r < 0) {
       return seastar::make_ready_future<tell_result_t>(
-        tell_result_t{-EINVAL, "syntax error: 'config get <var>'"});
+        tell_result_t{r, fmt::format("error getting {}: {}",
+                                     var, cpp_strerror(r))});
     }
-    try {
-      unique_ptr<Formatter> f{Formatter::create(format,
-                                                "json-pretty",
-                                                "json-pretty")};
-      f->open_object_section("config_get");
-      std::string conf_val =
-        local_conf().get_val<std::string>(var);
-      f->dump_string(var.c_str(), conf_val.c_str());
-      f->close_section();
-      return seastar::make_ready_future<tell_result_t>(f.get());
-    } catch (const boost::bad_get&) {
-      return seastar::make_ready_future<tell_result_t>(
-        tell_result_t{-EINVAL, fmt::format("unrecognized option {}", var)});
-    }
+    unique_ptr<Formatter> f{Formatter::create(format,
+                                              "json-pretty",
+                                              "json-pretty")};
+    f->open_object_section("config_get");
+    f->dump_string(var, conf_val);
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(f.get());
   }
 };
 
