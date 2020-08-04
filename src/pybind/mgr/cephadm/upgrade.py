@@ -178,7 +178,7 @@ class CephadmUpgrade:
 
     def _fail_upgrade(self, alert_id, alert) -> None:
         logger.error('Upgrade: Paused due to %s: %s' % (alert_id,
-                                                          alert['summary']))
+                                                        alert['summary']))
         if not self.upgrade_state:
             assert False, 'No upgrade in progress'
 
@@ -231,7 +231,7 @@ class CephadmUpgrade:
             self._save_upgrade_state()
         target_version = self.upgrade_state.target_version
         logger.info('Upgrade: Target is %s with id %s' % (target_name,
-                                                            target_id))
+                                                          target_id))
 
         # get all distinct container_image settings
         image_settings = {}
@@ -264,7 +264,7 @@ class CephadmUpgrade:
                 if daemon_type == 'mgr' and \
                    d.daemon_id == self.mgr.get_mgr_id():
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
-                                  self.mgr.get_mgr_id())
+                                self.mgr.get_mgr_id())
                     need_upgrade_self = True
                     continue
 
@@ -274,7 +274,7 @@ class CephadmUpgrade:
                     image=target_name, no_fsid=True, error_ok=True)
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     logger.info('Upgrade: Pulling %s on %s' % (target_name,
-                                                                 d.hostname))
+                                                               d.hostname))
                     out, err, code = self.mgr._run_cephadm(
                         d.hostname, '', 'pull', [],
                         image=target_name, no_fsid=True, error_ok=True)
@@ -290,7 +290,8 @@ class CephadmUpgrade:
                         return
                     r = json.loads(''.join(out))
                     if r.get('image_id') != target_id:
-                        logger.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (target_name, d.hostname, r['image_id'], target_id))
+                        logger.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (
+                            target_name, d.hostname, r['image_id'], target_id))
                         self.upgrade_state.target_id = r['image_id']
                         self._save_upgrade_state()
                         return
@@ -299,12 +300,13 @@ class CephadmUpgrade:
 
                 if not d.container_image_id:
                     if d.container_image_name == target_name:
-                        logger.debug('daemon %s has unknown container_image_id but has correct image name' % (d.name()))
+                        logger.debug(
+                            'daemon %s has unknown container_image_id but has correct image name' % (d.name()))
                         continue
                 if not self._wait_for_ok_to_stop(d):
                     return
                 logger.info('Upgrade: Redeploying %s.%s' %
-                              (d.daemon_type, d.daemon_id))
+                            (d.daemon_type, d.daemon_id))
                 ret, out, err = self.mgr.check_mon_command({
                     'prefix': 'config set',
                     'name': 'container_image',
@@ -335,7 +337,7 @@ class CephadmUpgrade:
                     return
 
                 logger.info('Upgrade: there are %d other already-upgraded '
-                              'standby mgrs, failing over' % num)
+                            'standby mgrs, failing over' % num)
 
                 self._update_upgrade_progress(done / len(daemons))
 
@@ -364,7 +366,7 @@ class CephadmUpgrade:
             # push down configs
             if image_settings.get(daemon_type) != target_name:
                 logger.info('Upgrade: Setting container_image for all %s...' %
-                              daemon_type)
+                            daemon_type)
                 ret, out, err = self.mgr.check_mon_command({
                     'prefix': 'config set',
                     'name': 'container_image',
@@ -377,7 +379,7 @@ class CephadmUpgrade:
                     to_clean.append(section)
             if to_clean:
                 logger.debug('Upgrade: Cleaning up container_image for %s...' %
-                               to_clean)
+                             to_clean)
                 for section in to_clean:
                     ret, image, err = self.mgr.check_mon_command({
                         'prefix': 'config rm',
@@ -386,7 +388,7 @@ class CephadmUpgrade:
                     })
 
             logger.info('Upgrade: All %s daemons are up to date.' %
-                          daemon_type)
+                        daemon_type)
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')
