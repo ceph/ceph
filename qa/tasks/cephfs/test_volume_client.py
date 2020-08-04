@@ -5,7 +5,6 @@ from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
-from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +51,8 @@ vc.disconnect()
             "mon", "allow *"
         )
         mount.client_id = id_name
-        sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        mount.client_remote.write_file(mount.get_keyring_path(),
+                                       out, sudo=True)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def _configure_guest_auth(self, volumeclient_mount, guest_mount,
@@ -115,8 +115,8 @@ vc.disconnect()
             key=key
         ))
         guest_mount.client_id = guest_entity
-        sudo_write_file(guest_mount.client_remote,
-                        guest_mount.get_keyring_path(), keyring_txt)
+        guest_mount.client_remote.write_file(guest_mount.get_keyring_path(),
+                                             keyring_txt, sudo=True)
 
         # Add a guest client section to the ceph config file.
         self.set_conf("client.{0}".format(guest_entity), "client quota", "True")
