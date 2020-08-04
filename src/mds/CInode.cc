@@ -499,21 +499,6 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
 
   if (cur_srnode) {
     new_srnode = new sr_t(*cur_srnode);
-    if (!new_srnode->past_parents.empty()) {
-      // convert past_parents to past_parent_snaps
-      ceph_assert(snaprealm);
-      auto& snaps = snaprealm->get_snaps();
-      for (auto p : snaps) {
-	if (p >= new_srnode->current_parent_since)
-	  break;
-	if (!new_srnode->snaps.count(p))
-	  new_srnode->past_parent_snaps.insert(p);
-      }
-      new_srnode->seq = snaprealm->get_newest_seq();
-      new_srnode->past_parents.clear();
-    }
-    if (snaprealm)
-      snaprealm->past_parents_dirty = false;
   } else {
     if (snapid == 0)
       snapid = mdcache->get_global_snaprealm()->get_newest_seq();
@@ -642,32 +627,16 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm, bool early)
   if (next_snaprealm) {
     dout(10) << __func__ << (early ? " (early) " : " ")
 	     << next_snaprealm << " seq " << next_snaprealm->seq << dendl;
-    bool invalidate_cached_snaps = false;
-    if (!snaprealm) {
+    if (!snaprealm)
       open_snaprealm();
-    } else if (!snaprealm->srnode.past_parents.empty()) {
-      invalidate_cached_snaps = true;
-      // re-open past parents
-      snaprealm->close_parents();
 
-      dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
-	       << " -> " << next_snaprealm->past_parents << dendl;
-    }
     auto old_flags = snaprealm->srnode.flags;
     snaprealm->srnode = *next_snaprealm;
     delete next_snaprealm;
 
     if ((snaprealm->srnode.flags ^ old_flags) & sr_t::PARENT_GLOBAL) {
-      snaprealm->close_parents();
       snaprealm->adjust_parent();
     }
-
-    // we should be able to open these up (or have them already be open).
-    bool ok = snaprealm->_open_parents(NULL);
-    ceph_assert(ok);
-
-    if (invalidate_cached_snaps)
-      snaprealm->invalidate_cached_snaps();
 
     if (snaprealm->parent)
       dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
@@ -3118,7 +3087,6 @@ void CInode::close_snaprealm(bool nojoin)
 {
   if (snaprealm) {
     dout(15) << __func__ << " " << *snaprealm << dendl;
-    snaprealm->close_parents();
     if (snaprealm->parent) {
       snaprealm->parent->open_children.erase(snaprealm);
       //if (!nojoin)
@@ -3157,12 +3125,8 @@ void CInode::decode_snap_blob(const bufferlist& snapbl)
     auto old_flags = snaprealm->srnode.flags;
     auto p = snapbl.cbegin();
     decode(snaprealm->srnode, p);
-    if (is_base()) {
-      bool ok = snaprealm->_open_parents(NULL);
-      ceph_assert(ok);
-    } else {
+    if (!is_base()) {
       if ((snaprealm->srnode.flags ^ old_flags) & sr_t::PARENT_GLOBAL) {
-	snaprealm->close_parents();
 	snaprealm->adjust_parent();
       }
     }
@@ -4606,7 +4570,6 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
       set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
       set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
-      set_callback(SNAPREALM, static_cast<Continuation::stagePtr>(&ValidationContinuation::_snaprealm));
     }
 
     ~ValidationContinuation() override {
@@ -4654,10 +4617,6 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 	// there's nothing to do for symlinks!
 	return true;
       }
-
-      // prefetch snaprealm's past parents
-      if (in->snaprealm && !in->snaprealm->have_past_parents_open())
-	in->snaprealm->open_parents(nullptr);
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
 					    in->mdcache->mds->finisher);
@@ -4779,7 +4738,7 @@ next:
 	return validate_directory_data();
       } else {
 	// TODO: validate on-disk inode for normal files
-	return check_inode_snaprealm();
+	return true;
       }
     }
 
@@ -4911,37 +4870,6 @@ next:
 
       results->raw_stats.passed = true;
 next:
-      // snaprealm
-      return check_inode_snaprealm();
-    }
-
-    bool check_inode_snaprealm() {
-      if (!in->snaprealm)
-	return true;
-
-      if (!in->snaprealm->have_past_parents_open()) {
-	in->snaprealm->open_parents(get_internal_callback(SNAPREALM));
-	return false;
-      } else {
-	return immediate(SNAPREALM, 0);
-      }
-    }
-
-    bool _snaprealm(int rval) {
-
-      if (in->snaprealm->past_parents_dirty ||
-	  !in->get_projected_srnode()->past_parents.empty()) {
-	// temporarily store error in field of on-disk inode validation temporarily
-	results->inode.checked = true;
-	results->inode.passed = false;
-	if (in->scrub_infop->header->get_repair()) {
-	  results->inode.error_str << "Inode has old format snaprealm (will upgrade)";
-	  results->inode.repaired = true;
-	  in->mdcache->upgrade_inode_snaprealm(in);
-	} else {
-	  results->inode.error_str << "Inode has old format snaprealm";
-	}
-      }
       return true;
     }
 
