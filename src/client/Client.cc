@@ -154,7 +154,7 @@ int Client::CommandHook::call(
 {
   f->open_object_section("result");
   {
-    std::lock_guard l{m_client->client_lock};
+    std::scoped_lock l{m_client->client_lock};
     if (command == "mds_requests")
       m_client->dump_mds_requests(f);
     else if (command == "mds_sessions")
@@ -260,7 +260,7 @@ vinodeno_t Client::_map_faked_ino(ino_t ino)
 
 vinodeno_t Client::map_faked_ino(ino_t ino)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return _map_faked_ino(ino);
 }
 
@@ -323,7 +323,7 @@ Client::~Client()
   // It is necessary to hold client_lock, because any inode destruction
   // may call into ObjectCacher, which asserts that it's lock (which is
   // client_lock) is held.
-  std::lock_guard l{client_lock};
+  std::scoped_lock l{client_lock};
   tear_down_cache();
 }
 
@@ -369,7 +369,7 @@ void Client::tear_down_cache()
 
 inodeno_t Client::get_root_ino()
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   if (use_faked_inos())
     return root->faked_ino;
   else
@@ -378,7 +378,7 @@ inodeno_t Client::get_root_ino()
 
 Inode *Client::get_root()
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   root->ll_get();
   return root;
 }
@@ -498,7 +498,7 @@ int Client::init()
 
   _pre_init();
   {
-    std::lock_guard l{client_lock};
+    std::scoped_lock l{client_lock};
     messenger->add_dispatcher_tail(this);
   }
   _finish_init();
@@ -509,7 +509,7 @@ int Client::init()
 void Client::_finish_init()
 {
   {
-    std::lock_guard l{client_lock};
+    std::scoped_lock l{client_lock};
     // logger
     PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
     plb.add_time_avg(l_c_reply, "reply", "Latency of receiving a reply on metadata request");
@@ -568,7 +568,7 @@ void Client::shutdown()
   // If we were not mounted, but were being used for sending
   // MDS commands, we may have sessions that need closing.
   {
-    std::lock_guard l{client_lock};
+    std::scoped_lock l{client_lock};
     _close_sessions();
   }
   cct->_conf.remove_observer(this);
@@ -2051,7 +2051,7 @@ void Client::update_metadata(std::string const &k, std::string const &v)
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   ceph_assert(iref_reader.is_state_satisfied());
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   auto it = metadata.find(k);
   if (it != metadata.end()) {
@@ -2604,7 +2604,7 @@ bool Client::ms_dispatch2(const MessageRef &m)
 //  if (!is_initialized())
 //    return true;
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   switch (m->get_type()) {
     // mounting and mds sessions
@@ -4023,7 +4023,7 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
-  //  std::lock_guard l(client_lock);
+  //  std::scoped_lock l(client_lock);
   ceph_assert(ceph_mutex_is_locked(client_lock));   // will be called via dispatch() -> objecter -> ...
   Inode *in = static_cast<Inode *>(oset->parent);
   ceph_assert(in);
@@ -8084,7 +8084,7 @@ void Client::rewinddir(dir_result_t *dirp)
   if (!mref_reader.is_state_satisfied())
     return;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   dir_result_t *d = static_cast<dir_result_t*>(dirp);
   _readdir_drop_dirp_buffer(d);
   d->reset();
@@ -8105,7 +8105,7 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
   if (!mref_reader.is_state_satisfied())
     return;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   if (offset == dirp->offset)
     return;
@@ -8365,7 +8365,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
 
@@ -8833,7 +8833,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPHASH);
   filepath path(ino);
   req->set_filepath(path);
@@ -8885,7 +8885,7 @@ int Client::_lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 
 int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return _lookup_ino(ino, perms, inode);
 }
 
@@ -8943,7 +8943,7 @@ int Client::_lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 
 int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return _lookup_name(ino, parent, perms);
 }
 
@@ -10270,7 +10270,7 @@ void Client::getcwd(string& dir, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return;
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   _getcwd(dir, perms);
 }
@@ -10705,7 +10705,7 @@ void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
 {
   if (!args)
     return;
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   ldout(cct, 10) << __func__ << " cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
@@ -10797,14 +10797,14 @@ int Client::sync_fs()
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   return _sync_fs();
 }
 
 int64_t Client::drop_caches()
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   return objectcacher->release_all();
 }
 
@@ -10834,7 +10834,7 @@ int Client::_lazyio(Fh *fh, int enable)
 
 int Client::lazyio(int fd, int enable)
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10853,7 +10853,7 @@ int Client::ll_lazyio(Fh *fh, int enable)
 
 int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   ldout(cct, 3) << "op: client->lazyio_propagate(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
@@ -10869,7 +10869,7 @@ int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
 
 int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   ldout(cct, 3) << "op: client->lazyio_synchronize(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
@@ -10897,7 +10897,7 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   filepath path(relpath);
   InodeRef in;
@@ -10919,7 +10919,7 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   filepath path(relpath);
   InodeRef in;
@@ -10944,7 +10944,7 @@ int Client::get_caps_issued(int fd)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -10959,7 +10959,7 @@ int Client::get_caps_issued(const char *path, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   filepath p(path);
   InodeRef in;
@@ -11060,7 +11060,7 @@ int Client::ll_lookup_inode(
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
 
   // Num1: get inode and *inode
@@ -11267,7 +11267,7 @@ bool Client::_ll_forget(Inode *in, uint64_t count)
 
 bool Client::ll_forget(Inode *in, uint64_t count)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return _ll_forget(in, count);
 }
 
@@ -11279,7 +11279,7 @@ bool Client::ll_put(Inode *in)
 
 int Client::ll_get_snap_ref(snapid_t snap)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   auto p = ll_snap_ref.find(snap);
   if (p != ll_snap_ref.end())
     return p->second;
@@ -11288,7 +11288,7 @@ int Client::ll_get_snap_ref(snapid_t snap)
 
 snapid_t Client::ll_get_snapid(Inode *in)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return in->snapid;
 }
 
@@ -11298,7 +11298,7 @@ Inode *Client::ll_get_inode(ino_t ino)
   if (!mref_reader.is_state_satisfied())
     return NULL;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   vinodeno_t vino = _map_faked_ino(ino);
   unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
@@ -11315,7 +11315,7 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
   if (!mref_reader.is_state_satisfied())
     return NULL;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
   if (p == inode_map.end())
@@ -11345,7 +11345,7 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   int res = _ll_getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
 
@@ -11362,7 +11362,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   int res = 0;
   unsigned mask = statx_to_mask(flags, want);
@@ -11412,7 +11412,7 @@ int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef target(in);
   int res = _ll_setattrx(in, stx, mask, perms, &target);
@@ -11435,7 +11435,7 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef target(in);
   int res = _ll_setattrx(in, &stx, mask, perms, &target);
@@ -11459,7 +11459,7 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true, CEPH_STAT_CAP_XATTR);
@@ -11475,7 +11475,7 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false, CEPH_STAT_CAP_XATTR);
@@ -11491,7 +11491,7 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -11506,7 +11506,7 @@ int Client::listxattr(const char *path, char *list, size_t size,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true, CEPH_STAT_CAP_XATTR);
@@ -11522,7 +11522,7 @@ int Client::llistxattr(const char *path, char *list, size_t size,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false, CEPH_STAT_CAP_XATTR);
@@ -11537,7 +11537,7 @@ int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -11552,7 +11552,7 @@ int Client::removexattr(const char *path, const char *name,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
@@ -11568,7 +11568,7 @@ int Client::lremovexattr(const char *path, const char *name,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false);
@@ -11583,7 +11583,7 @@ int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -11600,7 +11600,7 @@ int Client::setxattr(const char *path, const char *name, const void *value,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
@@ -11618,7 +11618,7 @@ int Client::lsetxattr(const char *path, const char *name, const void *value,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false);
@@ -11636,7 +11636,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -13248,13 +13248,13 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 
 int Client::ll_num_osds(void)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return objecter->with_osdmap(std::mem_fn(&OSDMap::get_num_osds));
 }
 
 int Client::ll_osdaddr(int osd, uint32_t *addr)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   entity_addr_t g;
   bool exists = objecter->with_osdmap([&](const OSDMap& o) {
@@ -13272,19 +13272,19 @@ int Client::ll_osdaddr(int osd, uint32_t *addr)
 
 uint32_t Client::ll_stripe_unit(Inode *in)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return in->layout.stripe_unit;
 }
 
 uint64_t Client::ll_snap_seq(Inode *in)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   return in->snaprealm->seq;
 }
 
 int Client::ll_file_layout(Inode *in, file_layout_t *layout)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   *layout = in->layout;
   return 0;
 }
@@ -13304,7 +13304,7 @@ int Client::ll_file_layout(Fh *fh, file_layout_t *layout)
 int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 			      file_layout_t* layout)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   inodeno_t ino = in->ino;
   uint32_t object_size = layout->object_size;
@@ -13336,7 +13336,7 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 
 uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   file_layout_t *layout=&(in->layout);
   uint32_t object_size = layout->object_size;
   uint32_t su = layout->stripe_unit;
@@ -13531,7 +13531,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   InodeRef in;
 
   int r = _ll_create(parent, name, mode, flags, &in, CEPH_STAT_CAP_INODE_ALL,
@@ -13562,7 +13562,7 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
   InodeRef in;
 
   int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
@@ -14106,7 +14106,7 @@ public:
     req->get();
   }
   void finish(int r) override {
-    std::lock_guard l(client->client_lock);
+    std::scoped_lock l(client->client_lock);
     ceph_assert(req->head.op == CEPH_MDS_OP_SETFILELOCK);
     client->_interrupt_filelock(req);
     client->put_request(req);
@@ -14186,7 +14186,7 @@ int64_t Client::get_pool_id(const char *pool_name)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   return objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
 			       pool_name);
@@ -14737,7 +14737,7 @@ out:
 
 void Client::set_filer_flags(int flags)
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   ceph_assert(flags == 0 ||
 	 flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->add_global_op_flags(flags);
@@ -14745,7 +14745,7 @@ void Client::set_filer_flags(int flags)
 
 void Client::clear_filer_flags(int flags)
 {
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   ceph_assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->clear_global_op_flag(flags);
 }
@@ -14756,7 +14756,7 @@ void Client::set_uuid(const std::string& uuid)
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   ceph_assert(iref_reader.is_state_satisfied());
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
   assert(!uuid.empty());
 
   metadata["uuid"] = uuid;
@@ -14769,7 +14769,7 @@ void Client::set_session_timeout(unsigned timeout)
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   ceph_assert(iref_reader.is_state_satisfied());
 
-  std::lock_guard l(client_lock);
+  std::scoped_lock l(client_lock);
 
   metadata["timeout"] = stringify(timeout);
 }
@@ -14948,7 +14948,7 @@ const char** Client::get_tracked_conf_keys() const
 void Client::handle_conf_change(const ConfigProxy& conf,
 				const std::set <std::string> &changed)
 {
-  std::lock_guard lock(client_lock);
+  std::scoped_lock lock(client_lock);
 
   if (changed.count("client_cache_mid")) {
     lru.lru_set_midpoint(cct->_conf->client_cache_mid);
