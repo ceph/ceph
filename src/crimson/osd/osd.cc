@@ -429,9 +429,6 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_admin_commands(),
       asok->register_command(make_asok_hook<OsdStatusHook>(*this)),
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
-      asok->register_command(make_asok_hook<ConfigShowHook>()),
-      asok->register_command(make_asok_hook<ConfigGetHook>()),
-      asok->register_command(make_asok_hook<ConfigSetHook>()),
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)));
   });
 }
