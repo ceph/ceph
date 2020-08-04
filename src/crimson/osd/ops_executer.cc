@@ -709,6 +709,13 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       osd_op_params = osd_op_params_t();
       return backend.writefull(os, osd_op, txn, *osd_op_params);
     }, true);
+  case CEPH_OSD_OP_TRUNCATE:
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      // FIXME: rework needed. Move this out to do_write_op(), introduce
+      // do_write_op_no_user_modify()...
+      osd_op_params = osd_op_params_t();
+      return backend.truncate(os, osd_op, txn, *osd_op_params);
+    }, true);
   case CEPH_OSD_OP_SETALLOCHINT:
     return osd_op_errorator::now();
   case CEPH_OSD_OP_SETXATTR:

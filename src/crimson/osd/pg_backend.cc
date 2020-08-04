@@ -250,6 +250,21 @@ bool PGBackend::maybe_create_new_object(
   return true;
 }
 
+static bool is_offset_and_length_valid(
+  const std::uint64_t offset,
+  const std::uint64_t length)
+{
+  if (const std::uint64_t max = local_conf()->osd_max_object_size;
+      offset >= max || length > max || offset + length > max) {
+    logger().debug("{} osd_max_object_size: {}, offset: {}, len: {}; "
+                   "Hard limit of object size is 4GB",
+                   __func__, max, offset, length);
+    return false;
+  } else {
+    return true;
+  }
+}
+
 seastar::future<> PGBackend::write(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -338,6 +353,52 @@ seastar::future<> PGBackend::writefull(
 	std::max((uint64_t) op.extent.length, os.oi.size));
   }
   return seastar::now();
+}
+
+PGBackend::write_ertr::future<> PGBackend::truncate(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{} object dne, truncate is a no-op", __func__);
+    return write_ertr::now();
+  }
+  const ceph_osd_op& op = osd_op.op;
+  if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
+    return crimson::ct_error::file_too_large::make();
+  }
+  if (op.extent.truncate_seq) {
+    assert(op.extent.offset == op.extent.truncate_size);
+    if (op.extent.truncate_seq <= os.oi.truncate_seq) {
+      logger().debug("{} truncate seq {} <= current {}, no-op",
+                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
+      return write_ertr::make_ready_future<>();
+    } else {
+      logger().debug("{} truncate seq {} > current {}, truncating",
+                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
+      os.oi.truncate_seq = op.extent.truncate_seq;
+      os.oi.truncate_size = op.extent.truncate_size;
+    }
+  }
+  maybe_create_new_object(os, txn);
+  txn.truncate(coll->get_cid(),
+               ghobject_t{os.oi.soid}, op.extent.offset);
+  if (os.oi.size > op.extent.offset) {
+    // TODO: modified_ranges.union_of(trim);
+    osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
+        os.oi.size - op.extent.offset);
+  } else if (os.oi.size < op.extent.offset) {
+    osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+        op.extent.offset - os.oi.size);
+  }
+  // TODO: truncate_update_size_and_usage()
+  // TODO: ctx->delta_stats.num_wr++;
+  // ----
+  // do no set exists, or we will break above DELETE -> TRUNCATE munging.
+  os.oi.clear_data_digest();
+  return write_ertr::now();
 }
 
 seastar::future<> PGBackend::create(
