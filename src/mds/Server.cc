@@ -4512,14 +4512,16 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
  */
 class C_MDS_inode_update_finish : public ServerLogContext {
   CInode *in;
-  bool truncating_smaller, changed_ranges, new_realm;
+  bool truncating_smaller, changed_ranges, adjust_realm;
 public:
   C_MDS_inode_update_finish(Server *s, MDRequestRef& r, CInode *i,
-			    bool sm=false, bool cr=false, bool nr=false) :
+			    bool sm=false, bool cr=false, bool ar=false) :
     ServerLogContext(s, r), in(i),
-    truncating_smaller(sm), changed_ranges(cr), new_realm(nr) { }
+    truncating_smaller(sm), changed_ranges(cr), adjust_realm(ar) { }
   void finish(int r) override {
     ceph_assert(r == 0);
+
+    int snap_op = (in->snaprealm ? CEPH_SNAP_OP_UPDATE : CEPH_SNAP_OP_SPLIT);
 
     // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
@@ -4533,10 +4535,9 @@ public:
       mds->mdcache->truncate_inode(in, mdr->ls);
     }
 
-    if (new_realm) {
-      int op = CEPH_SNAP_OP_SPLIT;
-      mds->mdcache->send_snap_update(in, 0, op);
-      mds->mdcache->do_realm_invalidate_and_update_notify(in, op);
+    if (adjust_realm) {
+      mds->mdcache->send_snap_update(in, 0, snap_op);
+      mds->mdcache->do_realm_invalidate_and_update_notify(in, snap_op);
     }
 
     get_mds()->balancer->hit_inode(in, META_POP_IWR);
@@ -5298,7 +5299,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     return;
   }
 
-  bool new_realm = false;
+  bool adjust_realm = false;
   if (name.compare(0, 15, "ceph.dir.layout") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
@@ -5367,28 +5368,76 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     lov.add_xlock(&cur->policylock);
     if (quota.is_enable() && !cur->get_projected_srnode()) {
       lov.add_xlock(&cur->snaplock);
-      new_realm = true;
+      adjust_realm = true;
     }
 
     if (!mds->locker->acquire_locks(mdr, lov))
       return;
 
-    auto &pi = cur->project_inode(false, new_realm);
+    if (cur->get_projected_inode()->quota == quota) {
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    auto &pi = cur->project_inode(false, adjust_realm);
     pi.inode.quota = quota;
 
-    if (new_realm) {
-      SnapRealm *realm = cur->find_snaprealm();
-      auto seq = realm->get_newest_seq();
-      auto &newsnap = *pi.snapnode;
-      newsnap.created = seq;
-      newsnap.seq = seq;
-    }
+    if (adjust_realm)
+      pi.snapnode->created = pi.snapnode->seq = cur->find_snaprealm()->get_newest_seq();
+
     mdr->no_early_reply = true;
     pip = &pi.inode;
 
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
-  } else if (name.find("ceph.dir.pin") == 0) {
+  } else if (name == "ceph.dir.subvolume"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    bool val;
+    try {
+      val = boost::lexical_cast<bool>(value);
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    lov.add_xlock(&cur->policylock);
+    lov.add_xlock(&cur->snaplock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    SnapRealm *realm = cur->find_snaprealm();
+    if (val) {
+      inodeno_t subvol_ino = realm->get_subvolume_ino();
+      // can't create subvolume inside another subvolume
+      if (subvol_ino && subvol_ino != cur->ino()) {
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+    }
+
+    const auto srnode = cur->get_projected_srnode();
+    if (val == (srnode && srnode->is_subvolume())) {
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    auto& pi = cur->project_inode(false, true);
+    if (!srnode)
+      pi.snapnode->created = pi.snapnode->seq = realm->get_newest_seq();
+    if (val)
+      pi.snapnode->mark_subvolume();
+    else
+      pi.snapnode->clear_subvolume();
+
+    mdr->no_early_reply = true;
+    pip = &pi.inode;
+    adjust_realm = true;
+  } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
       return;
@@ -5434,7 +5483,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
-								   false, false, new_realm));
+								   false, false, adjust_realm));
   return;
 }
 
