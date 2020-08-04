@@ -1319,7 +1319,9 @@ void MDSRank::heartbeat_reset()
   // (by blacklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.
   auto grace = g_conf().get_val<double>("mds_heartbeat_grace");
-  g_ceph_context->get_heartbeat_map()->reset_timeout(hb, grace, 0);
+  g_ceph_context->get_heartbeat_map()->reset_timeout(hb,
+    ceph::make_timespan(grace),
+    ceph::timespan::zero());
 }
 
 bool MDSRank::is_stale_message(const cref_t<Message> &m) const
