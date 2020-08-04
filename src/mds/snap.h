@@ -74,6 +74,10 @@ struct sr_t {
   void clear_parent_global() { flags &= ~PARENT_GLOBAL; }
   bool is_parent_global() const { return flags & PARENT_GLOBAL; }
 
+  void mark_subvolume() { flags |= SUBVOLUME; }
+  void clear_subvolume() { flags &= ~SUBVOLUME; }
+  bool is_subvolume() const { return flags & SUBVOLUME; }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
@@ -90,7 +94,8 @@ struct sr_t {
 
   __u32 flags = 0;
   enum {
-    PARENT_GLOBAL = 1 << 0,
+    PARENT_GLOBAL	= 1 << 0,
+    SUBVOLUME		= 1 << 1,
   };
 };
 WRITE_CLASS_ENCODER(sr_t)
