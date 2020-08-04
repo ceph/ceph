@@ -45,6 +45,7 @@ class OpsExecuter {
     crimson::ct_error::input_output_error,
     crimson::ct_error::value_too_large>;
   using read_errorator = PGBackend::read_errorator;
+  using write_ertr = PGBackend::write_ertr;
   using get_attr_errorator = PGBackend::get_attr_errorator;
   using watch_errorator = crimson::errorator<
     crimson::ct_error::enoent,
@@ -62,6 +63,7 @@ public:
   using osd_op_errorator = crimson::compound_errorator_t<
     call_errorator,
     read_errorator,
+    write_ertr,
     get_attr_errorator,
     watch_errorator,
     PGBackend::stat_errorator>;
