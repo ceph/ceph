@@ -7498,27 +7498,25 @@ TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
 TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
   // note: require >= mimic
 
-  // create object
-  {
-    ObjectWriteOperation op;
-    op.create(true);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(pool_name, "allow_ec_overwrites", "true"),
+    inbl, NULL, NULL));
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("there hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  {
+    bufferlist bl;
+    bl.append("There hi");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
   }
-
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7526,7 +7524,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
   // set_chunk
   {
     ObjectReadOperation op;
-    op.set_chunk(0, 8, cache_ioctx, "bar", 0);
+    op.set_chunk(0, 4, cache_ioctx, "bar", 0);
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
 	      librados::OPERATION_IGNORE_CACHE, NULL));
@@ -7535,13 +7533,15 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
     completion->release();
   }
 
-  // make all chunks dirty --> full flush --> all chunks are evicted
+  // promote
   {
-    bufferlist bl;
-    bl.append("There hi");
     ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    op.tier_promote();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 
   // read and verify the object
@@ -7551,11 +7551,6 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
     ASSERT_EQ('T', bl[0]);
   }
 
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
 }
@@ -7563,22 +7558,29 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
 TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
   // note: require >= mimic
 
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(pool_name, "allow_ec_overwrites", "true"),
+    inbl, NULL, NULL));
+
   // create object
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("hiaa there");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
+    bufferlist bl;
+    bl.append("base chunk");
     ObjectWriteOperation op;
-    op.create(true);
+    op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
   }
   {
     bufferlist bl;
-    bl.append("HI there");
+    bl.append("HIaa there");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
@@ -7590,17 +7592,6 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
     op.write_full(bl);
     ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
   }
-
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
 
   // set-redirect
   {
@@ -7655,11 +7646,6 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
     ASSERT_EQ(1, ioctx.read("foo-chunk", bl, 1, 0));
     ASSERT_EQ('B', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
