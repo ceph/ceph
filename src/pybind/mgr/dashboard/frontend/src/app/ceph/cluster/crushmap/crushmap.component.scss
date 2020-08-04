@@ -1,0 +1,7 @@
+::ng-deep tree-root {
+  tree-viewport {
+    div:first-child {
+      height: unset !important;
+    }
+  }
+}
