@@ -445,8 +445,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
   if (vm.count(at::IMAGE_FEATURES)) {
     features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
-  } else {
-    features = get_rbd_default_features(g_ceph_context);
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
