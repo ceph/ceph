@@ -2055,7 +2055,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   /* garbage collection related handling */
   utime_t start_time = ceph_clock_now();
   if (start_time > gc_invalidate_time) {
-    int r = store->getRados()->defer_gc(s->obj_ctx, s->bucket->get_info(), s->object->get_obj(), s->yield);
+    int r = store->defer_gc(s->obj_ctx, s->bucket.get(), s->object.get(), s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "WARNING: could not defer gc entry for obj" << dendl;
     }
@@ -2120,7 +2120,6 @@ void RGWGetObj::execute()
 
   perfcounter->inc(l_rgw_get);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), s->object->get_obj());
   std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op(s->object->get_read_op(s->obj_ctx));
 
   op_ret = get_params();
@@ -3491,16 +3490,20 @@ int RGWPutObj::verify_permission()
     RGWAccessControlPolicy cs_acl(s->cct);
     boost::optional<Policy> policy;
     map<string, bufferlist> cs_attrs;
-    rgw_bucket cs_bucket(copy_source_bucket_info.bucket);
-    rgw_obj_key cs_object(copy_source_object_name, copy_source_version_id);
+    std::unique_ptr<rgw::sal::RGWBucket> cs_bucket;
+    int ret = store->get_bucket(NULL, copy_source_bucket_info, &cs_bucket);
+    if (ret < 0)
+      return ret;
 
-    rgw_obj obj(cs_bucket, cs_object);
-    store->getRados()->set_atomic(s->obj_ctx, obj);
-    store->getRados()->set_prefetch_data(s->obj_ctx, obj);
+    std::unique_ptr<rgw::sal::RGWObject> cs_object =
+      cs_bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
+
+    cs_object->set_atomic(s->obj_ctx);
+    cs_object->set_prefetch_data(s->obj_ctx);
 
     /* check source object permissions */
     if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
-			policy, cs_bucket, cs_object, true) < 0) {
+			policy, cs_bucket->get_key(), cs_object->get_key(), true) < 0) {
       return -EACCES;
     }
 
@@ -3510,10 +3513,10 @@ int RGWPutObj::verify_permission()
         auto usr_policy_res = Effect::Pass;
         for (auto& user_policy : s->iam_user_policies) {
           if (usr_policy_res = user_policy.eval(s->env, *s->auth.identity,
-			      cs_object.instance.empty() ?
+			      cs_object->get_instance().empty() ?
 			      rgw::IAM::s3GetObject :
 			      rgw::IAM::s3GetObjectVersion,
-			      rgw::ARN(obj)); usr_policy_res == Effect::Deny)
+			      rgw::ARN(cs_object->get_obj())); usr_policy_res == Effect::Deny)
             return -EACCES;
           else if (usr_policy_res == Effect::Allow)
             break;
@@ -3521,10 +3524,10 @@ int RGWPutObj::verify_permission()
   rgw::IAM::Effect e = Effect::Pass;
   if (policy) {
 	  e = policy->eval(s->env, *s->auth.identity,
-			      cs_object.instance.empty() ?
+			      cs_object->get_instance().empty() ?
 			      rgw::IAM::s3GetObject :
 			      rgw::IAM::s3GetObjectVersion,
-			      rgw::ARN(obj));
+			      rgw::ARN(cs_object->get_obj()));
   }
 	if (e == Effect::Deny) {
 	  return -EACCES; 
@@ -3647,7 +3650,6 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   std::unique_ptr<RGWGetObj_Filter> decrypt;
   RGWCompressionInfo cs_info;
   map<string, bufferlist> attrs;
-  map<string, bufferlist>::iterator attr_iter;
   int ret = 0;
 
   uint64_t obj_size;
@@ -3656,20 +3658,22 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   new_ofs = fst;
   new_end = lst;
 
-  rgw_obj_key obj_key(copy_source_object_name, copy_source_version_id);
-  rgw_obj obj(copy_source_bucket_info.bucket, obj_key);
-
-  RGWRados::Object op_target(store->getRados(), copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-  RGWRados::Object::Read read_op(&op_target);
-  read_op.params.obj_size = &obj_size;
-  read_op.params.attrs = &attrs;
-
-  ret = read_op.prepare(s->yield);
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
   if (ret < 0)
     return ret;
 
+  std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op(obj->get_read_op(s->obj_ctx));
+
+  ret = read_op->prepare(s->yield);
+  if (ret < 0)
+    return ret;
+
+  obj_size = obj->get_obj_size();
+
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(obj->get_attrs().attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
@@ -3683,11 +3687,11 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     filter = &*decompress;
   }
 
-  attr_iter = attrs.find(RGW_ATTR_MANIFEST);
+  auto attr_iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
   op_ret = this->get_decrypt_filter(&decrypt,
                                     filter,
-                                    attrs,
-                                    attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
+                                    obj->get_attrs().attrs,
+                                    attr_iter != obj->get_attrs().end() ? &(attr_iter->second) : nullptr);
   if (decrypt != nullptr) {
     filter = decrypt.get();
   }
@@ -3695,12 +3699,12 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
   }
 
-  ret = read_op.range_to_ofs(obj_size, new_ofs, new_end);
+  ret = obj->range_to_ofs(obj_size, new_ofs, new_end);
   if (ret < 0)
     return ret;
 
   filter->fixup_range(new_ofs, new_end);
-  ret = read_op.iterate(new_ofs, new_end, filter, s->yield);
+  ret = read_op->iterate(new_ofs, new_end, filter, s->yield);
 
   if (ret >= 0)
     ret = filter->flush();

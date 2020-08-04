@@ -734,6 +734,10 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
   return 0;
 }
 
+int RGWRadosStore::defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj, optional_yield y)
+{
+  return rados->defer_gc(rctx, bucket->get_info(), obj->get_obj(), y);
+}
 
 int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 const string& zonegroup_id,

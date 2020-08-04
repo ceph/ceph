@@ -85,6 +85,8 @@ class RGWStore : public DoutPrefixProvider {
     virtual bool is_meta_master() = 0;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
 				  bufferlist& in_data, JSONParser *jp, req_info& info) = 0;
+    virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
+			 optional_yield y) = 0;
 
     virtual void finalize(void)=0;
 
@@ -633,6 +635,8 @@ class RGWRadosStore : public RGWStore {
     virtual bool is_meta_master() override;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
 				  bufferlist& in_data, JSONParser *jp, req_info& info) override;
+    virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
+			 optional_yield y) override;
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados *getRados(void) { return rados; }
