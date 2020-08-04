@@ -1449,15 +1449,25 @@ you may want to run:
             return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
 
+    def _invalidate_daemons_and_kick_serve(self, filter_host=None):
+        if filter_host:
+            self.cache.invalidate_host_daemons(filter_host)
+        else:
+            for h in self.cache.get_hosts():
+                # Also discover daemons deployed manually
+                self.cache.invalidate_host_daemons(h)
+
+        self._kick_serve_loop()
+
     @trivial_completion
-    def describe_service(self, service_type=None, service_name=None,
-                         refresh=False) -> List[orchestrator.ServiceDescription]:
+    def describe_service(self, service_type: Optional[str]=None, service_name: Optional[str]=None,
+                         refresh: bool=False) -> List[orchestrator.ServiceDescription]:
         if refresh:
-            # ugly sync path, FIXME someday perhaps?
-            for host in self.inventory.keys():
-                self._refresh_host_daemons(host)
+            self._invalidate_daemons_and_kick_serve()
+            self.log.info('Kicked serve() loop to refresh all services')
+
         # <service_map>
-        sm = {}  # type: Dict[str, orchestrator.ServiceDescription]
+        sm: Dict[str, orchestrator.ServiceDescription] = {}
         osd_count = 0
         for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
@@ -1538,15 +1548,16 @@ you may want to run:
         return list(sm.values())
 
     @trivial_completion
-    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None,
-                     host=None, refresh=False) -> List[orchestrator.DaemonDescription]:
+    def list_daemons(self,
+                     service_name: Optional[str] = None,
+                     daemon_type: Optional[str] = None,
+                     daemon_id: Optional[str] = None,
+                     host: Optional[str] = None,
+                     refresh: bool = False) -> List[orchestrator.DaemonDescription]:
         if refresh:
-            # ugly sync path, FIXME someday perhaps?
-            if host:
-                self._refresh_host_daemons(host)
-            else:
-                for hostname in self.inventory.keys():
-                    self._refresh_host_daemons(hostname)
+            self._invalidate_daemons_and_kick_serve(host)
+            self.log.info('Kicked serve() loop to refresh all daemons')
+
         result = []
         for h, dm in self.cache.get_daemons_with_volatile_status():
             if host and h != host:
@@ -1661,7 +1672,7 @@ you may want to run:
             return f'Failed to remove service. <{service_name}> was not found.'
 
     @trivial_completion
-    def get_inventory(self, host_filter=None, refresh=False) -> List[orchestrator.InventoryHost]:
+    def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter]=None, refresh=False) -> List[orchestrator.InventoryHost]:
         """
         Return the storage inventory of hosts matching the given filter.
 
@@ -1671,17 +1682,19 @@ you may want to run:
           - add filtering by label
         """
         if refresh:
-            # ugly sync path, FIXME someday perhaps?
-            if host_filter:
-                for host in host_filter.hosts:
-                    self._refresh_host_devices(host)
+            if host_filter and host_filter.hosts:
+                for h in host_filter.hosts:
+                    self.cache.invalidate_host_devices(h)
             else:
-                for host in self.inventory.keys():
-                    self._refresh_host_devices(host)
+                for h in self.cache.get_hosts():
+                    self.cache.invalidate_host_devices(h)
+
+            self.event.set()
+            self.log.info('Kicked serve() loop to refresh devices')
 
         result = []
         for host, dls in self.cache.devices.items():
-            if host_filter and host not in host_filter.hosts:
+            if host_filter and host_filter.hosts and host not in host_filter.hosts:
                 continue
             result.append(orchestrator.InventoryHost(host,
                                                      inventory.Devices(dls)))
