@@ -791,20 +791,42 @@ int Migration<I>::abort() {
     ldout(m_cct, 1) << "failed to open destination image: " << cpp_strerror(r)
                     << dendl;
   } else {
-    ldout(m_cct, 10) << "relinking children" << dendl;
+    BOOST_SCOPE_EXIT_TPL(&dst_image_ctx) {
+      if (dst_image_ctx != nullptr) {
+        dst_image_ctx->state->close();
+      }
+    } BOOST_SCOPE_EXIT_END;
 
+    std::list<obj_watch_t> watchers;
+    int flags = librbd::image::LIST_WATCHERS_FILTER_OUT_MY_INSTANCE |
+                librbd::image::LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES;
+    C_SaferCond on_list_watchers;
+    auto list_watchers_request = librbd::image::ListWatchersRequest<I>::create(
+        *dst_image_ctx, flags, &watchers, &on_list_watchers);
+    list_watchers_request->send();
+    r = on_list_watchers.wait();
+    if (r < 0) {
+      lderr(m_cct) << "failed listing watchers:" << cpp_strerror(r) << dendl;
+      return r;
+    }
+    if (!watchers.empty()) {
+      lderr(m_cct) << "image has watchers - cannot abort migration" << dendl;
+      return -EBUSY;
+    }
+
+    // ensure destination image is now read-only
+    r = set_state(cls::rbd::MIGRATION_STATE_ABORTING, "");
+    if (r < 0) {
+      return r;
+    }
+
+    ldout(m_cct, 10) << "relinking children" << dendl;
     r = relink_children(dst_image_ctx, m_src_image_ctx);
     if (r < 0) {
       return r;
     }
 
     ldout(m_cct, 10) << "removing dst image snapshots" << dendl;
-
-    BOOST_SCOPE_EXIT_TPL(&dst_image_ctx) {
-      if (dst_image_ctx != nullptr) {
-        dst_image_ctx->state->close();
-      }
-    } BOOST_SCOPE_EXIT_END;
 
     std::vector<librbd::snap_info_t> snaps;
     r = Snapshot<I>::list(dst_image_ctx, snaps);
@@ -853,7 +875,7 @@ int Migration<I>::abort() {
                    << m_dst_io_ctx.get_pool_name() << "/" << m_dst_image_name
                    << " (" << m_dst_image_id << ")': " << cpp_strerror(r)
                    << dendl;
-      // not fatal
+      return r;
     }
   }
 

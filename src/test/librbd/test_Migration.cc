@@ -1107,6 +1107,15 @@ TEST_F(TestMigration, SnapTrimBeforePrepare)
   migration_commit(m_ioctx, m_image_name);
 }
 
+TEST_F(TestMigration, AbortInUseImage) {
+  migration_prepare(m_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
+
+  librbd::NoOpProgressContext no_op;
+  EXPECT_EQ(-EBUSY, librbd::api::Migration<>::abort(m_ioctx, m_ictx->name,
+                                                    no_op));
+}
+
 TEST_F(TestMigration, CloneV1Parent)
 {
   const uint32_t CLONE_FORMAT = 1;
