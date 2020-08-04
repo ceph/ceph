@@ -60,10 +60,29 @@ inline int rgw_shard_id(const std::string& key, int max_shards)
 			max_shards);
 }
 
-int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std::string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, std::map<std::string, bufferlist> *pattrs = NULL);
-int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std::string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *pattrs = NULL,
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
+void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
+
+std::pair<std::string, int> rgw_shard_name(std::string_view prefix,
+					   unsigned max_shards,
+					   std::string_view key);
+std::string rgw_shard_name(std::string_view prefix, unsigned max_shards,
+			   std::string_view section, std::string_view key);
+std::string rgw_shard_name(std::string_view prefix, unsigned shard_id);
+
+struct rgw_name_to_flag {
+  const char *type_name;
+  uint32_t flag;
+};
+
+int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+			    const string& str, uint32_t *perm);
+
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
+int rgw_get_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none, bool raw_attrs=false);
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 

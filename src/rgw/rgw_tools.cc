@@ -3,6 +3,10 @@
 
 #include <errno.h>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "librados/librados_asio.h"
@@ -101,8 +105,67 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
-                       RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
+{
+  int s = 0;
+  if (!shard_id) shard_id = &s;
+  std::tie(name, *shard_id) = rgw_shard_name(prefix, max_shards, key);
+}
+
+void rgw_shard_name(const string& prefix, unsigned max_shards,
+		    const string& section, const string& key, string& name)
+{
+  name = rgw_shard_name(prefix, max_shards, section, key);
+}
+
+void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
+{
+  name = rgw_shard_name(prefix, shard_id);
+}
+
+std::pair<std::string, int> rgw_shard_name(std::string_view prefix,
+					   unsigned max_shards,
+					   std::string_view key)
+{
+  uint32_t val = ceph_str_hash_linux(key.data(), key.size());
+  auto shard_id = val % max_shards;
+  return {rgw_shard_name(prefix, shard_id), shard_id};
+}
+
+std::string rgw_shard_name(std::string_view prefix, unsigned max_shards,
+			   std::string_view section, std::string_view key)
+{
+  uint32_t val = ceph_str_hash_linux(key.data(), key.size());
+  val ^= ceph_str_hash_linux(section.data(), section.size());
+  return rgw_shard_name(prefix, val);
+}
+
+std::string rgw_shard_name(std::string_view prefix, unsigned shard_id)
+{
+  return fmt::format("{}{}", prefix, unsigned(shard_id));
+}
+
+
+int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+			    const string& str, uint32_t *perm)
+{
+  list<string> strs;
+  get_str_list(str, strs);
+  list<string>::iterator iter;
+  uint32_t v = 0;
+  for (iter = strs.begin(); iter != strs.end(); ++iter) {
+    string& s = *iter;
+    for (int i = 0; mapping[i].type_name; i++) {
+      if (s.compare(mapping[i].type_name) == 0)
+        v |= mapping[i].flag;
+    }
+  }
+
+  *perm = v;
+  return 0;
+}
+
+int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
