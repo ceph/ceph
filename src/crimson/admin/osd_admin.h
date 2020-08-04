@@ -12,6 +12,7 @@ class AssertAlwaysHook;
 class FlushPgStatsHook;
 class OsdStatusHook;
 class SendBeaconHook;
+class SeastarMetricsHook;
 
 template<class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args);
