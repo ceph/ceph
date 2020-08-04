@@ -101,8 +101,8 @@ void readahead(I *ictx, const Extents& image_extents) {
                                              object_extent.length);
       auto req = io::ObjectDispatchSpec::create_read(
         ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-        object_extent.offset, object_extent.length, snap_id, 0, {},
-        &req_comp->read_data, &req_comp->extent_map, req_comp);
+        {{object_extent.offset, object_extent.length}}, snap_id, 0, {},
+        &req_comp->read_data, &req_comp->extent_map, nullptr, req_comp);
       req->send();
     }
 
@@ -405,9 +405,9 @@ void ImageReadRequest<I>::send_request() {
     auto req_comp = new io::ReadResult::C_ObjectReadRequest(
       aio_comp, oe.offset, oe.length, std::move(oe.buffer_extents));
     auto req = ObjectDispatchSpec::create_read(
-      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.object_no, oe.offset,
-      oe.length, snap_id, m_op_flags, this->m_trace, &req_comp->bl,
-      &req_comp->extent_map, req_comp);
+      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.object_no,
+      {{oe.offset, oe.length}}, snap_id, m_op_flags, this->m_trace,
+      &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
     req->send();
   }
 

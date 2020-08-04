@@ -34,10 +34,10 @@ public:
   void shut_down(Context* on_finish) override;
 
   bool read(
-      uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      librados::snap_t snap_id, int op_flags,
-      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, int* object_dispatch_flags,
+      uint64_t object_no, const Extents &extents, librados::snap_t snap_id,
+      int op_flags, const ZTracer::Trace &parent_trace,
+      ceph::bufferlist* read_data, Extents* extent_map,
+      uint64_t* version, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 

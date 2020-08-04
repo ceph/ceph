@@ -50,9 +50,9 @@ struct Mock {
     s_instance = this;
   }
 
-  MOCK_METHOD8(read_parent,
-               void(librbd::MockParentImageCacheImageCtx *, uint64_t, uint64_t,
-                    uint64_t, librados::snap_t, const ZTracer::Trace &,
+  MOCK_METHOD7(read_parent,
+               void(librbd::MockParentImageCacheImageCtx *, uint64_t,
+                    const io::Extents &, librados::snap_t, const ZTracer::Trace &,
                     ceph::bufferlist*, Context*));
 };
 
@@ -62,9 +62,9 @@ Mock *Mock::s_instance = nullptr;
 
 template<> void read_parent(
     librbd::MockParentImageCacheImageCtx *image_ctx, uint64_t object_no,
-    uint64_t off, uint64_t len, librados::snap_t snap_id,
+    const io::Extents &extents, librados::snap_t snap_id,
     const ZTracer::Trace &trace, ceph::bufferlist* data, Context* on_finish) {
-  Mock::s_instance->read_parent(image_ctx, object_no, off, len, snap_id, trace,
+  Mock::s_instance->read_parent(image_ctx, object_no, extents, snap_id, trace,
                                 data, on_finish);
 }
 
@@ -136,11 +136,11 @@ public :
   }
 
   void expect_read_parent(MockUtils &mock_utils, uint64_t object_no,
-                          uint64_t off, uint64_t len, librados::snap_t snap_id,
+                          const io::Extents &extents, librados::snap_t snap_id,
                           int r) {
     EXPECT_CALL(mock_utils,
-                read_parent(_, object_no, off, len, snap_id, _, _, _))
-      .WillOnce(WithArg<7>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
+                read_parent(_, object_no, extents, snap_id, _, _, _))
+      .WillOnce(WithArg<6>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
   }
 
   void expect_cache_close(MockParentImageCache& mparent_image_cache, int ret_val) {
@@ -370,9 +370,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
   ceph::bufferlist read_data;
-  mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {}, &read_data,
-                                nullptr, nullptr, &dispatch_result, nullptr,
-                                &on_dispatched);
+  mock_parent_image_cache->read(0, {{0, 4096}}, CEPH_NOSNAP, 0, {}, &read_data,
+                                nullptr, nullptr, nullptr, &dispatch_result,
+                                nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();
@@ -418,13 +418,13 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
   expect_cache_lookup_object(*mock_parent_image_cache, "");
 
   MockUtils mock_utils;
-  expect_read_parent(mock_utils, 0, 0, 4096, CEPH_NOSNAP, 0);
+  expect_read_parent(mock_utils, 0, {{0, 4096}}, CEPH_NOSNAP, 0);
 
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;
-  mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {}, nullptr,
-                                nullptr, nullptr, &dispatch_result, nullptr,
-                                &on_dispatched);
+  mock_parent_image_cache->read(0, {{0, 4096}}, CEPH_NOSNAP, 0, {}, nullptr,
+                                nullptr, nullptr, nullptr, &dispatch_result,
+                                nullptr, &on_dispatched);
   ASSERT_EQ(0, on_dispatched.wait());
 
   mock_parent_image_cache->get_cache_client()->close();

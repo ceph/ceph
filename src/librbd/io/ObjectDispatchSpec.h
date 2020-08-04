@@ -36,35 +36,35 @@ private:
 public:
   struct RequestBase {
     uint64_t object_no;
-    uint64_t object_off;
 
-    RequestBase(uint64_t object_no, uint64_t object_off)
-      : object_no(object_no), object_off(object_off) {
+    RequestBase(uint64_t object_no)
+      : object_no(object_no) {
     }
   };
 
   struct ReadRequest : public RequestBase {
-    uint64_t object_len;
+    const Extents extents;
     librados::snap_t snap_id;
     ceph::bufferlist* read_data;
     Extents* extent_map;
+    uint64_t* version;
 
-    ReadRequest(uint64_t object_no, uint64_t object_off, uint64_t object_len,
+    ReadRequest(uint64_t object_no, const Extents &extents,
                 librados::snap_t snap_id, ceph::bufferlist* read_data,
-                Extents* extent_map)
-      : RequestBase(object_no, object_off),
-        object_len(object_len), snap_id(snap_id), read_data(read_data),
-        extent_map(extent_map) {
+                Extents* extent_map, uint64_t* version)
+      : RequestBase(object_no), extents(extents), snap_id(snap_id),
+        read_data(read_data), extent_map(extent_map), version(version) {
     }
   };
 
   struct WriteRequestBase : public RequestBase {
+    uint64_t object_off;
     ::SnapContext snapc;
     uint64_t journal_tid;
 
     WriteRequestBase(uint64_t object_no, uint64_t object_off,
                      const ::SnapContext& snapc, uint64_t journal_tid)
-      : RequestBase(object_no, object_off), snapc(snapc),
+      : RequestBase(object_no), object_off(object_off), snapc(snapc),
         journal_tid(journal_tid) {
     }
   };
@@ -153,15 +153,14 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_read(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      librados::snap_t snap_id, int op_flags,
-      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, Context* on_finish) {
+      uint64_t object_no, const Extents &extents, librados::snap_t snap_id,
+      int op_flags, const ZTracer::Trace &parent_trace,
+      ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
+      Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  ReadRequest{object_no, object_off,
-                                              object_len, snap_id, read_data,
-                                              extent_map},
+                                  ReadRequest{object_no, extents, snap_id,
+                                              read_data, extent_map, version},
                                   op_flags, parent_trace, on_finish);
   }
 
