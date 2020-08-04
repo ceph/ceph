@@ -3,7 +3,7 @@ import json
 import pytest
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, PlacementSpec
+    IscsiServiceSpec, AlertManagerSpec
 
 from orchestrator import DaemonDescription, OrchestratorError
 
@@ -517,3 +517,15 @@ def test_daemon_description_service_name(spec: ServiceSpec,
         with pytest.raises(OrchestratorError):
             dd.service_name()
 
+
+def test_alertmanager_spec_1():
+    spec = AlertManagerSpec()
+    assert spec.service_type == 'alertmanager'
+    assert isinstance(spec.user_data, dict)
+    assert len(spec.user_data.keys()) == 0
+
+
+def test_alertmanager_spec_2():
+    spec = AlertManagerSpec(user_data={'default_webhook_urls': ['foo']})
+    assert isinstance(spec.user_data, dict)
+    assert 'default_webhook_urls' in spec.user_data.keys()
