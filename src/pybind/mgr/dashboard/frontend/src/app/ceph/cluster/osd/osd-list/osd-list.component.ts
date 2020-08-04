@@ -542,6 +542,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   configurePgScrubAction() {
-    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { size: 'lg' });
+    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, undefined, { size: 'lg' });
   }
 }

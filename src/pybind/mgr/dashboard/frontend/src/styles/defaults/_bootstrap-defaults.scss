@@ -2,40 +2,40 @@
 
 // Color system
 
-$white:     #ffffff !default;
-$gray-100:  #f8f9fa !default;
-$gray-200:  #e9ecef !default;
-$gray-300:  #dee2e6 !default;
-$gray-400:  #ced4da !default;
-$gray-500:  #adb5bd !default;
-$gray-600:  #6c757d !default;
-$gray-700:  #495057 !default;
-$gray-800:  #343a40 !default;
-$gray-900:  #212529 !default;
-$black:     #000000 !default;
+$white: #fff !default;
+$gray-100: #f8f9fa !default;
+$gray-200: #e9ecef !default;
+$gray-300: #dee2e6 !default;
+$gray-400: #ced4da !default;
+$gray-500: #adb5bd !default;
+$gray-600: #6c757d !default;
+$gray-700: #495057 !default;
+$gray-800: #343a40 !default;
+$gray-900: #212529 !default;
+$black: #000 !default;
 
-$blue:      #007bff !default;
-$indigo:    #6610f2 !default;
-$purple:    #6f42c1 !default;
-$pink:      #a94442;
-$red:       #ef5c55;
-$orange:    #fd7e14 !default;
-$yellow:    #ffc200;
-$green:     #00bb00;
-$teal:      #20c997 !default;
-$cyan:      #17a2b8 !default;
+$blue: #007bff !default;
+$indigo: #6610f2 !default;
+$purple: #6f42c1 !default;
+$pink: #a94442;
+$red: #ef5c55;
+$orange: #fd7e14 !default;
+$yellow: #ffc200;
+$green: #0b0;
+$teal: #20c997 !default;
+$cyan: #17a2b8 !default;
 
-$primary:   #2b99a8;
+$primary: #2b99a8;
 $secondary: #374249;
-$success:   $green;
-$info:      $primary;
-$warning:   $yellow;
-$danger:    $red;
-$light:     $gray-100;
-$dark:      #777777;
+$success: $green;
+$info: $primary;
+$warning: $yellow;
+$danger: $red;
+$light: $gray-100;
+$dark: #777;
 
 $theme-colors: (
-  "accent": $red
+  'accent': #ef5c55
 );
 
 // Body
@@ -47,7 +47,7 @@ $body-color: $gray-900;
 // Typography
 
 $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-serif,
-'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
 // Card
 
@@ -57,14 +57,18 @@ $card-cap-bg: $gray-100;
 
 $grid-gutter-width: 30px;
 
+// Table
+
+$datatable-divider-color: rgba($black, 0.09);
+
 // Navs
 
 $nav-tabs-margin-bottom: 1rem;
 
 // Tooltips
 
-$tooltip-color:                     $white;
-$tooltip-bg:                        $body-color;
+$tooltip-color: $white;
+$tooltip-bg: $body-color;
 
 // Misc
 

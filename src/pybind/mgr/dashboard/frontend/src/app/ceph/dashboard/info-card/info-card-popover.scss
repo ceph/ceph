@@ -29,13 +29,13 @@
 }
 
 .info-card-content-clickable {
-  border: 1px solid bd.$color-shade-gray;
+  border: 1px solid bd.$gray-200;
   border-radius: 3px;
   cursor: pointer;
   padding: 7px;
 }
 
 .info-card-content-clickable:hover {
-  background-color: bd.$color-light-shade-gray;
-  border-color: bd.$color-light-gray;
+  background-color: bd.$gray-200;
+  border-color: bd.$gray-400;
 }
