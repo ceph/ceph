@@ -7,10 +7,12 @@ tasks:
         rpm:
         - python3-cephfs
         - cephfs-top
+        - cephfs-mirror
         deb:
         - python3-cephfs
         - cephfs-shell
         - cephfs-top
+        - cephfs-mirror
       # For kernel_untar_build workunit
       extra_system_packages:
         deb:
