@@ -801,6 +801,9 @@ std::ostream& operator<<(std::ostream& os,
   case MIGRATION_STATE_EXECUTED:
     os << "executed";
     break;
+  case MIGRATION_STATE_ABORTING:
+    os << "aborting";
+    break;
   default:
     os << "unknown (" << static_cast<uint32_t>(migration_state) << ")";
     break;
