@@ -347,16 +347,7 @@ void StrayManager::_enqueue(CDentry *dn, bool trunc)
     return;
   }
 
-  CInode *in = dn->get_linkage()->get_inode();
-  if (in->snaprealm &&
-      !in->snaprealm->have_past_parents_open() &&
-      !in->snaprealm->open_parents(new C_RetryEnqueue(this, dn, trunc))) {
-    // this can happen if the dentry had been trimmed from cache.
-    return;
-  }
-
   dn->get_dir()->auth_pin(this);
-
   if (trunc) {
     truncate(dn);
   } else {
@@ -474,15 +465,11 @@ bool StrayManager::_eval_stray(CDentry *dn)
     // only important for directories.  normal file data snaps are handled
     // by the object store.
     if (in->snaprealm) {
-      if (!in->snaprealm->have_past_parents_open() &&
-          !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn))) {
-        return false;
-      }
-      in->snaprealm->prune_past_parents();
+      in->snaprealm->prune_past_parent_snaps();
       in->purge_stale_snap_data(in->snaprealm->get_snaps());
     }
     if (in->is_dir()) {
-      if (in->snaprealm && in->snaprealm->has_past_parents()) {
+      if (in->snaprealm && in->snaprealm->has_past_parent_snaps()) {
 	dout(20) << "  directory has past parents "
 		 << in->snaprealm << dendl;
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
@@ -527,7 +514,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
       return false;
     }
     // don't purge multiversion inode with snap data
-    if (in->snaprealm && in->snaprealm->has_past_parents() &&
+    if (in->snaprealm && in->snaprealm->has_past_parent_snaps() &&
 	in->is_any_old_inodes()) {
       // A file with snapshots: we will truncate the HEAD revision
       // but leave the metadata intact.
