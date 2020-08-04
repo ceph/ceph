@@ -3,10 +3,12 @@ import os
 from typing import List, Any, Tuple, Dict
 
 from orchestrator import DaemonDescription
+from ceph.deployment.service_spec import AlertManagerSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 
 logger = logging.getLogger(__name__)
+
 
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
@@ -73,20 +75,29 @@ class GrafanaService(CephadmService):
             service_url
         )
 
+
 class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
 
-    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> str:
         assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
         return self.mgr._create_daemon(daemon_spec)
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps = [] # type: List[str]
+        deps: List[str] = []
+        default_webhook_urls: List[str] = []
+
+        if daemon_spec.spec:
+            user_data = daemon_spec.spec.user_data
+            if 'default_webhook_urls' in user_data and isinstance(
+                    user_data['default_webhook_urls'], list):
+                default_webhook_urls.extend(user_data['default_webhook_urls'])
 
         # dashboard(s)
-        dashboard_urls = []
+        dashboard_urls: List[str] = []
         mgr_map = self.mgr.get('mgr_map')
         port = None
         proto = None  # http: or https:
@@ -110,7 +121,8 @@ class AlertmanagerService(CephadmService):
                                                   port))
 
         context = {
-            'dashboard_urls': dashboard_urls
+            'dashboard_urls': dashboard_urls,
+            'default_webhook_urls': default_webhook_urls
         }
         yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
 
@@ -231,6 +243,7 @@ class PrometheusService(CephadmService):
             'dashboard set-prometheus-api-host',
             service_url
         )
+
 
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
