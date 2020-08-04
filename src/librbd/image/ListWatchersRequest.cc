@@ -17,6 +17,13 @@
 #define dout_prefix *_dout << "librbd::image::ListWatchersRequest: " << this \
                            << " " << __func__ << ": "
 
+static std::ostream& operator<<(std::ostream& os, const obj_watch_t& watch) {
+  os << "{addr=" << watch.addr << ", "
+     << "watcher_id=" << watch.watcher_id << ", "
+     << "cookie=" << watch.cookie << "}";
+  return os;
+}
+
 namespace librbd {
 namespace image {
 
@@ -71,6 +78,7 @@ void ListWatchersRequest<I>::handle_list_image_watchers(int r) {
     return;
   }
 
+  ldout(m_cct, 20) << "object_watchers=" << m_object_watchers << dendl;
   list_mirror_watchers();
 }
 
@@ -109,6 +117,8 @@ void ListWatchersRequest<I>::handle_list_mirror_watchers(int r) {
     ldout(m_cct, 1) << "error listing mirror watchers: " << cpp_strerror(r)
                     << dendl;
   }
+
+  ldout(m_cct, 20) << "mirror_watchers=" << m_mirror_watchers << dendl;
   finish(0);
 }
 
@@ -127,6 +137,7 @@ void ListWatchersRequest<I>::finish(int r) {
       for (auto &w : m_object_watchers) {
         if ((m_flags & LIST_WATCHERS_FILTER_OUT_MY_INSTANCE) != 0) {
           if (w.cookie == watch_handle) {
+            ldout(m_cct, 20) << "filtering out my instance: " << w << dendl;
             continue;
           }
         }
@@ -138,10 +149,13 @@ void ListWatchersRequest<I>::finish(int r) {
                                });
         if ((m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) != 0) {
           if (it != m_mirror_watchers.end()) {
+            ldout(m_cct, 20) << "filtering out mirror instance: " << w << dendl;
             continue;
           }
         } else if ((m_flags & LIST_WATCHERS_MIRROR_INSTANCES_ONLY) != 0) {
           if (it == m_mirror_watchers.end()) {
+            ldout(m_cct, 20) << "filtering out non-mirror instance: " << w
+                             << dendl;
             continue;
           }
         }
