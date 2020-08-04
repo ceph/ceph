@@ -488,11 +488,8 @@ public:
   {
     std::string var;
     std::vector<std::string> new_val;
-    if (!cmd_getval(cmdmap, "var", var) ||
-        !cmd_getval(cmdmap, "val", new_val)) {
-      return seastar::make_ready_future<tell_result_t>(
-        tell_result_t{-EINVAL, "syntax error: 'config set <var> <value>'"});
-    }
+    cmd_getval(cmdmap, "var", var);
+    cmd_getval(cmdmap, "val", new_val);
     // val may be multiple words
     const std::string joined_values = boost::algorithm::join(new_val, " ");
     return local_conf().set_val(var, joined_values).then([format] {
