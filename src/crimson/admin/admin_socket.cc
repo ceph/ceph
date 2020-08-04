@@ -415,6 +415,104 @@ public:
   }
 };
 
+/**
+ * listing the configuration values
+ */
+class ConfigShowHook : public AdminSocketHook {
+public:
+  explicit ConfigShowHook() :
+  AdminSocketHook("config show",
+		  "config show",
+                  "dump current config settings")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("config_show");
+    local_conf().show_config(f.get());
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(f.get());
+  }
+};
+
+/**
+ * fetching the value of a specific configuration item
+ */
+class ConfigGetHook : public AdminSocketHook {
+public:
+  ConfigGetHook() :
+    AdminSocketHook("config get",
+                    "config get name=var,type=CephString",
+                    "config get <field>: get the config value")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    std::string var;
+    if (!cmd_getval(cmdmap, "var", var)) {
+      // should have been caught by 'validate()'
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{-EINVAL, "syntax error: 'config get <var>'"});
+    }
+    try {
+      unique_ptr<Formatter> f{Formatter::create(format,
+                                                "json-pretty",
+                                                "json-pretty")};
+      f->open_object_section("config_get");
+      std::string conf_val =
+        local_conf().get_val<std::string>(var);
+      f->dump_string(var.c_str(), conf_val.c_str());
+      f->close_section();
+      return seastar::make_ready_future<tell_result_t>(f.get());
+    } catch (const boost::bad_get&) {
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{-EINVAL, fmt::format("unrecognized option {}", var)});
+    }
+  }
+};
+
+/**
+ * setting the value of a specific configuration item (an example:
+ * {"prefix": "config set", "var":"debug_osd", "val": ["30/20"]} )
+ */
+class ConfigSetHook : public AdminSocketHook {
+public:
+  ConfigSetHook()
+    : AdminSocketHook("config set",
+                      "config set"
+                      " name=var,type=CephString"
+                      " name=val,type=CephString,n=N",
+                      "config set <field> <val> [<val> ...]: set a config variable")
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&&) const final
+  {
+    std::string var;
+    std::vector<std::string> new_val;
+    if (!cmd_getval(cmdmap, "var", var) ||
+        !cmd_getval(cmdmap, "val", new_val)) {
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{-EINVAL, "syntax error: 'config set <var> <value>'"});
+    }
+    // val may be multiple words
+    const std::string joined_values = boost::algorithm::join(new_val, " ");
+    return local_conf().set_val(var, joined_values).then([format] {
+      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+      f->open_object_section("config_set");
+      f->dump_string("success", "");
+      f->close_section();
+      return seastar::make_ready_future<tell_result_t>(f.get());
+    }).handle_exception_type([](std::invalid_argument& e) {
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{-EINVAL, e.what()});
+    });
+  }
+};
+
 /// the hooks that are served directly by the admin_socket server
 seastar::future<> AdminSocket::register_admin_commands()
 {
@@ -423,6 +521,9 @@ seastar::future<> AdminSocket::register_admin_commands()
     register_command(std::make_unique<GitVersionHook>()),
     register_command(std::make_unique<HelpHook>(*this)),
     register_command(std::make_unique<GetdescsHook>(*this)),
+    register_command(std::make_unique<ConfigGetHook>()),
+    register_command(std::make_unique<ConfigSetHook>()),
+    register_command(std::make_unique<ConfigShowHook>()),
     register_command(std::make_unique<InjectArgsHook>()));
 }
 
