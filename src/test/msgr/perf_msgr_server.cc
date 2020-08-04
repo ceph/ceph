@@ -38,7 +38,7 @@ class ServerDispatcher : public Dispatcher {
     list<Message*> messages;
 
    public:
-    OpWQ(time_t timeout, time_t suicide_timeout, ThreadPool *tp)
+    OpWQ(ceph::timespan timeout, ceph::timespan suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueue<Message>("ServerDispatcher::OpWQ", timeout, suicide_timeout, tp) {}
 
     bool _enqueue(Message *m) override {
@@ -73,7 +73,7 @@ class ServerDispatcher : public Dispatcher {
  public:
   ServerDispatcher(int threads, uint64_t delay): Dispatcher(g_ceph_context), think_time(delay),
     op_tp(g_ceph_context, "ServerDispatcher::op_tp", "tp_serv_disp", threads, "serverdispatcher_op_threads"),
-    op_wq(30, 30, &op_tp) {
+    op_wq(ceph::make_timespan(30), ceph::make_timespan(30), &op_tp) {
     op_tp.start();
   }
   ~ServerDispatcher() override {
