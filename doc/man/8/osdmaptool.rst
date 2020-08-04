@@ -183,7 +183,7 @@ To view the mappings of placement groups for pool 1::
 
         osdmaptool osdmap --test-map-pgs-dump --pool 1
 
-        pool 0 pg_num 8
+        pool 1 pg_num 8
         1.0     [0,2,1] 0
         1.1     [2,0,1] 2
         1.2     [0,1,2] 0
@@ -250,7 +250,7 @@ placement group distribution, whose standard deviation is 1.41421::
         size 20
         size 364
 
-   To simulate the active balancer in upmap mode::
+To simulate the active balancer in upmap mode::
 
         osdmaptool --upmap upmaps.out --upmap-active --upmap-deviation 6 --upmap-max 11 osdmap
 
