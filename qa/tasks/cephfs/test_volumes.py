@@ -2692,6 +2692,25 @@ class TestVolumes(CephFSTestCase):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_snapshot_reconf_max_concurrent_clones(self):
+        """
+        Validate 'max_concurrent_clones' config option
+        """
+
+        # get the default number of cloner threads
+        default_max_concurrent_clones = int(self.config_get('mgr.x', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(default_max_concurrent_clones, 4)
+
+        # Increase number of cloner threads
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 6)
+        max_concurrent_clones = int(self.config_get('mgr.x', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 6)
+
+        # Decrease number of cloner threads
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
+        max_concurrent_clones = int(self.config_get('mgr.x', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 2)
+
     def test_subvolume_snapshot_clone_pool_layout(self):
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()
