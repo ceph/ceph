@@ -1,0 +1,6 @@
+meta:
+- desc: install cephfs-mirror package in cluster
+tasks:
+- install:
+    extra_packages: [cephfs-mirror]
+- ceph:
