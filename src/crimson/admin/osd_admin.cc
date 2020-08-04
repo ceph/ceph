@@ -35,7 +35,7 @@ std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args)
 class OsdStatusHook : public AdminSocketHook {
 public:
   explicit OsdStatusHook(crimson::osd::OSD& osd) :
-    AdminSocketHook("status", "status", "OSD status"),
+    AdminSocketHook{"status", "", "OSD status"},
     osd(osd)
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
@@ -60,9 +60,9 @@ make_asok_hook<OsdStatusHook>(crimson::osd::OSD& osd);
 class SendBeaconHook : public AdminSocketHook {
 public:
   explicit SendBeaconHook(crimson::osd::OSD& osd) :
-    AdminSocketHook("send_beacon",
-		    "send_beacon",
-		    "send OSD beacon to mon immediately"),
+    AdminSocketHook{"send_beacon",
+		    "",
+		    "send OSD beacon to mon immediately"},
     osd(osd)
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
@@ -86,7 +86,7 @@ class FlushPgStatsHook : public AdminSocketHook {
 public:
   explicit FlushPgStatsHook(crimson::osd::OSD& osd) :
     AdminSocketHook("flush_pg_stats",
-		    "flush_pg_stats",
+		    "",
 		    "flush pg stats"),
     osd{osd}
   {}
@@ -112,9 +112,9 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<FlushPgStatsHook>(crims
 class AssertAlwaysHook : public AdminSocketHook {
 public:
   AssertAlwaysHook()  :
-    AdminSocketHook("assert",
-		     "assert",
-		     "asserts")
+    AdminSocketHook{"assert",
+		    "",
+		    "asserts"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
