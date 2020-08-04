@@ -9,9 +9,6 @@
 namespace crimson::admin {
 
 class AssertAlwaysHook;
-class ConfigShowHook;
-class ConfigGetHook;
-class ConfigSetHook;
 class FlushPgStatsHook;
 class OsdStatusHook;
 class SendBeaconHook;
