@@ -173,6 +173,7 @@ int execute_add(const po::variables_map &vm,
     return r;
   }
 
+  normalize_level_spec_args(&args);
   r = utils::mgr_command(rados, "rbd trash purge schedule add", args,
                          &std::cout, &std::cerr);
   if (r < 0) {
@@ -207,6 +208,7 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
+  normalize_level_spec_args(&args);
   r = utils::mgr_command(rados, "rbd trash purge schedule remove", args,
                          &std::cout, &std::cerr);
   if (r < 0) {
@@ -245,6 +247,7 @@ int execute_list(const po::variables_map &vm,
     return r;
   }
 
+  normalize_level_spec_args(&args);
   std::stringstream out;
   r = utils::mgr_command(rados, "rbd trash purge schedule list", args, &out,
                          &std::cerr);
@@ -309,6 +312,7 @@ int execute_status(const po::variables_map &vm,
     return r;
   }
 
+  normalize_level_spec_args(&args);
   std::stringstream out;
   r = utils::mgr_command(rados, "rbd trash purge schedule status", args, &out,
                          &std::cerr);
