@@ -215,18 +215,21 @@ void SimpleSchedulerObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, Extents* extent_map,
+    uint64_t object_no, const Extents &extents, librados::snap_t snap_id,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
-                 << object_off << "~" << object_len << dendl;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " " << extents
+                 << dendl;
 
   std::lock_guard locker{m_lock};
-  if (intersects(object_no, object_off, object_len)) {
-    dispatch_delayed_requests(object_no);
+  for (auto [object_off, object_len] : extents) {
+    if (intersects(object_no, object_off, object_len)) {
+      dispatch_delayed_requests(object_no);
+      break;
+    }
   }
 
   return false;

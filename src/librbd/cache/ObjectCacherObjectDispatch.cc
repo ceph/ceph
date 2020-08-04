@@ -181,15 +181,21 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::Extents* extent_map,
+    uint64_t object_no, const io::Extents &extents, librados::snap_t snap_id,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   // IO chained in reverse order
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
-                 << object_len << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
+
+  if (version != nullptr || extents.size() != 1) {
+    // we currently don't cache read versions
+    // and don't support reading more than one extent
+    return false;
+  }
+  auto [object_off, object_len] = extents.front();
 
   // ensure we aren't holding the cache lock post-read
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
