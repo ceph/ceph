@@ -606,26 +606,23 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       "do_osd_ops: {} - object {} all operations successful",
       *m,
       obc->obs.oi.soid);
-    return std::move(*ox).submit_changes([this, m, &op_info]
-      (auto&& txn, auto&& obc, auto&& osd_op_p) -> osd_op_errorator::future<> {
-	// XXX: the entire lambda could be scheduled conditionally. ::if_then()?
-	if (txn.empty()) {
-	  logger().debug(
-	    "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
-	    *m,
-	    obc->obs.oi.soid);
-          return osd_op_errorator::now();
-        } else {
-	  logger().debug(
-	    "do_osd_ops: {} - object {} submitting txn",
-	    *m,
-	    obc->obs.oi.soid);
-	   return submit_transaction(op_info,
-                                     m->ops,
-                                     std::move(obc),
-                                     std::move(txn),
-                                     std::move(osd_op_p));
-	 }
+    return std::move(*ox).flush_changes(
+      [this, m] (auto&& obc) -> osd_op_errorator::future<> {
+	logger().debug(
+	  "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
+	  *m,
+	  obc->obs.oi.soid);
+        return osd_op_errorator::now();
+      },
+      [this, m, &op_info] (auto&& txn,
+			   auto&& obc,
+			   auto&& osd_op_p) -> osd_op_errorator::future<> {
+	logger().debug(
+	  "do_osd_ops: {} - object {} submitting txn",
+	  *m,
+	  obc->obs.oi.soid);
+	return submit_transaction(
+          op_info, m->ops, std::move(obc), std::move(txn), std::move(osd_op_p));
       });
   }).safe_then([this,
                 m,
