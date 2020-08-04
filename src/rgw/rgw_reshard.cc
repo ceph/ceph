@@ -19,6 +19,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
+#include "services/svc_datalog_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -557,68 +558,68 @@ int RGWBucketReshard::do_reshard(int num_shards,
         return ret;
 		}
 
-      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
-	rgw_cls_bi_entry& entry = *iter;
-	if (verbose_json_out) {
-	  formatter->open_object_section("entry");
+  for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+    rgw_cls_bi_entry& entry = *iter;
+    if (verbose_json_out) {
+      formatter->open_object_section("entry");
 
-	  encode_json("shard_id", i, formatter);
-	  encode_json("num_entry", total_entries, formatter);
-	  encode_json("entry", entry, formatter);
-	}
-	total_entries++;
+      encode_json("shard_id", i, formatter);
+      encode_json("num_entry", total_entries, formatter);
+      encode_json("entry", entry, formatter);
+    }
+    total_entries++;
 
-	marker = entry.idx;
+    marker = entry.idx;
 
-	int target_shard_id;
-	cls_rgw_obj_key cls_key;
-	RGWObjCategory category;
-	rgw_bucket_category_stats stats;
-	bool account = entry.get_info(&cls_key, &category, &stats);
-	rgw_obj_key key(cls_key);
-	rgw_obj obj(bucket_info.bucket, key);
-	RGWMPObj mp;
-	if (key.ns == RGW_OBJ_NS_MULTIPART && mp.from_meta(key.name)) {
-	  // place the multipart .meta object on the same shard as its head object
-	  obj.index_hash_source = mp.get_key();
-	}
-	int ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal, obj
-	.get_hash_object(),	&target_shard_id);
-	if (ret < 0) {
-	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
-	  return ret;
-	}
+    int target_shard_id;
+    cls_rgw_obj_key cls_key;
+    RGWObjCategory category;
+    rgw_bucket_category_stats stats;
+    bool account = entry.get_info(&cls_key, &category, &stats);
+    rgw_obj_key key(cls_key);
+    rgw_obj obj(bucket_info.bucket, key);
+    RGWMPObj mp;
+    if (key.ns == RGW_OBJ_NS_MULTIPART && mp.from_meta(key.name)) {
+      // place the multipart .meta object on the same shard as its head object
+      obj.index_hash_source = mp.get_key();
+    }
+    int ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal, obj
+    .get_hash_object(),	&target_shard_id);
+    if (ret < 0) {
+      lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
+      return ret;
+    }
 
-	int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
+    int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
 
-	ret = target_shards_mgr.add_entry(shard_index, entry, account,
-					  category, stats);
-	if (ret < 0) {
-	  return ret;
-	}
+    ret = target_shards_mgr.add_entry(shard_index, entry, account,
+              category, stats);
+    if (ret < 0) {
+      return ret;
+    }
 
-	Clock::time_point now = Clock::now();
-	if (reshard_lock.should_renew(now)) {
-	  // assume outer locks have timespans at least the size of ours, so
-	  // can call inside conditional
-	  if (outer_reshard_lock) {
-	    ret = outer_reshard_lock->renew(now);
-	    if (ret < 0) {
-	      return ret;
-	    }
-	  }
-	  ret = reshard_lock.renew(now);
-	  if (ret < 0) {
-	    lderr(store->ctx()) << "Error renewing bucket lock: " << ret << dendl;
-	    return ret;
-	  }
-	}
-	if (verbose_json_out) {
-	  formatter->close_section();
-	  formatter->flush(*out);
-	} else if (out && !(total_entries % 1000)) {
-	  (*out) << " " << total_entries;
-	}
+    Clock::time_point now = Clock::now();
+    if (reshard_lock.should_renew(now)) {
+      // assume outer locks have timespans at least the size of ours, so
+      // can call inside conditional
+      if (outer_reshard_lock) {
+        ret = outer_reshard_lock->renew(now);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+      ret = reshard_lock.renew(now);
+      if (ret < 0) {
+        lderr(store->ctx()) << "Error renewing bucket lock: " << ret << dendl;
+        return ret;
+      }
+    }
+    if (verbose_json_out) {
+      formatter->close_section();
+      formatter->flush(*out);
+    } else if (out && !(total_entries % 1000)) {
+      (*out) << " " << total_entries;
+    }
       } // entries loop
     }
   }
@@ -636,9 +637,30 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return -EIO;
   }
 
+  // update log layout
+  bucket_info.current_log_layout.log_gen = bucket_info.layout.target_index->gen;
+  bucket_info.current_log_layout.log_layout.index_log.num_shards = 
+      bucket_info.layout.target_index->layout.normal.num_shards;
+  bucket_info.log_layouts.push_back(bucket_info.current_log_layout);
+
   //overwrite current_index for the next reshard process
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
+
+  ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
+    return ret;
+  }
+
+  auto shards_num = bucket_info.layout.current_index.layout.normal.num_shards;
+  for (uint32_t shard_id = 0; shard_id < shards_num; ++shard_id) {
+    ret = store->svc()->datalog_rados->add_entry(bucket_info, shard_id);
+    if (ret < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log (bucket_info.bucket=" << bucket_info.bucket << ", shard_id=" << shard_id << ")" << dendl;
+      return ret;
+  }
+}
   ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::NONE);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed writing bucket instance info: " << dendl;

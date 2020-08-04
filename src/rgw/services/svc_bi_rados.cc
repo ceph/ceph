@@ -198,6 +198,29 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
+int RGWSI_BucketIndex_RADOS::open_bucket_log_in_index(const RGWBucketInfo& bucket_info,
+                                                   std::optional<int> _shard_id,
+                                                   RGWSI_RADOS::Pool *index_pool,
+                                                   map<int, string> *bucket_objs,
+                                                   map<int, string> *bucket_instance_ids)
+{
+  int shard_id = _shard_id.value_or(-1);
+  string bucket_oid_base;
+  int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
+  if (ret < 0) {
+    ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
+                   << ret << dendl;
+    return ret;
+  }
+
+  auto gen = bucket_info.current_log_layout.log_gen;
+
+  get_bucket_index_objects(bucket_oid_base, bucket_info.current_log_layout.log_layout.index_log.num_shards,
+                           gen, bucket_objs, shard_id);
+
+  return 0;
+}
+
 void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base,
                                                       uint32_t num_shards,
                                                       int shard_id,

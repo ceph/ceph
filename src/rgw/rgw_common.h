@@ -24,6 +24,7 @@
 #include "common/random_string.h"
 #include "rgw_acl.h"
 #include "rgw_bucket_layout.h"
+#include "rgw_bucket_log_layout.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
@@ -1113,6 +1114,11 @@ struct RGWBucketInfo {
 
   // layout of bucket index objects
   rgw::BucketLayout layout;
+
+  // layout of bucket index logs
+  rgw::bucket_log_layout_generation current_log_layout;
+
+  std::vector<rgw::bucket_log_layout_generation> log_layouts;
 
   // Represents the number of bucket index object shards:
   //   - value of 0 indicates there is no sharding (this is by default

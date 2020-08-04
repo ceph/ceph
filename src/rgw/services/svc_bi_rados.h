@@ -128,6 +128,12 @@ public:
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,
                         map<int, string> *bucket_instance_ids);
+
+  int open_bucket_log_in_index(const RGWBucketInfo& bucket_info,
+                      std::optional<int> shard_id,
+                      RGWSI_RADOS::Pool *index_pool,
+                      map<int, string> *bucket_objs,
+                      map<int, string> *bucket_instance_ids);
 };
 
 
