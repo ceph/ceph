@@ -242,9 +242,8 @@ OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
   assert(obc);
   const bool want_mutate = !txn.empty();
   if (want_mutate) {
-    if (!osd_op_params) {
-      osd_op_params = osd_op_params_t();
-    }
+    // osd_op_params are instantiated by every wr-like operation.
+    assert(osd_op_params);
     osd_op_params->req = std::move(msg);
     osd_op_params->at_version = pg.next_version();
     osd_op_params->pg_trim_to = pg.get_pg_trim_to();
