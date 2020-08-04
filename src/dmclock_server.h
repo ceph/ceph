@@ -1580,7 +1580,10 @@ namespace crimson {
 
       ~PushPriorityQueue() {
 	this->finishing = true;
-	sched_ahead_cv.notify_one();
+	{
+	  std::lock_guard<std::mutex> l(sched_ahead_mtx);
+	  sched_ahead_cv.notify_one();
+	}
 	sched_ahead_thd.join();
       }
 
