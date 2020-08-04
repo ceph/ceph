@@ -1,7 +1,7 @@
 <div class="container-fluid">
   <div class="row">
-    <div class="col-12">
-      <div class="float-right d-inline-flex">
+    <div class="col d-flex justify-content-end">
+      <form class="form-inline">
         <label for="refreshInterval"
                class="col-form-label my-0 mx-2"
                i18n>Refresh</label>
@@ -13,7 +13,7 @@
           <option *ngFor="let key of intervalKeys"
                   [value]="intervalList[key]">{{ key }}</option>
         </select>
-      </div>
+      </form>
     </div>
   </div>
 </div>

@@ -51,9 +51,10 @@
 <ng-template #logFiltersTpl>
   <div class="form-inline">
     <div class="form-group">
-      <label class="col-form-label"
+      <label for="logs-priority"
              i18n>Priority:</label>
-      <select class="form-control custom-select"
+      <select id="logs-priority"
+              class="form-control custom-select"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
         <option *ngFor="let prio of prioritys"
@@ -62,7 +63,7 @@
     </div>
 
     <div class="form-group">
-      <label class="col-form-label"
+      <label for="logs-keyword"
              i18n>Keyword:</label>
       <div class="input-group">
         <div class="input-group-prepend">
@@ -72,6 +73,7 @@
         </div>
 
         <input class="form-control"
+               id="logs-keyword"
                type="text"
                [(ngModel)]="search"
                (keyup)="filterLogs()">
@@ -87,10 +89,11 @@
     </div>
 
     <div class="form-group">
-      <label class="col-form-label"
+      <label for="logs-date"
              i18n>Date:</label>
       <div class="input-group">
         <input class="form-control"
+               id="logs-date"
                placeholder="YYYY-MM-DD"
                ngbDatepicker
                #d="ngbDatepicker"
@@ -108,13 +111,12 @@
     </div>
 
     <div class="form-group">
-      <label class="col-form-label"
-             i18n>Time range:</label>
+      <label i18n>Time range:</label>
       <ngb-timepicker [spinners]="false"
                       [(ngModel)]="startTime"
                       (ngModelChange)="filterLogs()"></ngb-timepicker>
 
-      <span class="middle">&nbsp;&mdash;&nbsp;</span>
+      <span>&nbsp;&mdash;&nbsp;</span>
 
       <ngb-timepicker [spinners]="false"
                       [(ngModel)]="endTime"

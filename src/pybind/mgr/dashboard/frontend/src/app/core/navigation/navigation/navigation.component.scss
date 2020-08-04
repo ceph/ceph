@@ -6,8 +6,8 @@
 
 ::ng-deep .cd-navbar-top {
   .cd-navbar-brand {
-    background: bd.$color-navbar-bg;
-    border-top: 4px solid bd.$color-nav-top-bar;
+    background: bd.$secondary;
+    border-top: 4px solid bd.$primary;
 
     &.isPwdDisplayed {
       top: bd.$top-notification-height;
@@ -15,7 +15,7 @@
 
     .navbar-brand,
     .navbar-brand:hover {
-      color: bd.$color-navbar-brand;
+      color: bd.$gray-200;
       height: auto;
       padding: 0;
     }
@@ -33,7 +33,7 @@
       }
 
       .fa-navicon {
-        color: bd.$color-nav-toggle-bar;
+        color: bd.$gray-200;
       }
     }
 
@@ -42,8 +42,8 @@
     }
 
     .cd-navbar-utility > .active > a {
-      background-color: bd.$color-nav-links-hover;
-      color: bd.$color-nav-links;
+      background-color: bd.$primary;
+      color: bd.$gray-200;
     }
 
     .cd-navbar-utility > li > .open > a,
@@ -51,14 +51,14 @@
     .cd-navbar-utility > li > .open > a:hover {
       background-color: transparent;
       border-color: transparent;
-      color: bd.$color-nav-links;
+      color: bd.$gray-200;
     }
   }
 
   .navbar-nav > li > .cd-navbar > [ngbDropdown] > a,
   .navbar-nav > li > .cd-navbar > a,
   .navbar-nav > li > a {
-    color: bd.$color-nav-links;
+    color: bd.$gray-200;
     display: block;
     line-height: 1;
     padding: 13.5px 18px !important;
@@ -68,7 +68,7 @@
 
   .navbar-nav .nav-link,
   .navbar-nav .nav-link:hover {
-    color: bd.$color-nav-links;
+    color: bd.$gray-200;
   }
 
   .navbar-nav > li > .cd-navbar > [ngbDropdown] > a:hover,
@@ -76,7 +76,7 @@
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
-    background-color: bd.$color-nav-links-hover;
+    background-color: bd.$primary;
   }
 
   .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
@@ -90,7 +90,7 @@
   .navbar-nav > .open > a:hover {
     background-color: transparent;
     border-color: transparent;
-    color: bd.$color-nav-links;
+    color: bd.$gray-200;
   }
 
   @media (min-width: bd.$screen-md-min) {
@@ -112,24 +112,24 @@
       }
 
       .open .dropdown-menu {
-        background-color: bd.$color-nav-open-bg;
+        background-color: bd.$primary;
         border: 0;
         padding-bottom: 0;
         padding-top: 0;
       }
 
       .open .dropdown-menu > li > a {
-        color: bd.$color-nav-links;
+        color: bd.$gray-200;
         padding: 5px 15px 5px 35px;
       }
 
       .open .dropdown-menu > .active > a {
-        background-color: bd.$color-nav-active-link-bg;
+        background-color: bd.$primary;
       }
     }
 
     .navbar-nav > li > a:hover {
-      background-color: bd.$color-nav-active-link-bg;
+      background-color: bd.$primary;
     }
   }
 }
@@ -143,9 +143,9 @@ $sidebar-width: 200px;
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
 .cd-navbar-primary > .active > a:hover {
-  background-color: bd.$color-nav-links-hover !important;
+  background-color: bd.$primary !important;
   border: 0 !important;
-  color: bd.$color-nav-links !important;
+  color: bd.$gray-200 !important;
 }
 
 .wrapper {
@@ -153,7 +153,7 @@ $sidebar-width: 200px;
   width: 100%;
 
   #sidebar {
-    background: bd.$color-navbar-bg;
+    background: bd.$secondary;
     bottom: 0;
     color: bd.$white;
     left: 0;
@@ -189,7 +189,7 @@ $sidebar-width: 200px;
         text-decoration: none;
 
         &:hover {
-          background: bd.$color-primary;
+          background: bd.$primary;
           color: bd.$white;
         }
 
@@ -224,7 +224,7 @@ $sidebar-width: 200px;
   }
 
   ul ul a {
-    background: lighten(bd.$color-navbar-bg, 10);
+    background: lighten(bd.$secondary, 10);
     font-size: 0.9em !important;
     padding-left: 40px !important;
   }

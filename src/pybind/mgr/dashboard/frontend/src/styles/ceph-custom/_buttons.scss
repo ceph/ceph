@@ -64,3 +64,7 @@
   /** Add space between icon and text */
   margin-right: 5px;
 }
+
+.card-footer button.btn:not(:first-child) {
+  margin-left: 5px;
+}
