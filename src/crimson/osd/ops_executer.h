@@ -152,6 +152,9 @@ private:
   template <class Func>
   auto do_write_op(Func&& f, bool um) {
     ++num_write;
+    if (!osd_op_params) {
+      osd_op_params.emplace();
+    }
     user_modify = um;
     return std::forward<Func>(f)(backend, obc->obs, txn);
   }
