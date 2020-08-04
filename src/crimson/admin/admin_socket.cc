@@ -295,7 +295,7 @@ seastar::future<> AdminSocket::stop()
 class VersionHook final : public AdminSocketHook {
  public:
   VersionHook()
-    : AdminSocketHook{"version", "version", "get ceph version"}
+    : AdminSocketHook{"version", "", "get ceph version"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
@@ -318,7 +318,7 @@ class VersionHook final : public AdminSocketHook {
 class GitVersionHook final : public AdminSocketHook {
  public:
   GitVersionHook()
-    : AdminSocketHook{"git_version", "git_version", "get git sha1"}
+    : AdminSocketHook{"git_version", "", "get git sha1"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
 				      std::string_view format,
@@ -337,7 +337,7 @@ class HelpHook final : public AdminSocketHook {
 
  public:
   explicit HelpHook(const AdminSocket& as) :
-    AdminSocketHook{"help", "help", "list available commands"},
+    AdminSocketHook{"help", "", "list available commands"},
     m_as{as}
   {}
 
@@ -366,7 +366,7 @@ class GetdescsHook final : public AdminSocketHook {
  public:
   explicit GetdescsHook(const AdminSocket& as) :
     AdminSocketHook{"get_command_descriptions",
-		    "get_command_descriptions",
+		    "",
 		    "list available commands"},
     m_as{ as } {}
 
@@ -380,9 +380,9 @@ class GetdescsHook final : public AdminSocketHook {
       f->open_object_section("command_descriptions");
       for (const auto& [prefix, hook] : m_as) {
 	auto secname = fmt::format("cmd {:>03}", cmdnum);
+        auto cmd = fmt::format("{} {}", hook->prefix, hook->desc);
         dump_cmd_and_help_to_json(f.get(), CEPH_FEATURES_ALL, secname,
-                                  std::string{hook->desc},
-				  std::string{hook->help});
+                                  cmd, std::string{hook->help});
         cmdnum++;
       }
       f->close_section();
@@ -394,9 +394,9 @@ class GetdescsHook final : public AdminSocketHook {
 class InjectArgsHook final : public AdminSocketHook {
 public:
   InjectArgsHook()
-    : AdminSocketHook("injectargs",
-		      "injectargs name=injected_args,type=CephString,n=N",
-		      "inject configuration arguments into running daemon")
+    : AdminSocketHook{"injectargs",
+                      "name=injected_args,type=CephString,n=N",
+                      "inject configuration arguments into running daemon"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
 				      std::string_view format,
@@ -420,10 +420,10 @@ public:
  */
 class ConfigShowHook : public AdminSocketHook {
 public:
-  explicit ConfigShowHook() :
-  AdminSocketHook("config show",
-		  "config show",
-                  "dump current config settings")
+  ConfigShowHook() :
+    AdminSocketHook{"config show",
+                    "",
+                    "dump current config settings"}
   {}
   seastar::future<tell_result_t> call(const cmdmap_t&,
                                       std::string_view format,
@@ -444,7 +444,7 @@ class ConfigGetHook : public AdminSocketHook {
 public:
   ConfigGetHook() :
     AdminSocketHook("config get",
-                    "config get name=var,type=CephString",
+                    "name=var,type=CephString",
                     "config get <field>: get the config value")
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
@@ -482,9 +482,8 @@ class ConfigSetHook : public AdminSocketHook {
 public:
   ConfigSetHook()
     : AdminSocketHook("config set",
-                      "config set"
-                      " name=var,type=CephString"
-                      " name=val,type=CephString,n=N",
+                      "name=var,type=CephString "
+                      "name=val,type=CephString,n=N",
                       "config set <field> <val> [<val> ...]: set a config variable")
   {}
   seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
