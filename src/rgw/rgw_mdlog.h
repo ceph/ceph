@@ -16,18 +16,29 @@
 
 #pragma once
 
+#include <list>
+#include <string>
+
+#include <boost/container/flat_set.hpp>
+
+#include "common/Formatter.h"
+#include "common/ceph_mutex.h"
+#include "common/ceph_time.h"
+
 #include "rgw_metadata.h"
 #include "rgw_mdlog_types.h"
 
 #include "services/svc_rados.h"
 
+namespace bc = boost::container;
+
 #define META_LOG_OBJ_PREFIX "meta.log."
 
 struct RGWMetadataLogInfo {
-  string marker;
-  real_time last_update;
+  std::string marker;
+  ceph::real_time last_update;
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 
@@ -41,7 +52,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   RGWSI_RADOS::Obj io_obj;
   librados::AioCompletion *completion;
   std::mutex mutex; //< protects callback between cancel/complete
-  boost::optional<info_callback_t> callback; //< cleared on cancel
+  info_callback_t callback; //< cleared on cancel
  public:
   explicit RGWMetadataLogInfoCompletion(info_callback_t callback);
   ~RGWMetadataLogInfoCompletion() override;
@@ -51,20 +62,20 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   librados::AioCompletion* get_completion() { return completion; }
 
   void finish(librados::completion_t cb) {
-    std::lock_guard<std::mutex> lock(mutex);
+    std::scoped_lock lock(mutex);
     if (callback) {
-      (*callback)(completion->get_return_value(), header);
+      callback(completion->get_return_value(), header);
     }
   }
   void cancel() {
-    std::lock_guard<std::mutex> lock(mutex);
-    callback = boost::none;
+    std::scoped_lock lock(mutex);
+    callback = nullptr;
   }
 };
 
 class RGWMetadataLog {
   CephContext *cct;
-  const string prefix;
+  const std::string prefix;
 
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -77,84 +88,87 @@ class RGWMetadataLog {
     return META_LOG_OBJ_PREFIX + period + ".";
   }
 
-  RWLock lock;
-  set<int> modified_shards;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("RGWMetaLog::lock");
+  bc::flat_set<int> modified_shards;
 
   void mark_modified(int shard_id);
 public:
-  RGWMetadataLog(CephContext *_cct,
+  RGWMetadataLog(CephContext *cct,
                  RGWSI_Zone *_zone_svc,
                  RGWSI_Cls *_cls_svc,
                  const std::string& period)
-    : cct(_cct),
-      prefix(make_prefix(period)),
-      lock("RGWMetaLog::lock") {
+    : cct(cct),
+      prefix(make_prefix(period)) {
     svc.zone = _zone_svc;
     svc.cls = _cls_svc;
   }
 
 
-  void get_shard_oid(int id, string& oid) const {
+  void get_shard_oid(int id, std::string& oid) const {
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", id);
     oid = prefix + buf;
   }
 
-  int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
-  int get_shard_id(const string& hash_key, int *shard_id);
-  int store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
+  int add_entry(const std::string& hash_key, const std::string& section,
+		const std::string& key, ceph::bufferlist& bl);
+  int get_shard_id(const std::string& hash_key, int *shard_id);
+  int store_entries_in_shard(std::list<cls_log_entry>& entries, int shard_id,
+			     librados::AioCompletion *completion);
 
   struct LogListCtx {
     int cur_shard;
-    string marker;
-    real_time from_time;
-    real_time end_time;
+    std::string marker;
+    ceph::real_time from_time;
+    ceph::real_time end_time;
 
-    string cur_oid;
+    std::string cur_oid;
 
     bool done;
 
     LogListCtx() : cur_shard(0), done(false) {}
   };
 
-  void init_list_entries(int shard_id, const real_time& from_time,
-			 const real_time& end_time, const string& marker,
-			 void **handle);
+  void init_list_entries(int shard_id, ceph::real_time from_time,
+			 ceph::real_time end_time,
+			 const std::string& marker, void **handle);
   void complete_list_entries(void *handle);
   int list_entries(void *handle,
                    int max_entries,
-                   list<cls_log_entry>& entries,
-		   string *out_marker,
+                   std::list<cls_log_entry>& entries,
+		   std::string *out_marker,
 		   bool *truncated);
 
-  int trim(int shard_id, const real_time& from_time, const real_time& end_time, const string& start_marker, const string& end_marker);
+  int trim(int shard_id, ceph::real_time from_time, ceph::real_time end_time,
+	   const std::string& start_marker, const std::string& end_marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
   int get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion);
-  int lock_exclusive(int shard_id, timespan duration, string&zone_id, string& owner_id);
-  int unlock(int shard_id, string& zone_id, string& owner_id);
+  int lock_exclusive(int shard_id, ceph::timespan duration, std::string& zone_id,
+		     std::string& owner_id);
+  int unlock(int shard_id, std::string& zone_id, string& owner_id);
 
-  int update_shards(list<int>& shards);
+  int update_shards(std::list<int>& shards);
 
-  void read_clear_modified(set<int> &modified);
+  bc::flat_set<int> read_clear_modified();
 };
 
 struct LogStatusDump {
   RGWMDLogStatus status;
 
-  explicit LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
-  void dump(Formatter *f) const;
+  explicit LogStatusDump(RGWMDLogStatus status) : status(status) {}
+  void dump(ceph::Formatter *f) const;
 };
 
 struct RGWMetadataLogData {
   obj_version read_version;
   obj_version write_version;
   RGWMDLogStatus status;
-  
+
   RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogData)
@@ -163,13 +177,13 @@ struct RGWMetadataLogHistory {
   epoch_t oldest_realm_epoch;
   std::string oldest_period_id;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(oldest_realm_epoch, bl);
     encode(oldest_period_id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     DECODE_START(1, p);
     decode(oldest_realm_epoch, p);
     decode(oldest_period_id, p);
@@ -179,4 +193,3 @@ struct RGWMetadataLogHistory {
   static const std::string oid;
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogHistory)
-

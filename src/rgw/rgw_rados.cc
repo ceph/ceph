@@ -301,7 +301,7 @@ public:
     http_manager.start();
   }
 
-  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map, set<int>& shards) {
+  int notify_all(map<rgw_zone_id, RGWRESTConn *>& conn_map, bc::flat_set<int>& shards) {
     rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                     { "notify", NULL },
                                     { NULL, NULL } };
@@ -310,7 +310,7 @@ public:
     for (auto iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
       RGWRESTConn *conn = iter->second;
       RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
-      stack->call(new RGWPostRESTResourceCR<set<int>, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
+      stack->call(new RGWPostRESTResourceCR<bc::flat_set<int>, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
 
       stacks.push_back(stack);
     }
@@ -422,16 +422,14 @@ public:
 
 int RGWMetaNotifier::process()
 {
-  set<int> shards;
-
-  log->read_clear_modified(shards);
+  auto shards = log->read_clear_modified();
 
   if (shards.empty()) {
     return 0;
   }
 
-  for (set<int>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
-    ldout(cct, 20) << __func__ << "(): notifying mdlog change, shard_id=" << *iter << dendl;
+  for (auto shard : shards) {
+    ldout(cct, 20) << __func__ << "(): notifying mdlog change, shard_id=" << shard << dendl;
   }
 
   notify_mgr.notify_all(store->svc.zone->get_zone_conn_map(), shards);
