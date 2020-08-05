@@ -17,11 +17,9 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { Task } from '../../../shared/models/task';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../shared/services/modal.service';
-import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
@@ -38,7 +36,6 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
 
   available: boolean = undefined;
   columns: CdTableColumn[];
-  docsUrl: string;
   modalRef: NgbModalRef;
   permission: Permission;
   selection = new CdTableSelection();
@@ -62,9 +59,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     private authStorageService: AuthStorageService,
     private iscsiService: IscsiService,
     private taskListService: TaskListService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
     private notAvailablePipe: NotAvailablePipe,
-    private summaryservice: SummaryService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
@@ -145,11 +140,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
           this.settings = settings;
         });
       } else {
-        this.summaryservice.subscribeOnce((summary) => {
-          const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-          this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-iscsi-management`;
-          this.status = result.message;
-        });
+        this.status = result.message;
       }
     });
   }
