@@ -1116,6 +1116,28 @@ TEST_F(TestMigration, AbortInUseImage) {
                                                     no_op));
 }
 
+TEST_F(TestMigration, AbortWithoutSnapshots) {
+  test_no_snaps();
+  migration_prepare(m_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
+  test_no_snaps();
+  migration_abort(m_ioctx, m_image_name);
+}
+
+TEST_F(TestMigration, AbortWithSnapshots) {
+  test_snaps();
+  migration_prepare(m_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
+
+  test_no_snaps();
+  flush();
+  ASSERT_EQ(0, TestFixture::snap_create(*m_ictx, "dst-only-snap"));
+
+  test_no_snaps();
+
+  migration_abort(m_ioctx, m_image_name);
+}
+
 TEST_F(TestMigration, CloneV1Parent)
 {
   const uint32_t CLONE_FORMAT = 1;
