@@ -251,6 +251,7 @@ daemon_id: ubuntu
 hostname: ubuntu
 status: 1
 status_desc: starting
+is_active: false
 events:
 - 2020-06-10T10:08:22.933241 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
   host 'ubuntu'"

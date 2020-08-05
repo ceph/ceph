@@ -130,8 +130,7 @@ class HostAssignment(object):
 
         # we don't need any additional hosts
         if need < 0:
-            # ask the scheduler to return a set of hosts with a up to the value of <count>
-            return self.scheduler.place(hosts_with_daemons, count)
+            return self.prefer_hosts_with_active_daemons(hosts_with_daemons, count)
         else:
             # exclusive to 'mon' daemons. Filter out hosts that don't have a public network assigned
             if self.filter_new_host:
@@ -146,6 +145,30 @@ class HostAssignment(object):
             # if a host already has the anticipated daemon, merge it with the candidates
             # to get a list of HostPlacementSpec that can be deployed on.
             return list(merge_hostspecs(hosts_with_daemons, others))
+    
+    def get_hosts_with_active_daemon(self, hosts: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
+        active_hosts: List['HostPlacementSpec'] = []
+        for daemon in self.daemons:
+            if daemon.is_active:
+                for h in hosts:
+                    if h.hostname == daemon.hostname:
+                        active_hosts.append(h)
+        # remove duplicates before returning
+        return list(dict.fromkeys(active_hosts))
+    
+    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count) -> List[HostPlacementSpec]:
+        # try to prefer host with active daemon if possible
+        active_hosts = self.get_hosts_with_active_daemon(hosts)
+        if len(active_hosts) != 0 and count > 0:
+            for host in active_hosts:
+                hosts.remove(host)
+            if len(active_hosts) >= count:
+                return self.scheduler.place(active_hosts, count)
+            else:
+                return list(merge_hostspecs(self.scheduler.place(active_hosts, count),
+                            self.scheduler.place(hosts, count - len(active_hosts))))
+        # ask the scheduler to return a set of hosts with a up to the value of <count>
+        return self.scheduler.place(hosts, count)
 
     def add_daemon_hosts(self, host_pool: List[HostPlacementSpec]) -> Set[HostPlacementSpec]:
         hosts_with_daemons = {d.hostname for d in self.daemons}
@@ -226,5 +249,4 @@ def difference_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec])
     """
     r_names = {h.hostname for h in r}
     return [h for h in l if h.hostname not in r_names]
-
 

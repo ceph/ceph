@@ -110,7 +110,9 @@ class CephadmService(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
-        raise NotImplementedError()
+        # if this is called for a service type where it hasn't explcitly been
+        # defined, return empty Daemon Desc
+        return DaemonDescription()
 
     def _inventory_get_addr(self, hostname: str) -> str:
         """Get a host's address with its hostname."""
@@ -324,6 +326,14 @@ class MgrService(CephadmService):
         daemon_spec.keyring = keyring
 
         return self.mgr._create_daemon(daemon_spec)
+    
+    def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
+        active_mgr_str = self.mgr.get('mgr_map')['active_name']
+        for daemon in daemon_descrs:
+            if daemon.daemon_id == active_mgr_str:
+                return daemon
+        # if no active mgr found, return empty Daemon Desc
+        return DaemonDescription()
 
 
 class MdsService(CephadmService):
@@ -356,6 +366,21 @@ class MdsService(CephadmService):
         daemon_spec.keyring = keyring
 
         return self.mgr._create_daemon(daemon_spec)
+    
+    def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
+        active_mds_strs = list()
+        for fs in self.mgr.get('fs_map')['filesystems']:
+            mds_map = fs['mdsmap']
+            if mds_map is not None:
+                for mds_id, mds_status in mds_map['info'].items():
+                    if mds_status['state'] == 'up:active':
+                        active_mds_strs.append(mds_status['name'])
+        if len(active_mds_strs) != 0:
+            for daemon in daemon_descrs:
+                if daemon.daemon_id in active_mds_strs:
+                    return daemon
+        # if no mds found, return empty Daemon Desc
+        return DaemonDescription()
 
 
 class RgwService(CephadmService):

@@ -2135,6 +2135,12 @@ you may want to run:
             # These daemon types require additional configs after creation
             if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
                 daemons_post[dd.daemon_type].append(dd)
+            
+            if self.cephadm_services[dd.daemon_type].get_active_daemon(
+               self.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
+                dd.is_active = True
+            else:
+                dd.is_active = False
 
             deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
             last_deps, last_config = self.cache.get_daemon_last_config_deps(
