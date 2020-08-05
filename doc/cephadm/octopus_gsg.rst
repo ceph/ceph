@@ -11,11 +11,9 @@ Removing an old cluster
 -----------------------
 
 If you mess up the installation at any point during the procedure, you can run
-this two-step procedure to return your system to the beginning state. If you
-mess up or you lose your place or you just want to start over from the
-beginning, now you know how.
+this two-step procedure to return your system to the beginning state. 
 
-1. Run ``cephadm ls`` and make a note of the filesystem ID (fsid)::
+#. Run ``cephadm ls`` and make a note of the filesystem ID (fsid)::
 
         [root@192-168-1-113 ~]# cephadm ls [     {         "style":
         "cephadm:v1",         "name": "mon.192-168-1-113",         "fsid":
@@ -26,7 +24,7 @@ beginning, now you know how.
         "container_image_id":
         "4569944bb86c3f9b5286057a558a3f852156079f759c9734e54d4f64092be9fa",
 
-2. Use the command ``cephadm rm cluster`` to remove the cluster. Use the FSID
+#. Use the command ``cephadm rm cluster`` to remove the cluster. Use the FSID
    that you made a note of in the previous step as the argument of the
    ``--fsid`` flag. Use the ``--force`` flag::
 
