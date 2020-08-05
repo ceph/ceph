@@ -6090,7 +6090,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
 
   // local or remote?
   if (targeti->is_auth()) 
-    _link_local(mdr, dn, targeti);
+    _link_local(mdr, dn, targeti, target_realm);
   else 
     _link_remote(mdr, true, dn, targeti);
   mds->balancer->maybe_fragment(dir, false);  
@@ -6115,7 +6115,7 @@ public:
 };
 
 
-void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
+void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm)
 {
   dout(10) << "_link_local " << *dn << " to " << *targeti << dendl;
 
@@ -6135,10 +6135,10 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   pi.inode.version = tipv;
 
   bool adjust_realm = false;
-  if (!targeti->is_projected_snaprealm_global()) {
+  if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
     sr_t *newsnap = targeti->project_snaprealm();
     targeti->mark_snaprealm_global(newsnap);
-    targeti->record_snaprealm_parent_dentry(newsnap, NULL, targeti->get_projected_parent_dn(), true);
+    targeti->record_snaprealm_parent_dentry(newsnap, target_realm, targeti->get_projected_parent_dn(), true);
     adjust_realm = true;
   }
 
@@ -6391,10 +6391,13 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     inc = true;
     pi.inode.nlink++;
-    if (!targeti->is_projected_snaprealm_global()) {
+
+    CDentry *target_pdn = targeti->get_projected_parent_dn();
+    SnapRealm *target_realm = target_pdn->get_dir()->inode->find_snaprealm();
+    if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
       sr_t *newsnap = targeti->project_snaprealm();
       targeti->mark_snaprealm_global(newsnap);
-      targeti->record_snaprealm_parent_dentry(newsnap, NULL, targeti->get_projected_parent_dn(), true);
+      targeti->record_snaprealm_parent_dentry(newsnap, target_realm, target_pdn, true);
       adjust_realm = true;
       realm_projected = true;
     }
@@ -6811,7 +6814,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (!mdr->more()->desti_srnode) {
     if (in->is_projected_snaprealm_global()) {
       sr_t *new_srnode = in->prepare_new_srnode(0);
-      in->record_snaprealm_parent_dentry(new_srnode, NULL, dn, dnl->is_primary());
+      in->record_snaprealm_parent_dentry(new_srnode, nullptr, dn, dnl->is_primary());
       // dropping the last linkage or dropping the last remote linkage,
       // detch the inode from global snaprealm
       auto nlink = in->get_projected_inode()->nlink;
@@ -7798,7 +7801,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	srci->get_projected_inode()->nlink == 1 &&
 	srci->is_projected_snaprealm_global()) {
       sr_t *new_srnode = srci->prepare_new_srnode(0);
-      srci->record_snaprealm_parent_dentry(new_srnode, NULL, destdn, false);
+      srci->record_snaprealm_parent_dentry(new_srnode, nullptr, destdn, false);
 
       srci->clear_snaprealm_global(new_srnode);
       mdr->more()->srci_srnode = new_srnode;
@@ -7807,7 +7810,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     if (oldin && !mdr->more()->desti_srnode) {
       if (oldin->is_projected_snaprealm_global()) {
 	sr_t *new_srnode = oldin->prepare_new_srnode(0);
-	oldin->record_snaprealm_parent_dentry(new_srnode, NULL, destdn, destdnl->is_primary());
+	oldin->record_snaprealm_parent_dentry(new_srnode, dest_realm, destdn, destdnl->is_primary());
 	// dropping the last linkage or dropping the last remote linkage,
 	// detch the inode from global snaprealm
 	auto nlink = oldin->get_projected_inode()->nlink;
@@ -7828,7 +7831,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     if (!mdr->more()->srci_srnode) {
       if (srci->is_projected_snaprealm_global()) {
 	sr_t *new_srnode = srci->prepare_new_srnode(0);
-	srci->record_snaprealm_parent_dentry(new_srnode, dest_realm, srcdn, srcdnl->is_primary());
+	srci->record_snaprealm_parent_dentry(new_srnode, src_realm, srcdn, srcdnl->is_primary());
 	mdr->more()->srci_srnode = new_srnode;
       } else if (srcdnl->is_primary()) {
 	snapid_t follows = src_realm->get_newest_seq();
