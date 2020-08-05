@@ -1,8 +1,8 @@
-.. _dev_index:
-
 ============================================
 Contributing to Ceph: A Guide for Developers
 ============================================
+
+.. _devguide:
 
 :Author: Loic Dachary
 :Author: Nathan Cutler

@@ -5,9 +5,28 @@
 Ceph uniquely delivers **object, block, and file storage in one unified
 system**.
 
-+----------------------------------+-------------------------------------+
-|`Octopus Getting Started`_        |              :ref:`dev_index`       |
-+----------------------------------+-------------------------------------+
+Quick Links
+===========
+
+.. image:: images/button_octo_install.png
+    :target: `Octopus Getting Started`_ 
+    :width: 33 %
+.. image:: images/button_dev_guide.png
+    :target: `Developer Guide`_
+    :width: 33 %
+.. image:: images/button_bug_tracker.png
+    :target: https://tracker.ceph.com
+    :width: 33 %
+
+To acquaint yourself with Ceph, use the **Octopus Getting Started Guide** to set up a basic Ceph cluster.
+
+To learn how to make a contribution to the Ceph project, read the **Developer Guide**.
+
+To report a bug, click the **Bug Tracker** link.
+
+
+Features
+========
 
 .. raw:: html
 
@@ -91,7 +110,7 @@ about Ceph, see our `Architecture`_ section.
 .. _Getting Started: install
 .. _Architecture: architecture
 .. _Octopus Getting Started: cephadm/octopus_gsg
-.. _Developer Guide: dev_index
+.. _Developer Guide: dev/developer_guide/intro
 
 .. toctree::
    :maxdepth: 3
@@ -100,6 +119,7 @@ about Ceph, see our `Architecture`_ section.
    start/intro
    install/index
    cephadm/index
+   cephadm/octopus_gsg
    rados/index
    cephfs/index
    rbd/index
