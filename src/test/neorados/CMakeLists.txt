@@ -17,12 +17,12 @@ target_link_libraries(ceph_test_neorados_completions Boost::system pthread
 
 add_executable(ceph_test_neorados_op_speed op_speed.cc)
 target_link_libraries(ceph_test_neorados_op_speed
-  libneorados fmt::fmt ${unittest_libs})
+  libneorados ${unittest_libs})
 
 add_library(neoradostest-support common_tests.cc)
 target_link_libraries(neoradostest-support
-  libneorados fmt::fmt)
+  libneorados)
 
 add_executable(ceph_test_neorados_list_pool list_pool.cc)
 target_link_libraries(ceph_test_neorados_list_pool
-  libneorados neoradostest-support global fmt::fmt ${unittest_libs})
+  libneorados neoradostest-support global ${unittest_libs})

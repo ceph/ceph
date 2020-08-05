@@ -310,6 +310,7 @@ else()
   add_subdirectory(fmt)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DFMT_HEADER_ONLY>)
 
 if(WITH_SEASTAR)
   find_package(c-ares 1.13.0 QUIET)
@@ -407,9 +408,7 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
-  fmt::fmt
   StdFilesystem::filesystem
-  fmt::fmt
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}

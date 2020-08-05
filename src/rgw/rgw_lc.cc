@@ -29,10 +29,6 @@
 #include "rgw_multi.h"
 #include "rgw_sal.h"
 
-// this seems safe to use, at least for now--arguably, we should
-// prefer header-only fmt, in general
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"

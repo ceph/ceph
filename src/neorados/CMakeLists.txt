@@ -7,7 +7,7 @@ add_library(libneorados STATIC
   $<TARGET_OBJECTS:neorados_api_obj>
   $<TARGET_OBJECTS:neorados_objs>)
 target_link_libraries(libneorados PRIVATE
-  osdc ceph-common cls_lock_client fmt::fmt
+  osdc ceph-common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 
 # if(ENABLE_SHARED)

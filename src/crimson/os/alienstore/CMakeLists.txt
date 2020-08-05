@@ -49,7 +49,6 @@ target_compile_definitions(crimson-alienstore PRIVATE -DWITH_SEASTAR -DWITH_ALIE
 target_include_directories(crimson-alienstore PRIVATE
   $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
 target_link_libraries(crimson-alienstore
-  fmt::fmt
   kv
   heap_profiler
   ${BLKID_LIBRARIES}
