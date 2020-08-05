@@ -19,8 +19,13 @@
 #include "common/RWLock.h"
 #include <list>
 #include <string>
+#include <string_view>
 
 #include <boost/container/flat_set.hpp>
+
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
 
 #include "common/Formatter.h"
 #include "common/ceph_mutex.h"
@@ -33,7 +38,7 @@
 
 namespace bc = boost::container;
 
-#define META_LOG_OBJ_PREFIX "meta.log."
+inline constexpr auto META_LOG_OBJ_PREFIX = "meta.log."sv;
 
 struct RGWMetadataLogInfo {
   std::string marker;
@@ -85,8 +90,8 @@ class RGWMetadataLog {
 
   static std::string make_prefix(const std::string& period) {
     if (period.empty())
-      return META_LOG_OBJ_PREFIX;
-    return META_LOG_OBJ_PREFIX + period + ".";
+      return string(META_LOG_OBJ_PREFIX);
+    return fmt::format("{}{}.", META_LOG_OBJ_PREFIX, period);
   }
 
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWMetaLog::lock");
