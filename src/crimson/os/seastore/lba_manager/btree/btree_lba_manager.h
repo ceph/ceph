@@ -80,17 +80,29 @@ public:
     return update_refcount(t, addr, 1);
   }
 
-  submit_lba_transaction_ret submit_lba_transaction(
+  complete_transaction_ret complete_transaction(
     Transaction &t) final;
 
-  TransactionRef create_transaction() final {
-    auto t = new Transaction;
-    return TransactionRef(t);
+  init_cached_extent_ret init_cached_extent(
+    Transaction &t,
+    CachedExtentRef e) final;
+
+  void add_pin(LBAPin &pin) final {
+    pin_set.add_pin(reinterpret_cast<BtreeLBAPin*>(&pin)->pin);
   }
 
 private:
   SegmentManager &segment_manager;
   Cache &cache;
+
+  btree_pin_set_t pin_set;
+
+  op_context_t get_context(Transaction &t) {
+    return op_context_t{cache, pin_set, t};
+  }
+
+  static btree_range_pin_t &get_pin(CachedExtent &e);
+
 
   /**
    * get_root

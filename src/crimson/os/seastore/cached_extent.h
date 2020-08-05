@@ -108,6 +108,10 @@ public:
    */
   virtual extent_types_t get_type() const = 0;
 
+  virtual bool is_logical() const {
+    return false;
+  }
+
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
@@ -170,6 +174,10 @@ public:
   template <typename T>
   TCachedExtentRef<T> cast() {
     return TCachedExtentRef<T>(static_cast<T*>(this));
+  }
+  template <typename T>
+  TCachedExtentRef<const T> cast() const {
+    return TCachedExtentRef<const T>(static_cast<const T*>(this));
   }
 
   /// Returns true if extent is part of an open transaction
@@ -491,5 +499,106 @@ public:
   }
 };
 
+class LogicalCachedExtent;
+class LBAPin;
+using LBAPinRef = std::unique_ptr<LBAPin>;
+class LBAPin {
+public:
+  virtual void link_extent(LogicalCachedExtent *ref) = 0;
+  virtual extent_len_t get_length() const = 0;
+  virtual paddr_t get_paddr() const = 0;
+  virtual laddr_t get_laddr() const = 0;
+  virtual LBAPinRef duplicate() const = 0;
+
+  virtual ~LBAPin() {}
+};
+std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
+
+using lba_pin_list_t = std::list<LBAPinRef>;
+
+std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
+
+
+/**
+ * LogicalCachedExtent
+ *
+ * CachedExtent with associated lba mapping.
+ *
+ * Users of TransactionManager should be using extents derived from
+ * LogicalCachedExtent.
+ */
+class LogicalCachedExtent : public CachedExtent {
+public:
+  template <typename... T>
+  LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
+
+  void set_pin(LBAPinRef &&npin) {
+    assert(!pin);
+    pin = std::move(npin);
+    laddr = pin->get_laddr();
+    pin->link_extent(this);
+  }
+
+  bool has_pin() const {
+    return !!pin;
+  }
+
+  LBAPin &get_pin() {
+    assert(pin);
+    return *pin;
+  }
+
+  laddr_t get_laddr() const {
+    assert(laddr != L_ADDR_NULL);
+    return laddr;
+  }
+
+  void set_laddr(laddr_t nladdr) {
+    laddr = nladdr;
+  }
+
+  void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) final {
+    apply_delta(bl);
+    set_last_committed_crc(get_crc32c());
+  }
+
+  bool is_logical() const final {
+    return true;
+  }
+protected:
+  virtual void apply_delta(const ceph::bufferlist &bl) = 0;
+
+private:
+  laddr_t laddr = L_ADDR_NULL;
+  LBAPinRef pin;
+};
+
+using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
+struct ref_laddr_cmp {
+  using is_transparent = laddr_t;
+  bool operator()(const LogicalCachedExtentRef &lhs,
+		  const LogicalCachedExtentRef &rhs) const {
+    return lhs->get_laddr() < rhs->get_laddr();
+  }
+  bool operator()(const laddr_t &lhs,
+		  const LogicalCachedExtentRef &rhs) const {
+    return lhs < rhs->get_laddr();
+  }
+  bool operator()(const LogicalCachedExtentRef &lhs,
+		  const laddr_t &rhs) const {
+    return lhs->get_laddr() < rhs;
+  }
+};
+
+using lextent_set_t = addr_extent_set_base_t<
+  laddr_t,
+  LogicalCachedExtentRef,
+  ref_laddr_cmp
+  >;
+
+template <typename T>
+using lextent_list_t = addr_extent_list_base_t<
+  laddr_t, TCachedExtentRef<T>>;
 
 }

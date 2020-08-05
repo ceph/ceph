@@ -62,8 +62,9 @@ struct btree_lba_manager_test :
     }
 
     return journal.submit_record(std::move(*record)).safe_then(
-      [this, t=std::move(t)](paddr_t addr) {
+      [this, t=std::move(t)](paddr_t addr) mutable {
 	cache.complete_commit(*t, addr);
+	lba_manager->complete_transaction(*t);
       },
       crimson::ct_error::all_same_way([](auto e) {
 	ceph_assert(0 == "Hit error submitting to journal");
@@ -76,7 +77,7 @@ struct btree_lba_manager_test :
       return journal.open_for_write();
     }).safe_then([this] {
       return seastar::do_with(
-	lba_manager->create_transaction(),
+	make_transaction(),
 	[this](auto &transaction) {
 	  cache.init();
 	  return cache.mkfs(*transaction
@@ -119,10 +120,10 @@ struct btree_lba_manager_test :
 
   auto create_transaction() {
     auto t = test_transaction_t{
-      lba_manager->create_transaction(),
+      make_transaction(),
       test_lba_mappings
     };
-    cache.alloc_new_extent<TestBlock>(*t.t, TestBlock::SIZE);
+    cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
     return t;
   }
 

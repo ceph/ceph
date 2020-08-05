@@ -36,7 +36,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return journal.open_for_write().safe_then([this] {
     logger().debug("TransactionManager::mkfs: about to do_with");
     return seastar::do_with(
-      lba_manager.create_transaction(),
+      create_transaction(),
       [this](auto &transaction) {
 	logger().debug("TransactionManager::mkfs: about to cache.mkfs");
 	cache.init();
@@ -66,6 +66,16 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     return cache.replay_delta(paddr, e);
   }).safe_then([this] {
     return journal.open_for_write();
+  }).safe_then([this] {
+    return seastar::do_with(
+      create_transaction(),
+      [this](auto &t) {
+	return cache.init_cached_extents(*t, [this](auto &t, auto &e) {
+	  return lba_manager.init_cached_extent(t, e);
+	}).safe_then([this, &t]() mutable {
+	  return submit_transaction(std::move(t));
+	});
+      });
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::all_same_way([] {
@@ -132,8 +142,9 @@ TransactionManager::submit_transaction(
   logger().debug("TransactionManager::submit_transaction");
 
   return journal.submit_record(std::move(*record)).safe_then(
-    [this, t=std::move(t)](paddr_t addr) {
+    [this, t=std::move(t)](paddr_t addr) mutable {
       cache.complete_commit(*t, addr);
+      lba_manager.complete_transaction(*t);
     },
     submit_transaction_ertr::pass_further{},
     crimson::ct_error::all_same_way([](auto e) {

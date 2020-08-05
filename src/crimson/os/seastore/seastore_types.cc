@@ -45,6 +45,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "LADDR_LEAF";
   case extent_types_t::TEST_BLOCK:
     return out << "TEST_BLOCK";
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return out << "TEST_BLOCK_PHYSICAL";
   case extent_types_t::NONE:
     return out << "NONE";
   default:
@@ -76,6 +78,7 @@ std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs)
   return lhs << "delta_info_t("
 	     << "type: " << rhs.type
 	     << ", paddr: " << rhs.paddr
+	     << ", laddr: " << rhs.laddr
 	     << ", prev_crc: " << rhs.prev_crc
 	     << ", final_crc: " << rhs.final_crc
 	     << ", length: " << rhs.length
