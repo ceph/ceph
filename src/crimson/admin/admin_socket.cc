@@ -19,12 +19,6 @@
 #include "crimson/net/Socket.h"
 
 using namespace crimson::common;
-/**
- *  A Crimson-wise version of the admin socket - implementation file
- *
- *  \todo handle the unlinking of the admin socket. Note that 'cleanup_files'
- *  at-exit functionality is not yet implemented in Crimson.
- */
 
 namespace {
 seastar::logger& logger()
