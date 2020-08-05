@@ -4,7 +4,7 @@ Installing Ceph Octopus
 =======================
 
 This procedure is a step-by-step walkthrough of the installation of a three-node
-Ceph clutser. If you have never installed Ceph before and you don't know where
+Ceph cluster. If you have never installed Ceph before and you don't know where
 to begin, begin here.
 
 Removing an old cluster 
