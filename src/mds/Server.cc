@@ -7743,6 +7743,21 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   }
   */
 
+  SnapRealm *dest_realm = nullptr;
+  SnapRealm *src_realm = nullptr;
+  if (!linkmerge) {
+    dest_realm = destdir->inode->find_snaprealm();
+    if (srcdir->inode == destdir->inode)
+      src_realm = dest_realm;
+    else
+      src_realm = srcdir->inode->find_snaprealm();
+    if (src_realm != dest_realm &&
+	src_realm->get_subvolume_ino() != dest_realm->get_subvolume_ino()) {
+      respond_to_request(mdr, -EXDEV);
+      return;
+    }
+  }
+
   ceph_assert(g_conf()->mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
@@ -7792,7 +7807,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	  oldin->clear_snaprealm_global(new_srnode);
 	mdr->more()->desti_srnode = new_srnode;
       } else if (destdnl->is_primary()) {
-	SnapRealm *dest_realm = destdir->inode->find_snaprealm();
 	snapid_t follows = dest_realm->get_newest_seq();
 	if (oldin->snaprealm || follows + 1 > oldin->get_oldest_snap()) {
 	  sr_t *new_srnode = oldin->prepare_new_srnode(follows);
@@ -7802,13 +7816,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       }
     }
     if (!mdr->more()->srci_srnode) {
-      SnapRealm *dest_realm = destdir->inode->find_snaprealm();
       if (srci->is_projected_snaprealm_global()) {
 	sr_t *new_srnode = srci->prepare_new_srnode(0);
 	srci->record_snaprealm_parent_dentry(new_srnode, dest_realm, srcdn, srcdnl->is_primary());
 	mdr->more()->srci_srnode = new_srnode;
       } else if (srcdnl->is_primary()) {
-	SnapRealm *src_realm = srcdir->inode->find_snaprealm();
 	snapid_t follows = src_realm->get_newest_seq();
 	if (src_realm != dest_realm &&
 	    (srci->snaprealm || follows + 1 > srci->get_oldest_snap())) {
