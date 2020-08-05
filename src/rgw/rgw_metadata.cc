@@ -178,8 +178,8 @@ int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<c
   return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
 }
 
-void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
-                                       const string& marker, void **handle)
+void RGWMetadataLog::init_list_entries(int shard_id, ceph::real_time from_time, ceph::real_time end_time, 
+				       const string& marker, void **handle)
 {
   LogListCtx *ctx = new LogListCtx();
 
@@ -276,7 +276,7 @@ int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, 
                                      completion->get_completion());
 }
 
-int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time,
+int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, ceph::real_time from_time, ceph::real_time end_time,
                          const string& start_marker, const string& end_marker)
 {
   string oid;
@@ -302,22 +302,23 @@ int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& 
 
 void RGWMetadataLog::mark_modified(int shard_id)
 {
-  lock.get_read();
+  std::shared_lock l(lock);
   if (modified_shards.find(shard_id) != modified_shards.end()) {
-    lock.unlock();
+    l.unlock();
     return;
   }
-  lock.unlock();
+  l.unlock();
 
   std::unique_lock wl{lock};
   modified_shards.insert(shard_id);
 }
 
-void RGWMetadataLog::read_clear_modified(set<int> &modified)
+bc::flat_set<int> RGWMetadataLog::read_clear_modified()
 {
   std::unique_lock wl{lock};
-  modified.swap(modified_shards);
+  auto m = std::move(modified_shards);
   modified_shards.clear();
+  return m;
 }
 
 obj_version& RGWMetadataObject::get_version()
@@ -346,7 +347,8 @@ public:
 
   string get_type() override { return string(); }
 
-  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) {
+  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv,
+				  const ceph::real_time& mtime) override {
     return new RGWMetadataObject;
   }
 
@@ -369,7 +371,7 @@ public:
              optional_yield y,
              const DoutPrefixProvider *dpp,
              RGWMDLogStatus op_type,
-             std::function<int()> f) {
+             std::function<int()> f) override {
     return -ENOTSUP;
   }
 
