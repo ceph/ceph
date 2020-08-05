@@ -89,8 +89,7 @@ export class MgrModuleListComponent extends ListWithDetails {
         name: $localize`Disable`,
         permission: 'update',
         click: () => this.updateModuleState(),
-        disable: () => this.isTableActionDisabled('disabled'),
-        disableDesc: () => this.getTableActionDisabledDesc(),
+        disable: () => () => this.getTableActionDisabledDesc(),
         icon: Icons.stop
       }
     ];
@@ -140,15 +139,12 @@ export class MgrModuleListComponent extends ListWithDetails {
     }
   }
 
-  getTableActionDisabledDesc(): string | undefined {
-    if (this.selection.hasSelection) {
-      const selected = this.selection.first();
-      if (selected.always_on) {
-        return $localize`This Manager module is always on.`;
-      }
+  getTableActionDisabledDesc(): string | boolean {
+    if (this.selection.first().always_on) {
+      return $localize`This Manager module is always on.`;
     }
 
-    return undefined;
+    return this.isTableActionDisabled('disabled');
   }
 
   /**
