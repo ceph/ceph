@@ -132,7 +132,9 @@ seastar::future<> Socket::close() {
   return seastar::when_all_succeed(
     in.close(),
     close_and_handle_errors(out)
-  ).handle_exception([] (auto eptr) {
+  ).then_unpack([] {
+    return seastar::now();
+  }).handle_exception([] (auto eptr) {
     logger().error("Socket::close(): unexpected exception {}", eptr);
     ceph_abort();
   });
