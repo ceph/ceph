@@ -71,6 +71,10 @@ is of the form::
 
 The app_id in the condition above must match the 'aud' field of the incoming token.
 
+A shadow user is created corresponding to every federated user. The user id is derived from the 'sub' field of the incoming web token.
+The user is created in a separate namespace - 'oidc' such that the user id doesn't clash with any other user ids in rgw. The format of the user id
+is - <tenant>$<user-namespace>$<sub> where user-namespace is 'oidc' for users that authenticate with oidc providers.
+
 STS Configuration
 =================
 
