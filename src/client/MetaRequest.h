@@ -199,6 +199,7 @@ public:
   }
   bool auth_is_best() {
     if ((head.op & CEPH_MDS_OP_WRITE) || head.op == CEPH_MDS_OP_OPEN ||
+        (head.op == CEPH_MDS_OP_GETATTR && (head.args.getattr.mask & CEPH_STAT_RSTAT)) ||
 	head.op == CEPH_MDS_OP_READDIR || send_to_auth) 
       return true;
     return false;    
