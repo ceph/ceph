@@ -94,8 +94,9 @@ bool ParentCacheObjectDispatch<I>::read(
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
-   ([this, read_data, dispatch_result, on_dispatched, object_no, object_off,
-     object_len, snap_id, &parent_trace](ObjectCacheRequest* ack) {
+   ([this, read_data, dispatch_result, on_dispatched, object_no, 
+     object_off = object_off, object_len = object_len, snap_id, &parent_trace]
+   (ObjectCacheRequest* ack) {
       handle_read_cache(ack, object_no, object_off, object_len, snap_id,
                         parent_trace, read_data, dispatch_result,
                         on_dispatched);
