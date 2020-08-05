@@ -528,8 +528,20 @@ void MDRequestImpl::_dump(Formatter *f) const
   {
     f->open_array_section("events");
     std::lock_guard l(lock);
-    for (auto& i : events) {
-      f->dump_object("event", i);
+    for (auto i = events.begin(); i != events.end(); ++i) {
+      f->open_object_section("event");
+      f->dump_string("event", i->str);
+      f->dump_stream("time") << i->stamp;
+
+      auto i_next = i + 1;
+
+      if (i_next < events.end()) {
+	f->dump_float("duration", i_next->stamp - i->stamp);
+      } else {
+	f->dump_float("duration", events.rbegin()->stamp - get_initiated());
+      }
+
+      f->close_section();
     }
     f->close_section(); // events
   }
