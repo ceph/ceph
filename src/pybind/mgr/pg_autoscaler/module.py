@@ -1,13 +1,14 @@
 """
 Automatically scale pg_num based on how much data is stored in each pool.
 """
-
 import json
 import mgr_util
 import threading
 import uuid
 from prettytable import PrettyTable
 from mgr_module import MgrModule
+from datetime import datetime, timedelta
+
 
 """
 Some terminology is made up for the purposes of this module:
@@ -23,7 +24,8 @@ INTERVAL = 5
 
 PG_NUM_MIN = 32  # unless specified on a per-pool basis
 
-def nearest_power_of_two(n):
+
+def nearest_power_of_two(n, t='t'):
     v = int(n)
 
     v -= 1
@@ -39,7 +41,8 @@ def nearest_power_of_two(n):
     # Low bound power of tow
     x = v >> 1
 
-    return x if (v - n) > (n - x) else v
+    return x if (v - n) > (n - x) or t == "Low" else v
+
 
 def effective_target_ratio(target_ratio, total_target_ratio, total_target_bytes, capacity):
     """
@@ -61,6 +64,7 @@ class PgAdjustmentProgress(object):
     """
     Keeps the initial and target pg_num values
     """
+
     def __init__(self, pool_id, pg_num, pg_num_target):
         self.ev_id = str(uuid.uuid4())
         self.pool_id = pool_id
@@ -111,6 +115,9 @@ class PgAutoscaler(MgrModule):
         # So much of what we do peeks at the osdmap that it's easiest
         # to just keep a copy of the pythonized version.
         self._osd_map = None
+        self.old_values = {1: {'total_requests': 0, 'potential_moved': 0, 'current_moved': 0, 'potential_add': 0,
+                               'current_add': 0}}
+        self.start = datetime.now().date()
 
     def config_notify(self):
         for opt in self.NATIVE_OPTIONS:
@@ -210,6 +217,74 @@ class PgAutoscaler(MgrModule):
         self.log.info('Stopping pg_autoscaler')
         self._shutdown.set()
 
+    def check_pool_activity(check_time, pool_stats, pool_id, final_pg_target, old_values):
+        """
+        total_requests is the total number of read + writes made by a pool, potential add is potential number of PGs
+        that can be added to the current pool from other pools, current_add is the number of PGs that are currently
+        being added to the current pool from other pools, potential_moved is the potential number of PGs that can be
+        moved from the current pool to other pools, and current_moved is the number of PGs that are currently being
+        moved from the current pool to other pools
+        """
+        total_requests = (int(pool_stats.get("rd", 0)) + int(pool_stats.get("wr", 0)))
+        if pool_id in old_values.keys():
+            # below if statement is to check if 24 hours have passed since the last check
+            if check_time == 1:
+                # checks if the total_requests have changed at all in the last 24 hours
+                if old_values[pool_id]['total_requests'] == total_requests:
+                    old_values[pool_id]['potential_add'] = 0
+                    old_values[pool_id]['current_add'] = 0
+                    # checks if another PG was moved from the current pool would it still maintain the min amount of Pgs
+                    if final_pg_target - (old_values[pool_id]['potential_moved'] + 1) >= PG_NUM_MIN:
+                        old_values[pool_id]['potential_moved'] += 1
+                        for k1 in old_values:
+                            if old_values[k1]['potential_moved'] == 0 and pool_id != k1:
+                                old_values[k1]['potential_add'] += 1
+                                break
+                else:
+                    old_values[pool_id]['total_requests'] = total_requests
+                    # reclaims all PGs that were given to another pool
+                    if old_values[pool_id]['potential_moved'] != 0:
+                        for k2 in old_values:
+                            # short circuit the outer for loop when we are done
+                            if old_values[pool_id]['potential_moved'] == 0:
+                                break
+                            # continue when there's nothing to do for k2
+                            if k2 == old_values[pool_id] or old_values[k2]['potential_add'] == 0:
+                                continue
+                            change = min(old_values[k2]['potential_add'], old_values[pool_id]['potential_moved'])
+                            old_values[k2]['potential_add'] -= change
+                            old_values[pool_id]['potential_moved'] -= change
+                    else:
+                        old_values[pool_id]['potential_add'] += 1
+            else:
+                # when there are enough potential PGs not being used to get final_pg_target to the next power of two
+                # move them and add them to current_add
+                if old_values[pool_id]['potential_add'] - old_values[pool_id]['current_add'] >= \
+                        nearest_power_of_two(final_pg_target, "High") - final_pg_target:
+                    for k3 in old_values:
+                        if k3 == old_values[pool_id]:
+                            continue
+                        unused_diff = old_values[k3]['potential_moved'] - old_values[k3]['current_moved']
+                        if unused_diff == 0:
+                            continue
+                        add_diff = old_values[pool_id]['potential_add'] - old_values[pool_id]['current_add']
+                        if add_diff == 0:
+                            break
+                        min_diff = min(add_diff, unused_diff)
+                        old_values[pool_id]['current_add'] += min_diff
+                        old_values[k3]['current_moved'] += min_diff
+                if old_values[pool_id]['current_add'] != 0:
+                    final_pg_target += old_values[pool_id]['current_add']
+#                    final_pg_target = nearest_power_of_two(final_pg_target, "High")
+                elif old_values[pool_id]['current_moved'] != 0:
+                    final_pg_target -= old_values[pool_id]['current_moved']
+#                    final_pg_target = nearest_power_of_two(final_pg_target, "Low")
+        else:
+            old_values[pool_id] = {'total_requests': total_requests, 'potential_moved': 0, 'current_moved': 0,
+                                   'potential_add': 0, 'current_add': 0}
+        return old_values, final_pg_target
+
+
     def get_subtree_resource_status(self, osdmap, crush):
         """
         For each CRUSH subtree of interest (i.e. the roots under which
@@ -306,6 +381,19 @@ class PgAutoscaler(MgrModule):
 
         ret = []
 
+        check_time = 0
+
+        current = datetime.now().date()
+
+        later = self.start + timedelta(hours=24)
+
+        # check if 24 hours have passed
+        if current > later:
+            self.start = current
+            check_time = 1
+
+        total_number_pools = len(pools)
+
         # iterate over all pools to determine how they should be sized
         for pool_name, p in pools.items():
             pool_id = p['pool']
@@ -339,6 +427,7 @@ class PgAutoscaler(MgrModule):
 
             pool_raw_used = max(pool_logical_used, target_bytes) * raw_used_rate
             capacity_ratio = float(pool_raw_used) / capacity
+            even_ratio = 1 / total_number_pools
 
             self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
                 p['options'].get('target_size_ratio', 0.0),
@@ -350,7 +439,7 @@ class PgAutoscaler(MgrModule):
                                                   root_map[root_id].total_target_bytes,
                                                   capacity)
 
-            final_ratio = max(capacity_ratio, target_ratio)
+            final_ratio = max(capacity_ratio, target_ratio, even_ratio)
 
             # So what proportion of pg allowance should we be using?
             pool_pg_target = (final_ratio * root_map[root_id].pg_target) / p['size'] * bias
@@ -358,6 +447,9 @@ class PgAutoscaler(MgrModule):
             final_pg_target = max(p['options'].get('pg_num_min', PG_NUM_MIN),
                                   nearest_power_of_two(pool_pg_target))
 
+            if final_ratio == even_ratio:
+                self.old_values, final_pg_target = self.check_pool_activity(check_time, pool_stats, pool_id,
+                                                                            final_pg_target, self.old_values)
             self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
                           "pg target {4} quantized to {5} (current {6})".format(
                               p['pool_name'],
@@ -367,7 +459,7 @@ class PgAutoscaler(MgrModule):
                               pool_pg_target,
                               final_pg_target,
                               p['pg_num_target']
-                          ))
+                        ))
 
             adjust = False
             if (final_pg_target > p['pg_num_target'] * threshold or \
@@ -436,7 +528,7 @@ class PgAutoscaler(MgrModule):
             pool_id = p['pool_id']
             pool_opts = pools[p['pool_name']]['options']
             if pool_opts.get('target_size_ratio', 0) > 0 and pool_opts.get('target_size_bytes', 0) > 0:
-                    bytes_and_ratio.append('Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
+                bytes_and_ratio.append('Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
             total_bytes[p['crush_root_id']] += max(
                 p['actual_raw_used'],
                 p['target_bytes'] * p['raw_used_rate'])
