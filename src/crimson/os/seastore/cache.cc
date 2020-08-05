@@ -28,6 +28,24 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
+Cache::retire_extent_ret Cache::retire_extent_if_cached(
+  Transaction &t, paddr_t addr)
+{
+  if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
+    t.add_to_retired_set(CachedExtentRef(&*ext));
+    return retire_extent_ertr::now();
+  } else if (auto iter = extents.find_offset(addr);
+      iter != extents.end()) {
+    auto ret = CachedExtentRef(&*iter);
+    return ret->wait_io().then([&t, ret=std::move(ret)]() mutable {
+      t.add_to_retired_set(ret);
+      return retire_extent_ertr::now();
+    });
+  } else {
+    return retire_extent_ertr::now();
+  }
+}
+
 void Cache::add_extent(CachedExtentRef ref)
 {
   assert(ref->is_valid());
