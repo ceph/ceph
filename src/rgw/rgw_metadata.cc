@@ -241,7 +241,7 @@ int RGWMetadataLog::trim(int shard_id, ceph::real_time from_time, ceph::real_tim
   return svc.cls->timelog.trim(oid, from_time, end_time, start_marker,
                                end_marker, nullptr, null_yield);
 }
-  
+
 int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
@@ -618,7 +618,7 @@ int RGWMetadataManager::find_handler(const string& metadata_key, RGWMetadataHand
     return 0;
   }
 
-  map<string, RGWMetadataHandler *>::iterator iter = handlers.find(type);
+  auto iter = handlers.find(type);
   if (iter == handlers.end())
     return -ENOENT;
 
@@ -839,7 +839,7 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
     decode(log_data, iter);
 
     encode_json("data", log_data, f);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     lderr(cct) << "failed to decode log entry: " << entry.section << ":" << entry.name<< " ts=" << entry.timestamp << dendl;
   }
   f->close_section();
@@ -847,8 +847,7 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
 
 void RGWMetadataManager::get_sections(list<string>& sections)
 {
-  for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
+  for (auto iter = handlers.begin(); iter != handlers.end(); ++iter) {
     sections.push_back(iter->first);
   }
 }
-
