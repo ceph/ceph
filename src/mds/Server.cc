@@ -6075,6 +6075,16 @@ void Server::handle_client_link(MDRequestRef& mdr)
       return;
   }
 
+  CInode* target_pin = targeti->get_projected_parent_dir()->inode;
+  SnapRealm *target_realm = target_pin->find_snaprealm();
+  if (target_pin != dir->inode &&
+      target_realm->get_subvolume_ino() !=
+      dir->inode->find_snaprealm()->get_subvolume_ino()) {
+    dout(7) << "target is in different subvolume, failing..." << dendl;
+    respond_to_request(mdr, -EXDEV);
+    return;
+  }
+
   // go!
   ceph_assert(g_conf()->mds_kill_link_at != 1);
 
