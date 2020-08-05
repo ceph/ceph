@@ -514,9 +514,27 @@ class EventStore():
         e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', spec.service_name(), level, message)
         self.add(e)
 
+    def from_orch_error(self, e: OrchestratorError):
+        if e.event_subject is not None:
+            self.add(OrchestratorEvent(
+                datetime.datetime.utcnow(),
+                e.event_subject[0],
+                e.event_subject[1],
+                "ERROR",
+                str(e)
+            ))
+
+
     def for_daemon(self, daemon_name, level, message):
         e = OrchestratorEvent(datetime.datetime.utcnow(), 'daemon', daemon_name, level, message)
         self.add(e)
+
+    def for_daemon_from_exception(self, daemon_name, e: Exception):
+        self.for_daemon(
+            daemon_name,
+            "ERROR",
+            str(e)
+        )
 
     def cleanup(self) -> None:
         # Needs to be properly done, in case events are persistently stored.
@@ -536,8 +554,8 @@ class EventStore():
         for k_s in unknowns:
             del self.events[k_s]
 
-    def get_for_service(self, name):
+    def get_for_service(self, name) -> List[OrchestratorEvent]:
         return self.events.get('service:' + name, [])
 
-    def get_for_daemon(self, name):
+    def get_for_daemon(self, name) -> List[OrchestratorEvent]:
         return self.events.get('daemon:' + name, [])
