@@ -13,6 +13,9 @@
 
 namespace crimson::os::seastore {
 
+using depth_t = int32_t;
+using depth_le_t = ceph_les32;
+
 using checksum_t = uint32_t;
 
 // Identifies segment location on disk, see SegmentManager,
@@ -215,6 +218,7 @@ enum class extent_types_t : uint8_t {
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
+  TEST_BLOCK_PHYSICAL = 0xF1,
 
   // None
   NONE = 0xFF
@@ -234,10 +238,9 @@ constexpr extent_version_t EXTENT_VERSION_NULL = 0;
 struct delta_info_t {
   extent_types_t type = extent_types_t::NONE;  ///< delta type
   paddr_t paddr;                               ///< physical address
-  /* logical address -- needed for repopulating cache -- TODO don't actually need */
-  // laddr_t laddr = L_ADDR_NULL;
-  uint32_t prev_crc;
-  uint32_t final_crc;
+  laddr_t laddr = L_ADDR_NULL;                 ///< logical address
+  uint32_t prev_crc = 0;
+  uint32_t final_crc = 0;
   segment_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
   ceph::bufferlist bl;                         ///< payload
@@ -246,7 +249,7 @@ struct delta_info_t {
     DENC_START(1, 1, p);
     denc(v.type, p);
     denc(v.paddr, p);
-    //denc(v.laddr, p);
+    denc(v.laddr, p);
     denc(v.prev_crc, p);
     denc(v.final_crc, p);
     denc(v.length, p);
@@ -259,6 +262,7 @@ struct delta_info_t {
     return (
       type == rhs.type &&
       paddr == rhs.paddr &&
+      laddr == rhs.laddr &&
       prev_crc == rhs.prev_crc &&
       final_crc == rhs.final_crc &&
       length == rhs.length &&

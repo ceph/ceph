@@ -7,8 +7,6 @@
 
 namespace crimson::os::seastore {
 
-using depth_t = uint32_t;
-
 /**
  * root_t
  *
