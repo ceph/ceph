@@ -19,11 +19,9 @@ import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
-import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { SummaryService } from '../../../../shared/services/summary.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
 import { PrometheusListHelper } from '../prometheus-list-helper';
 
@@ -57,11 +55,9 @@ export class SilenceListComponent extends PrometheusListHelper {
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n,
-    @Inject(PrometheusService) prometheusService: PrometheusService,
-    @Inject(SummaryService) summaryService: SummaryService,
-    @Inject(CephReleaseNamePipe) cephReleaseNamePipe: CephReleaseNamePipe
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
-    super(prometheusService, summaryService, cephReleaseNamePipe);
+    super(prometheusService);
     this.permission = this.authStorageService.getPermissions().prometheus;
     const selectionExpired = (selection: CdTableSelection) =>
       selection.first() && selection.first().status && selection.first().status.state === 'expired';

@@ -25,6 +25,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
+import { DocComponent } from './doc/doc.component';
 import { FormModalComponent } from './form-modal/form-modal.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
@@ -87,7 +88,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     OrchestratorDocModalComponent,
-    DateTimePickerComponent
+    DateTimePickerComponent,
+    DocComponent
   ],
   providers: [],
   exports: [
@@ -109,7 +111,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
-    DateTimePickerComponent
+    DateTimePickerComponent,
+    DocComponent
   ]
 })
 export class ComponentsModule {}

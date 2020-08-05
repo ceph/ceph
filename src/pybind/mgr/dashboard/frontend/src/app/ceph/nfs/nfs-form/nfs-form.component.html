@@ -405,9 +405,8 @@
                   *ngIf="nfsForm.getValue('access_type') === 'RW' && nfsForm.getValue('name') === 'RGW'"
                   i18n>The Object Gateway NFS backend has a number of
               limitations which will seriously affect applications writing to
-              the share. Please consult the
-              <a href="{{docsUrl}}"
-                 target="_blank"> documentation</a> for details before enabling write access.</span>
+              the share. Please consult the <cd-doc section="rgw-nfs"></cd-doc>
+              for details before enabling write access.</span>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('access_type', formDir, 'required')"
                   i18n>This field is required.</span>

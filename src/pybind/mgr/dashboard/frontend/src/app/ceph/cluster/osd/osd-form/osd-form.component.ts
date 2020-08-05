@@ -60,7 +60,6 @@ export class OsdFormComponent extends CdForm implements OnInit {
   featureList: OsdFeature[] = [];
 
   hasOrchestrator = true;
-  docsUrl: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,

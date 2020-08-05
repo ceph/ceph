@@ -4,17 +4,13 @@
 
 <cd-alert-panel type="info"
                 *ngIf="!grafanaExist"
-                i18n>Please consult the
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  configure and enable the monitoring functionality.</cd-alert-panel>
+                i18n>Please consult the <cd-doc section="grafana"></cd-doc> on
+  how to configure and enable the monitoring functionality.</cd-alert-panel>
 
 <cd-alert-panel type="info"
                 *ngIf="!dashboardExist"
                 i18n>Grafana Dashboard doesn't exist. Please refer to
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  add dashboards to Grafana.</cd-alert-panel>
+  <cd-doc section="grafana"></cd-doc> on how to add dashboards to Grafana.</cd-alert-panel>
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
   <div class="row">

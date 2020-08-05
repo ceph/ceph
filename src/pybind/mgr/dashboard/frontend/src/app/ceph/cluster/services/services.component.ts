@@ -30,7 +30,6 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
   checkingOrchestrator = true;
   hasOrchestrator = false;
-  docsUrl: string;
 
   columns: Array<CdTableColumn> = [];
   services: Array<CephServiceSpec> = [];
