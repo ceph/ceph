@@ -401,6 +401,8 @@ Alternatively, the realm, zonegroup, and zone can be manually created using ``ra
 
   # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
 
+  # radosgw-admin period update --rgw-realm=<realm-name> --commit
+
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
 Deploying NFS ganesha
