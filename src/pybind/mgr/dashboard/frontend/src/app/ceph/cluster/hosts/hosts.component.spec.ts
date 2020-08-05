@@ -111,12 +111,12 @@ describe('HostsComponent', () => {
       );
     });
 
-    it('should disable button and return undefined (no selection)', () => {
+    it('should disable button and return true (no selection)', () => {
       expect(tableAction.disable(component.selection)).toBeTruthy();
-      expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
+      expect(component.getEditDisableDesc(component.selection)).toBeTruthy();
     });
 
-    it('should enable button and return undefined (managed by Orchestrator)', () => {
+    it('should enable button and return false (managed by Orchestrator)', () => {
       component.selection.add({
         sources: {
           ceph: false,
@@ -124,7 +124,7 @@ describe('HostsComponent', () => {
         }
       });
       expect(tableAction.disable(component.selection)).toBeFalsy();
-      expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
+      expect(component.getEditDisableDesc(component.selection)).toBeFalsy();
     });
   });
 
@@ -147,11 +147,11 @@ describe('HostsComponent', () => {
       );
     });
 
-    it('should return undefined (no selection)', () => {
-      expect(component.getDeleteDisableDesc(component.selection)).toBeUndefined();
+    it('should return true (no selection)', () => {
+      expect(component.getDeleteDisableDesc(component.selection)).toBeTruthy();
     });
 
-    it('should return undefined (managed by Orchestrator)', () => {
+    it('should return false (managed by Orchestrator)', () => {
       component.selection.add({
         sources: {
           ceph: false,
@@ -164,7 +164,7 @@ describe('HostsComponent', () => {
           orchestrator: true
         }
       });
-      expect(component.getDeleteDisableDesc(component.selection)).toBeUndefined();
+      expect(component.getDeleteDisableDesc(component.selection)).toBeFalsy();
     });
   });
 });
