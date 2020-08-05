@@ -288,6 +288,7 @@ void ProtocolV2::reset_throttle() {
       connection->policy.throttler_messages) {
     //if timer event exists, cancel it
     th_timer.cancel_event(th_message_callback);
+    messenger->set_throttle_failed(false);
     ldout(cct, 10) << __func__ << " releasing " << 1
                    << " message to policy throttler "
                    << connection->policy.throttler_messages->get_current()
@@ -299,6 +300,7 @@ void ProtocolV2::reset_throttle() {
     if (connection->policy.throttler_bytes) {
       //if timer event exists, cancel it
       th_timer.cancel_event(th_message_callback);
+      messenger->set_throttle_failed(false);
       const size_t cur_msg_size = get_current_msg_size();
       ldout(cct, 10) << __func__ << " releasing " << cur_msg_size
                      << " bytes to policy throttler "
@@ -310,6 +312,7 @@ void ProtocolV2::reset_throttle() {
   if (state > THROTTLE_DISPATCH_QUEUE && state <= THROTTLE_DONE) {
     //if timer event exists, cancel it
     th_timer.cancel_event(th_message_callback);
+    messenger->set_throttle_failed(false);
     const size_t cur_msg_size = get_current_msg_size();
     ldout(cct, 10)
         << __func__ << " releasing " << cur_msg_size
@@ -1537,6 +1540,7 @@ CtPtr ProtocolV2::throttle_message() {
       //already exists, cancel it and add a new timer event after 30s, for this throttle limit hit.
       th_timer.cancel_event(th_message_callback);
       th_timer.add_event_after(30, th_message_callback);
+      messenger->set_throttle_failed(true);
       // following thread pool deal with th full message queue isn't a
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {
@@ -1572,6 +1576,7 @@ CtPtr ProtocolV2::throttle_bytes() {
 	//already exists, cancel it and add a new timer event after 30s, for this throttle limit hit.
 	th_timer.cancel_event(th_message_callback);
 	th_timer.add_event_after(30, th_message_callback);
+	messenger->set_throttle_failed(true);
         // following thread pool deal with th full message queue isn't a
         // short time, so we can wait a ms.
         if (connection->register_time_events.empty()) {
@@ -1605,6 +1610,7 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
       //already exists, cancel it and add a new timer event after 30s, for this throttle limit hit.
       th_timer.cancel_event(th_message_callback);
       th_timer.add_event_after(30, th_message_callback);
+      messenger->set_throttle_failed(true);
       // following thread pool deal with th full message queue isn't a
       // short time, so we can wait a ms.
       if (connection->register_time_events.empty()) {

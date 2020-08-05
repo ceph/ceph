@@ -70,6 +70,7 @@ private:
   std::deque<Dispatcher*> dispatchers;
   std::deque<Dispatcher*> fast_dispatchers;
   ZTracer::Endpoint trace_endpoint;
+  bool throttle_failed = false;
 
 protected:
   void set_endpoint_addr(const entity_addr_t& a,
@@ -217,6 +218,12 @@ public:
   }
   void set_auth_server(AuthServer *as) {
     auth_server = as;
+  }
+  void set_throttle_failed(bool v) {
+    throttle_failed = v;
+  }
+  bool get_throttle_failed() {
+    return throttle_failed;
   }
 
 protected:
