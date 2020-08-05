@@ -22,16 +22,19 @@ seastar::future<> write_file(ceph::buffer::list&& bl,
   foo.create_permissions = permissions;
   return seastar::open_file_dma(fn, flags, foo).then(
     [bl=std::move(bl)](seastar::file f) {
-    return seastar::do_with(seastar::make_file_output_stream(f),
-                            std::move(f),
-                            std::move(bl),
-                            [](seastar::output_stream<char>& out,
-                               seastar::file& f,
-                               ceph::buffer::list& bl) {
-      return seastar::do_for_each(bl.buffers(), [&out](auto& buf) {
-        return out.write(buf.c_str(), buf.length());
-      }).then([&out] {
-        return out.close();
+    return seastar::make_file_output_stream(f).then(
+      [bl=std::move(bl), f=std::move(f)](seastar::output_stream<char> out) {
+      return seastar::do_with(std::move(out),
+                              std::move(f),
+                              std::move(bl),
+                              [](seastar::output_stream<char>& out,
+                                 seastar::file& f,
+                                 ceph::buffer::list& bl) {
+        return seastar::do_for_each(bl.buffers(), [&out](auto& buf) {
+          return out.write(buf.c_str(), buf.length());
+        }).then([&out] {
+          return out.close();
+        });
       });
     });
   });
