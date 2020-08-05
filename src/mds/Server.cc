@@ -9739,6 +9739,12 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
+  if (inodeno_t subvol_ino = diri->find_snaprealm()->get_subvolume_ino();
+      (subvol_ino && subvol_ino != diri->ino())) {
+    respond_to_request(mdr, -EPERM);
+    return;
+  }
+
   // check if we can create any more snapshots
   // we don't allow any more if we are already at or beyond the limit
   if (diri->snaprealm &&
