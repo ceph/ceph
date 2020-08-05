@@ -1460,8 +1460,8 @@ you may want to run:
         self._kick_serve_loop()
 
     @trivial_completion
-    def describe_service(self, service_type: Optional[str]=None, service_name: Optional[str]=None,
-                         refresh: bool=False) -> List[orchestrator.ServiceDescription]:
+    def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None,
+                         refresh: bool = False) -> List[orchestrator.ServiceDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve()
             self.log.info('Kicked serve() loop to refresh all services')
@@ -1513,7 +1513,8 @@ you may want to run:
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = spec.placement.get_host_selection_size(self.inventory.all_specs())
+                        sm[n].size = spec.placement.get_host_selection_size(
+                            self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
                     if service_type == 'nfs':
@@ -1672,7 +1673,7 @@ you may want to run:
             return f'Failed to remove service. <{service_name}> was not found.'
 
     @trivial_completion
-    def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter]=None, refresh=False) -> List[orchestrator.InventoryHost]:
+    def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter] = None, refresh=False) -> List[orchestrator.InventoryHost]:
         """
         Return the storage inventory of hosts matching the given filter.
 
