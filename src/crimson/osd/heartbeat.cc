@@ -65,7 +65,7 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                                    start_messenger(*back_msgr,
 						   back_addrs,
 						   chained_dispatchers))
-    .then([this] {
+    .then_unpack([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
     });
@@ -95,6 +95,8 @@ seastar::future<> Heartbeat::stop()
   return gate.close().then([this] {
     return seastar::when_all_succeed(front_msgr->shutdown(),
 				     back_msgr->shutdown());
+  }).then_unpack([] {
+    return seastar::now();
   });
 }
 

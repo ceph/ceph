@@ -137,7 +137,10 @@ seastar::future<> ShardServices::dispatch_context(
   return seastar::when_all_succeed(
     dispatch_context_messages(
       BufferedRecoveryMessages{ceph_release_t::octopus, ctx}),
-    col ? dispatch_context_transaction(col, ctx) : seastar::now());
+    col ? dispatch_context_transaction(col, ctx) : seastar::now()
+  ).then_unpack([] {
+    return seastar::now();
+  });
 }
 
 void ShardServices::queue_want_pg_temp(pg_t pgid,
