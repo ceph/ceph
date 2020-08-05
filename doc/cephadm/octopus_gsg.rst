@@ -189,14 +189,14 @@ Octopus Installation Procedure
 
 
 #. Set the hostname of the second node. In the example, the hostname is set 
-    to the IP address of the host::
+   to the IP address of the host::
 
         [zdover@192-168-1-102 ~]$ hostname 192.168.1.102 hostname: you must be
         root to change the host name [zdover@192-168-1-102 ~]$ sudo hostname
         192.168.1.102 [sudo] password for zdover: [zdover@192-168-1-102 ~]$ 
 
 #. On the first node, use the ``ceph orch host add`` command to add the second
-    node to the cluster::
+   node to the cluster::
 
         [root@192-168-1-113 zdover]# ceph orch host add 192.168.1.102 Added host
         '192.168.1.102'
@@ -226,11 +226,11 @@ Octopus Installation Procedure
         Number of key(s) added: 1
 
 #. Now try logging into the machine, with: ``ssh 'root@192.168.1.112'`` and
-    check to make sure that only the key(s) you wanted were added.
+   check to make sure that only the key(s) you wanted were added.
 
 
 #. On the first node, run the ``ceph orch host add`` command to add the third
-    node to the cluster::
+   node to the cluster::
 
         [root@192-168-1-113 ~]# ceph orch host add 192.168.1.112 Added host
         '192.168.1.112'
