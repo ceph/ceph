@@ -1964,25 +1964,29 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         if daemon_type == 'osd':
             # osds have a pre-start step
             assert osd_fsid
-            f.write('# Simple OSDs need chown on startup:\n')
-            for n in ['block', 'block.db', 'block.wal']:
-                p = os.path.join(data_dir, n)
-                f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
-            f.write('# LVM OSDs use ceph-volume lvm activate:\n')
-            prestart = CephContainer(
-                image=args.image,
-                entrypoint='/usr/sbin/ceph-volume',
-                args=[
-                    'lvm', 'activate',
-                    str(daemon_id), osd_fsid,
-                    '--no-systemd'
-                ],
-                privileged=True,
-                volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
-                bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
-                cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
-            )
-            f.write(' '.join(prestart.run_cmd()) + '\n')
+            simple_fn = os.path.join('/etc/ceph/osd',
+                                     '%s-%s.json.adopted-by-cephadm' % (daemon_id, osd_fsid))
+            if os.path.exists(simple_fn):
+                f.write('# Simple OSDs need chown on startup:\n')
+                for n in ['block', 'block.db', 'block.wal']:
+                    p = os.path.join(data_dir, n)
+                    f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
+            else:
+                f.write('# LVM OSDs use ceph-volume lvm activate:\n')
+                prestart = CephContainer(
+                    image=args.image,
+                    entrypoint='/usr/sbin/ceph-volume',
+                    args=[
+                        'lvm', 'activate',
+                        str(daemon_id), osd_fsid,
+                        '--no-systemd'
+                    ],
+                    privileged=True,
+                    volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                    bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
+                    cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
+                )
+                f.write(' '.join(prestart.run_cmd()) + '\n')
         elif daemon_type == NFSGanesha.daemon_type:
             # add nfs to the rados grace db
             nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
