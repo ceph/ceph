@@ -70,6 +70,8 @@ if 'UNITTEST' in os.environ:
                 self._store = {}
             return self._store.get(f'_ceph_get/{data_name}', mock.MagicMock())
 
+        def _ceph_send_command(self, ev, *args):
+            ev.complete(0, '', '')
 
         def __init__(self, *args):
             if not hasattr(self, '_store'):
@@ -113,7 +115,7 @@ if 'UNITTEST' in os.environ:
 
 
         sys.modules.update({
-            'rados': mock.Mock(Error=MockRadosError, OSError=MockRadosError),
+            'rados': mock.MagicMock(Error=MockRadosError, OSError=MockRadosError),
             'rbd': mock.Mock(),
             'cephfs': mock.Mock(),
         })
