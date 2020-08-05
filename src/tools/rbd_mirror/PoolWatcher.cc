@@ -178,10 +178,12 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
     std::swap(on_init_finish, m_on_init_finish);
   } else if (r == -ENOENT) {
     dout(5) << "mirroring directory does not exist" << dendl;
-    schedule_refresh_images(30);
+    {
+      std::lock_guard locker{m_lock};
+      std::swap(on_init_finish, m_on_init_finish);
+    }
 
-    std::lock_guard locker{m_lock};
-    std::swap(on_init_finish, m_on_init_finish);
+    schedule_refresh_images(30);
   } else {
     derr << "unexpected error registering mirroring directory watch: "
          << cpp_strerror(r) << dendl;
