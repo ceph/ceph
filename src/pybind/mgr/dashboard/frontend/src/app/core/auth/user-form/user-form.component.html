@@ -95,13 +95,13 @@
                         cdPasswordButton="confirmpassword">
                 </button>
               </span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                    i18n>Password confirmation doesn't match the password.</span>
             </div>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
                   i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
-                  i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
 
