@@ -1043,7 +1043,7 @@ struct cls_rgw_lc_get_next_entry_ret {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    if (struct_v < 1) {
+    if (struct_v < 2) {
       std::pair<std::string, int> oe;
       decode(oe, bl);
       entry = {oe.first, 0 /* start */, uint32_t(oe.second)};
@@ -1109,7 +1109,7 @@ struct cls_rgw_lc_rm_entry_op {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    if (struct_v < 1) {
+    if (struct_v < 2) {
       std::pair<std::string, int> oe;
       decode(oe, bl);
       entry = {oe.first, 0 /* start */, uint32_t(oe.second)};
@@ -1133,7 +1133,7 @@ struct cls_rgw_lc_set_entry_op {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    if (struct_v < 1) {
+    if (struct_v < 2) {
       std::pair<std::string, int> oe;
       decode(oe, bl);
       entry = {oe.first, 0 /* start */, uint32_t(oe.second)};
