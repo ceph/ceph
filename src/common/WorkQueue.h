@@ -24,6 +24,8 @@ struct ThreadPool {
 
 #else
 
+#include <time.h>
+
 #include <atomic>
 #include <list>
 #include <set>
@@ -79,6 +81,9 @@ protected:
     ceph::timespan timeout_interval;
     ceph::timespan suicide_interval;
     WorkQueue_(std::string n, ceph::timespan ti, ceph::timespan sti)
+      : name(std::move(n)), timeout_interval(ti), suicide_interval(sti)
+    { }
+    WorkQueue_(std::string n, time_t ti, time_t sti)
       : name(std::move(n)), timeout_interval(ti), suicide_interval(sti)
     { }
     virtual ~WorkQueue_() {}
