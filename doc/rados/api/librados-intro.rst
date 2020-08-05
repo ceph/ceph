@@ -451,7 +451,7 @@ binding converts C++-based errors into exceptions.
 .. code-block:: java
 
 	import com.ceph.rados.Rados;
-	import com.ceph.rados.RadosException;
+	import com.ceph.rados.exceptions.RadosException;
 	
 	import java.io.File;
 	
