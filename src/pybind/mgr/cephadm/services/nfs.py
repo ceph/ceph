@@ -119,6 +119,8 @@ class NFSGanesha(object):
                  daemon_id: str,
                  spec: NFSServiceSpec) -> None:
         assert spec.service_id and daemon_id.startswith(spec.service_id)
+        mgr._check_pool_exists(spec.pool, spec.service_name())
+
         self.mgr = mgr
         self.daemon_id = daemon_id
         self.spec = spec
@@ -170,12 +172,11 @@ class NFSGanesha(object):
                 % (entity, ret, err))
 
     def create_rados_config_obj(self, clobber: Optional[bool] = False) -> None:
-        obj = self.spec.rados_config_name()
-
         with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
             if self.spec.namespace:
                 ioctx.set_namespace(self.spec.namespace)
 
+            obj = self.spec.rados_config_name()
             exists = True
             try:
                 ioctx.stat(obj)
