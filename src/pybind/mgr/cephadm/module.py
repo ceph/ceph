@@ -9,7 +9,7 @@ from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator
+    Any, Set, TYPE_CHECKING, cast, Iterator, Union
 
 import datetime
 import os
@@ -45,7 +45,7 @@ from .schedule import HostAssignment, HostPlacementSpec
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
-from .utils import forall_hosts
+from .utils import forall_hosts, CephadmNoImage, cephadmNoImage
 
 try:
     import remoto
@@ -410,7 +410,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.debug(' checking %s' % host)
         try:
             out, err, code = self._run_cephadm(
-                host, 'client', 'check-host', [],
+                host, cephadmNoImage, 'check-host', [],
                 error_ok=True, no_fsid=True)
             self.cache.update_last_host_check(host)
             self.cache.save_host(host)
@@ -933,7 +933,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         'Check whether we can access and manage a remote host')
     def check_host(self, host, addr=None):
         try:
-            out, err, code = self._run_cephadm(host, 'client', 'check-host',
+            out, err, code = self._run_cephadm(host, cephadmNoImage, 'check-host',
                                                ['--expect-hostname', host],
                                                addr=addr,
                                                error_ok=True, no_fsid=True)
@@ -957,7 +957,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         'name=addr,type=CephString,req=false',
         'Prepare a remote host for use with cephadm')
     def _prepare_host(self, host, addr=None):
-        out, err, code = self._run_cephadm(host, 'client', 'prepare-host',
+        out, err, code = self._run_cephadm(host, cephadmNoImage, 'prepare-host',
                                            ['--expect-hostname', host],
                                            addr=addr,
                                            error_ok=True, no_fsid=True)
@@ -1056,9 +1056,36 @@ you may want to run:
             self.log.exception(ex)
             raise
 
+    def _get_container_image(self, daemon_name: str) -> str:
+        daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
+        if daemon_type in CEPH_TYPES or \
+                daemon_type == 'nfs' or \
+                daemon_type == 'iscsi':
+            # get container image
+            ret, image, err = self.check_mon_command({
+                'prefix': 'config get',
+                'who': utils.name_to_config_section(daemon_name),
+                'key': 'container_image',
+            })
+            image = image.strip()  # type: ignore
+        elif daemon_type == 'prometheus':
+            image = self.container_image_prometheus
+        elif daemon_type == 'grafana':
+            image = self.container_image_grafana
+        elif daemon_type == 'alertmanager':
+            image = self.container_image_alertmanager
+        elif daemon_type == 'node-exporter':
+            image = self.container_image_node_exporter
+        else:
+            assert False, daemon_type
+
+        self.log.debug('%s container image %s' % (daemon_name, image))
+
+        return image
+
     def _run_cephadm(self,
                      host: str,
-                     entity: str,
+                     entity: Union[CephadmNoImage, str],
                      command: str,
                      args: List[str],
                      addr: Optional[str] = "",
@@ -1076,28 +1103,8 @@ you may want to run:
         with self._remote_connection(host, addr) as tpl:
             conn, connr = tpl
             assert image or entity
-            if not image:
-                daemon_type = entity.split('.', 1)[0]  # type: ignore
-                if daemon_type in CEPH_TYPES or \
-                        daemon_type == 'nfs' or \
-                        daemon_type == 'iscsi':
-                    # get container image
-                    ret, image, err = self.check_mon_command({
-                        'prefix': 'config get',
-                        'who': utils.name_to_config_section(entity),
-                        'key': 'container_image',
-                    })
-                    image = image.strip()  # type: ignore
-                elif daemon_type == 'prometheus':
-                    image = self.container_image_prometheus
-                elif daemon_type == 'grafana':
-                    image = self.container_image_grafana
-                elif daemon_type == 'alertmanager':
-                    image = self.container_image_alertmanager
-                elif daemon_type == 'node-exporter':
-                    image = self.container_image_node_exporter
-
-            self.log.debug('%s container image %s' % (entity, image))
+            if not image and entity is not cephadmNoImage:
+                image = self._get_container_image(entity)
 
             final_args = []
 
@@ -1173,7 +1180,7 @@ you may want to run:
         :param host: host name
         """
         assert_valid_host(spec.hostname)
-        out, err, code = self._run_cephadm(spec.hostname, 'client', 'check-host',
+        out, err, code = self._run_cephadm(spec.hostname, cephadmNoImage, 'check-host',
                                            ['--expect-hostname', spec.hostname],
                                            addr=spec.addr,
                                            error_ok=True, no_fsid=True)
