@@ -187,10 +187,16 @@ void Cache::complete_commit(
   for (auto &i: t.fresh_block_list) {
     i->set_paddr(cur);
     cur.offset += i->get_length();
-    i->state = CachedExtent::extent_state_t::CLEAN;
     i->last_committed_crc = i->get_crc32c();
-    logger().debug("complete_commit: fresh {}", *i);
     i->on_initial_write();
+
+    if (!i->is_valid()) {
+      logger().debug("complete_commit: invalid {}", *i);
+      continue;
+    }
+
+    i->state = CachedExtent::extent_state_t::CLEAN;
+    logger().debug("complete_commit: fresh {}", *i);
     add_extent(i);
   }
 
