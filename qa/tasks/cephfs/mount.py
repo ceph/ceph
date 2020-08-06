@@ -872,13 +872,14 @@ class CephFSMount(object):
             n = {count}
             abs_path = "{abs_path}"
 
-            if not os.path.exists(os.path.dirname(abs_path)):
-                os.makedirs(os.path.dirname(abs_path))
+            if not os.path.exists(abs_path):
+                os.makedirs(abs_path)
 
             handles = []
             for i in range(0, n):
-                fname = "{{0}}_{{1}}".format(abs_path, i)
-                handles.append(open(fname, 'w'))
+                fname = "file_"+str(i)
+                path = os.path.join(abs_path, fname)
+                handles.append(open(path, 'w'))
 
             while True:
                 time.sleep(1)
