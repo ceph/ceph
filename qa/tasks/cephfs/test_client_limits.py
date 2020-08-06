@@ -42,16 +42,14 @@ class TestClientLimits(CephFSTestCase):
         # ask the client to trim the caps.
         cache_memory_limit = "1K"
 
-        self.set_conf('mds', 'mds_cache_memory_limit', cache_memory_limit)
-        self.set_conf('mds', 'mds_recall_max_caps', open_files/2)
-        self.set_conf('mds', 'mds_recall_warning_threshold', open_files)
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
+        self.config_set('mds', 'mds_cache_memory_limit', cache_memory_limit)
+        self.config_set('mds', 'mds_recall_max_caps', int(open_files/2))
+        self.config_set('mds', 'mds_recall_warning_threshold', open_files)
 
-        mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
-        mds_max_caps_per_client = int(self.fs.get_config("mds_max_caps_per_client"))
-        mds_recall_warning_decay_rate = float(self.fs.get_config("mds_recall_warning_decay_rate"))
-        self.assertTrue(open_files >= mds_min_caps_per_client)
+        mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
+        mds_max_caps_per_client = int(self.config_get('mds', "mds_max_caps_per_client"))
+        mds_recall_warning_decay_rate = float(self.config_get('mds', "mds_recall_warning_decay_rate"))
+        self.assertGreaterEqual(open_files, mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
         path = "subdir" if use_subdir else "."
@@ -239,11 +237,9 @@ class TestClientLimits(CephFSTestCase):
         That the MDS will not let a client sit above mds_max_caps_per_client caps.
         """
 
-        mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
         mds_max_caps_per_client = 2*mds_min_caps_per_client
-        self.set_conf('mds', 'mds_max_caps_per_client', mds_max_caps_per_client)
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
+        self.config_set('mds', 'mds_max_caps_per_client', mds_max_caps_per_client)
 
         self.mount_a.create_n_files("foo/", 3*mds_max_caps_per_client, sync=True)
 
