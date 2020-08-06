@@ -214,7 +214,7 @@ struct btree_lba_manager_test :
 
     auto refcnt = lba_manager->decref_extent(
       *t.t,
-      target->first).unsafe_get0();
+      target->first).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
@@ -228,7 +228,7 @@ struct btree_lba_manager_test :
     target->second.refcount++;
     auto refcnt = lba_manager->incref_extent(
       *t.t,
-      target->first).unsafe_get0();
+      target->first).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
   }
 
