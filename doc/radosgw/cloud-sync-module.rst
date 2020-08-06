@@ -244,4 +244,4 @@ For example, creating a new profile for buckets starting with {prefix}:
 An entry can be removed by using ``--tier-config-rm={key}``.
 
 
-.. _Multisite Configuration: ./multisite
+.. _Multisite Configuration: ../multisite
