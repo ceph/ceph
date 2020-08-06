@@ -131,6 +131,11 @@ void usage()
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
   cout << "  account create             create an account\n";
+  cout << "  account get                get account info\n";
+  cout << "  account rm                 remove an account\n";
+  cout << "  account user add           add a user to an account\n";
+  cout << "  account user rm            remove a user from an account\n";
+  cout << "  account user list          list users in an account\n";
   cout << "  bucket list                list buckets (specify --allow-unordered for\n";
   cout << "                             faster, unsorted listing)\n";
   cout << "  bucket limit check         show bucket sharding stats\n";
