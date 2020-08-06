@@ -152,6 +152,9 @@ private:
   template <class Func>
   auto do_write_op(Func&& f, bool um) {
     ++num_write;
+    if (!osd_op_params) {
+      osd_op_params.emplace();
+    }
     user_modify = um;
     return std::forward<Func>(f)(backend, obc->obs, txn);
   }
@@ -182,8 +185,8 @@ public:
   osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
   seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
-  template <typename Func>
-  osd_op_errorator::future<> submit_changes(Func&& f) &&;
+  template <typename Func, typename MutFunc>
+  osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
 
   const auto& get_message() const {
     return *msg;
@@ -207,7 +210,7 @@ auto OpsExecuter::with_effect_on_obc(
   using context_t = std::decay_t<Context>;
   // the language offers implicit conversion to pointer-to-function for
   // lambda only when it's closureless. We enforce this restriction due
-  // the fact that `submit_changes()` std::moves many executer's parts.
+  // the fact that `flush_changes()` std::moves many executer's parts.
   using allowed_effect_func_t =
     seastar::future<> (*)(context_t&&, ObjectContextRef);
   static_assert(std::is_convertible_v<EffectFunc, allowed_effect_func_t>,
@@ -233,30 +236,43 @@ auto OpsExecuter::with_effect_on_obc(
   return std::forward<MainFunc>(main_func)(ctx_ref);
 }
 
-template <typename Func>
-OpsExecuter::osd_op_errorator::future<> OpsExecuter::submit_changes(Func&& f) && {
+template <typename Func,
+          typename MutFunc>
+OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
+  Func&& func,
+  MutFunc&& mut_func) &&
+{
   assert(obc);
-  if (!osd_op_params) {
-    osd_op_params = osd_op_params_t();
+  const bool want_mutate = !txn.empty();
+  if (want_mutate) {
+    // osd_op_params are instantiated by every wr-like operation.
+    assert(osd_op_params);
+    osd_op_params->req = std::move(msg);
+    osd_op_params->at_version = pg.next_version();
+    osd_op_params->pg_trim_to = pg.get_pg_trim_to();
+    osd_op_params->min_last_complete_ondisk = pg.get_min_last_complete_ondisk();
+    osd_op_params->last_complete = pg.get_info().last_complete;
+    if (user_modify) {
+      osd_op_params->user_at_version = osd_op_params->at_version.version;
+    }
   }
-  osd_op_params->req = std::move(msg);
-  eversion_t at_version = pg.next_version();
-
-  osd_op_params->at_version = at_version;
-  osd_op_params->pg_trim_to = pg.get_pg_trim_to();
-  osd_op_params->min_last_complete_ondisk = pg.get_min_last_complete_ondisk();
-  osd_op_params->last_complete = pg.get_info().last_complete;
-  if (user_modify)
-    osd_op_params->user_at_version = at_version.version;
   if (__builtin_expect(op_effects.empty(), true)) {
-    return std::forward<Func>(f)(std::move(txn), std::move(obc), std::move(*osd_op_params));
-  }
-  return std::forward<Func>(f)(std::move(txn), std::move(obc), std::move(*osd_op_params)).safe_then([this] {
-    // let's do the cleaning of `op_effects` in destructor
-    return crimson::do_for_each(op_effects, [] (auto& op_effect) {
-      return op_effect->execute();
+    return want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
+                                                         std::move(obc),
+                                                         std::move(*osd_op_params))
+                       : std::forward<Func>(func)(std::move(obc));
+  } else {
+    return (want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
+                                                          std::move(obc),
+                                                          std::move(*osd_op_params))
+                        : std::forward<Func>(func)(std::move(obc))
+    ).safe_then([this] {
+      // let's do the cleaning of `op_effects` in destructor
+      return crimson::do_for_each(op_effects, [] (auto& op_effect) {
+        return op_effect->execute();
+      });
     });
-  });
+  }
 }
 
 } // namespace crimson::osd
