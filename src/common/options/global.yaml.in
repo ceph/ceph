@@ -2281,6 +2281,11 @@ options:
   level: dev
   default: false
   with_legacy: true
+- name: objecter_want_latest
+  type: bool
+  level: advanced
+  default: false
+  desc: make objecter want latest subscribe instead of incremental map (need mon_max_span_of_incremental > 0)
 - name: filer_max_purge_ops
   type: uint
   level: advanced
