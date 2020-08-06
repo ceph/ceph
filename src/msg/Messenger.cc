@@ -61,7 +61,9 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
     started(false),
     magic(0),
     socket_priority(-1),
-    cct(cct_),
+    comp_client(cct_),
+    comp_server(cct_),
+    cct(cct_),    
     crcflags(get_default_crc_flags(cct->_conf)),
     auth_registry(cct)
 {

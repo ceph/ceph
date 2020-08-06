@@ -26,8 +26,10 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
                 << " cs=" << connect_seq << " l=" << connection->policy.lossy
                 << " rev1=" << HAVE_MSGR2_FEATURE(peer_supported_features,
                                                   REVISION_1)
-                << " rx=" << session_stream_handlers.rx.get()
+                << " crypto rx=" << session_stream_handlers.rx.get()
                 << " tx=" << session_stream_handlers.tx.get()
+                << " comp rx=" << session_compression_handlers.rx.get()
+                << " tx=" << session_compression_handlers.tx.get()
                 << ").";
 }
 
@@ -94,8 +96,8 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       replacing(false),
       can_write(false),
       bannerExchangeCallback(nullptr),
-      tx_frame_asm(&session_stream_handlers, false),
-      rx_frame_asm(&session_stream_handlers, false),
+      tx_frame_asm(&session_stream_handlers, false, &session_compression_handlers),
+      rx_frame_asm(&session_stream_handlers, false, &session_compression_handlers),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
 }
@@ -246,15 +248,17 @@ void ProtocolV2::reset_recv_state() {
     // `write_event()` unlocks it just before calling `write_message()`.
     // `submit_to()` here is NOT blocking.
     connection->center->submit_to(connection->center->get_id(), [this] {
-      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto handlers"
+      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto and compression handlers"
                     << dendl;
       // Possibly unnecessary. See the comment in `deactivate_existing`.
       std::lock_guard<std::mutex> l(connection->lock);
       std::lock_guard<std::mutex> wl(connection->write_lock);
       reset_security();
+      reset_compression();
     }, /* always_async = */true);
   } else {
     reset_security();
+    reset_compression();
   }
 
   // clean read and write callbacks
@@ -615,6 +619,14 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
   for (int k = 0; k < i; k++) {
     pending[k]->put();
   }
+}
+
+void ProtocolV2::reset_compression() {
+  ldout(cct, 5) << __func__ << dendl;
+
+  comp_meta.reset(new CompConnectionMeta);
+  session_compression_handlers.rx.reset(nullptr);
+  session_compression_handlers.tx.reset(nullptr);
 }
 
 void ProtocolV2::write_event() {
@@ -1135,6 +1147,8 @@ CtPtr ProtocolV2::handle_read_frame_dispatch() {
     case Tag::KEEPALIVE2_ACK:
     case Tag::ACK:
     case Tag::WAIT:
+    case Tag::COMPRESSION_REQUEST:
+    case Tag::COMPRESSION_DONE:
       return handle_frame_payload();
     case Tag::MESSAGE:
       return handle_message();
@@ -1249,6 +1263,10 @@ CtPtr ProtocolV2::handle_frame_payload() {
       return handle_message_ack(payload);
     case Tag::WAIT:
       return handle_wait(payload);
+    case Tag::COMPRESSION_REQUEST:
+      return handle_compression_request(payload);
+    case Tag::COMPRESSION_DONE:
+      return handle_compression_done(payload);
     default:
       ceph_abort();
   }
@@ -1309,6 +1327,9 @@ CtPtr ProtocolV2::_handle_read_frame_epilogue_main() {
     rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
     aborted = !rx_frame_asm.disassemble_remaining_segments(
         rx_segments_data.data(), rx_epilogue);
+    if (!aborted) {
+      rx_frame_asm.disasm_all_decompress(rx_segments_data.data());
+    }
   } catch (FrameError& e) {
     ldout(cct, 1) << __func__ << " " << e.what() << dendl;
     return _fault();
@@ -2029,6 +2050,10 @@ CtPtr ProtocolV2::handle_reconnect_ok(ceph::bufferlist &payload)
   connection->dispatch_queue->queue_connect(connection);
   messenger->ms_deliver_handle_fast_connect(connection);
 
+  if (HAVE_MSGR2_FEATURE(connection->get_features(), COMPRESSION)) {
+    return send_compression_request();
+  }
+
   return ready();
 }
 
@@ -2083,6 +2108,42 @@ CtPtr ProtocolV2::handle_server_ident(ceph::bufferlist &payload)
 
   connection->dispatch_queue->queue_connect(connection);
   messenger->ms_deliver_handle_fast_connect(connection);
+
+  if (HAVE_MSGR2_FEATURE(connection->get_features(), COMPRESSION)) {    
+    return send_compression_request();
+  }
+
+  return ready();
+}
+
+CtPtr ProtocolV2::send_compression_request() { 
+  auto cm = comp_meta;
+  auto am = auth_meta;
+  
+  std::vector<uint32_t> preferred_methods;
+  messenger->comp_client.get_comp_request(connection, cm.get(), am.get(), &preferred_methods);
+
+  auto comp_req_frame = CompressionRequestFrame::Encode(cm->is_compress(), preferred_methods);
+
+  state = COMPRESSION_CONNECTING;
+  return WRITE(comp_req_frame, "compression request", read_frame);
+}
+
+CtPtr ProtocolV2::handle_compression_done(ceph::bufferlist &payload) {
+  if (state != COMPRESSION_CONNECTING) {
+    lderr(cct) << __func__ << " state changed!" << dendl;
+    return _fault();
+  }
+
+  auto response = CompressionDoneFrame::Decode(payload);
+  ldout(cct, 10) << __func__ << " CompressionDoneFrame(is_compress=" << response.is_compress()
+		 << ", method=" << response.method() << ")" << dendl;
+
+  auto cm = comp_meta;
+  messenger->comp_client.handle_comp_done(cm.get(), response.is_compress(), response.method());
+
+  session_compression_handlers = ceph::compression::onwire::rxtx_t::create_handler_pair(
+    cct, *comp_meta, messenger->comp_client.get_min_compress_size(connection->get_peer_type()));
 
   return ready();
 }
@@ -2664,7 +2725,9 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
   // this happens in the event center's thread as there should be
   // no user outside its boundaries (simlarly to e.g. outgoing_bl).
   auto temp_stream_handlers = std::move(session_stream_handlers);
+  auto temp_compression_handlers = std::move(session_compression_handlers);
   exproto->auth_meta = auth_meta;
+  exproto->comp_meta = comp_meta;
 
   ldout(messenger->cct, 5) << __func__ << " stop myself to swap existing"
                            << dendl;
@@ -2693,7 +2756,8 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
         new_worker,
         new_center,
         exproto,
-        temp_stream_handlers=std::move(temp_stream_handlers)
+        temp_stream_handlers=std::move(temp_stream_handlers),
+        temp_compression_handlers=std::move(temp_compression_handlers)
       ](ConnectedSocket &cs) mutable {
         // we need to delete time event in original thread
         {
@@ -2708,6 +2772,7 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
           existing->outgoing_bl.clear();
           existing->open_write = false;
           exproto->session_stream_handlers = std::move(temp_stream_handlers);
+          exproto->session_compression_handlers = std::move(temp_compression_handlers);
           existing->write_lock.unlock();
           if (exproto->state == NONE) {
             existing->shutdown_socket();
@@ -2838,6 +2903,11 @@ CtPtr ProtocolV2::send_server_ident() {
 
   INTERCEPT(12);
 
+  if (HAVE_MSGR2_FEATURE(connection->get_features(), COMPRESSION)) {
+    state = COMPRESSION_ACCEPTING;
+    return WRITE(server_ident, "server ident", read_frame);  
+  }
+
   return WRITE(server_ident, "server ident", server_ready);
 }
 
@@ -2893,5 +2963,42 @@ CtPtr ProtocolV2::send_reconnect_ok() {
 
   INTERCEPT(14);
 
+  if (HAVE_MSGR2_FEATURE(connection->get_features(), COMPRESSION)) {
+    state = COMPRESSION_ACCEPTING;
+    return WRITE(reconnect_ok, "reconnect ok", read_frame);  
+  }
+
   return WRITE(reconnect_ok, "reconnect ok", server_ready);
+}
+
+
+CtPtr ProtocolV2::handle_compression_request(ceph::bufferlist &payload) {
+  if (state != COMPRESSION_ACCEPTING) {
+    lderr(cct) << __func__ << " state changed!" << dendl;
+    return _fault();
+  }
+
+  auto request = CompressionRequestFrame::Decode(payload);
+  ldout(cct, 10) << __func__ << " CompressionRequestFrame(is_compress=" << request.is_compress()
+		 << ", preferred_methods=" << request.preferred_methods() << ")" << dendl;
+
+  auto cm = comp_meta;
+  auto am = auth_meta;
+  messenger->comp_server.handle_comp_request(connection, cm.get(), am.get(),
+    request.is_compress(), request.preferred_methods());
+
+  auto response = CompressionDoneFrame::Encode(comp_meta->is_compress(), comp_meta->get_method());
+
+  return WRITE(response, "compression done", finish_compression);
+}
+
+CtPtr ProtocolV2::finish_compression() {
+  ceph_assert(comp_meta);
+  // TODO: having a possibility to check whether we're server or client could
+  // allow reusing finish_compression().
+  
+  session_compression_handlers = ceph::compression::onwire::rxtx_t::create_handler_pair(
+    cct, *comp_meta, messenger->comp_client.get_min_compress_size(connection->get_peer_type()));
+
+  return server_ready();
 }

@@ -1269,6 +1269,41 @@ std::vector<Option> get_global_options() {
     .set_default(8192)
     .set_description(""),
 
+    // Messenger On-wire compression
+
+    Option("ms_osd_compress_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("force")
+    .set_enum_allowed({"none", "force"})
+    .add_service("osd")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Compression policy to use in Messenger for communicating with OSD")
+    .add_see_also("ms_compress_secure"),
+
+    Option("ms_osd_compress_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1_K)
+    .add_service("osd")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Minimal message size eligable for on-wire compression")
+    .add_see_also("ms_osd_compress_mode"),
+
+    Option("ms_osd_compression_algorithm", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("snappy zlib zstd lz4")
+    .add_service("osd")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Compression algorithm to use in Messenger when communicating with OSD")
+    .set_long_description("Compression algorithm for connections with OSD in order of preference. ")
+    .add_see_also("ms_osd_compress_mode"),
+
+    Option("ms_compress_secure", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Allowing compression when on-wire encryption is enabled")
+    .set_long_description("Combining encryption with compression reduces the level "
+    "of security of messages between peers. In case both encryption and compression "
+    "are enabled, compression setting will be ignored and message will not be compressed. "
+    "This behaviour can be override using this setting.")
+    .add_see_also("ms_osd_compress_mode"),
+
     Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("send ourselves a SIGTERM early during startup"),

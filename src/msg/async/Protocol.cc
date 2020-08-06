@@ -9,6 +9,7 @@ Protocol::Protocol(int type, AsyncConnection *connection)
     messenger(connection->async_msgr),
     cct(connection->async_msgr->cct) {
   auth_meta.reset(new AuthConnectionMeta());
+  comp_meta.reset(new CompConnectionMeta());
 }
 
 Protocol::~Protocol() {}

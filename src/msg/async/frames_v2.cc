@@ -72,6 +72,8 @@ void FrameAssembler::fill_preamble(Tag tag,
     preamble.segments[i].alignment = m_descs[i].align;
   }
   preamble.num_segments = m_descs.size();
+  preamble.flags = m_flags;  
+
   preamble.crc = ceph_crc32c(
       0, reinterpret_cast<const unsigned char*>(&preamble),
       sizeof(preamble) - sizeof(preamble.crc));
@@ -239,11 +241,16 @@ bufferlist FrameAssembler::asm_secure_rev1(const preamble_block_t& preamble,
 
 bufferlist FrameAssembler::assemble_frame(Tag tag, bufferlist segment_bls[],
                                           const uint16_t segment_aligns[],
-                                          size_t segment_count) {
+                                          size_t segment_count) {  
+  m_flags = 0;
   m_descs.resize(calc_num_segments(segment_bls, segment_count));
   for (size_t i = 0; i < m_descs.size(); i++) {
     m_descs[i].logical_len = segment_bls[i].length();
     m_descs[i].align = segment_aligns[i];
+  }
+
+  if (m_compression->tx) {   
+    asm_compress(segment_bls);
   }
 
   preamble_block_t preamble;
@@ -317,6 +324,13 @@ Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
     m_descs[i].logical_len = preamble->segments[i].length;
     m_descs[i].align = preamble->segments[i].alignment;
   }
+
+  m_flags = preamble->flags;
+
+  if (is_compressed() && !m_compression->rx) {
+      throw FrameError(fmt::format("Incoming frame is compressed but compression handler is missing"));
+  }
+
   return static_cast<Tag>(preamble->tag);
 }
 
@@ -440,21 +454,23 @@ void FrameAssembler::disassemble_first_segment(bufferlist& preamble_bl,
 bool FrameAssembler::disassemble_remaining_segments(
     bufferlist segment_bls[], bufferlist& epilogue_bl) const {
   ceph_assert(!m_descs.empty());
+  bool is_completed = true;
   if (m_is_rev1) {
     if (m_descs.size() == 1) {
       // no epilogue if only one segment
       ceph_assert(epilogue_bl.length() == 0);
-      return true;
+    } else if (m_crypto->rx) {
+      is_completed = disasm_remaining_secure_rev1(segment_bls, epilogue_bl);
+    } else {
+      is_completed = disasm_remaining_crc_rev1(segment_bls, epilogue_bl);
     }
-    if (m_crypto->rx) {
-      return disasm_remaining_secure_rev1(segment_bls, epilogue_bl);
-    }
-    return disasm_remaining_crc_rev1(segment_bls, epilogue_bl);
+  } else if (m_crypto->rx) {
+    is_completed = disasm_all_secure_rev0(segment_bls, epilogue_bl);
+  } else {
+    is_completed = disasm_all_crc_rev0(segment_bls, epilogue_bl);
   }
-  if (m_crypto->rx) {
-    return disasm_all_secure_rev0(segment_bls, epilogue_bl);
-  }
-  return disasm_all_crc_rev0(segment_bls, epilogue_bl);
+
+  return is_completed;
 }
 
 std::ostream& operator<<(std::ostream& os, const FrameAssembler& frame_asm) {
@@ -469,8 +485,47 @@ std::ostream& operator<<(std::ostream& os, const FrameAssembler& frame_asm) {
   }
   os << "rev1=" << frame_asm.m_is_rev1
      << " rx=" << frame_asm.m_crypto->rx.get()
-     << " tx=" << frame_asm.m_crypto->tx.get();
+     << " tx=" << frame_asm.m_crypto->tx.get()
+     << " comp rx=" << frame_asm.m_compression->rx.get()
+     << " comp tx=" << frame_asm.m_compression->tx.get()
+     << " compressed=" << frame_asm.is_compressed();
   return os;
+}
+
+void FrameAssembler::asm_compress(bufferlist segment_bls[]) {
+  std::array<bufferlist, MAX_NUM_SEGMENTS> compressed;
+
+  m_compression->tx->reset_handler(m_descs.size(), get_frame_logical_len());
+
+  bool abort = false;
+  for (size_t i = 0; (i < m_descs.size()) && !abort; i++) {
+      abort = !m_compression->tx->compress(segment_bls[i], compressed[i]);
+  }
+
+  if (!abort) {
+    m_compression->tx->final();
+
+    for (size_t i = 0; i < m_descs.size(); i++) {
+      segment_bls[i].swap(compressed[i]);
+      m_descs[i].logical_len = segment_bls[i].length();
+    }
+
+    m_flags |= FRAME_EARLY_DATA_COMPRESSED;
+  }
+}
+
+void FrameAssembler::disasm_all_decompress(bufferlist segment_bls[]) const {
+  if (!is_compressed()) {
+    return;
+  }
+
+  for (size_t i = 0; i < m_descs.size(); i++) {
+    bufferlist decompressed;
+    if (!m_compression->rx->decompress(segment_bls[i], decompressed)) {
+      throw FrameError("Segment decompression failed");
+    }
+    segment_bls[i] = std::move(decompressed);
+  }
 }
 
 }  // namespace ceph::msgr::v2
