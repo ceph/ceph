@@ -3388,14 +3388,14 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   // create object
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("There hi");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("There hi");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
@@ -3444,15 +3444,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
-  // make all chunks dirty --> flush 
-  {
-    // make a dirty chunks
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
-  }
   // flush
   {
     ObjectReadOperation op;
@@ -3464,14 +3455,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
-  }
-  {
-    // make a dirty chunks
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   // flush
   {
@@ -3634,42 +3617,13 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
   cluster.wait_for_latest_osdmap();
 
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(2, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "bar", "foo");
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(6, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "bar", "foo");
 
   // make all chunks dirty --> flush
   // foo: [er] [hi]
 
-  // make a dirty chunks
-  {
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
   // flush
   {
     ObjectReadOperation op;
@@ -3986,7 +3940,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
   // create object
   {
     bufferlist bl;
-    bl.append("there hiHI");
+    bl.append("Thabe cdHI");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
@@ -4003,53 +3957,16 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
   cluster.wait_for_latest_osdmap();
 
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(2, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "bar", "foo");
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(6, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "bar", "foo");
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(8, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "bar", "foo");
 
 
   // make all chunks dirty --> flush
   // foo: [ab] [cd] [ef]
 
-  // make a dirty chunks
-  {
-    bufferlist bl;
-    bl.append("Thabe cd");
-    ObjectWriteOperation op;
-    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
-  }
   // flush
   {
     ObjectReadOperation op;
@@ -4243,38 +4160,11 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
   cluster.wait_for_latest_osdmap();
 
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(2, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "bar", "foo");
   // set-chunk (dedup)
-  {
-    ObjectReadOperation op;
-    op.set_chunk(6, 2, cache_ioctx, "bar", 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "bar", "foo");
 
   // foo head: [er] [hi]
-  // make a dirty chunks
-  {
-    bufferlist bl;
-    bl.append("There");
-    ObjectWriteOperation op;
-    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
-  }
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
