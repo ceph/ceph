@@ -7,6 +7,7 @@ exceed the limits of how many caps/inodes they should hold.
 import logging
 from textwrap import dedent
 from teuthology.orchestra.run import CommandFailedError
+from tasks.ceph_test_case import TestTimeoutError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
 import os
@@ -47,6 +48,7 @@ class TestClientLimits(CephFSTestCase):
         self.config_set('mds', 'mds_recall_warning_threshold', open_files)
 
         mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
+        self.config_set('mds', 'mds_min_caps_working_set', mds_min_caps_per_client)
         mds_max_caps_per_client = int(self.config_get('mds', "mds_max_caps_per_client"))
         mds_recall_warning_decay_rate = float(self.config_get('mds', "mds_recall_warning_decay_rate"))
         self.assertGreaterEqual(open_files, mds_min_caps_per_client)
@@ -106,6 +108,53 @@ class TestClientLimits(CephFSTestCase):
     @needs_trimming
     def test_client_pin_mincaps(self):
         self._test_client_pin(True, 200)
+
+    def test_client_min_caps_working_set(self):
+        """
+        When a client has inodes pinned in its cache (open files), that the MDS
+        will not warn about the client not responding to cache pressure when
+        the number of caps is below mds_min_caps_working_set.
+        """
+
+        # Set MDS cache memory limit to a low value that will make the MDS to
+        # ask the client to trim the caps.
+        cache_memory_limit = "1K"
+        open_files = 400
+
+        self.config_set('mds', 'mds_cache_memory_limit', cache_memory_limit)
+        self.config_set('mds', 'mds_recall_max_caps', int(open_files/2))
+        self.config_set('mds', 'mds_recall_warning_threshold', open_files)
+        self.config_set('mds', 'mds_min_caps_working_set', open_files*2)
+
+        mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
+        mds_recall_warning_decay_rate = float(self.config_get('mds', "mds_recall_warning_decay_rate"))
+        self.assertGreaterEqual(open_files, mds_min_caps_per_client)
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.mount_a.open_n_background("subdir", open_files)
+
+        # Client should now hold:
+        # `open_files` caps for the open files
+        # 1 cap for root
+        # 1 cap for subdir
+        self.wait_until_equal(lambda: self.get_session(mount_a_client_id)['num_caps'],
+                              open_files + 2,
+                              timeout=600,
+                              reject_fn=lambda x: x > open_files + 2)
+
+        # We can also test that the MDS health warning for oversized
+        # cache is functioning as intended.
+        self.wait_for_health("MDS_CACHE_OVERSIZED", mds_recall_warning_decay_rate*2)
+
+        try:
+            # MDS should not be happy about that but it's not sending
+            # MDS_CLIENT_RECALL warnings because the client's caps are below
+            # mds_min_caps_working_set.
+            self.wait_for_health("MDS_CLIENT_RECALL", mds_recall_warning_decay_rate*2)
+        except TestTimeoutError:
+            pass
+        else:
+            raise RuntimeError("expected no client recall warning")
 
     def test_client_release_bug(self):
         """
