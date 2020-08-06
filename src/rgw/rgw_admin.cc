@@ -10491,40 +10491,31 @@ next:
       return EINVAL;
     }
     RGWObjVersionTracker objv_tracker;
+    RGWAccountAdminOpState acc_op_state(account_id, tenant);
 
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
       RGWAccountInfo account_info(account_id, tenant);
 
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
-          dpp(), account_info, &objv_tracker, real_time(), true, nullptr, null_yield);
+      ret = RGWAdminOp_Account::add(dpp(), store, acc_op_state,
+                                    stream_flusher, null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-
-      encode_json("AccountInfo", account_info, formatter.get());
-      formatter->flush(cout);
     }
 
     if (opt_cmd == OPT::ACCOUNT_GET) {
-      real_time mtime;
-      RGWAccountInfo account_info;
-      map<std::string, bufferlist> attrs;
-
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->read_info(
-          dpp(), account_id, &account_info, &objv_tracker, &mtime, &attrs, null_yield);
+      ret = RGWAdminOp_Account::info(dpp(), store, acc_op_state,
+                                     stream_flusher, null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not get account " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-
-      encode_json("AccountInfo", account_info, formatter.get());
-      formatter->flush(cout);
     }
 
     if (opt_cmd == OPT::ACCOUNT_RM) {
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->remove_info(
-          dpp(), account_id, &objv_tracker, null_yield);
+      ret = RGWAdminOp_Account::remove(dpp(), store, acc_op_state,
+                                       stream_flusher, null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not remove account " << cpp_strerror(-ret) << std::endl;
         return -ret;
