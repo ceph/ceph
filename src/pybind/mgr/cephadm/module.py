@@ -646,6 +646,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if ssh_config_fname:
             self.validate_ssh_config_fname(ssh_config_fname)
             ssh_options += ['-F', ssh_config_fname]
+        self.ssh_config = ssh_config
 
         # identity
         ssh_key = self.get_store("ssh_identity_key")
@@ -742,6 +743,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty ssh config provided"
+        if inbuf == self.ssh_config:
+            return 0, "value unchanged", ""
         self.set_store("ssh_config", inbuf)
         self.log.info('Set ssh_config')
         self._reconfig_ssh()
@@ -809,6 +812,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _set_priv_key(self, inbuf=None):
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty private ssh key provided"
+        if inbuf == self.ssh_key:
+            return 0, "value unchanged", ""
         self.set_store("ssh_identity_key", inbuf)
         self.log.info('Set ssh private key')
         self._reconfig_ssh()
@@ -820,6 +825,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _set_pub_key(self, inbuf=None):
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty public ssh key provided"
+        if inbuf == self.ssh_pub:
+            return 0, "value unchanged", ""
         self.set_store("ssh_identity_pub", inbuf)
         self.log.info('Set ssh public key')
         self._reconfig_ssh()
@@ -856,6 +863,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         'Set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
     def set_ssh_user(self, user):
         current_user = self.ssh_user
+        if user == current_user:
+            return 0, "value unchanged", ""
 
         self.set_store('ssh_user', user)
         self._reconfig_ssh()
