@@ -401,6 +401,33 @@ PGBackend::write_ertr::future<> PGBackend::truncate(
   return write_ertr::now();
 }
 
+PGBackend::write_ertr::future<> PGBackend::zero(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{} object dne, zero is a no-op", __func__);
+    return write_ertr::now();
+  }
+  const ceph_osd_op& op = osd_op.op;
+  if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
+    return crimson::ct_error::file_too_large::make();
+  }
+  assert(op.extent.length);
+  txn.zero(coll->get_cid(),
+           ghobject_t{os.oi.soid},
+           op.extent.offset,
+           op.extent.length);
+  // TODO: modified_ranges.union_of(zeroed);
+  osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
+						     op.extent.length);
+  // TODO: ctx->delta_stats.num_wr++;
+  os.oi.clear_data_digest();
+  return write_ertr::now();
+}
+
 seastar::future<> PGBackend::create(
   ObjectState& os,
   const OSDOp& osd_op,
