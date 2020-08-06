@@ -471,6 +471,31 @@ def task(ctx, config):
     assert len(out['swift_keys']) == 0
     assert len(out['subusers']) == 0
 
+    # TESTCASE 'account create'
+    account1 = "account1"
+    (err, out) = rgwadmin(ctx, client, [
+        'account', 'create', '--account', account1
+    ],check_status = True)
+    assert out['id'] == account1
+
+    # TESTCASE 'account get'
+    (err, out) = rgwadmin(ctx, client, [
+        'account', 'get', '--account', account1
+    ], check_status = True)
+    assert out['id'] == account1
+
+    # TESTCASE 'account user add'
+    (err, out) = rgwadmin(ctx, client, [
+        'account', 'user', 'add', '--account', account1,
+        '--uid', user1
+    ], check_status=True)
+
+    # TESTCASE 'account user list'
+    (err, out) = rgwadmin(ctx, client, [
+        'account', 'user', 'list', '--account', account1
+    ])
+    assert(len(out)) = 1
+
     # TESTCASE 'bucket-stats','bucket','stats','no session/buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user1],
         check_status=True)
@@ -1010,6 +1035,19 @@ def task(ctx, config):
     assert len(out['entries']) == 0
     assert len(out['summary']) == 0
 
+    # TESTCASE 'account user rm'
+    (err, out) = rgwadmin(ctx, client, [
+        'account', 'user', 'rm', '--account', account1,
+        '--uid', user1
+    ])
+
+    # TESTCASE 'account user list'
+    (err, out) = rgwadmin(ctx, client, [
+        'account', 'user', 'list', '--account', account1
+    ])
+    assert(len(out)) = 0
+
+    # TESTCASE 'user rm'
     (err, out) = rgwadmin(ctx, client,
         ['user', 'rm', '--uid', user1, '--purge-data' ],
         check_status=True)
