@@ -11,8 +11,30 @@ try:
     from lsm import Disk as lsm_Disk
 except ImportError:
     lsm_available = False
+    transport_map = {}
+    health_map = {}
 else:
     lsm_available = True
+    transport_map = {
+            lsm_Disk.LINK_TYPE_UNKNOWN: "Unavailable",
+            lsm_Disk.LINK_TYPE_FC: "Fibre Channel",
+            lsm_Disk.LINK_TYPE_SSA: "IBM SSA",
+            lsm_Disk.LINK_TYPE_SBP: "Serial Bus",
+            lsm_Disk.LINK_TYPE_SRP: "SCSI RDMA",
+            lsm_Disk.LINK_TYPE_ISCSI: "iSCSI",
+            lsm_Disk.LINK_TYPE_SAS: "SAS",
+            lsm_Disk.LINK_TYPE_ADT: "ADT (Tape)",
+            lsm_Disk.LINK_TYPE_ATA: "ATA/SATA",
+            lsm_Disk.LINK_TYPE_USB: "USB",
+            lsm_Disk.LINK_TYPE_SOP: "SCSI over PCI-E",
+            lsm_Disk.LINK_TYPE_PCIE: "PCI-E",
+    }
+    health_map = {
+        lsm_Disk.HEALTH_STATUS_UNKNOWN: "Unknown",
+        lsm_Disk.HEALTH_STATUS_FAIL: "Fail",
+        lsm_Disk.HEALTH_STATUS_WARN: "Warn",
+        lsm_Disk.HEALTH_STATUS_GOOD: "Good",
+    }
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +89,13 @@ class LSMDisk:
     @property
     def led_ident_state(self):
         """Query a disks IDENT LED state to discover when it is On, Off or Unknown (str)"""
-        led_state = self.led_status
-        if led_state == 1:
+        if self.led_status == 1:
             return "Unsupported"
-        if led_state & lsm_Disk.LED_STATUS_IDENT_ON == lsm_Disk.LED_STATUS_IDENT_ON:
+        if self.led_status & lsm_Disk.LED_STATUS_IDENT_ON == lsm_Disk.LED_STATUS_IDENT_ON:
             return "On"
-        elif led_state & lsm_Disk.LED_STATUS_IDENT_OFF == lsm_Disk.LED_STATUS_IDENT_OFF:
+        elif self.led_status & lsm_Disk.LED_STATUS_IDENT_OFF == lsm_Disk.LED_STATUS_IDENT_OFF:
             return "Off"
-        elif led_state & lsm_Disk.LED_STATUS_IDENT_UNKNOWN == lsm_Disk.LED_STATUS_IDENT_UNKNOWN:
+        elif self.led_status & lsm_Disk.LED_STATUS_IDENT_UNKNOWN == lsm_Disk.LED_STATUS_IDENT_UNKNOWN:
             return "Unknown"
         
         return "Unsupported"
@@ -82,14 +103,13 @@ class LSMDisk:
     @property
     def led_fault_state(self):
         """Query a disks FAULT LED state to discover when it is On, Off or Unknown (str)"""
-        led_state = self.led_status
-        if led_state == 1:
+        if self.led_status == 1:
             return "Unsupported"
-        if led_state & lsm_Disk.LED_STATUS_FAULT_ON == lsm_Disk.LED_STATUS_FAULT_ON:
+        if self.led_status & lsm_Disk.LED_STATUS_FAULT_ON == lsm_Disk.LED_STATUS_FAULT_ON:
             return "On"
-        elif led_state & lsm_Disk.LED_STATUS_FAULT_OFF == lsm_Disk.LED_STATUS_FAULT_OFF:
+        elif self.led_status & lsm_Disk.LED_STATUS_FAULT_OFF == lsm_Disk.LED_STATUS_FAULT_OFF:
             return "Off"
-        elif led_state & lsm_Disk.LED_STATUS_FAULT_UNKNOWN == lsm_Disk.LED_STATUS_FAULT_UNKNOWN:
+        elif self.led_status & lsm_Disk.LED_STATUS_FAULT_UNKNOWN == lsm_Disk.LED_STATUS_FAULT_UNKNOWN:
             return "Unknown"
         
         return "Unsupported"
@@ -97,8 +117,7 @@ class LSMDisk:
     @property
     def led_ident_support(self):
         """Query the LED state to determine IDENT support: Unknown, Supported, Unsupported (str)"""
-        led_state = self.led_status
-        if led_state == 1:
+        if self.led_status == 1:
             return "Unknown"
 
         ident_states = (
@@ -107,7 +126,7 @@ class LSMDisk:
             lsm_Disk.LED_STATUS_IDENT_UNKNOWN
         )
 
-        if (led_state & ident_states) == 0:
+        if (self.led_status & ident_states) == 0:
             return "Unsupported"
         
         return "Supported"
@@ -115,8 +134,7 @@ class LSMDisk:
     @property
     def led_fault_support(self):
         """Query the LED state to determine FAULT support: Unknown, Supported, Unsupported (str)"""
-        led_state = self.led_status
-        if led_state == 1:
+        if self.led_status == 1:
             return "Unknown"
 
         fail_states = (
@@ -125,7 +143,7 @@ class LSMDisk:
             lsm_Disk.LED_STATUS_FAULT_UNKNOWN
         )
 
-        if led_state & fail_states == 0:
+        if self.led_status & fail_states == 0:
             return "Unsupported"
 
         return "Supported"
@@ -133,40 +151,15 @@ class LSMDisk:
     @property
     def health(self):
         """Determine the health of the disk from LSM : Unknown, Fail, Warn or Good (str)"""
-        health_map = {
-           -1: "Unknown",
-            0: "Fail",
-            1: "Warn",
-            2: "Good",
-        }
         _health_int = self._query_lsm('health_status_get', self.dev_path)
-        if _health_int is None:
-            _health_int = -1
         return health_map.get(_health_int, "Unknown")
 
     @property
     def transport(self):
         """Translate a disks link type to a human readable format (str)"""
         _link_type = self._query_lsm('link_type_get', self.dev_path)
+        return transport_map.get(_link_type, "Unknown")
 
-        if _link_type is not None:
-            _transport_map = {
-                lsm_Disk.LINK_TYPE_UNKNOWN: "Unavailable",
-                lsm_Disk.LINK_TYPE_FC: "Fibre Channel",
-                lsm_Disk.LINK_TYPE_SSA: "IBM SSA",
-                lsm_Disk.LINK_TYPE_SBP: "Serial Bus",
-                lsm_Disk.LINK_TYPE_SRP: "SCSI RDMA",
-                lsm_Disk.LINK_TYPE_ISCSI: "iSCSI",
-                lsm_Disk.LINK_TYPE_SAS: "SAS",
-                lsm_Disk.LINK_TYPE_ADT: "ADT (Tape)",
-                lsm_Disk.LINK_TYPE_ATA: "ATA/SATA",
-                lsm_Disk.LINK_TYPE_USB: "USB",
-                lsm_Disk.LINK_TYPE_SOP: "SCSI over PCI-E",
-                lsm_Disk.LINK_TYPE_PCIE: "PCI-E",
-            }
-            return _transport_map.get(_link_type, "Unknown")
-        else:
-            return "Unknown"
 
     @property
     def media_type(self):
