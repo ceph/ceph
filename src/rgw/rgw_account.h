@@ -27,6 +27,7 @@ class RGWRole;
 class RGWSI_Zone;
 class RGWSI_Account;
 class RGWSI_MetaBackend_Handler;
+class RGWFormatterFlusher;
 
 static constexpr uint32_t DEFAULT_QUOTA_LIMIT = 1000;
 
@@ -227,4 +228,52 @@ public:
   RGWMetadataObject *get_meta_obj(JSONObj *jo,
 				  const obj_version& objv,
 				  const ceph::real_time& mtime) override;
+};
+
+struct RGWAccountAdminOpState
+{
+  RGWAccountInfo info;
+  std::string account_id;
+  std::string tenant;
+  uint32_t max_users;
+  uint32_t max_roles;
+  RGWObjVersionTracker objv_tracker;
+
+  bool has_account_id() {
+    return !account_id.empty();
+  }
+
+  void set_max_users(uint32_t _max_users) { max_users = _max_users;}
+  void set_max_roles(uint32_t _max_roles) { max_roles = _max_roles; }
+  RGWAccountAdminOpState(const std::string& _account_id): account_id(_account_id) {};
+  RGWAccountAdminOpState(const std::string& _account_id,
+			 const std::string& _tenant) : account_id(_account_id),
+						       tenant(_tenant) {}
+};
+
+/*
+ Wrappers to unify all the admin ops of creating & removing accounts
+*/
+class RGWAdminOp_Account
+{
+public:
+  static int add(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		 RGWAccountAdminOpState& op_state,
+		 RGWFormatterFlusher& flusher,
+		 optional_yield y);
+
+  static int remove(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		    RGWAccountAdminOpState& op_state,
+		    RGWFormatterFlusher& flusher,
+		    optional_yield y);
+
+  static int info(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		  RGWAccountAdminOpState& op_state,
+		  RGWFormatterFlusher& flusher,
+		  optional_yield y);
+
+  static int list(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+		  RGWAccountAdminOpState& op_state,
+		  RGWFormatterFlusher& flusher,
+		  optional_yield y);
 };
