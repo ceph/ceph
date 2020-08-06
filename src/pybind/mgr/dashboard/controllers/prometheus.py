@@ -3,6 +3,12 @@ from __future__ import absolute_import
 
 from datetime import datetime
 import json
+
+try:
+    from typing import Any
+except ImportError:  # pragma: no cover
+    pass  # Just for type checking
+
 import requests
 
 from . import Controller, ApiController, BaseController, RESTController, Endpoint
@@ -27,12 +33,13 @@ class PrometheusReceiver(BaseController):
 
 class PrometheusRESTController(RESTController):
     def prometheus_proxy(self, method, path, params=None, payload=None):
-        # type (str, str, dict, dict)
+        # type: (str, str, dict, dict) -> Any
         return self._proxy(self._get_api_url(Settings.PROMETHEUS_API_HOST),
                            method, path, 'Prometheus', params, payload)
 
     def alert_proxy(self, method, path, params=None, payload=None):
-        # type (str, str, dict, dict)
+        # type: (str, str, dict, dict) -> Any
+        i:int = "s"
         return self._proxy(self._get_api_url(Settings.ALERTMANAGER_API_HOST),
                            method, path, 'Alertmanager', params, payload)
 
@@ -40,7 +47,7 @@ class PrometheusRESTController(RESTController):
         return host.rstrip('/') + '/api/v1'
 
     def _proxy(self, base_url, method, path, api_name, params=None, payload=None):
-        # type (str, str, str, str, dict, dict)
+        # type: (str, str, str, str, dict, dict) -> Any
         try:
             response = requests.request(method, base_url + path, params=params, json=payload)
         except Exception:
