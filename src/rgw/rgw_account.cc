@@ -1,5 +1,6 @@
 #include "rgw_account.h"
 #include "rgw_metadata.h"
+#include "rgw_sal.h"
 
 #include "services/svc_account.h"
 #include "services/svc_meta.h"
@@ -231,4 +232,78 @@ int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
 {
   // TODO find out if we need to error if the key doesn't exist?
   return svc.account->remove_account_info(op->ctx(), entry, &objv_tracker, y);
+}
+
+int RGWAdminOp_Account::add(rgw::sal::RGWRadosStore *store,
+                            RGWAccountAdminOpState& op_state,
+                            RGWFormatterFlusher& flusher,
+                            optional_yield y)
+{
+
+  if (!op_state.has_account_id()) {
+    return -EINVAL;
+  }
+
+  RGWAccountInfo account_info(op_state.account_id,
+                              op_state.tenant);
+  int ret = store->ctl()->account->store_info(account_info,
+                                              &op_state.objv_tracker,
+                                              real_time(),
+                                              true, /* exclusive */
+                                              nullptr,
+                                              y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  flusher.start(0);
+  encode_json("AccountInfo", account_info, flusher.get_formatter());
+  flusher.flush();
+
+  return 0;
+}
+
+int RGWAdminOp_Account::remove(rgw::sal::RGWRadosStore *store,
+                               RGWAccountAdminOpState& op_state,
+                               RGWFormatterFlusher& flusher,
+                               optional_yield y)
+{
+  if (!op_state.has_account_id()) {
+    return -EINVAL;
+  }
+
+  return store->ctl()->account->remove_info(op_state.account_id,
+                                            &op_state.objv_tracker,
+                                            y);
+}
+
+int RGWAdminOp_Account::info(rgw::sal::RGWRadosStore *store,
+                             RGWAccountAdminOpState& op_state,
+                             RGWFormatterFlusher& flusher,
+                             optional_yield y)
+{
+  RGWAccountInfo account_info;
+  real_time mtime;
+  map<std::string, bufferlist> attrs;
+
+  if (!op_state.has_account_id()) {
+    return -EINVAL;
+  }
+
+  int ret = store->ctl()->account->read_info(op_state.account_id,
+                                             &account_info,
+                                             &op_state.objv_tracker,
+                                             &mtime,
+                                             &attrs,
+                                             y);
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  flusher.start(0);
+  encode_json("AccountInfo", account_info, flusher.get_formatter());
+  flusher.flush();
+
+  return 0;
 }
