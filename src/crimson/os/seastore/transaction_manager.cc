@@ -95,8 +95,9 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  return lba_manager.incref_extent(t, ref->get_laddr()
-  ).handle_error(
+  return lba_manager.incref_extent(t, ref->get_laddr()).safe_then([](auto r) {
+    return r.refcount;
+  }).handle_error(
     ref_ertr::pass_further{},
     ct_error::all_same_way([](auto e) {
       ceph_assert(0 == "unhandled error, TODO");
@@ -107,7 +108,9 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   laddr_t offset)
 {
-  return lba_manager.incref_extent(t, offset);
+  return lba_manager.incref_extent(t, offset).safe_then([](auto result) {
+    return result.refcount;
+  });
 }
 
 TransactionManager::ref_ret TransactionManager::dec_ref(
@@ -127,7 +130,9 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   laddr_t offset)
 {
   // TODO: need to retire the extent (only) if it's live, will need cache call
-  return lba_manager.decref_extent(t, offset);
+  return lba_manager.decref_extent(t, offset).safe_then([](auto ret) {
+    return ret.refcount;
+  });
 }
 
 TransactionManager::submit_transaction_ertr::future<>
