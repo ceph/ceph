@@ -602,7 +602,7 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 
 seastar::future<> PGBackend::setxattr(
   ObjectState& os,
-  const OSDOp& osd_op,
+  OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
@@ -626,6 +626,7 @@ seastar::future<> PGBackend::setxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
     bp.copy(osd_op.op.xattr.value_len, val);
+    osd_op.indata.splice(0, bp.get_off());
   }
   logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
 
@@ -645,6 +646,7 @@ PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
     std::string aname;
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
+    osd_op.indata.splice(0, bp.get_off());
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, name).safe_then([&osd_op] (ceph::bufferptr val) {
@@ -730,6 +732,7 @@ seastar::future<> PGBackend::omap_get_keys(
     auto p = osd_op.indata.cbegin();
     decode(start_after, p);
     decode(max_return, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
@@ -778,6 +781,7 @@ seastar::future<> PGBackend::omap_get_vals(
     decode(start_after, p);
     decode(max_return, p);
     decode(filter_prefix, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
@@ -830,6 +834,7 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
   try {
     auto p = osd_op.indata.cbegin();
     decode(keys_to_get, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument();
   }
@@ -847,7 +852,7 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
 
 seastar::future<> PGBackend::omap_set_vals(
   ObjectState& os,
-  const OSDOp& osd_op,
+  OSDOp& osd_op,
   ceph::os::Transaction& txn,
   osd_op_params_t& osd_op_params)
 {
@@ -857,6 +862,7 @@ seastar::future<> PGBackend::omap_set_vals(
   try {
     auto p = osd_op.indata.cbegin();
     decode_str_str_map_to_bl(p, &to_set_bl);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
@@ -892,7 +898,7 @@ seastar::future<> PGBackend::omap_set_header(
 
 seastar::future<> PGBackend::omap_remove_range(
   ObjectState& os,
-  const OSDOp& osd_op,
+  OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   std::string key_begin, key_end;
@@ -900,6 +906,7 @@ seastar::future<> PGBackend::omap_remove_range(
     auto p = osd_op.indata.cbegin();
     decode(key_begin, p);
     decode(key_end, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error& e) {
     throw crimson::osd::invalid_argument{};
   }
