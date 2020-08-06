@@ -713,6 +713,10 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       // do_write_op_no_user_modify()...
       return backend.truncate(os, osd_op, txn, *osd_op_params);
     }, true);
+  case CEPH_OSD_OP_ZERO:
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.zero(os, osd_op, txn, *osd_op_params);
+    }, true);
   case CEPH_OSD_OP_SETALLOCHINT:
     return osd_op_errorator::now();
   case CEPH_OSD_OP_SETXATTR:
