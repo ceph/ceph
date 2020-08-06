@@ -1,9 +1,10 @@
 import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { configureTestSuite } from 'ng-bullet';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
@@ -18,29 +19,9 @@ import {
   AlertmanagerNotificationAlert,
   PrometheusRule
 } from '../app/shared/models/prometheus-alerts';
-import { _DEV_ } from '../unit-test-configuration';
 
-export function configureTestBed(configuration: any, useOldMethod?: boolean) {
-  if (_DEV_ && !useOldMethod) {
-    const resetTestingModule = TestBed.resetTestingModule;
-    beforeAll((done) =>
-      (async () => {
-        TestBed.resetTestingModule();
-        TestBed.configureTestingModule(configuration);
-        // prevent Angular from resetting testing module
-        TestBed.resetTestingModule = () => TestBed;
-      })()
-        .then(done)
-        .catch(done.fail)
-    );
-    afterAll(() => {
-      TestBed.resetTestingModule = resetTestingModule;
-    });
-  } else {
-    beforeEach(async(() => {
-      TestBed.configureTestingModule(configuration);
-    }));
-  }
+export function configureTestBed(configuration: any) {
+  configureTestSuite(() => TestBed.configureTestingModule(configuration));
 }
 
 export class PermissionHelper {

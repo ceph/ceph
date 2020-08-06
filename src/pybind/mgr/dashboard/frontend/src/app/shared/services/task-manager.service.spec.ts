@@ -35,12 +35,9 @@ describe('TaskManagerService', () => {
   let summaryService: any;
   let called: boolean;
 
-  configureTestBed(
-    {
-      providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
-    },
-    true
-  );
+  configureTestBed({
+    providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
+  });
 
   beforeEach(() => {
     taskManagerService = TestBed.get(TaskManagerService);

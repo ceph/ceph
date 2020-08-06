@@ -34,21 +34,18 @@ describe('NfsListComponent', () => {
     summaryService['summaryDataSource'].next(data);
   };
 
-  configureTestBed(
-    {
-      declarations: [NfsListComponent, NfsDetailsComponent],
-      imports: [
-        BrowserAnimationsModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot(),
-        TabsModule.forRoot()
-      ],
-      providers: [TaskListService, i18nProviders]
-    },
-    true
-  );
+  configureTestBed({
+    declarations: [NfsListComponent, NfsDetailsComponent],
+    imports: [
+      BrowserAnimationsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastrModule.forRoot(),
+      TabsModule.forRoot()
+    ],
+    providers: [TaskListService, i18nProviders]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsListComponent);
