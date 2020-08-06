@@ -54,7 +54,7 @@ class TestClientLimits(CephFSTestCase):
         self.assertTrue(open_files >= mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
-        path = "subdir/mount_a" if use_subdir else "mount_a"
+        path = "subdir" if use_subdir else "."
         open_proc = self.mount_a.open_n_background(path, open_files)
 
         # Client should now hold:
