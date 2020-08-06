@@ -6,6 +6,7 @@ LGPL2.1.  See file COPYING.
 from datetime import datetime, timezone
 import json
 import logging
+from os import environ
 import re
 import sqlite3
 from typing import Tuple, Any
@@ -312,7 +313,7 @@ class Schedule(object):
     def repeat(self):
         mult = self.schedule[-1]
         period = int(self.schedule[0:-1])
-        if mult == 'M':
+        if 'SNAP_SCHED_TESTING' in environ and mult == 'M':
             return period * 60
         elif mult == 'h':
             return period * 60 * 60
