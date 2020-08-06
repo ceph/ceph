@@ -223,8 +223,8 @@ class TestVolume(object):
     @pytest.mark.parametrize('dev',[
         '/dev/sdb',
         api.VolumeGroup(vg_name='foo'),
-        api.Volume(lv_name='vg/no_osd', lv_tags=''),
-        api.Volume(lv_name='vg/no_osd', lv_tags='ceph.osd_id=null'),
+        api.Volume(lv_name='vg/no_osd', lv_tags='', lv_path='lv/path'),
+        api.Volume(lv_name='vg/no_osd', lv_tags='ceph.osd_id=null', lv_path='lv/path'),
         None,
     ])
     def test_is_not_ceph_device(self, dev):
@@ -670,18 +670,16 @@ class TestTags(object):
         assert self.foo_volume.tags == tags
 
         expected = [
-            ['lvchange', '--deltag', 'ceph.foo0=bar0', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo0=bar0', '/path'],
-            ['lvchange', '--deltag', 'ceph.foo1=bar1', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo1=baz1', '/path'],
-            ['lvchange', '--deltag', 'ceph.foo2=bar2', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo2=baz2', '/path'],
-            ['lvchange', '--deltag', 'ceph.foo1=baz1', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo1=other1', '/path'],
+            sorted(['lvchange', '--deltag', 'ceph.foo0=bar0', '--deltag',
+                    'ceph.foo1=bar1', '--deltag', 'ceph.foo2=bar2', '/path']),
+            sorted(['lvchange', '--deltag', 'ceph.foo1=baz1', '/path']),
+            sorted(['lvchange', '--addtag', 'ceph.foo0=bar0', '--addtag',
+                    'ceph.foo1=baz1', '--addtag', 'ceph.foo2=baz2', '/path']),
+            sorted(['lvchange', '--addtag', 'ceph.foo1=other1', '/path']),
         ]
         # The order isn't guaranted
         for call in capture.calls:
-            assert call['args'][0] in expected
+            assert sorted(call['args'][0]) in expected
         assert len(capture.calls) == len(expected)
 
     def test_clear_tags(self, monkeypatch, capture):
@@ -695,16 +693,16 @@ class TestTags(object):
         assert self.foo_volume_clean.tags == {}
 
         expected = [
-            ['lvchange', '--addtag', 'ceph.foo0=bar0', '/pathclean'],
-            ['lvchange', '--addtag', 'ceph.foo1=bar1', '/pathclean'],
-            ['lvchange', '--addtag', 'ceph.foo2=bar2', '/pathclean'],
-            ['lvchange', '--deltag', 'ceph.foo0=bar0', '/pathclean'],
-            ['lvchange', '--deltag', 'ceph.foo1=bar1', '/pathclean'],
-            ['lvchange', '--deltag', 'ceph.foo2=bar2', '/pathclean'],
+            sorted(['lvchange', '--addtag', 'ceph.foo0=bar0', '--addtag',
+                    'ceph.foo1=bar1', '--addtag', 'ceph.foo2=bar2',
+                    '/pathclean']),
+            sorted(['lvchange', '--deltag', 'ceph.foo0=bar0', '--deltag',
+                    'ceph.foo1=bar1', '--deltag', 'ceph.foo2=bar2',
+                    '/pathclean']),
         ]
         # The order isn't guaranted
         for call in capture.calls:
-            assert call['args'][0] in expected
+            assert sorted(call['args'][0]) in expected
         assert len(capture.calls) == len(expected)
 
 
