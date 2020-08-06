@@ -63,6 +63,13 @@ public:
     uint32_t truncate_seq,
     uint32_t flags);
 
+  using checksum_errorator = ll_read_errorator::extend<
+    crimson::ct_error::object_corrupted,
+    crimson::ct_error::invarg>;
+  checksum_errorator::future<> checksum(
+    const ObjectState& os,
+    OSDOp& osd_op);
+
   using stat_errorator = crimson::errorator<crimson::ct_error::enoent>;
   stat_errorator::future<> stat(
     const ObjectState& os,

@@ -13,6 +13,7 @@
 
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
+#include "common/Checksummer.h"
 #include "common/Clock.h"
 
 #include "crimson/common/exception.h"
@@ -213,6 +214,101 @@ PGBackend::read(const object_info_t& oi,
         return crimson::ct_error::object_corrupted::make();
       }
     });
+}
+
+namespace {
+
+  template<class CSum>
+  PGBackend::checksum_errorator::future<>
+  do_checksum(ceph::bufferlist& init_value_bl,
+	      size_t chunk_size,
+	      const ceph::bufferlist& buf,
+	      ceph::bufferlist& result)
+  {
+    typename CSum::init_value_t init_value;
+    auto init_value_p = init_value_bl.cbegin();
+    try {
+      decode(init_value, init_value_p);
+      // chop off the consumed part
+      init_value_bl.splice(0, init_value_p.get_off());
+    } catch (const ceph::buffer::end_of_buffer&) {
+      logger().warn("{}: init value not provided", __func__);
+      return crimson::ct_error::invarg::make();
+    }
+    const uint32_t chunk_count = buf.length() / chunk_size;
+    ceph::bufferptr csum_data{
+      ceph::buffer::create(sizeof(typename CSum::value_t) * chunk_count)};
+    Checksummer::calculate<CSum>(
+      init_value, chunk_size, 0, buf.length(), buf, &csum_data);
+    encode(chunk_count, result);
+    result.append(std::move(csum_data));
+    return PGBackend::checksum_errorator::now();
+  }
+}
+
+PGBackend::checksum_errorator::future<>
+PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
+{
+  // sanity tests and normalize the argments
+  auto& checksum = osd_op.op.checksum;
+  if (checksum.offset == 0 && checksum.length == 0) {
+    // zeroed offset+length implies checksum whole object
+    checksum.length = os.oi.size;
+  } else if (checksum.offset >= os.oi.size) {
+    // read size was trimmed to zero, do nothing,
+    // see PGBackend::read()
+    return checksum_errorator::now();
+  }
+  if (checksum.chunk_size > 0) {
+    if (checksum.length == 0) {
+      logger().warn("{}: length required when chunk size provided", __func__);
+      return crimson::ct_error::invarg::make();
+    }
+    if (checksum.length % checksum.chunk_size != 0) {
+      logger().warn("{}: length not aligned to chunk size", __func__);
+      return crimson::ct_error::invarg::make();
+    }
+  } else {
+    checksum.chunk_size = checksum.length;
+  }
+  if (checksum.length == 0) {
+    uint32_t count = 0;
+    encode(count, osd_op.outdata);
+    return checksum_errorator::now();
+  }
+
+  // read the chunk to be checksum'ed
+  return _read(os.oi.soid, checksum.offset, checksum.length, osd_op.op.flags).safe_then(
+    [&osd_op](auto&& read_bl) mutable -> checksum_errorator::future<> {
+    auto& checksum = osd_op.op.checksum;
+    if (read_bl.length() != checksum.length) {
+      logger().warn("checksum: bytes read {} != {}",
+                        read_bl.length(), checksum.length);
+      return crimson::ct_error::invarg::make();
+    }
+    // calculate its checksum and put the result in outdata
+    switch (checksum.type) {
+    case CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32:
+      return do_checksum<Checksummer::xxhash32>(osd_op.indata,
+                                                checksum.chunk_size,
+                                                read_bl,
+                                                osd_op.outdata);
+    case CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64:
+      return do_checksum<Checksummer::xxhash64>(osd_op.indata,
+                                                checksum.chunk_size,
+                                                read_bl,
+                                                osd_op.outdata);
+    case CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C:
+      return do_checksum<Checksummer::crc32c>(osd_op.indata,
+                                              checksum.chunk_size,
+                                              read_bl,
+                                              osd_op.outdata);
+    default:
+      logger().warn("checksum: unknown crc type ({})",
+		    static_cast<uint32_t>(checksum.type));
+      return crimson::ct_error::invarg::make();
+    }
+  });
 }
 
 PGBackend::stat_errorator::future<> PGBackend::stat(
