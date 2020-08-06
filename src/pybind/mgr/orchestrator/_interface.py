@@ -963,13 +963,13 @@ class Orchestrator(object):
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def daemon_action(self, action, daemon_type, daemon_id):
-        # type: (str, str, str) -> Completion[List[str]]
+    def daemon_action(self, action: str, daemon_name: str, image: Optional[str]=None) -> Completion[str]:
         """
         Perform an action (start/stop/reload) on a daemon.
 
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
-        :param name: name of daemon
+        :param daemon_name: name of daemon
+        :param image: Container image when redeploying that daemon
         :rtype: Completion
         """
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]

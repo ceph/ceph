@@ -1090,14 +1090,26 @@ Usage:
 
     @_cli_write_command(
         'orch daemon',
-        "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
+        "name=action,type=CephChoices,strings=start|stop|restart|reconfig "
         "name=name,type=CephString",
-        'Start, stop, restart, redeploy, or reconfig a specific daemon')
+        'Start, stop, restart, (redeploy,) or reconfig a specific daemon')
     def _daemon_action(self, action, name):
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
-        (daemon_type, daemon_id) = name.split('.', 1)
-        completion = self.daemon_action(action, daemon_type, daemon_id)
+        completion = self.daemon_action(action, name)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch daemon redeploy',
+        "name=name,type=CephString "
+        "name=image,type=CephString,req=false",
+        'Redeploy a daemon (with a specifc image)')
+    def _daemon_action_redeploy(self, name, image):
+        if '.' not in name:
+            raise OrchestratorError('%s is not a valid daemon name' % name)
+        completion = self.daemon_action("redeploy", name, image=image)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
