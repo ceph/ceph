@@ -2,5 +2,7 @@
 
 import os
 
-if 'CEPH_SNAP_SCHEDULE_UNITTEST' not in os.environ:
-    from .module import Module
+if 'UNITTEST' in os.environ:
+    import tests
+
+from .module import Module
