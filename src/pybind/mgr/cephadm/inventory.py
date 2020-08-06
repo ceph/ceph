@@ -358,6 +358,13 @@ class HostCache():
                 r.append(dd)
         return r
 
+    def get_daemon(self, daemon_name: str) -> orchestrator.DaemonDescription:
+        for _, dm in self.daemons.items():
+            for _, dd in dm.items():
+                if dd.name() == daemon_name:
+                    return dd
+        raise orchestrator.OrchestratorError(f'Unable to find {daemon_name} daemon(s)')
+
     def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
         def alter(host, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
             dd = copy(dd_orig)

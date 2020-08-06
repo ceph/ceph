@@ -1580,12 +1580,28 @@ you may want to run:
         ).name()):
             return self._daemon_action(daemon_type, daemon_id, host, action)
 
-    def _daemon_action(self, daemon_type, daemon_id, host, action):
+    def _daemon_action(self, daemon_type, daemon_id, host, action, image=None):
         daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
             daemon_type=daemon_type,
         )
+
+        if image is not None:
+            if action != 'redeploy':
+                raise OrchestratorError(
+                    f'Cannot execute {action} with new image. `action` needs to be `redeploy`')
+            if daemon_type not in CEPH_TYPES:
+                raise OrchestratorError(
+                    f'Cannot redeploy {daemon_type}.{daemon_id} with a new image: Supported '
+                    f'types are: {", ".join(CEPH_TYPES)}')
+
+            self.check_mon_command({
+                'prefix': 'config set',
+                'name': 'container_image',
+                'value': image,
+                'who': utils.name_to_config_section(daemon_type + '.' + daemon_id),
+            })
 
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
@@ -1607,24 +1623,17 @@ you may want to run:
             except Exception:
                 self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(daemon_spec.host)
-        return "{} {} from host '{}'".format(action, name, daemon_spec.host)
+        msg = "{} {} from host '{}'".format(action, name, daemon_spec.host)
+        self.events.for_daemon(name, 'INFO', msg)
+        return msg
 
     @trivial_completion
-    def daemon_action(self, action, daemon_type, daemon_id) -> List[str]:
-        args = []
-        for host, dm in self.cache.daemons.items():
-            for name, d in dm.items():
-                if d.daemon_type == daemon_type and d.daemon_id == daemon_id:
-                    args.append((d.daemon_type, d.daemon_id,
-                                 d.hostname, action))
-        if not args:
-            raise orchestrator.OrchestratorError(
-                'Unable to find %s.%s daemon(s)' % (
-                    daemon_type, daemon_id))
-        self.log.info('%s daemons %s' % (
-            action.capitalize(),
-            ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
-        return self._daemon_actions(args)
+    def daemon_action(self, action: str, daemon_name: str, image: Optional[str]=None) -> str:
+        d = self.cache.get_daemon(daemon_name)
+
+        self.log.info(f'{action} daemon {daemon_name}')
+        return self._daemon_action(d.daemon_type, d.daemon_id,
+                                 d.hostname, action, image=image)
 
     @trivial_completion
     def remove_daemons(self, names):
