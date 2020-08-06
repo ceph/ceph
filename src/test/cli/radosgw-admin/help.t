@@ -19,6 +19,11 @@
     key create                 create access key
     key rm                     remove access key
     account create             create an account
+    account get                get account info
+    account rm                 remove an account
+    account user add           add a user to an account
+    account user rm            remove a user from an account
+    account user list          list users in an account
     bucket list                list buckets (specify --allow-unordered for
                                faster, unsorted listing)
     bucket limit check         show bucket sharding stats
