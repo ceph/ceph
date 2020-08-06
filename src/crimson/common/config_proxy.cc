@@ -46,5 +46,18 @@ void ConfigProxy::show_config(ceph::Formatter* f) const {
   get_config().show_config(*values, f);
 }
 
+seastar::future<> ConfigProxy::parse_config_files(const std::string& conf_files)
+{
+  return do_change([this, conf_files](ConfigValues& values) {
+    const char* conf_file_paths =
+      conf_files.empty() ? nullptr : conf_files.c_str();
+      get_config().parse_config_files(values,
+                                      obs_mgr,
+                                      conf_file_paths,
+                                      &std::cerr,
+                                      CODE_ENVIRONMENT_DAEMON);
+  });
+}
+
 ConfigProxy::ShardedConfig ConfigProxy::sharded_conf;
 }
