@@ -141,7 +141,7 @@ def task(ctx, config):
     admin_display_name = 'Ms. Admin User'
     admin_access_key = 'MH1WC2XQ1S8UISFDZC8W'
     admin_secret_key = 'dQyrTPA0s248YeN5bBv4ukvKU0kh54LWWywkrpoG'
-    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read;ratelimit=read, write'
+    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read;ratelimit=read, write; account=read,write'
 
     user1 = 'foo'
     user2 = 'fud'
@@ -157,6 +157,7 @@ def task(ctx, config):
     secret_key2 = 'Q8Tk6Q/27hfbFSYdSkPtUqhqx1GgzvpXa4WARozh'
     swift_secret1 = 'gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
     swift_secret2 = 'ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
+    account1 = 'account1'
 
     bucket_name = 'myfoo'
 
@@ -230,10 +231,31 @@ def task(ctx, config):
     assert out['truncated'] == False
     assert len(out['keys']) == 1
 
+    #TESTCASE 'account-create'
+    (ret, out) = rgwadmin_rest(admin_conn,
+                              ['account', 'create'],
+                              {'account': account1})
+    assert ret == 200
+    assert out['id'] == account1
+
+
+    #TESTCASE 'account-info'
+    (ret, out) = rgwadmin_rest(admin_conn,
+                               ['account','info'],
+                               {'account': account1})
+    assert ret == 200
+    assert out['id'] == account1
+
+    #TESTCASE 'account user-add'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'link'], {'account': account1, 'uid': user1})
+    assert ret == 200
+
+
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
 
     assert out['user_id'] == user1
+    assert out['account_id'] == account1
     assert out['email'] == email
     assert out['display_name'] == display_name1
     assert len(out['keys']) == 1
@@ -260,6 +282,8 @@ def task(ctx, config):
     assert out['temp_url_keys'] == []
     assert out['type'] == 'rgw'
     assert out['mfa_ids'] == []
+
+
     # TESTCASE 'info-existing','user','info','existing user query with wrong uid but correct access key','returns correct info'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'access-key' : access_key, 'uid': 'uid_not_exist'})
 
@@ -705,12 +729,26 @@ def task(ctx, config):
     assert ret == 200
     assert not out
 
+    # TESTCASE 'unlink-user' unlinks user from account
+    (ret, out) - rgwadmin_rest(admin_conn, ['user', 'unlink'], {'uid': user1, 'account': account1})
+    assert ret == 200
+
+    # TESTCASE 'user-info' now doesn't contain account id
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    assert not out["account_id"]
+
     # TESTCASE 'rm-user','user','rm','existing user','fails, still has buckets'
     bucket = connection.create_bucket(bucket_name)
     key = boto.s3.key.Key(bucket)
 
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user1})
     assert ret == 409
+
+
+    # TESTCASE rm-account
+    (ret, out) = rgwadmin_rest(admin_conn, ['account', 'rm'],
+                               {'account': account1})
+    assert ret == 200
 
     # TESTCASE 'rm-user2', 'user', 'rm', user with data', 'succeeds'
     bucket = connection.create_bucket(bucket_name)
