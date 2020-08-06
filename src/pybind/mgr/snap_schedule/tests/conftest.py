@@ -1,6 +1,6 @@
 import pytest
 import sqlite3
-from fs.schedule import Schedule
+from ..fs.schedule import Schedule
 
 
 # simple_schedule fixture returns schedules without any timing arguments

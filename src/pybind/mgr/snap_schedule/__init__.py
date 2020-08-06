@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import os
+from os import environ
 
-if 'UNITTEST' in os.environ:
+if 'UNITTEST' in environ:
     import tests
 
 from .module import Module

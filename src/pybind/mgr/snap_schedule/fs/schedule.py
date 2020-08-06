@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import sqlite3
+from typing import Tuple, Any
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,9 @@ def parse_retention(retention):
     log.debug(f'parse_retention({retention}) -> {ret}')
     return ret
 
+
 RETENTION_MULTIPLIERS = ['n', 'M', 'h', 'd', 'w', 'm', 'y']
+
 
 def dump_retention(retention):
     ret = ''
@@ -32,6 +35,7 @@ def dump_retention(retention):
         if mult in retention:
             ret += str(retention[mult]) + mult
     return ret
+
 
 class Schedule(object):
     '''
@@ -161,7 +165,7 @@ class Schedule(object):
     @classmethod
     def get_db_schedules(cls, path, db, fs, repeat=None, start=None):
         query = cls.GET_SCHEDULES
-        data = (path,)
+        data: Tuple[Any, ...] = (path,)
         if repeat:
             query += ' AND sm.repeat = ?'
             data += (repeat,)
