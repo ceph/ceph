@@ -22,8 +22,8 @@ def name_to_config_section(name: str) -> str:
     else:
         return 'mon'
 
-def name_to_auth_entity(daemon_type,  # type: str
-                        daemon_id,    # type: str
+def name_to_auth_entity(daemon_type: str,
+                        daemon_id: str,
                         host = ""     # type  Optional[str] = ""
                         ):
     """
