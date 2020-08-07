@@ -22,9 +22,10 @@ def name_to_config_section(name: str) -> str:
     else:
         return 'mon'
 
+
 def name_to_auth_entity(daemon_type: str,
                         daemon_id: str,
-                        host = ""     # type  Optional[str] = ""
+                        host: Optional[str] = None
                         ):
     """
     Map from daemon names/host to ceph entity names (as seen in config)
@@ -32,7 +33,7 @@ def name_to_auth_entity(daemon_type: str,
     if daemon_type in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
         return 'client.' + daemon_type + "." + daemon_id
     elif daemon_type == 'crash':
-        if host == "":
+        if not host:
             raise OrchestratorError("Host not provided to generate <crash> auth entity name")
         return 'client.' + daemon_type + "." + host
     elif daemon_type == 'mon':
