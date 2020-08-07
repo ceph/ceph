@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
@@ -10,11 +11,23 @@ num_vcpus=$(( $(lscpu -p | tail -1 | cut -d "," -f 1) + 1 ))
 CEPH_DIR="${CEPH_DIR:-$SCRIPT_DIR}"
 BUILD_DIR="${BUILD_DIR:-${CEPH_DIR}/build}"
 DEPS_DIR="${DEPS_DIR:-$CEPH_DIR/build.deps}"
+ZIP_DEST="${ZIP_DEST:-$BUILD_DIR/ceph.zip}"
 
 CLEAN_BUILD=${CLEAN_BUILD:-}
 SKIP_BUILD=${SKIP_BUILD:-}
+# Usefull when packaging existing binaries.
+SKIP_CMAKE=${SKIP_CMAKE:-}
+SKIP_DLL_COPY=${SKIP_DLL_COPY:-}
+SKIP_TESTS=${SKIP_TESTS:-}
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
 DEV_BUILD=${DEV_BUILD:-}
+BUILD_ZIP=${BUILD_ZIP:-}
+# By default, we'll build release binaries with debug symbols attached.
+# If BUILD_ZIP and STRIP_ZIPPED are enabled, we'll strip the binaries
+# that we're going to archive.
+# Unfortunately we cannot use pdb symbols when cross compiling. cv2pdb
+# well as llvm rely on mspdb*.dll in order to support this proprietary format.
+STRIP_ZIPPED=${STRIP_ZIPPED:-}
 
 # We'll have to be explicit here since auto-detecting doesn't work
 # properly when cross compiling.
@@ -24,6 +37,8 @@ ALLOCATOR=${ALLOCATOR:-libc}
 # -Wa,-mbig-obj does not help.
 CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-RelWithDebInfo}
 
+binDir="$BUILD_DIR/bin"
+strippedBinDir="$BUILD_DIR/bin_stripped"
 depsSrcDir="$DEPS_DIR/src"
 depsToolsetDir="$DEPS_DIR/mingw"
 
@@ -62,6 +77,7 @@ fi
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
 
+if [[ -z $SKIP_CMAKE ]]; then
 # We'll need to cross compile Boost.Python before enabling
 # "WITH_MGR".
 echo "Generating solution. Log: ${BUILD_DIR}/cmake.log"
@@ -103,6 +119,7 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WNBD_LIBRARIES="$wnbdLibDir/libwnbd.a" \
       -G "$generatorUsed" \
       $CEPH_DIR  2>&1 | tee "${BUILD_DIR}/cmake.log"
+fi # [[ -z $SKIP_CMAKE ]]
 
 if [[ -z $SKIP_BUILD ]]; then
     echo "Building using $NUM_WORKERS workers. Log: ${BUILD_DIR}/build.log"
@@ -121,4 +138,32 @@ if [[ -z $SKIP_BUILD ]]; then
       echo "Building $target_subdir: ${make_targets[$target_subdir]}" | tee -a "${BUILD_DIR}/build.log"
       make -j $NUM_WORKERS -C $target_subdir ${make_targets[$target_subdir]} 2>&1 | tee -a "${BUILD_DIR}/build.log"
     done
+fi
+
+if [[ -z $SKIP_DLL_COPY ]]; then
+    # Hopefully this path will be the same across distros.
+    # This depends on the thread library, we're currently using posix.
+    mingwVersion=`x86_64-w64-mingw32-c++-posix -dumpversion`
+    mingwTargetLibDir="/usr/lib/gcc/x86_64-w64-mingw32/$mingwVersion"
+    required_dlls=(
+        $zlibDir/zlib1.dll
+        $sslDir/bin/libcrypto-1_1-x64.dll
+        $sslDir/bin/libssl-1_1-x64.dll
+        $mingwTargetLibDir/libstdc++-6.dll
+        $mingwTargetLibDir/libgcc_s_seh-1.dll
+        /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll)
+    echo "Copying required dlls to $binDir."
+    cp ${required_dlls[@]} $binDir
+fi
+
+if [[ -n $BUILD_ZIP ]]; then
+    if [[ -n $STRIP_ZIPPED ]]; then
+        rm -rf $strippedBinDir
+        cp -r $binDir $strippedBinDir
+        echo "Stripping debug symbols from $strippedBinDir binaries."
+        x86_64-w64-mingw32-strip $strippedBinDir/*.exe \
+                                 $strippedBinDir/*.dll
+    fi
+    echo "Building zip archive $ZIP_DEST."
+    zip -r $ZIP_DEST $strippedBinDir
 fi
