@@ -249,9 +249,11 @@ def get_initial_tasks(lock, config, machine_type):
             {'internal.git_ignore_ssl': None},
             {'internal.setup_cdn_repo': None},
             {'internal.setup_base_repo': None},
-            {'internal.setup_additional_repo': None},
-            {'kernel.install_latest_rh_kernel': None}
+            {'internal.setup_additional_repo': None}
         ])
+        # Install latest kernel task for redhat downstream runs
+        if config.get('redhat').get('install_latest_rh_kernel', False):
+            init_tasks.extend({'kernel.install_latest_rh_kernel': None})
  
     return init_tasks
 
