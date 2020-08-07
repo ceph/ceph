@@ -52,13 +52,12 @@ static inline Span new_span(const char* span_name){
       Span span=opentracing::Tracer::Global()->StartSpan(span_name);
       return span;
   }
-static inline Span child_span(const char* span_name,const Span& parent_span)
-{
+static inline Span child_span(const char* span_name, const Span& parent_span){
     if(parent_span){
         Span span = opentracing::Tracer::Global()->StartSpan(span_name, {opentracing::ChildOf(&parent_span->context())});
         return span;
     }
-    return NULL;
+    return nullptr;
   }
 
 //method to finish tracing of a single Span

@@ -13111,7 +13111,7 @@ uint64_t PrimaryLogPG::recover_backfill(
       backfill_info.trim();
     }
 
-    // dout(20) << "   my backfill interval " << backfill_info << dendl;
+    dout(20) << "   my backfill interval " << backfill_info << dendl;
 
     bool sent_scan = false;
     for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
@@ -13120,7 +13120,7 @@ uint64_t PrimaryLogPG::recover_backfill(
       pg_shard_t bt = *i;
       BackfillInterval& pbi = peer_backfill_info[bt];
 
-      // dout(20) << " peer shard " << bt << " backfill " << pbi << dendl;
+      dout(20) << " peer shard " << bt << " backfill " << pbi << dendl;
       if (pbi.begin <= backfill_info.begin &&
 	  !pbi.extends_to_end() && pbi.empty()) {
 	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;
