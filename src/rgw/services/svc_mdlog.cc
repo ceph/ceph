@@ -399,10 +399,10 @@ int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key
   return current_log->add_entry(dpp, hash_key, section, key, bl);
 }
 
-int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
+int RGWSI_MDLog::get_shard_id(const string& hash_key)
 {
   ceph_assert(current_log); // must have called init()
-  return current_log->get_shard_id(hash_key, shard_id);
+  return current_log->get_shard_id(hash_key);
 }
 
 int RGWSI_MDLog::pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
@@ -410,4 +410,3 @@ int RGWSI_MDLog::pull_period(const DoutPrefixProvider *dpp, const std::string& p
 {
   return period_puller->pull(dpp, period_id, period, y);
 }
-

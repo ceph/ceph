@@ -104,7 +104,11 @@ public:
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl);
 
+<<<<<<< HEAD
   int get_shard_id(const std::string& hash_key, int *shard_id);
+=======
+  int get_shard_id(const string& hash_key);
+>>>>>>> bbd5a56ddfb (rgw: Remove unused trim arguments)
 
   RGWPeriodHistory *get_period_history() {
     return period_history.get();
@@ -115,4 +119,3 @@ public:
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);
 };
-

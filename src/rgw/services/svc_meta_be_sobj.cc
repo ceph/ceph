@@ -91,12 +91,10 @@ int RGWSI_MetaBackend_SObj::post_modify(const DoutPrefixProvider *dpp,
 }
 
 int RGWSI_MetaBackend_SObj::get_shard_id(RGWSI_MetaBackend::Context *_ctx,
-					 const std::string& key,
-					 int *shard_id)
+					 const std::string& key)
 {
   auto ctx = static_cast<Context_SObj *>(_ctx);
-  *shard_id = mdlog_svc->get_shard_id(ctx->module->get_hash_key(key), shard_id);
-  return 0;
+  return mdlog_svc->get_shard_id(ctx->module->get_hash_key(key));
 }
 
 int RGWSI_MetaBackend_SObj::call(std::optional<RGWSI_MetaBackend_CtxParams> opt,

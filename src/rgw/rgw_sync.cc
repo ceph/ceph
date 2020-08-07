@@ -946,14 +946,8 @@ public:
 
             tn->log(20, SSTR("list metadata: section=" << *sections_iter << " key=" << *iter));
             string s = *sections_iter + ":" + *iter;
-            int shard_id;
-	    rgw::sal::RadosStore* store = sync_env->store;
-            int ret = store->ctl()->meta.mgr->get_shard_id(*sections_iter, *iter, &shard_id);
-            if (ret < 0) {
-              tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
-              ret_status = ret;
-              break;
-            }
+	    rgw::sal::RGWRadosStore *store = sync_env->store;
+            int shard_id = store->ctl()->meta.mgr->get_shard_id(*sections_iter, *iter);
             if (!entries_index->append(s, shard_id)) {
               break;
             }
