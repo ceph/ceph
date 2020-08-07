@@ -25,12 +25,7 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_run(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
-        cephadm_module.check_mon_command({
-            'prefix': 'config set',
-            'name': 'container_image',
-            'value': 'from_image',
-            'who': 'global',
-        })
+        cephadm_module.set_container_image('global', 'from_image')
         with with_service(cephadm_module, ServiceSpec('mgr'), CephadmOrchestrator.apply_mgr, 'test'):
             assert wait(cephadm_module, cephadm_module.upgrade_start(
                 'to_image', None)) == 'Initiating upgrade to to_image'
