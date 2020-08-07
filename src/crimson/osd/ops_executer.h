@@ -84,7 +84,7 @@ private:
   };
 
   ObjectContextRef obc;
-  const OpInfo* op_info;
+  const OpInfo& op_info;
   PG& pg;
   PGBackend& backend;
   Ref<MOSDOp> msg;
@@ -166,7 +166,7 @@ private:
   }
 
 public:
-  OpsExecuter(ObjectContextRef obc, const OpInfo* op_info, PG& pg, Ref<MOSDOp> msg)
+  OpsExecuter(ObjectContextRef obc, const OpInfo& op_info, PG& pg, Ref<MOSDOp> msg)
     : obc(std::move(obc)),
       op_info(op_info),
       pg(pg),
@@ -269,22 +269,15 @@ OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
 // PgOpsExecuter -- a class for executing ops targeting a certain PG.
 class PgOpsExecuter {
 public:
-  PgOpsExecuter(PG& pg, Ref<MOSDOp> msg)
-    : pg(pg), msg(std::move(msg)) {
+  PgOpsExecuter(const PG& pg, const MOSDOp& msg)
+    : pg(pg), nspace(msg.get_hobj().nspace) {
   }
 
   seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
 private:
-  // PG operations are being provided with pg instead of os.
-  template <class Func>
-  auto do_pg_op(Func&& f) {
-    return std::forward<Func>(f)(std::as_const(pg),
-                                 std::as_const(msg->get_hobj().nspace));
-  }
-
-  PG& pg;
-  Ref<MOSDOp> msg;
+  const PG& pg;
+  const std::string& nspace;
 };
 
 } // namespace crimson::osd

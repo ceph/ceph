@@ -107,8 +107,8 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       // ceph-osd has this implemented in `PrimaryLogPG::execute_ctx`,
       // grep for `ignore_out_data`.
       using crimson::common::local_conf;
-      if (op_info->allows_returnvec() &&
-          op_info->may_write() &&
+      if (op_info.allows_returnvec() &&
+          op_info.may_write() &&
           ret >= 0 &&
           outdata.length() > local_conf()->osd_max_write_op_reply_len) {
         // the justification of this limit it to not inflate the pg log.
@@ -121,7 +121,7 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       }
       // for write calls we never return data expect errors or RETURNVEC.
       // please refer cls/cls_hello.cc to details.
-      if (!op_info->may_write() || op_info->allows_returnvec() || ret < 0) {
+      if (!op_info.may_write() || op_info.allows_returnvec() || ret < 0) {
         osd_op.op.extent.length = outdata.length();
         osd_op.outdata.claim_append(outdata);
       }
@@ -952,21 +952,13 @@ PgOpsExecuter::execute_pg_op(OSDOp& osd_op)
   logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_PGLS:
-    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
-      return do_pgls(pg, nspace, osd_op);
-    });
+    return do_pgls(pg, nspace, osd_op);
   case CEPH_OSD_OP_PGLS_FILTER:
-    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
-      return do_pgls_filtered(pg, nspace, osd_op);
-    });
+    return do_pgls_filtered(pg, nspace, osd_op);
   case CEPH_OSD_OP_PGNLS:
-    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
-      return do_pgnls(pg, nspace, osd_op);
-    });
+    return do_pgnls(pg, nspace, osd_op);
   case CEPH_OSD_OP_PGNLS_FILTER:
-    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
-      return do_pgnls_filtered(pg, nspace, osd_op);
-    });
+    return do_pgnls_filtered(pg, nspace, osd_op);
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
