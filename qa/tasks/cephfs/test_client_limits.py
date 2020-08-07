@@ -86,8 +86,6 @@ class TestClientLimits(CephFSTestCase):
             num_caps = self.get_session(mount_a_client_id)['num_caps']
             if num_caps <= mds_min_caps_per_client:
                 return True
-            elif num_caps < cache_size:
-                return True
             else:
                 return False
 
