@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "rgw_rados.h"
 #include "rgw_rest_client.h"
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"

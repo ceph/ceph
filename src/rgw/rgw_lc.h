@@ -17,7 +17,6 @@
 #include "common/iso_8601.h"
 #include "common/Thread.h"
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
 #include "rgw_sal.h"

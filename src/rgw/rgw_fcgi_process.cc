@@ -5,7 +5,6 @@
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
 
-#include "rgw_rados.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
