@@ -104,33 +104,31 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 }
 
 
-int RGWMetadataLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(const string& hash_key, const string& section,
+			      const string& key, bufferlist& bl) {
   if (!svc.zone->need_to_log_metadata())
     return 0;
 
-  string oid;
-  int shard_id;
-
-  rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
+  auto [oid, shard_id] = rgw_shard_name(prefix,
+					cct->_conf->rgw_md_log_max_shards,
+					hash_key);
   mark_modified(shard_id);
   real_time now = real_clock::now();
   return svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
 }
 
-int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
+int RGWMetadataLog::get_shard_id(std::string_view hash_key)
 {
-  string oid;
-
-  rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, shard_id);
-  return 0;
+  auto [oid, shard_id] = rgw_shard_name(prefix,
+					cct->_conf->rgw_md_log_max_shards,
+					hash_key);
+  return shard_id;
 }
 
 int RGWMetadataLog::store_entries_in_shard(std::vector<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
-  string oid;
-
   mark_modified(shard_id);
-  rgw_shard_name(prefix, shard_id, oid);
+  auto oid = rgw_shard_name(prefix, shard_id);
   std::list<cls_log_entry> lentries(std::move_iterator(entries.begin()),
 				    std::move_iterator(entries.end()));
   return svc.cls->timelog.add(oid, lentries, completion, false, null_yield);
@@ -496,10 +494,10 @@ int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::get_shard_id(const string& entry, int *shard_id)
+int RGWMetadataHandler_GenericMetaBE::get_shard_id(const string& entry)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return op->get_shard_id(entry, shard_id);
+    return op->get_shard_id(entry);
   });
 }
 
@@ -732,14 +730,14 @@ int RGWMetadataManager::mutate(const string& metadata_key,
   return handler->mutate(entry, mtime, objv_tracker, y, op_type, f);
 }
 
-int RGWMetadataManager::get_shard_id(const string& section, const string& entry, int *shard_id)
+int RGWMetadataManager::get_shard_id(const string& section, const string& entry)
 {
   RGWMetadataHandler *handler = get_handler(section);
   if (!handler) {
     return -EINVAL;
   }
 
-  return handler->get_shard_id(entry, shard_id);
+  return handler->get_shard_id(entry);
 }
 
 struct list_keys_handle {

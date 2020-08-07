@@ -115,7 +115,7 @@ public:
 
   int add_entry(const std::string& hash_key, const std::string& section,
 		const std::string& key, ceph::bufferlist& bl);
-  int get_shard_id(const std::string& hash_key, int *shard_id);
+  int get_shard_id(std::string_view hash_key);
   int store_entries_in_shard(std::vector<cls_log_entry>& entries, int shard_id,
 			     librados::AioCompletion *completion);
 

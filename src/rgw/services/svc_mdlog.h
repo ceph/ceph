@@ -101,7 +101,7 @@ public:
 
   int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
 
-  int get_shard_id(const string& hash_key, int *shard_id);
+  int get_shard_id(const string& hash_key);
 
   RGWPeriodHistory *get_period_history() {
     return period_history.get();
@@ -112,4 +112,3 @@ public:
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);
 };
-
