@@ -154,7 +154,7 @@ public:
 
   virtual int init_processing() {
     req_state_span ss;
-    char buffer[1000];
+    char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
     get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
     start_trace(std::move(ss), {}, s, buffer);
 

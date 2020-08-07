@@ -195,7 +195,7 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			 bool assume_unsorted)
 {
   req_state_span ss;
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   start_trace(std::move(ss), {}, s, buffer);
   return list_multipart_parts(store, s->bucket->get_info(), s->cct, upload_id,
@@ -207,7 +207,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
 			   RGWMPObj& mp_obj, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -307,7 +307,7 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 			   vector<rgw_bucket_dir_entry> *objs,
 			   map<string, bool> *common_prefixes, bool *is_truncated, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -328,7 +328,7 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
 				string& prefix, string& delim, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);

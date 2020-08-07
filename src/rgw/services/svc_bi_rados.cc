@@ -41,7 +41,7 @@ int RGWSI_BucketIndex_RADOS::open_pool(const rgw_pool& pool,
 int RGWSI_BucketIndex_RADOS::open_bucket_index_pool(const RGWBucketInfo& bucket_info,
                                                     RGWSI_RADOS::Pool *index_pool, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -174,7 +174,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
                                                map<int, string> *bucket_instance_ids, const Span& parent_span)
 {
   string bucket_oid_base;
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
 
@@ -330,7 +330,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
 int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info, const Span& parent_span)
 {
   string bucket_oid_base;
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);

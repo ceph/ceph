@@ -40,7 +40,7 @@ namespace rgw::sal {
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
 			       uint64_t max, bool need_stats, RGWBucketList &buckets, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -90,7 +90,7 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
 
 int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -238,7 +238,7 @@ int RGWRadosBucket::sync_user_stats()
 
 int RGWRadosBucket::update_container_stats(const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
 
@@ -439,7 +439,7 @@ int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj 
 
 int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -763,7 +763,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 req_info& req_info,
 				 std::unique_ptr<RGWBucket>* bucket_out, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);

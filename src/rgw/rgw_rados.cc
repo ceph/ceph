@@ -1735,7 +1735,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
   bool *is_truncated,
   optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -2020,7 +2020,7 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 						   bool *is_truncated,
                                                    optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -2179,7 +2179,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             uint32_t *pmaster_num_shards,
 			    bool exclusive, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -2299,7 +2299,7 @@ bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_ob
 
 int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -2764,7 +2764,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                                     const DoutPrefixProvider *dpp,
                                     optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -2971,7 +2971,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                                            bool assume_noent, bool modify_tail,
                                            void *_index_op, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -3270,7 +3270,7 @@ done_cancel:
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -4196,7 +4196,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const DoutPrefixProvider *dpp,
                optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -4485,7 +4485,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                const DoutPrefixProvider *dpp,
                optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -4617,7 +4617,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
 
 int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -4666,7 +4666,7 @@ int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, c
  */
 int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -5043,7 +5043,7 @@ struct tombstone_entry {
  */
 int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -5269,7 +5269,7 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
                          const real_time& expiration_time,
                          rgw_zone_set *zones_trace, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -5835,7 +5835,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
                         map<string, bufferlist>* rmattrs,
                         optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -5978,7 +5978,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
 
 int RGWRados::Object::Read::prepare(optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);  
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -6153,7 +6153,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
 
 int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_tag, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
   Span span_1 = child_span(buffer, parent_span);
 
@@ -6191,7 +6191,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             list<rgw_obj_index_key> *remove_objs, const string *user_data,
                                             bool appendable, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -6529,7 +6529,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
 int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
                                     optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -7806,7 +7806,7 @@ int RGWRados::get_bucket_info(RGWServices *svc,
                               real_time *pmtime,
                               optional_yield y, map<string, bufferlist> *pattrs, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
 
@@ -7841,7 +7841,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
                               real_time mtime, map<string, bufferlist> *pattrs, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -7856,7 +7856,7 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -8443,7 +8443,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
                                       optional_yield y,
 				      check_filter_t force_check_filter, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -8711,7 +8711,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
                                         optional_yield y,
 					check_filter_t force_check_filter, const Span& parent_span) {
   
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);

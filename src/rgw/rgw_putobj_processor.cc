@@ -202,7 +202,7 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
 
 int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -300,7 +300,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     rgw_zone_set *zones_trace,
                                     bool *pcanceled, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -384,7 +384,7 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
 
 int MultipartObjectProcessor::prepare_head(const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -452,7 +452,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        rgw_zone_set *zones_trace,
                                        bool *pcanceled, optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
@@ -642,7 +642,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
                                     optional_yield y, const Span& parent_span)
 {
-  char buffer[1000];
+  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
   Span span_1 = child_span(buffer, parent_span);
   const Span& this_parent_span(span_1);
