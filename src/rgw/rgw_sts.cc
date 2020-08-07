@@ -11,7 +11,6 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
-#include "rgw_rados.h"
 #include "auth/Crypto.h"
 #include "include/ceph_fs.h"
 #include "common/iso_8601.h"

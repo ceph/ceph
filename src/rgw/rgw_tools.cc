@@ -12,7 +12,6 @@
 #include "include/stringify.h"
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_tools.h"
 #include "rgw_acl_s3.h"
 #include "rgw_op.h"

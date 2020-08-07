@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_sal.h"

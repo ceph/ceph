@@ -9,7 +9,6 @@
 #include "common/errno.h"
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
