@@ -1502,7 +1502,7 @@ protected:
   void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
 			 RefCountCallback* cb);
   void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
-  void dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs);
+  void dec_refcount(const hobject_t& soid, const object_ref_delta_t& refs);
   void dec_refcount_by_dirty(OpContext* ctx);
   bool is_dedup_chunk(const object_info_t& oi, const chunk_info_t& chunk);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
