@@ -3547,7 +3547,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
   // create object
   {
     bufferlist bl;
-    bl.append("base chunk");
+    bl.append("DDse chunk");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
@@ -3559,14 +3559,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
     op.write_full(bl);
     ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
   }
-
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -3593,14 +3585,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
-  // make chunked object dirty
-  {
-    bufferlist bl;
-    bl.append("DD");
-    ObjectWriteOperation op;
-    op.write(0, bl);
-    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
-  }
   // flush
   {
     ObjectReadOperation op;
@@ -3619,11 +3603,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
     ASSERT_EQ(1, cache_ioctx.read("bar-chunk", bl, 1, 0));
     ASSERT_EQ('D', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -4747,12 +4726,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
   manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "bar", "foo");
 
   // foo head: [er] [hi] [HI]
-  // make a dirty chunks
-  {
-    bufferlist bl;
-    bl.append("There hi");
-    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
-  }
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
