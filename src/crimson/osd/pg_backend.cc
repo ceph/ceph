@@ -216,6 +216,37 @@ PGBackend::read(const object_info_t& oi,
     });
 }
 
+PGBackend::read_errorator::future<>
+PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op)
+{
+  const auto& op = osd_op.op;
+  logger().trace("sparse_read: {} {}~{}",
+                 os.oi.soid, op.extent.offset, op.extent.length);
+  return store->fiemap(coll, ghobject_t{os.oi.soid},
+		       op.extent.offset,
+		       op.extent.length).then([&os, &osd_op, this](auto&& m) {
+    return seastar::do_with(interval_set<uint64_t>{std::move(m)},
+			    [&os, &osd_op, this](auto&& extents) {
+      return store->readv(coll, ghobject_t{os.oi.soid},
+                          extents, osd_op.op.flags).safe_then(
+        [&os, &osd_op, &extents, this](auto&& bl) -> read_errorator::future<> {
+        if (_read_verify_data(os.oi, bl)) {
+          osd_op.op.extent.length = bl.length();
+          // re-encode since it might be modified
+          ceph::encode(extents, osd_op.outdata);
+          encode_destructively(bl, osd_op.outdata);
+          logger().trace("sparse_read got {} bytes from object {}",
+                         osd_op.op.extent.length, os.oi.soid);
+          return read_errorator::make_ready_future<>();
+        } else {
+          // TODO: repair it if crc mismatches
+          return crimson::ct_error::object_corrupted::make();
+        }
+      });
+    });
+  });
+}
+
 namespace {
 
   template<class CSum>
