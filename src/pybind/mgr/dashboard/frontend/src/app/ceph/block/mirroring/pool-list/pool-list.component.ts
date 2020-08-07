@@ -4,6 +4,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
+import { TableStatusViewCache } from '../../../../shared/classes/table-status-view-cache';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
@@ -35,6 +36,8 @@ export class PoolListComponent implements OnInit, OnDestroy {
 
   data: [];
   columns: {};
+
+  tableStatus = new TableStatusViewCache();
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -95,6 +98,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
 
     this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.data = data.content_data.pools;
+      this.tableStatus = new TableStatusViewCache(data.status);
     });
   }
 

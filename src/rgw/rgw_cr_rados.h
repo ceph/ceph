@@ -75,7 +75,9 @@ protected:
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWAsyncRadosRequest> {
     RGWAsyncRadosProcessor *processor;
-    RGWWQ(RGWAsyncRadosProcessor *p, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
+    RGWWQ(RGWAsyncRadosProcessor *p,
+	  ceph::timespan timeout, ceph::timespan suicide_timeout,
+	  ThreadPool *tp)
       : ThreadPool::WorkQueue<RGWAsyncRadosRequest>("RGWWQ", timeout, suicide_timeout, tp), processor(p) {}
 
     bool _enqueue(RGWAsyncRadosRequest *req) override;

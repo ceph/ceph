@@ -29,70 +29,6 @@ namespace crimson::os::seastore {
 class Journal;
 
 /**
- * LogicalCachedExtent
- *
- * CachedExtent with associated lba mapping.
- *
- * Users of TransactionManager should be using extents derived from
- * LogicalCachedExtent.
- */
-class LogicalCachedExtent : public CachedExtent {
-public:
-  template <typename... T>
-  LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
-
-  void set_pin(LBAPinRef &&pin) { this->pin = std::move(pin); }
-
-  LBAPin &get_pin() {
-    assert(pin);
-    return *pin;
-  }
-
-  laddr_t get_laddr() const {
-    assert(pin);
-    return pin->get_laddr();
-  }
-
-  void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
-    apply_delta(bl);
-    set_last_committed_crc(get_crc32c());
-  }
-protected:
-  virtual void apply_delta(const ceph::bufferlist &bl) = 0;
-
-private:
-  LBAPinRef pin;
-};
-
-using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;
-struct ref_laddr_cmp {
-  using is_transparent = laddr_t;
-  bool operator()(const LogicalCachedExtentRef &lhs,
-		  const LogicalCachedExtentRef &rhs) const {
-    return lhs->get_laddr() < rhs->get_laddr();
-  }
-  bool operator()(const laddr_t &lhs,
-		  const LogicalCachedExtentRef &rhs) const {
-    return lhs < rhs->get_laddr();
-  }
-  bool operator()(const LogicalCachedExtentRef &lhs,
-		  const laddr_t &rhs) const {
-    return lhs->get_laddr() < rhs;
-  }
-};
-
-using lextent_set_t = addr_extent_set_base_t<
-  laddr_t,
-  LogicalCachedExtentRef,
-  ref_laddr_cmp
-  >;
-
-template <typename T>
-using lextent_list_t = addr_extent_list_base_t<
-  laddr_t, TCachedExtentRef<T>>;
-
-/**
  * TransactionManager
  *
  * Abstraction hiding reading and writing to persistence.
@@ -139,7 +75,7 @@ public:
 
   /// Creates empty transaction
   TransactionRef create_transaction() {
-    return lba_manager.create_transaction();
+    return make_transaction();
   }
 
   /**
@@ -179,8 +115,11 @@ public:
 	    t,
 	    pin->get_paddr(),
 	    pin->get_length()
-	  ).safe_then([&pin, &ret_ref](auto ref) mutable {
-	    ref->set_pin(std::move(pin));
+	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable {
+	    if (!ref->has_pin()) {
+	      ref->set_pin(std::move(pin));
+	      lba_manager.add_pin(ref->get_pin());
+	    }
 	    ret_ref.push_back(std::make_pair(ref->get_laddr(), ref));
 	    crimson::get_logger(ceph_subsys_filestore).debug(
 	      "read_extents: got extent {}",

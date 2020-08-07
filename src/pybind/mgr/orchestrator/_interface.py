@@ -956,20 +956,20 @@ class Orchestrator(object):
         providing the logical service).
 
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
-        :param service_type: e.g. "mds", "rgw", ...
-        :param service_name: name of logical service ("cephfs", "us-east", ...)
+        :param service_name: service_type + '.' + service_id
+                            (e.g. "mon", "mgr", "mds.mycephfs", "rgw.realm.zone", ...)
         :rtype: Completion
         """
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def daemon_action(self, action, daemon_type, daemon_id):
-        # type: (str, str, str) -> Completion[List[str]]
+    def daemon_action(self, action: str, daemon_name: str, image: Optional[str]=None) -> Completion[str]:
         """
         Perform an action (start/stop/reload) on a daemon.
 
         :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
-        :param name: name of daemon
+        :param daemon_name: name of daemon
+        :param image: Container image when redeploying that daemon
         :rtype: Completion
         """
         #assert action in ["start", "stop", "reload, "restart", "redeploy"]
@@ -1318,6 +1318,9 @@ class DaemonDescription(object):
         return False
 
     def service_id(self):
+        if self.daemon_type == 'osd' and self.osdspec_affinity:
+            return self.osdspec_affinity
+
         def _match():
             err = OrchestratorError("DaemonDescription: Cannot calculate service_id: " \
                     f"daemon_id='{self.daemon_id}' hostname='{self.hostname}'")

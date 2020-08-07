@@ -1,11 +1,37 @@
 import errno
 import json
+import logging
+import traceback
 
 from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
 from .fs.nfs import NFSCluster, FSExport
+
+log = logging.getLogger(__name__)
+
+class VolumesInfoWrapper():
+    def __init__(self, f, context):
+        self.f = f
+        self.context = context
+    def __enter__(self):
+        log.info("Starting {}".format(self.context))
+    def __exit__(self, exc_type, exc_value, tb):
+        if exc_type is not None:
+            log.error("Failed {}:\n{}".format(self.context, "".join(traceback.format_exception(exc_type, exc_value, tb))))
+        else:
+            log.info("Finishing {}".format(self.context))
+
+def mgr_cmd_wrap(f):
+    def wrap(self, inbuf, cmd):
+        astr = []
+        for k in cmd:
+            astr.append("{}:{}".format(k, cmd[k]))
+        context = "{}({}) < \"{}\"".format(f.__name__, ", ".join(astr), inbuf)
+        with VolumesInfoWrapper(f, context):
+            return f(self, inbuf, cmd)
+    return wrap
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -356,19 +382,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return handler(inbuf, cmd)
 
+    @mgr_cmd_wrap
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
         placement = cmd.get('placement', '')
         return self.vc.create_fs_volume(vol_id, placement)
 
+    @mgr_cmd_wrap
     def _cmd_fs_volume_rm(self, inbuf, cmd):
         vol_name = cmd['vol_name']
         confirm = cmd.get('yes-i-really-mean-it', None)
         return self.vc.delete_fs_volume(vol_name, confirm)
 
+    @mgr_cmd_wrap
     def _cmd_fs_volume_ls(self, inbuf, cmd):
         return self.vc.list_fs_volumes()
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -378,6 +408,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
             uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -386,9 +417,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                               group_name=cmd['group_name'],
                                               force=cmd.get('force', False))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -403,6 +436,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         mode=cmd.get('mode', '755'),
                                         namespace_isolated=cmd.get('namespace_isolated', False))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -413,50 +447,60 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         force=cmd.get('force', False),
                                         retain_snapshots=cmd.get('retain_snapshots', False))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_ls(self, inbuf, cmd):
         return self.vc.list_subvolumes(vol_name=cmd['vol_name'],
                                        group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_getpath(self, inbuf, cmd):
         return self.vc.getpath_subvolume_group(
             vol_name=cmd['vol_name'], group_name=cmd['group_name'])
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_getpath(self, inbuf, cmd):
         return self.vc.subvolume_getpath(vol_name=cmd['vol_name'],
                                          sub_name=cmd['sub_name'],
                                          group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_info(self, inbuf, cmd):
         return self.vc.subvolume_info(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
         return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
             group_name=cmd['group_name'], pin_type=cmd['pin_type'],
             pin_setting=cmd['pin_setting'])
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_group_snapshot(vol_name=cmd['vol_name'],
                                                        group_name=cmd['group_name'],
                                                        snap_name=cmd['snap_name'])
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_rm(self, inbuf, cmd):
         return self.vc.remove_subvolume_group_snapshot(vol_name=cmd['vol_name'],
                                                        group_name=cmd['group_name'],
                                                        snap_name=cmd['snap_name'],
                                                        force=cmd.get('force', False))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_group_snapshots(vol_name=cmd['vol_name'],
                                                       group_name=cmd['group_name'])
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_snapshot(vol_name=cmd['vol_name'],
                                                  sub_name=cmd['sub_name'],
                                                  snap_name=cmd['snap_name'],
                                                  group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_rm(self, inbuf, cmd):
         return self.vc.remove_subvolume_snapshot(vol_name=cmd['vol_name'],
                                                  sub_name=cmd['sub_name'],
@@ -464,76 +508,94 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                  group_name=cmd.get('group_name', None),
                                                  force=cmd.get('force', False))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_info(self, inbuf, cmd):
         return self.vc.subvolume_snapshot_info(vol_name=cmd['vol_name'],
                                                sub_name=cmd['sub_name'],
                                                snap_name=cmd['snap_name'],
                                                group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
                                                 group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_resize(self, inbuf, cmd):
         return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                         new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
                                         no_shrink=cmd.get('no_shrink', False))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_pin(self, inbuf, cmd):
         return self.vc.subvolume_pin(vol_name=cmd['vol_name'],
             sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
             pin_setting=cmd['pin_setting'],
             group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
         return self.vc.protect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                                   snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_unprotect(self, inbuf, cmd):
         return self.vc.unprotect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                                     snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_clone(self, inbuf, cmd):
         return self.vc.clone_subvolume_snapshot(
             vol_name=cmd['vol_name'], sub_name=cmd['sub_name'], snap_name=cmd['snap_name'],
             group_name=cmd.get('group_name', None), pool_layout=cmd.get('pool_layout', None),
             target_sub_name=cmd['target_sub_name'], target_group_name=cmd.get('target_group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_clone_status(self, inbuf, cmd):
         return self.vc.clone_status(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
+    @mgr_cmd_wrap
     def _cmd_nfs_export_create_cephfs(self, inbuf, cmd):
         #TODO Extend export creation for rgw.
         return self.fs_export.create_export(fs_name=cmd['fsname'], cluster_id=cmd['clusterid'],
                 pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False), path=cmd.get('path', '/'))
 
+    @mgr_cmd_wrap
     def _cmd_nfs_export_delete(self, inbuf, cmd):
         return self.fs_export.delete_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
 
+    @mgr_cmd_wrap
     def _cmd_nfs_export_ls(self, inbuf, cmd):
         return self.fs_export.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
 
+    @mgr_cmd_wrap
     def _cmd_nfs_export_get(self, inbuf, cmd):
         return self.fs_export.get_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
 
+    @mgr_cmd_wrap
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
         return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
                                            placement=cmd.get('placement', None))
 
+    @mgr_cmd_wrap
     def _cmd_nfs_cluster_update(self, inbuf, cmd):
         return self.nfs.update_nfs_cluster(cluster_id=cmd['clusterid'], placement=cmd['placement'])
 
+    @mgr_cmd_wrap
     def _cmd_nfs_cluster_delete(self, inbuf, cmd):
         return self.nfs.delete_nfs_cluster(cluster_id=cmd['clusterid'])
 
+    @mgr_cmd_wrap
     def _cmd_nfs_cluster_ls(self, inbuf, cmd):
         return self.nfs.list_nfs_cluster()
 
+    @mgr_cmd_wrap
     def _cmd_nfs_cluster_info(self, inbuf, cmd):
         return self.nfs.show_nfs_cluster_info(cluster_id=cmd.get('clusterid', None))

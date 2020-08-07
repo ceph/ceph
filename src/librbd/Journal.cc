@@ -51,7 +51,8 @@ public:
   explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::Journal", "tp_librbd_journ", 1),
       work_queue(new ContextWQ("librbd::journal::work_queue",
-                               cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
+                               ceph::make_timespan(
+                                 cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout")),
                                this)) {
     start();
   }

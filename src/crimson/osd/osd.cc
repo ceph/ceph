@@ -429,9 +429,6 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_admin_commands(),
       asok->register_command(make_asok_hook<OsdStatusHook>(*this)),
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
-      asok->register_command(make_asok_hook<ConfigShowHook>()),
-      asok->register_command(make_asok_hook<ConfigGetHook>()),
-      asok->register_command(make_asok_hook<ConfigSetHook>()),
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)));
   });
 }
@@ -704,7 +701,7 @@ MessageRef OSD::get_stats() const
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
   auto m = make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
-
+  m->osd_stat = osd_stat;
   for (auto [pgid, pg] : pg_map.get_pgs()) {
     if (pg->is_primary()) {
       auto stats = pg->get_stats();
@@ -720,7 +717,7 @@ uint64_t OSD::send_pg_stats()
 {
   // mgr client sends the report message in background
   mgrc->report();
-  return osd_stat_seq;
+  return osd_stat.seq;
 }
 
 OSD::cached_map_t OSD::get_map() const

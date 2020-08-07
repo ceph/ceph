@@ -3,6 +3,7 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
+import { TableStatusViewCache } from '../../../../shared/classes/table-status-view-cache';
 
 @Component({
   selector: 'cd-mirroring-images',
@@ -31,6 +32,8 @@ export class ImageListComponent implements OnInit, OnDestroy {
     data: [],
     columns: {}
   };
+
+  tableStatus = new TableStatusViewCache();
 
   constructor(private rbdMirroringService: RbdMirroringService) {}
 
@@ -80,6 +83,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
       this.image_error.data = data.content_data.image_error;
       this.image_syncing.data = data.content_data.image_syncing;
       this.image_ready.data = data.content_data.image_ready;
+      this.tableStatus = new TableStatusViewCache(data.status);
     });
   }
 

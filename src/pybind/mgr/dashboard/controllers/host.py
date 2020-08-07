@@ -46,7 +46,7 @@ def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
     for host in hosts:
         hostname = host['hostname']
         if hostname in orch_hosts_map:
-            host = merge_dicts(host, orch_hosts_map[hostname])
+            host.update(orch_hosts_map[hostname])
             host['sources']['orchestrator'] = True
             orch_hosts_map.pop(hostname)
 

@@ -94,15 +94,6 @@ ExtentsSummary<ExtentsType>::ExtentsSummary(const ExtentsType &extents)
   }
 }
 
-template <typename T>
-std::ostream &operator<<(std::ostream &os,
-                         const ExtentsSummary<T> &s) {
-  os << "total_bytes=" << s.total_bytes << ", "
-     << "first_image_byte=" << s.first_image_byte << ", "
-     << "last_image_byte=" << s.last_image_byte << "";
-  return os;
-}
-
 io::Extent whole_volume_extent() {
   return io::Extent({0, std::numeric_limits<uint64_t>::max()});
 }
@@ -126,3 +117,5 @@ Context * override_ctx(int r, Context *ctx) {
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
+
+template class librbd::cache::rwl::ExtentsSummary<librbd::io::Extents>;

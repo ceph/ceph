@@ -313,7 +313,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         pass
 
     @deferred_write("daemon_action")
-    def daemon_action(self, action, daemon_type, daemon_id):
+    def daemon_action(self, action, daemon_name, image=None):
         pass
 
     @deferred_write("Adding NFS service")

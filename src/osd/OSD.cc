@@ -121,7 +121,6 @@
 #include "messages/MCommandReply.h"
 
 #include "messages/MPGStats.h"
-#include "messages/MPGStatsAck.h"
 
 #include "messages/MWatchNotify.h"
 #include "messages/MOSDPGPush.h"
@@ -2182,8 +2181,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   test_ops_hook(NULL),
   op_shardedwq(
     this,
-    cct->_conf->osd_op_thread_timeout,
-    cct->_conf->osd_op_thread_suicide_timeout,
+    ceph::make_timespan(cct->_conf->osd_op_thread_timeout),
+    ceph::make_timespan(cct->_conf->osd_op_thread_suicide_timeout),
     &osd_op_tp),
   last_pg_create_epoch(0),
   boot_finisher(cct),

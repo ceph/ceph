@@ -18,9 +18,10 @@
   <div ngbDropdownMenu>
     <a ngbDropdownItem
        [ngClass]="{'disabled': !docsUrl}"
+       class="text-capitalize"
        href="{{ docsUrl }}"
        target="_blank"
-       i18n>Documentation</a>
+       i18n>documentation</a>
     <button ngbDropdownItem
             (click)="goToApiDocs()"
             i18n>API</button>

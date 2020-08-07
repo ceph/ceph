@@ -99,6 +99,26 @@ int TestMemIoCtxImpl::assert_exists(const std::string &oid, uint64_t snap_id) {
   return 0;
 }
 
+int TestMemIoCtxImpl::assert_version(const std::string &oid, uint64_t ver) {
+  if (m_client->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+
+  std::shared_lock l{m_pool->file_lock};
+  TestMemCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, {});
+  if (file == NULL || !file->exists) {
+    return -ENOENT;
+  }
+  if (ver < file->objver) {
+    return -ERANGE;
+  }
+  if (ver > file->objver) {
+    return -EOVERFLOW;
+  }
+
+  return 0;
+}
+
 int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {

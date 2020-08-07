@@ -80,10 +80,9 @@ bool assemble_write_same_extent(
 }
 
 template <typename I>
-void read_parent(I *image_ctx, uint64_t object_no, uint64_t off,
-                 uint64_t len, librados::snap_t snap_id,
-                 const ZTracer::Trace &trace, ceph::bufferlist* data,
-                 Context* on_finish) {
+void read_parent(I *image_ctx, uint64_t object_no, const Extents &extents,
+                 librados::snap_t snap_id, const ZTracer::Trace &trace,
+                 ceph::bufferlist* data, Context* on_finish) {
 
   auto cct = image_ctx->cct;
 
@@ -91,8 +90,10 @@ void read_parent(I *image_ctx, uint64_t object_no, uint64_t off,
 
   // calculate reverse mapping onto the image
   Extents parent_extents;
-  Striper::extent_to_file(cct, &image_ctx->layout, object_no, off, len,
-                          parent_extents);
+  for (auto [object_off, object_len]: extents) {
+    Striper::extent_to_file(cct, &image_ctx->layout, object_no, object_off,
+                            object_len, parent_extents);
+  }
 
   uint64_t parent_overlap = 0;
   uint64_t object_overlap = 0;
@@ -125,6 +126,6 @@ void read_parent(I *image_ctx, uint64_t object_no, uint64_t off,
 } // namespace librbd
 
 template void librbd::io::util::read_parent(
-    librbd::ImageCtx *image_ctx, uint64_t object_no, uint64_t off, uint64_t len,
+    librbd::ImageCtx *image_ctx, uint64_t object_no, const Extents &extents,
     librados::snap_t snap_id, const ZTracer::Trace &trace,
     ceph::bufferlist* data, Context* on_finish);

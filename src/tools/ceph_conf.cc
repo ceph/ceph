@@ -117,11 +117,10 @@ static int list_sections(const std::string &prefix,
 static int lookup(const std::deque<std::string> &sections,
 		  const std::string &key, bool resolve_search)
 {
-  std::vector <std::string> my_sections;
-  for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
-    my_sections.push_back(*s);
+  std::vector<std::string> my_sections{sections.begin(), sections.end()};
+  for (auto& section : g_conf().get_my_sections()) {
+    my_sections.push_back(section);
   }
-  g_conf().get_my_sections(my_sections);
   std::string val;
   int ret = g_conf().get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)

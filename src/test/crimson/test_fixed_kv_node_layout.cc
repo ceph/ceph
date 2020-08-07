@@ -35,24 +35,62 @@ struct test_val_le_t {
   operator test_val_t() const {
     return test_val_t{t1, t2};
   }
+};
 
-  bool operator==(const test_val_t &rhs) const {
+struct test_meta_t {
+  uint32_t t1 = 0;
+  uint32_t t2 = 0;
+
+  bool operator==(const test_meta_t &rhs) const {
     return rhs.t1 == t1 && rhs.t2 == t2;
   }
-  bool operator!=(const test_val_t &rhs) const {
+  bool operator!=(const test_meta_t &rhs) const {
     return !(*this == rhs);
+  }
+
+  std::pair<test_meta_t, test_meta_t> split_into(uint32_t pivot) const {
+    return std::make_pair(
+      test_meta_t{t1, pivot},
+      test_meta_t{pivot, t2});
+  }
+
+  static test_meta_t merge_from(const test_meta_t &lhs, const test_meta_t &rhs) {
+    return test_meta_t{lhs.t1, rhs.t2};
+  }
+
+  static std::pair<test_meta_t, test_meta_t>
+  rebalance(const test_meta_t &lhs, const test_meta_t &rhs, uint32_t pivot) {
+    return std::make_pair(
+      test_meta_t{lhs.t1, pivot},
+      test_meta_t{pivot, rhs.t2});
   }
 };
 
-constexpr size_t CAPACITY = 341;
+struct test_meta_le_t {
+  ceph_le32 t1 = init_le32(0);
+  ceph_le32 t2 = init_le32(0);
+
+  test_meta_le_t() = default;
+  test_meta_le_t(const test_meta_le_t &) = default;
+  test_meta_le_t(const test_meta_t &nv)
+    : t1(init_le32(nv.t1)), t2(init_le32(nv.t2)) {}
+
+  operator test_meta_t() const {
+    return test_meta_t{t1, t2};
+  }
+};
+
+constexpr size_t CAPACITY = 339;
 
 struct TestNode : FixedKVNodeLayout<
   CAPACITY,
+  test_meta_t, test_meta_le_t,
   uint32_t, ceph_le32,
   test_val_t, test_val_le_t> {
   char buf[4096];
   TestNode() : FixedKVNodeLayout(buf) {
     memset(buf, 0, sizeof(buf));
+    set_meta({0, std::numeric_limits<uint32_t>::max()});
   }
   TestNode(const TestNode &rhs)
     : FixedKVNodeLayout(buf) {
@@ -127,6 +165,10 @@ TEST(FixedKVNodeTest, split) {
   node.split_into(split_left, split_right);
 
   ASSERT_EQ(split_left.get_size() + split_right.get_size(), CAPACITY);
+  ASSERT_EQ(split_left.get_meta().t1, split_left.begin()->get_key());
+  ASSERT_EQ(split_left.get_meta().t2, split_right.get_meta().t1);
+  ASSERT_EQ(split_right.get_meta().t2, std::numeric_limits<uint32_t>::max());
+
   num = 0;
   for (auto &i : split_left) {
     ASSERT_EQ(i.get_key(), num);
@@ -165,6 +207,8 @@ TEST(FixedKVNodeTest, merge) {
     ++num;
     ++iter;
   }
+  node.set_meta({0, num});
+  node2.set_meta({num, std::numeric_limits<uint32_t>::max()});
   iter = node2.begin();
   while (num < (2 * (CAPACITY / 2))) {
     node2.journal_insert(iter, num, test_val_t{num, num}, nullptr);
@@ -179,6 +223,10 @@ TEST(FixedKVNodeTest, merge) {
 
   auto node_merged = TestNode();
   node_merged.merge_from(node, node2);
+
+  ASSERT_EQ(
+    node_merged.get_meta(),
+    (test_meta_t{0, std::numeric_limits<uint32_t>::max()}));
 
   ASSERT_EQ(node_merged.get_size(), total);
   num = 0;
@@ -210,6 +258,8 @@ void run_balance_test(unsigned left, unsigned right, bool prefer_left)
     ++num;
     ++iter;
   }
+  node.set_meta({0, num});
+  node2.set_meta({num, std::numeric_limits<uint32_t>::max()});
   iter = node2.begin();
   while (num < (left + right)) {
     node2.journal_insert(iter, num, test_val_t{num, num}, nullptr);
@@ -224,7 +274,7 @@ void run_balance_test(unsigned left, unsigned right, bool prefer_left)
 
   auto node_balanced = TestNode();
   auto node_balanced2 = TestNode();
-  TestNode::balance_into_new_nodes(
+  auto pivot = TestNode::balance_into_new_nodes(
     node,
     node2,
     prefer_left,
@@ -233,15 +283,28 @@ void run_balance_test(unsigned left, unsigned right, bool prefer_left)
 
   ASSERT_EQ(total, node_balanced.get_size() + node_balanced2.get_size());
 
+  unsigned left_size, right_size;
   if (total % 2) {
     if (prefer_left) {
-      ASSERT_EQ(node_balanced.get_size(), node_balanced2.get_size() + 1);
+      left_size = (total/2) + 1;
+      right_size = total/2;
     } else {
-      ASSERT_EQ(node_balanced.get_size() + 1, node_balanced2.get_size());
+      left_size = total/2;
+      right_size = (total/2) + 1;
     }
   } else {
-    ASSERT_EQ(node_balanced.get_size(), node_balanced2.get_size());
+    left_size = right_size = total/2;
   }
+  ASSERT_EQ(pivot, left_size);
+  ASSERT_EQ(left_size, node_balanced.get_size());
+  ASSERT_EQ(right_size, node_balanced2.get_size());
+
+  ASSERT_EQ(
+    node_balanced.get_meta(),
+    (test_meta_t{0, left_size}));
+  ASSERT_EQ(
+    node_balanced2.get_meta(),
+    (test_meta_t{left_size, std::numeric_limits<uint32_t>::max()}));
 
   num = 0;
   for (auto &i: node_balanced) {

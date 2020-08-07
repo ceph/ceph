@@ -66,6 +66,8 @@ def to_format(what, format: str, many: bool, cls):
         if many:
             return yaml.dump_all(to_yaml(copy), default_flow_style=False)
         return yaml.dump(to_yaml(copy), default_flow_style=False)
+    else:
+        raise OrchestratorError(f'unsupported format type: {format}')
 
 
 def generate_preview_tables(data):
@@ -1088,14 +1090,26 @@ Usage:
 
     @_cli_write_command(
         'orch daemon',
-        "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
+        "name=action,type=CephChoices,strings=start|stop|restart|reconfig "
         "name=name,type=CephString",
-        'Start, stop, restart, redeploy, or reconfig a specific daemon')
+        'Start, stop, restart, (redeploy,) or reconfig a specific daemon')
     def _daemon_action(self, action, name):
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
-        (daemon_type, daemon_id) = name.split('.', 1)
-        completion = self.daemon_action(action, daemon_type, daemon_id)
+        completion = self.daemon_action(action, name)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch daemon redeploy',
+        "name=name,type=CephString "
+        "name=image,type=CephString,req=false",
+        'Redeploy a daemon (with a specifc image)')
+    def _daemon_action_redeploy(self, name, image):
+        if '.' not in name:
+            raise OrchestratorError('%s is not a valid daemon name' % name)
+        completion = self.daemon_action("redeploy", name, image=image)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -1133,17 +1147,17 @@ Usage:
     @_cli_write_command(
         'orch apply',
         'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
-        'name=dry_run,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
+        'name=dry_run,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the size or placement for a service or apply a large yaml spec')
     def _apply_misc(self,
                     service_type: Optional[str] = None,
                     placement: Optional[str] = None,
-                    unmanaged: bool = False,
                     dry_run: bool = False,
                     format: str = 'plain',
+                    unmanaged: bool = False,
                     inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
@@ -1182,8 +1196,8 @@ Usage:
     @_cli_write_command(
         'orch apply mds',
         'name=fs_name,type=CephString '
-        'name=dry_run,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
+        'name=dry_run,type=CephBool,req=false '
         'name=unmanaged,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false',
         'Update the number of MDS instances for the given fs_name')
@@ -1191,8 +1205,8 @@ Usage:
                    fs_name: str,
                    placement: Optional[str] = None,
                    dry_run: bool = False,
-                   format: str = 'plain',
                    unmanaged: bool = False,
+                   format: str = 'plain',
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')

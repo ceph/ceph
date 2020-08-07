@@ -57,11 +57,12 @@ void WriteAroundObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool WriteAroundObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::Extents* extent_map,
+    uint64_t object_no, const io::Extents &extents, librados::snap_t snap_id,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
+  auto [object_off, object_len] = extents.front();
   return dispatch_unoptimized_io(object_no, object_off, object_len,
                                  dispatch_result, on_dispatched);
 }

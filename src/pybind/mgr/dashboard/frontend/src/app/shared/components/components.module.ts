@@ -25,6 +25,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
+import { DocComponent } from './doc/doc.component';
 import { FormModalComponent } from './form-modal/form-modal.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
@@ -42,7 +43,6 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
-import { ViewCacheComponent } from './view-cache/view-cache.component';
 
 @NgModule({
   imports: [
@@ -66,7 +66,6 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     NgbTimepickerModule
   ],
   declarations: [
-    ViewCacheComponent,
     SparklineComponent,
     HelperComponent,
     SelectBadgesComponent,
@@ -89,11 +88,11 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     OrchestratorDocModalComponent,
-    DateTimePickerComponent
+    DateTimePickerComponent,
+    DocComponent
   ],
   providers: [],
   exports: [
-    ViewCacheComponent,
     SparklineComponent,
     HelperComponent,
     SelectBadgesComponent,
@@ -112,7 +111,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
-    DateTimePickerComponent
+    DateTimePickerComponent,
+    DocComponent
   ]
 })
 export class ComponentsModule {}

@@ -17,6 +17,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/rwl/ImageCacheState.h"
 #include "librbd/cache/rwl/LogEntry.h"
+#include "librbd/cache/rwl/ReadRequest.h"
 #include "librbd/cache/rwl/Types.h"
 #include <map>
 #include <vector>
@@ -1155,7 +1156,12 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
                                      << "cw_req=" << cw_req << dendl;
 
           /* Compare read_bl to cmp_bl to determine if this will produce a write */
-          if (cw_req->cmp_bl.contents_equal(cw_req->read_bl)) {
+          buffer::list aligned_read_bl;
+          if (cw_req->cmp_bl.length() < cw_req->read_bl.length()) {
+            aligned_read_bl.substr_of(cw_req->read_bl, 0, cw_req->cmp_bl.length());
+          }
+          if (cw_req->cmp_bl.contents_equal(cw_req->read_bl) ||
+              cw_req->cmp_bl.contents_equal(aligned_read_bl)) {
             /* Compare phase succeeds. Begin write */
             ldout(m_image_ctx.cct, 5) << " cw_req=" << cw_req << " compare matched" << dendl;
             cw_req->compare_succeeded = true;
@@ -1168,7 +1174,6 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
             /* Compare phase fails. Comp-and write ends now. */
             ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " compare failed" << dendl;
             /* Bufferlist doesn't tell us where they differed, so we'll have to determine that here */
-            ceph_assert(cw_req->read_bl.length() == cw_req->cmp_bl.length());
             uint64_t bl_index = 0;
             for (bl_index = 0; bl_index < cw_req->cmp_bl.length(); bl_index++) {
               if (cw_req->cmp_bl[bl_index] != cw_req->read_bl[bl_index]) {
@@ -2758,3 +2763,6 @@ bool ReplicatedWriteLog<I>::retire_entries(const unsigned long int frees_per_tx)
 
 template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
 template class librbd::cache::ImageCache<librbd::ImageCtx>;
+template void librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>:: \
+  flush_pmem_buffer(std::vector<std::shared_ptr< \
+    librbd::cache::rwl::GenericLogOperation>>&);

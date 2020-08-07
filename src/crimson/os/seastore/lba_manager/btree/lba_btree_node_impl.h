@@ -18,10 +18,34 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba_manager/btree/btree_range_pin.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
 
 constexpr size_t LBA_BLOCK_SIZE = 4096;
+
+/**
+ * lba_node_meta_le_t
+ *
+ * On disk layout for lba_node_meta_t
+ */
+struct lba_node_meta_le_t {
+  laddr_le_t begin = init_le64(0);
+  laddr_le_t end = init_le64(0);
+  depth_le_t depth = init_les32(0);
+
+  lba_node_meta_le_t() = default;
+  lba_node_meta_le_t(const lba_node_meta_le_t &) = default;
+  explicit lba_node_meta_le_t(const lba_node_meta_t &val)
+    : begin(init_le64(val.begin)),
+      end(init_le64(val.end)),
+      depth(init_les32(val.depth)) {}
+
+  operator lba_node_meta_t() const {
+    return lba_node_meta_t{ begin, end, depth };
+  }
+};
+
 
 /**
  * LBAInternalNode
@@ -30,18 +54,22 @@ constexpr size_t LBA_BLOCK_SIZE = 4096;
  * LBA Tree.
  *
  * Layout (4k):
- *   size       : uint32_t[1]      (1*4)b
- *   keys       : laddr_t[255]     (255*8)b
- *   values     : paddr_t[255]     (255*8)b
- *                                 = 4084
+ *   size       : uint32_t[1]                4b
+ *   (padding)  :                            4b
+ *   meta       : lba_node_meta_le_t[3]      (1*24)b
+ *   keys       : laddr_t[255]               (254*8)b
+ *   values     : paddr_t[255]               (254*8)b
+ *                                           = 4096
 
  * TODO: make the above capacity calculation part of FixedKVNodeLayout
+ * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t INTERNAL_NODE_CAPACITY = 255;
+constexpr size_t INTERNAL_NODE_CAPACITY = 254;
 struct LBAInternalNode
   : LBANode,
     common::FixedKVNodeLayout<
       INTERNAL_NODE_CAPACITY,
+      lba_node_meta_t, lba_node_meta_le_t,
       laddr_t, laddr_le_t,
       paddr_t, paddr_le_t> {
   using internal_iterator_t = const_iterator;
@@ -51,6 +79,8 @@ struct LBAInternalNode
     FixedKVNodeLayout(get_bptr().c_str()) {}
 
   static constexpr extent_types_t type = extent_types_t::LADDR_INTERNAL;
+
+  lba_node_meta_t get_node_meta() const final { return get_meta(); }
 
   CachedExtentRef duplicate_for_write() final {
     assert(delta_buffer.empty());
@@ -62,72 +92,79 @@ struct LBAInternalNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
+  lookup_ret lookup(op_context_t c, laddr_t addr, depth_t depth) final;
+
   lookup_range_ret lookup_range(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t addr,
     extent_len_t len) final;
 
   insert_ret insert(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     lba_map_val_t val) final;
 
   mutate_mapping_ret mutate_mapping(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) final;
 
   find_hole_ret find_hole(
-    Cache &cache,
-    Transaction &t,
+    op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
-  make_split_children(Cache &cache, Transaction &t) final {
-    auto left = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
-    auto right = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
+  make_split_children(op_context_t c) final {
+    auto left = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto right = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto pivot = split_into(*left, *right);
+    left->pin.set_range(left->get_meta());
+    right->pin.set_range(right->get_meta());
     return std::make_tuple(
       left,
       right,
-      split_into(*left, *right));
+      pivot);
   }
 
   LBANodeRef make_full_merge(
-    Cache &cache, Transaction &t, LBANodeRef &right) final {
-    auto replacement = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
+    op_context_t c,
+    LBANodeRef &right) final {
+    auto replacement = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
     replacement->merge_from(*this, *right->cast<LBAInternalNode>());
+    replacement->pin.set_range(replacement->get_meta());
     return replacement;
   }
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_balanced(
-    Cache &cache, Transaction &t,
+    op_context_t c,
     LBANodeRef &_right,
     bool prefer_left) final {
     ceph_assert(_right->get_type() == type);
     auto &right = *_right->cast<LBAInternalNode>();
-    auto replacement_left = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
-    auto replacement_right = cache.alloc_new_extent<LBAInternalNode>(
-      t, LBA_BLOCK_SIZE);
+    auto replacement_left = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto replacement_right = c.cache.alloc_new_extent<LBAInternalNode>(
+      c.trans, LBA_BLOCK_SIZE);
 
+    auto pivot = balance_into_new_nodes(
+      *this,
+      right,
+      prefer_left,
+      *replacement_left,
+      *replacement_right);
+
+    replacement_left->pin.set_range(replacement_left->get_meta());
+    replacement_right->pin.set_range(replacement_right->get_meta());
     return std::make_tuple(
       replacement_left,
       replacement_right,
-      balance_into_new_nodes(
-	*this,
-	right,
-	prefer_left,
-	*replacement_left,
-	*replacement_right));
+      pivot);
   }
 
   /**
@@ -215,7 +252,8 @@ struct LBAInternalNode
     >;
   using split_ret = split_ertr::future<LBANodeRef>;
   split_ret split_entry(
-    Cache &c, Transaction &t, laddr_t addr,
+    op_context_t c,
+    laddr_t addr,
     internal_iterator_t,
     LBANodeRef entry);
 
@@ -224,7 +262,8 @@ struct LBAInternalNode
     >;
   using merge_ret = merge_ertr::future<LBANodeRef>;
   merge_ret merge_entry(
-    Cache &c, Transaction &t, laddr_t addr,
+    op_context_t c,
+    laddr_t addr,
     internal_iterator_t,
     LBANodeRef entry);
 
@@ -239,14 +278,17 @@ struct LBAInternalNode
  * LBA Tree.
  *
  * Layout (4k):
- *   num_entries: uint32_t           4b
- *   keys       : laddr_t[170]       (146*8)b
- *   values     : lba_map_val_t[170] (146*20)b
- *                                   = 4090
+ *   size       : uint32_t[1]                4b
+ *   (padding)  :                            4b
+ *   meta       : lba_node_meta_le_t[3]      (1*24)b
+ *   keys       : laddr_t[170]               (145*8)b
+ *   values     : lba_map_val_t[170]         (145*20)b
+ *                                           = 4092
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
+ * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 146;
+constexpr size_t LEAF_NODE_CAPACITY = 145;
 
 /**
  * lba_map_val_le_t
@@ -276,6 +318,7 @@ struct LBALeafNode
   : LBANode,
     common::FixedKVNodeLayout<
       LEAF_NODE_CAPACITY,
+      lba_node_meta_t, lba_node_meta_le_t,
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t> {
   using internal_iterator_t = const_iterator;
@@ -285,6 +328,8 @@ struct LBALeafNode
     FixedKVNodeLayout(get_bptr().c_str()) {}
 
   static constexpr extent_types_t type = extent_types_t::LADDR_LEAF;
+
+  lba_node_meta_t get_node_meta() const final { return get_meta(); }
 
   CachedExtentRef duplicate_for_write() final {
     assert(delta_buffer.empty());
@@ -296,71 +341,84 @@ struct LBALeafNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
+  lookup_ret lookup(op_context_t c, laddr_t addr, depth_t depth) final
+  {
+    return lookup_ret(
+      lookup_ertr::ready_future_marker{},
+      this);
+  }
+
   lookup_range_ret lookup_range(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t addr,
     extent_len_t len) final;
 
   insert_ret insert(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     lba_map_val_t val) final;
 
   mutate_mapping_ret mutate_mapping(
-    Cache &cache,
-    Transaction &transaction,
+    op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) final;
 
   find_hole_ret find_hole(
-    Cache &cache,
-    Transaction &t,
+    op_context_t c,
     laddr_t min,
     laddr_t max,
     extent_len_t len) final;
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
-  make_split_children(Cache &cache, Transaction &t) final {
-    auto left = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
-    auto right = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
+  make_split_children(op_context_t c) final {
+    auto left = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto right = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto pivot = split_into(*left, *right);
+    left->pin.set_range(left->get_meta());
+    right->pin.set_range(right->get_meta());
     return std::make_tuple(
       left,
       right,
-      split_into(*left, *right));
+      pivot);
   }
 
   LBANodeRef make_full_merge(
-    Cache &cache, Transaction &t, LBANodeRef &right) final {
-    auto replacement = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
+    op_context_t c,
+    LBANodeRef &right) final {
+    auto replacement = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
     replacement->merge_from(*this, *right->cast<LBALeafNode>());
+    replacement->pin.set_range(replacement->get_meta());
     return replacement;
   }
 
   std::tuple<LBANodeRef, LBANodeRef, laddr_t>
   make_balanced(
-    Cache &cache, Transaction &t,
+    op_context_t c,
     LBANodeRef &_right,
     bool prefer_left) final {
     ceph_assert(_right->get_type() == type);
     auto &right = *_right->cast<LBALeafNode>();
-    auto replacement_left = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
-    auto replacement_right = cache.alloc_new_extent<LBALeafNode>(
-      t, LBA_BLOCK_SIZE);
+    auto replacement_left = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
+    auto replacement_right = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans, LBA_BLOCK_SIZE);
+
+    auto pivot = balance_into_new_nodes(
+      *this,
+      right,
+      prefer_left,
+      *replacement_left,
+      *replacement_right);
+
+    replacement_left->pin.set_range(replacement_left->get_meta());
+    replacement_right->pin.set_range(replacement_right->get_meta());
     return std::make_tuple(
       replacement_left,
       replacement_right,
-      balance_into_new_nodes(
-	*this,
-	right,
-	prefer_left,
-	*replacement_left,
-	*replacement_right));
+      pivot);
   }
 
   // See LBAInternalNode, same concept
@@ -434,43 +492,5 @@ struct LBALeafNode
   get_leaf_entries(laddr_t addr, extent_len_t len);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
-
-/* BtreeLBAPin
- *
- * References leaf node
- *
- * TODO: does not at this time actually keep the relevant
- * leaf resident in memory.  This is actually a bit tricky
- * as we can mutate and therefore replace a leaf referenced
- * by other, uninvolved but cached extents.  Will need to
- * come up with some kind of pinning mechanism that handles
- * that well.
- */
-struct BtreeLBAPin : LBAPin {
-  paddr_t paddr;
-  laddr_t laddr = L_ADDR_NULL;
-  extent_len_t length = 0;
-  unsigned refcount = 0;
-
-public:
-  BtreeLBAPin(
-    paddr_t paddr,
-    laddr_t laddr,
-    extent_len_t length)
-    : paddr(paddr), laddr(laddr), length(length) {}
-
-  extent_len_t get_length() const final {
-    return length;
-  }
-  paddr_t get_paddr() const final {
-    return paddr;
-  }
-  laddr_t get_laddr() const final {
-    return laddr;
-  }
-  LBAPinRef duplicate() const final {
-    return LBAPinRef(new BtreeLBAPin(*this));
-  }
-};
 
 }

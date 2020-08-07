@@ -514,13 +514,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
             except OrchestratorError as e:
                 if e.event_subject:
-                    self.events.add(OrchestratorEvent(
-                        datetime.datetime.utcnow(),
-                        e.event_subject[0],
-                        e.event_subject[1],
-                        "ERROR",
-                        str(e)
-                    ))
+                    self.events.from_orch_error(e)
 
             self._serve_sleep()
         self.log.debug("serve exit")
@@ -1455,15 +1449,25 @@ you may want to run:
             return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
 
+    def _invalidate_daemons_and_kick_serve(self, filter_host=None):
+        if filter_host:
+            self.cache.invalidate_host_daemons(filter_host)
+        else:
+            for h in self.cache.get_hosts():
+                # Also discover daemons deployed manually
+                self.cache.invalidate_host_daemons(h)
+
+        self._kick_serve_loop()
+
     @trivial_completion
-    def describe_service(self, service_type=None, service_name=None,
-                         refresh=False) -> List[orchestrator.ServiceDescription]:
+    def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None,
+                         refresh: bool = False) -> List[orchestrator.ServiceDescription]:
         if refresh:
-            # ugly sync path, FIXME someday perhaps?
-            for host in self.inventory.keys():
-                self._refresh_host_daemons(host)
+            self._invalidate_daemons_and_kick_serve()
+            self.log.info('Kicked serve() loop to refresh all services')
+
         # <service_map>
-        sm = {}  # type: Dict[str, orchestrator.ServiceDescription]
+        sm: Dict[str, orchestrator.ServiceDescription] = {}
         osd_count = 0
         for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
@@ -1509,7 +1513,8 @@ you may want to run:
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = spec.placement.get_host_selection_size(self.inventory.all_specs())
+                        sm[n].size = spec.placement.get_host_selection_size(
+                            self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
                     if service_type == 'nfs':
@@ -1544,15 +1549,16 @@ you may want to run:
         return list(sm.values())
 
     @trivial_completion
-    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None,
-                     host=None, refresh=False) -> List[orchestrator.DaemonDescription]:
+    def list_daemons(self,
+                     service_name: Optional[str] = None,
+                     daemon_type: Optional[str] = None,
+                     daemon_id: Optional[str] = None,
+                     host: Optional[str] = None,
+                     refresh: bool = False) -> List[orchestrator.DaemonDescription]:
         if refresh:
-            # ugly sync path, FIXME someday perhaps?
-            if host:
-                self._refresh_host_daemons(host)
-            else:
-                for hostname in self.inventory.keys():
-                    self._refresh_host_daemons(hostname)
+            self._invalidate_daemons_and_kick_serve(host)
+            self.log.info('Kicked serve() loop to refresh all daemons')
+
         result = []
         for h, dm in self.cache.get_daemons_with_volatile_status():
             if host and h != host:
@@ -1586,12 +1592,28 @@ you may want to run:
         ).name()):
             return self._daemon_action(daemon_type, daemon_id, host, action)
 
-    def _daemon_action(self, daemon_type, daemon_id, host, action):
+    def _daemon_action(self, daemon_type, daemon_id, host, action, image=None):
         daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
             daemon_type=daemon_type,
         )
+
+        if image is not None:
+            if action != 'redeploy':
+                raise OrchestratorError(
+                    f'Cannot execute {action} with new image. `action` needs to be `redeploy`')
+            if daemon_type not in CEPH_TYPES:
+                raise OrchestratorError(
+                    f'Cannot redeploy {daemon_type}.{daemon_id} with a new image: Supported '
+                    f'types are: {", ".join(CEPH_TYPES)}')
+
+            self.check_mon_command({
+                'prefix': 'config set',
+                'name': 'container_image',
+                'value': image,
+                'who': utils.name_to_config_section(daemon_type + '.' + daemon_id),
+            })
 
         if action == 'redeploy':
             # stop, recreate the container+unit, then restart
@@ -1613,24 +1635,17 @@ you may want to run:
             except Exception:
                 self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(daemon_spec.host)
-        return "{} {} from host '{}'".format(action, name, daemon_spec.host)
+        msg = "{} {} from host '{}'".format(action, name, daemon_spec.host)
+        self.events.for_daemon(name, 'INFO', msg)
+        return msg
 
     @trivial_completion
-    def daemon_action(self, action, daemon_type, daemon_id) -> List[str]:
-        args = []
-        for host, dm in self.cache.daemons.items():
-            for name, d in dm.items():
-                if d.daemon_type == daemon_type and d.daemon_id == daemon_id:
-                    args.append((d.daemon_type, d.daemon_id,
-                                 d.hostname, action))
-        if not args:
-            raise orchestrator.OrchestratorError(
-                'Unable to find %s.%s daemon(s)' % (
-                    daemon_type, daemon_id))
-        self.log.info('%s daemons %s' % (
-            action.capitalize(),
-            ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
-        return self._daemon_actions(args)
+    def daemon_action(self, action: str, daemon_name: str, image: Optional[str]=None) -> str:
+        d = self.cache.get_daemon(daemon_name)
+
+        self.log.info(f'{action} daemon {daemon_name}')
+        return self._daemon_action(d.daemon_type, d.daemon_id,
+                                 d.hostname, action, image=image)
 
     @trivial_completion
     def remove_daemons(self, names):
@@ -1658,7 +1673,7 @@ you may want to run:
             return f'Failed to remove service. <{service_name}> was not found.'
 
     @trivial_completion
-    def get_inventory(self, host_filter=None, refresh=False) -> List[orchestrator.InventoryHost]:
+    def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter] = None, refresh=False) -> List[orchestrator.InventoryHost]:
         """
         Return the storage inventory of hosts matching the given filter.
 
@@ -1668,17 +1683,19 @@ you may want to run:
           - add filtering by label
         """
         if refresh:
-            # ugly sync path, FIXME someday perhaps?
-            if host_filter:
-                for host in host_filter.hosts:
-                    self._refresh_host_devices(host)
+            if host_filter and host_filter.hosts:
+                for h in host_filter.hosts:
+                    self.cache.invalidate_host_devices(h)
             else:
-                for host in self.inventory.keys():
-                    self._refresh_host_devices(host)
+                for h in self.cache.get_hosts():
+                    self.cache.invalidate_host_devices(h)
+
+            self.event.set()
+            self.log.info('Kicked serve() loop to refresh devices')
 
         result = []
         for host, dls in self.cache.devices.items():
-            if host_filter and host not in host_filter.hosts:
+            if host_filter and host_filter.hosts and host not in host_filter.hosts:
                 continue
             result.append(orchestrator.InventoryHost(host,
                                                      inventory.Devices(dls)))
@@ -2125,12 +2142,23 @@ you may want to run:
                 self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
                 reconfig = True
             if reconfig:
-                self._create_daemon(
-                    CephadmDaemonSpec(
-                        host=dd.hostname,
-                        daemon_id=dd.daemon_id,
-                        daemon_type=dd.daemon_type),
-                    reconfig=True)
+                try:
+                    self._create_daemon(
+                        CephadmDaemonSpec(
+                            host=dd.hostname,
+                            daemon_id=dd.daemon_id,
+                            daemon_type=dd.daemon_type),
+                        reconfig=True)
+                except OrchestratorError as e:
+                    self.events.from_orch_error(e)
+                    if dd.daemon_type in daemons_post:
+                        del daemons_post[dd.daemon_type]
+                    # continue...
+                except Exception as e:
+                    self.events.for_daemon_from_exception(dd.name(), e)
+                    if dd.daemon_type in daemons_post:
+                        del daemons_post[dd.daemon_type]
+                    # continue...
 
         # do daemon post actions
         for daemon_type, daemon_descs in daemons_post.items():

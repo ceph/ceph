@@ -20,6 +20,7 @@ setup(
     tests_require=[
         'pytest >=2.1.3',
         'tox',
+        'ceph',
     ],
     entry_points = dict(
         console_scripts = [
