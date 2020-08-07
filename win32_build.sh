@@ -88,6 +88,8 @@ snappyDir="${depsToolsetDir}/snappy"
 winLibDir="${depsToolsetDir}/windows/lib"
 wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
+dokanSrcDir="${depsSrcDir}/dokany"
+dokanLibDir="${depsToolsetDir}/dokany/lib"
 
 depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
@@ -147,11 +149,12 @@ fi
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
-      -D WITH_GSSAPI=OFF -D WITH_FUSE=OFF -D WITH_XFS=OFF \
+      -D WITH_GSSAPI=OFF -D WITH_XFS=OFF \
+      -D WITH_FUSE=OFF -D WITH_DOKAN=ON \
       -D WITH_BLUESTORE=OFF -D WITH_LEVELDB=OFF \
       -D WITH_LTTNG=OFF -D WITH_BABELTRACE=OFF \
       -D WITH_SYSTEM_BOOST=ON -D WITH_MGR=OFF -D WITH_KVS=OFF \
-      -D WITH_LIBCEPHFS=OFF -D WITH_KRBD=OFF -D WITH_RADOSGW=OFF \
+      -D WITH_LIBCEPHFS=ON -D WITH_KRBD=OFF -D WITH_RADOSGW=OFF \
       -D ENABLE_SHARED=$ENABLE_SHARED -D WITH_RBD=ON -D BUILD_GMOCK=ON \
       -D WITH_CEPHFS=OFF -D WITH_MANPAGE=OFF \
       -D WITH_MGR_DASHBOARD_FRONTEND=OFF -D WITH_SYSTEMD=OFF -D WITH_TESTS=ON \
@@ -163,6 +166,8 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WNBD_INCLUDE_DIRS="$wnbdSrcDir/include" \
       -D WNBD_LIBRARIES="$wnbdLibDir/libwnbd.a" \
       -D WITH_CEPH_DEBUG_MUTEX=$WITH_CEPH_DEBUG_MUTEX \
+      -D DOKAN_INCLUDE_DIRS="$dokanSrcDir/dokan" \
+      -D DOKAN_LIBRARIES="$dokanLibDir/libdokan.a" \
       -G "$generatorUsed" \
       $CEPH_DIR  2>&1 | tee "${BUILD_DIR}/cmake.log"
 fi # [[ -z $SKIP_CMAKE ]]
@@ -179,6 +184,8 @@ if [[ -z $SKIP_BUILD ]]; then
     make_targets["src/tools/rbd"]="all"
     make_targets["src/tools/rbd_wnbd"]="all"
     make_targets["src/compressor"]="all"
+    make_targets["src"]="cephfs"
+    make_targets["src/dokan"]="all"
 
     if [[ -z $SKIP_TESTS ]]; then
       make_targets["src/tools"]+=" ceph_radosacl ceph_scratchtool"
