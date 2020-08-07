@@ -8,6 +8,7 @@
 #include "include/ceph_assert.h"
 #include "rgw_coroutine.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 

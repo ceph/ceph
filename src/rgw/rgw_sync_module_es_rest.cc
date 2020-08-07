@@ -7,6 +7,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

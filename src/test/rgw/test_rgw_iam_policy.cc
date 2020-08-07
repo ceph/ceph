@@ -26,6 +26,7 @@
 #include "rgw/rgw_auth.h"
 #include "rgw/rgw_iam_policy.h"
 #include "rgw/rgw_op.h"
+#include "rgw_sal_rados.h"
 
 
 using std::string;

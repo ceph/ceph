@@ -6,6 +6,7 @@
 #include "rgw_op.h"
 #include "rgw_user.h"
 #include "rgw_rest_user.h"
+#include "rgw_sal_rados.h"
 
 #include "include/str_list.h"
 #include "include/ceph_assert.h"

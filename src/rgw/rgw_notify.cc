@@ -10,6 +10,7 @@
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_perf_counters.h"
+#include "rgw_sal_rados.h"
 #include "common/dout.h"
 #include <chrono>
 

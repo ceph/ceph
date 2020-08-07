@@ -13,6 +13,7 @@
 #include "rgw_orphan.h"
 #include "rgw_zone.h"
 #include "rgw_bucket.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
