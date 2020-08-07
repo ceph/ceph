@@ -23,7 +23,9 @@
 #include <sys/param.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 #include <sys/uio.h>
 
 #include <boost/lexical_cast.hpp>
@@ -31,7 +33,7 @@
 
 #include "common/async/waiter.h"
 
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(_WIN32)
 #define XATTR_CREATE    0x1
 #define XATTR_REPLACE   0x2
 #else
@@ -125,6 +127,20 @@
 
 #ifndef O_DIRECT
 #define O_DIRECT 0x0
+#endif
+
+// Windows doesn't define those values. While the Posix compatibilty layer
+// doesn't support those values, the Windows native functions do provide
+// similar flags. Special care should be taken if we're going to use those
+// flags in ceph-dokan. The current values are no-ops, while propagating
+// them to the rest of the code might cause the Windows functions to reject
+// them as invalid.
+#ifndef O_NOFOLLOW
+#define O_NOFOLLOW 0x0
+#endif
+
+#ifndef O_SYNC
+#define O_SYNC 0x0
 #endif
 
 #define DEBUG_GETATTR_CAPS (CEPH_CAP_XATTR_SHARED)
@@ -2034,6 +2050,13 @@ MetaSession *Client::_get_or_open_mds_session(mds_rank_t mds)
 void Client::populate_metadata(const std::string &mount_root)
 {
   // Hostname
+#ifdef _WIN32
+  // TODO: move this to compat.h
+  char hostname[64];
+  DWORD hostname_sz = 64;
+  GetComputerNameA(hostname, &hostname_sz);
+  metadata["hostname"] = hostname;
+#else
   struct utsname u;
   int r = uname(&u);
   if (r >= 0) {
@@ -2042,6 +2065,7 @@ void Client::populate_metadata(const std::string &mount_root)
   } else {
     ldout(cct, 1) << __func__ << " failed to read hostname (" << cpp_strerror(r) << ")" << dendl;
   }
+#endif
 
   metadata["pid"] = stringify(getpid());
 
@@ -7439,6 +7463,9 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
 #ifdef __APPLE__
   stx->stx_mtime = st->st_mtimespec;
   stx->stx_atime = st->st_atimespec;
+#elif __WIN32
+  stx->stx_mtime.tv_sec = st->st_mtime;
+  stx->stx_atime.tv_sec = st->st_atime;
 #else
   stx->stx_mtime = st->st_mtim;
   stx->stx_atime = st->st_atim;
@@ -7732,12 +7759,20 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
       st->st_size = in->rstat.rbytes;
     else
       st->st_size = in->dirstat.size();
+// The Windows "stat" structure provides just a subset of the fields that are
+// available on Linux.
+#ifndef _WIN32
     st->st_blocks = 1;
+#endif
   } else {
     st->st_size = in->size;
+#ifndef _WIN32
     st->st_blocks = (in->size + 511) >> 9;
+#endif
   }
+#ifndef _WIN32
   st->st_blksize = std::max<uint32_t>(in->layout.stripe_unit, 4096);
+#endif
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -8281,7 +8316,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
 {
   strncpy(de->d_name, name, 255);
   de->d_name[255] = '\0';
-#ifndef __CYGWIN__
+#if !defined(__CYGWIN__) && !(defined(_WIN32))
   de->d_ino = ino;
 #if !defined(__APPLE__) && !defined(__FreeBSD__)
   de->d_off = next_off;
