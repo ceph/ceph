@@ -116,7 +116,7 @@ public:
   int add_entry(const std::string& hash_key, const std::string& section,
 		const std::string& key, ceph::bufferlist& bl);
   int get_shard_id(const std::string& hash_key, int *shard_id);
-  int store_entries_in_shard(std::list<cls_log_entry>& entries, int shard_id,
+  int store_entries_in_shard(std::vector<cls_log_entry>& entries, int shard_id,
 			     librados::AioCompletion *completion);
 
   struct LogListCtx {
@@ -137,15 +137,12 @@ public:
 		   std::string *out_marker,
 		   bool *truncated);
 
-  int trim(int shard_id, ceph::real_time from_time, ceph::real_time end_time,
-	   const std::string& start_marker, const std::string& end_marker);
+  int trim(int shard_id, std::string_view marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
   int get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion);
   int lock_exclusive(int shard_id, ceph::timespan duration, std::string& zone_id,
 		     std::string& owner_id);
   int unlock(int shard_id, std::string& zone_id, string& owner_id);
-
-  int update_shards(std::list<int>& shards);
 
   bc::flat_set<int> read_clear_modified();
 };
