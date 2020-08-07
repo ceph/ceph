@@ -589,6 +589,11 @@ int RGWRadosObject::RadosReadOp::get_manifest(RGWObjManifest **pmanifest,
   return op_target.get_manifest(pmanifest, y);
 }
 
+int RGWRadosObject::RadosReadOp::get_attr(const char *name, bufferlist& dest, optional_yield y)
+{
+  return parent_op.get_attr(name, dest, y);
+}
+
 int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACLOwner bucket_owner, ceph::real_time unmod_since, bool high_precision_time, uint64_t epoch, string& version_id, optional_yield y)
 {
   int ret = 0;
@@ -797,6 +802,16 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 int RGWRadosStore::defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj, optional_yield y)
 {
   return rados->defer_gc(rctx, bucket->get_info(), obj->get_obj(), y);
+}
+
+const RGWZoneGroup& RGWRadosStore::get_zonegroup()
+{
+  return rados->svc.zone->get_zonegroup();
+}
+
+int RGWRadosStore::get_zonegroup(const string& id, RGWZoneGroup& zonegroup)
+{
+  return rados->svc.zone->get_zonegroup(id, zonegroup);
 }
 
 int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,

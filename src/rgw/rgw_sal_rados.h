@@ -63,6 +63,7 @@ class RGWRadosObject : public RGWObject {
       virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) override;
       virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) override;
       virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) override;
+      virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) override;
     };
 
     RGWRadosObject() = default;
@@ -249,6 +250,8 @@ class RGWRadosStore : public RGWStore {
 				  bufferlist& in_data, JSONParser *jp, req_info& info) override;
     virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) override;
+    virtual const RGWZoneGroup& get_zonegroup() override;
+    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) override;
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados *getRados(void) { return rados; }
