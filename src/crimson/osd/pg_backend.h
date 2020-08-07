@@ -62,6 +62,9 @@ public:
     size_t truncate_size,
     uint32_t truncate_seq,
     uint32_t flags);
+  read_errorator::future<> sparse_read(
+    const ObjectState& os,
+    OSDOp& osd_op);
 
   using checksum_errorator = ll_read_errorator::extend<
     crimson::ct_error::object_corrupted,
