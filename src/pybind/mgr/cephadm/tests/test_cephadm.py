@@ -105,7 +105,7 @@ class TestCephadm(object):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
 
             # Be careful with backward compatibility when changing things here:
-            assert json.loads(cephadm_module._store['inventory']) == \
+            assert json.loads(cephadm_module.get_store('inventory')) == \
                    {"test": {"hostname": "test", "addr": "test", "labels": [], "status": ""}}
 
             with with_host(cephadm_module, 'second'):
@@ -234,10 +234,10 @@ class TestCephadm(object):
                     _ceph_send_command.side_effect = Exception("myerror")
 
                     # Make sure, _check_daemons does a redeploy due to monmap change:
-                    cephadm_module._store['_ceph_get/mon_map'] = {
+                    cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
                         'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
                         'fsid': 'foobar',
-                    }
+                    })
                     cephadm_module.notify('mon_map', None)
 
                     cephadm_module._check_daemons()
@@ -252,14 +252,14 @@ class TestCephadm(object):
             with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test'):
 
                 # Make sure, _check_daemons does a redeploy due to monmap change:
-                cephadm_module._store['_ceph_get/mon_map'] = {
+                cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
                     'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
                     'fsid': 'foobar',
-                }
+                })
                 cephadm_module.notify('mon_map', None)
-                cephadm_module._store['_ceph_get/mgr_map'] = {
+                cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {
                     'modules': ['dashboard']
-                }
+                })
 
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
 
@@ -745,10 +745,10 @@ class TestCephadm(object):
             assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
-            cephadm_module._store['_ceph_get/mon_map'] = {
+            cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
                 'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
                 'fsid': 'foobar',
-            }
+            })
             cephadm_module.notify('mon_map', mock.MagicMock())
             assert cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
             cephadm_module.cache.last_etc_ceph_ceph_conf = {}

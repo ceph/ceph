@@ -51,10 +51,10 @@ def with_cephadm_module(module_options=None, store=None):
         if store is None:
             store = {}
         if '_ceph_get/mon_map' not in store:
-            store['_ceph_get/mon_map'] = {
+            m.mock_store_set('_ceph_get', 'mon_map', {
                 'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
                 'fsid': 'foobar',
-            }
+            })
         for k, v in store.items():
             m._ceph_set_store(k, v)
 
