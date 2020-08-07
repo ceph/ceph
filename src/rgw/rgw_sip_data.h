@@ -89,6 +89,7 @@ public:
                       RGWMetadataManager *meta_mgr,
                       RGWBucketCtl *_bucket_ctl) : SIProvider_SingleStage(_cct,
 									  "data.full",
+                                                                          std::nullopt,
                                                                           std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >(),
 									  SIProvider::StageType::FULL,
 									  1,

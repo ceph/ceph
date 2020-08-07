@@ -119,6 +119,14 @@ public:
   virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) = 0;
 
   virtual const std::string& get_name() const = 0;
+  virtual const std::optional<std::string>& get_instance() const = 0;
+  virtual std::string get_id() const {
+    const auto& instance = get_instance();
+    if (!instance) {
+      return get_name();
+    }
+    return get_name() + "/" + *instance;
+  }
 
   virtual TypeHandlerProvider *get_type_provider() = 0;
   virtual TypeHandler *get_type_handler() {
@@ -144,15 +152,23 @@ class SIProviderCommon : public SIProvider
 protected:
   CephContext *cct;
   std::string name;
+  std::optional<std::string> instance;
 
 public:
-  SIProviderCommon(CephContext *_cct, const std::string& _name) : cct(_cct),
-                                                                  name(_name) {}
+  SIProviderCommon(CephContext *_cct,
+                   const std::string& _name,
+                   std::optional<std::string> _instance) : cct(_cct),
+                                                           name(_name),
+                                                           instance(_instance) {}
 
   SIProvider::Info get_info() override;
 
   const std::string& get_name() const override {
     return name;
+  }
+
+  const std::optional<std::string>& get_instance() const override {
+    return instance;
   }
 };
 
@@ -170,10 +186,11 @@ protected:
 public:
   SIProvider_SingleStage(CephContext *_cct,
                          const std::string& name,
+                         std::optional<std::string> instance,
                          SIProvider::TypeHandlerProviderRef _type_provider,
                          StageType type,
                          int num_shards,
-                         bool disabled) : SIProviderCommon(_cct, name),
+                         bool disabled) : SIProviderCommon(_cct, name, instance),
                                           stage_info({name, nullopt, type, num_shards, disabled}),
                                           type_provider(_type_provider) {}
 
@@ -240,6 +257,7 @@ protected:
 public:
   SIProvider_Container(CephContext *_cct,
                        const std::string& _name,
+                       std::optional<std::string> _instance,
                        std::vector<SIProviderRef>& _providers);
 
   stage_id_t get_first_stage() override;

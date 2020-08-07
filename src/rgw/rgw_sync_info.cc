@@ -124,7 +124,8 @@ int SIProvider_SingleStage::trim(const stage_id_t& sid, int shard_id, const std:
 
 SIProvider_Container::SIProvider_Container(CephContext *_cct,
                                            const std::string& _name,
-                                           std::vector<SIProviderRef>& _providers) : SIProviderCommon(_cct, _name),
+                                           std::optional<std::string> _instance,
+                                           std::vector<SIProviderRef>& _providers) : SIProviderCommon(_cct, _name, _instance),
                                                                                      type_provider(this),
                                                                                      providers(_providers)
 {

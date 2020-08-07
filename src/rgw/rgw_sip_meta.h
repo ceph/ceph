@@ -79,6 +79,7 @@ public:
   SIProvider_MetaFull(CephContext *_cct,
                       RGWMetadataManager *meta_mgr) : SIProvider_SingleStage(_cct,
 									     "meta.full",
+                                                                             std::nullopt,
                                                                              std::make_shared<SITypeHandlerProvider_Default<siprovider_meta_info> >(),
 									     SIProvider::StageType::FULL,
 									     1,
