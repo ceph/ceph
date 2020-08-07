@@ -150,6 +150,9 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #define LOG_AUTHPRIV    (10<<3)
 #define LOG_FTP         (11<<3)
 #define __STRING(x)     "x"
+#endif
+
+#if defined(__sun) || defined(_AIX) || defined(_WIN32)
 #define IFTODT(mode)   (((mode) & 0170000) >> 12)
 #endif
 
@@ -220,6 +223,7 @@ int ceph_memzero_s(void *dest, size_t destsz, size_t count);
 #include <time.h>
 
 #include "include/win32/win32_errno.h"
+#include "include/win32/fs_compat.h"
 
 // There are a few name collisions between Windows headers and Ceph.
 // Updating Ceph definitions would be the prefferable fix in order to avoid
@@ -237,12 +241,12 @@ typedef unsigned int uint;
 
 typedef _sigset_t sigset_t;
 
-typedef int uid_t;
-typedef int gid_t;
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;
 
-typedef long blksize_t;
-typedef long blkcnt_t;
-typedef long nlink_t;
+typedef unsigned int blksize_t;
+typedef unsigned __int64 blkcnt_t;
+typedef unsigned short nlink_t;
 
 typedef long long loff_t;
 
@@ -297,6 +301,12 @@ int chown(const char *path, uid_t owner, gid_t group);
 int fchown(int fd, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
 int setenv(const char *name, const char *value, int overwrite);
+
+int geteuid();
+int getegid();
+int getuid();
+int getgid();
+
 #define unsetenv(name) _putenv_s(name, "")
 
 int win_socketpair(int socks[2]);
