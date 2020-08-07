@@ -70,6 +70,7 @@ public:
   ConfFile(const std::vector<conf_section_t>& sections);
   int parse_file(const std::string &fname, std::ostream *warnings);
   int parse_bufferlist(ceph::bufferlist *bl, std::ostream *warnings);
+  bool parse_buffer(std::string_view buf, std::ostream* warning);
   int read(const std::string& section, std::string_view key,
 	   std::string &val) const;
   static std::string normalize_key_name(std::string_view key);
@@ -80,8 +81,6 @@ public:
   void check_old_style_section_names(const std::vector<std::string>& prefixes,
 				     std::ostream& os);
 
-private:
-  bool load_from_buffer(std::string_view buf, std::ostream* warning);
 };
 
 std::ostream &operator<<(std::ostream& oss, const ConfFile& cf);
