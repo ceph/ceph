@@ -10,6 +10,8 @@
 #include "include/buffer.h"
 #include "common/ceph_json.h"
 
+#include "services/svc_sip_marker.h"
+
 class SIProvider_Container;
 
 namespace ceph {
@@ -30,7 +32,7 @@ public:
     INC = 1,
   };
 
-  using stage_id_t = std::string;
+  using stage_id_t = RGWSI_SIP_Marker::stage_id_t;
 
   struct StageInfo {
     stage_id_t sid;

@@ -38,6 +38,8 @@ set(librgw_common_srcs
   services/svc_notify.cc
   services/svc_otp.cc
   services/svc_quota.cc
+  services/svc_sip_marker.cc
+  services/svc_sip_marker_sobj.cc
   services/svc_sync_modules.cc
   services/svc_rados.cc
   services/svc_sys_obj.cc
