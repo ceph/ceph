@@ -814,6 +814,10 @@ if(WITH_FUSE)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif(WITH_FUSE)
 
+if(WITH_DOKAN)
+  add_subdirectory(dokan)
+endif(WITH_DOKAN)
+
 add_subdirectory(journal)
 
 if(WITH_RBD)

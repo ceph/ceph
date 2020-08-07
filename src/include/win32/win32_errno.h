@@ -136,6 +136,8 @@ extern "C" {
 #endif
 
 __s32 wsae_to_errno(__s32 r);
+__u32 errno_to_ntstatus(__s32 r);
+__u32 cephfs_errno_to_ntsatus(int cephfs_errno);
 
 #ifdef __cplusplus
 }
