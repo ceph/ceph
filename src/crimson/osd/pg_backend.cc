@@ -670,6 +670,28 @@ PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
   return store->get_attr(coll, ghobject_t{soid}, key);
 }
 
+PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  return store->get_attrs(coll, ghobject_t{os.oi.soid}).safe_then(
+    [&osd_op](auto&& attrs) {
+    std::vector<std::pair<std::string, bufferlist>> user_xattrs;
+    for (auto& [key, val] : attrs) {
+      if (key.size() > 1 && key[0] == '_') {
+	ceph::bufferlist bl;
+	bl.append(std::move(val));
+	user_xattrs.emplace_back(key.substr(1), std::move(bl));
+      }
+    }
+    ceph::encode(user_xattrs, osd_op.outdata);
+    return get_attr_errorator::now();
+  });
+}
+
 static seastar::future<crimson::os::FuturizedStore::omap_values_t>
 maybe_get_omap_vals_by_keys(
   crimson::os::FuturizedStore* store,

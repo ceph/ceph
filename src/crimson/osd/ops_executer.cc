@@ -699,6 +699,10 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.getxattr(os, osd_op);
     });
+  case CEPH_OSD_OP_GETXATTRS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.get_xattrs(os, osd_op);
+    });
   case CEPH_OSD_OP_CREATE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.create(os, osd_op, txn);
