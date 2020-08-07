@@ -9,6 +9,9 @@ from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 
+if TYPE_CHECKING:
+    from cephadm.module import CephadmOrchestrator
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +25,7 @@ class NFSService(CephadmService):
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
 
-        deps = []  # type: List[str]
+        deps: List[str] = []
 
         # find the matching NFSServiceSpec
         # TODO: find the spec and pass via _create_daemon instead ??
@@ -112,10 +115,9 @@ class NFSService(CephadmService):
 
 class NFSGanesha(object):
     def __init__(self,
-                 mgr,
-                 daemon_id,
-                 spec):
-        # type: (cephadm.CephadmOrchestrator, str, NFSServiceSpec) -> None
+                 mgr: "CephadmOrchestrator",
+                 daemon_id: str,
+                 spec: NFSServiceSpec) -> None:
         assert spec.service_id and daemon_id.startswith(spec.service_id)
         self.mgr = mgr
         self.daemon_id = daemon_id
@@ -197,7 +199,7 @@ class NFSGanesha(object):
         return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
     def get_cephadm_config(self) -> Dict[str, Any]:
-        config = {'pool': self.spec.pool}  # type: Dict
+        config: Dict[str, Any] = {'pool': self.spec.pool}
         if self.spec.namespace:
             config['namespace'] = self.spec.namespace
         config['userid'] = self.get_rados_user()
