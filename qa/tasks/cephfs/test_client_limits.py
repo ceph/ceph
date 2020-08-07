@@ -44,9 +44,9 @@ class TestClientLimits(CephFSTestCase):
         self.config_set('mds', 'mds_recall_max_caps', int(open_files/2))
         self.config_set('mds', 'mds_recall_warning_threshold', open_files)
 
-        mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
+        mds_min_caps_per_client = int(self.config_get('mds.a', "mds_min_caps_per_client"))
         self.config_set('mds', 'mds_min_caps_working_set', mds_min_caps_per_client)
-        mds_recall_warning_decay_rate = float(self.config_get('mds', "mds_recall_warning_decay_rate"))
+        mds_recall_warning_decay_rate = float(self.config_get('mds.a', "mds_recall_warning_decay_rate"))
         self.assertGreaterEqual(open_files, mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
@@ -122,8 +122,8 @@ class TestClientLimits(CephFSTestCase):
         self.config_set('mds', 'mds_recall_warning_threshold', open_files)
         self.config_set('mds', 'mds_min_caps_working_set', open_files*2)
 
-        mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
-        mds_recall_warning_decay_rate = float(self.config_get('mds', "mds_recall_warning_decay_rate"))
+        mds_min_caps_per_client = int(self.config_get('mds.a', "mds_min_caps_per_client"))
+        mds_recall_warning_decay_rate = float(self.config_get('mds.a', "mds_recall_warning_decay_rate"))
         self.assertGreaterEqual(open_files, mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
@@ -285,7 +285,7 @@ class TestClientLimits(CephFSTestCase):
         That the MDS will not let a client sit above mds_max_caps_per_client caps.
         """
 
-        mds_min_caps_per_client = int(self.config_get('mds', "mds_min_caps_per_client"))
+        mds_min_caps_per_client = int(self.config_get('mds.a', "mds_min_caps_per_client"))
         mds_max_caps_per_client = 2*mds_min_caps_per_client
         self.config_set('mds', 'mds_max_caps_per_client', mds_max_caps_per_client)
 
