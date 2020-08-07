@@ -28,18 +28,25 @@ Journal::Journal(SegmentManager &segment_manager)
 Journal::initialize_segment_ertr::future<> Journal::initialize_segment(
   Segment &segment)
 {
-  logger().debug("initialize_segment {}", segment.get_segment_id());
+  auto new_tail = segment_provider->get_journal_tail_target();
+  logger().debug(
+    "initialize_segment {} journal_tail_target {}",
+    segment.get_segment_id(),
+    new_tail);
   // write out header
   ceph_assert(segment.get_write_ptr() == 0);
   bufferlist bl;
   auto header = segment_header_t{
     current_journal_segment_seq++,
     segment.get_segment_id(),
-    current_replay_point};
+    segment_provider->get_journal_tail_target()};
   ::encode(header, bl);
 
   written_to = segment_manager.get_block_size();
-  return segment.write(0, bl).handle_error(
+  return segment.write(0, bl).safe_then(
+    [=] {
+      segment_provider->update_journal_tail_committed(new_tail);
+    },
     init_ertr::pass_further{},
     crimson::ct_error::assert_all{ "TODO" });
 }
@@ -211,7 +218,7 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 		rt.second.journal_segment_seq;
 	    });
 
-	  auto replay_from = segments.rbegin()->second.journal_tail;
+	  auto replay_from = segments.rbegin()->second.journal_tail.offset;
 	  auto from = segments.begin();
 	  if (replay_from != P_ADDR_NULL) {
 	    from = std::find_if(
