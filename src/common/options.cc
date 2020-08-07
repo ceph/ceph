@@ -8175,6 +8175,11 @@ std::vector<Option> get_mds_options() {
     .set_default(100)
     .set_description("minimum number of capabilities a client may hold"),
 
+    Option("mds_min_caps_working_set", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("number of capabilities a client may hold without cache pressure warnings generated"),
+
     Option("mds_max_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("maximum number of capabilities a client may hold"),
