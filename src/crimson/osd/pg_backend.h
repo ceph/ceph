@@ -127,6 +127,9 @@ public:
   get_attr_errorator::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
+  get_attr_errorator::future<> get_xattrs(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
   seastar::future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
