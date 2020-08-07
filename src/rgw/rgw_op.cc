@@ -325,17 +325,6 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
   return policies;
 }
 
-static int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs, rgw_obj *target_obj = nullptr)
-{
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  read_op.params.attrs = &attrs;
-  read_op.params.target_obj = target_obj;
-
-  return read_op.prepare(s->yield);
-}
-
 static int get_obj_head(rgw::sal::RGWRadosStore *store, struct req_state *s,
                         const rgw_obj& obj,
                         map<string, bufferlist> *attrs,
@@ -5968,7 +5957,7 @@ void RGWCompleteMultipart::execute()
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
   bufferlist etag_bl;
-  rgw_obj meta_obj;
+  std::unique_ptr<rgw::sal::RGWObject> meta_obj;
   rgw_obj target_obj;
   RGWMPObj mp;
   RGWObjManifest manifest;
@@ -6038,9 +6027,9 @@ void RGWCompleteMultipart::execute()
 
   iter = parts->parts.begin();
 
-  meta_obj.init_ns(s->bucket->get_key(), meta_oid, mp_ns);
-  meta_obj.set_in_extra_data(true);
-  meta_obj.index_hash_source = s->object->get_name();
+  meta_obj = s->bucket->get_object(rgw_obj_key(meta_oid, string(), mp_ns));
+  meta_obj->set_in_extra_data(true);
+  meta_obj->set_hash_source(s->object->get_name());
 
   /*take a cls lock on meta_obj to prevent racing completions (or retries)
     from deleting the parts*/
@@ -6050,9 +6039,9 @@ void RGWCompleteMultipart::execute()
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   utime_t dur(max_lock_secs_mp, 0);
 
-  store->getRados()->obj_to_raw((s->bucket->get_info()).placement_rule, meta_obj, &raw_obj);
+  store->getRados()->obj_to_raw((s->bucket->get_info()).placement_rule, meta_obj->get_obj(), &raw_obj);
   store->getRados()->get_obj_data_pool((s->bucket->get_info()).placement_rule,
-			   meta_obj,&meta_pool);
+			   meta_obj->get_obj(), &meta_pool);
   store->getRados()->open_pool_ctx(meta_pool, serializer.ioctx, true);
 
   op_ret = serializer.try_lock(raw_obj.oid, dur);
@@ -6063,14 +6052,13 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  /* XXX dang fix this and remove function */
-  op_ret = get_obj_attrs(store, s, meta_obj, attrs);
-
+  op_ret = meta_obj->get_obj_attrs(s->obj_ctx, s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj
 		     << " ret=" << op_ret << dendl;
     return;
   }
+  attrs = meta_obj->get_attrs().attrs;
 
   do {
     op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
@@ -6223,7 +6211,7 @@ void RGWCompleteMultipart::execute()
 
   // remove the upload obj
   int r = store->getRados()->delete_obj(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-			    s->bucket->get_info(), meta_obj, 0);
+			    s->bucket->get_info(), meta_obj->get_obj(), 0);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer.clear_locked();
