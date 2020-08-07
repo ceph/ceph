@@ -211,7 +211,7 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 		rt.second.journal_segment_seq;
 	    });
 
-	  auto replay_from = segments.rbegin()->second.journal_replay_lb;
+	  auto replay_from = segments.rbegin()->second.journal_tail;
 	  auto from = segments.begin();
 	  if (replay_from != P_ADDR_NULL) {
 	    from = std::find_if(
