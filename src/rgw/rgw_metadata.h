@@ -254,7 +254,7 @@ public:
 
   string get_marker(void *handle);
 
-  void dump_log_entry(cls_log_entry& entry, Formatter *f);
+  void dump_log_entry(const cls_log_entry& entry, Formatter *f);
 
   void get_sections(list<string>& sections);
 

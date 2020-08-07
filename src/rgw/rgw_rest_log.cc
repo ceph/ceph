@@ -43,7 +43,6 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
   string   max_entries_str = s->info.args.get("max-entries");
   string   marker = s->info.args.get("marker"),
            err;
-  void    *handle;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   if (s->info.args.exists("start-time") ||
@@ -84,12 +83,8 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
 
   RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
 
-  meta_log.init_list_entries(shard_id, {}, {}, marker, &handle);
-
-  op_ret = meta_log.list_entries(handle, max_entries, entries,
+  op_ret = meta_log.list_entries(shard_id, max_entries, marker, entries,
                                    &last_marker, &truncated);
-
-  meta_log.complete_list_entries(handle);
 }
 
 void RGWOp_MDLog_List::send_response() {
@@ -105,9 +100,7 @@ void RGWOp_MDLog_List::send_response() {
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
-    for (list<cls_log_entry>::iterator iter = entries.begin();
-	 iter != entries.end(); ++iter) {
-      cls_log_entry& entry = *iter;
+    for (const auto& entry : entries) {
       store->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
       flusher.flush();
     }

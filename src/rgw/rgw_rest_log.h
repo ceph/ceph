@@ -79,7 +79,7 @@ public:
 };
 
 class RGWOp_MDLog_List : public RGWRESTOp {
-  list<cls_log_entry> entries;
+  std::vector<cls_log_entry> entries;
   string last_marker;
   bool truncated;
 public:
