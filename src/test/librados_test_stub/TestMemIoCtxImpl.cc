@@ -100,8 +100,8 @@ int TestMemIoCtxImpl::assert_exists(const std::string &oid, uint64_t snap_id) {
 }
 
 int TestMemIoCtxImpl::assert_version(const std::string &oid, uint64_t ver) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::shared_lock l{m_pool->file_lock};
