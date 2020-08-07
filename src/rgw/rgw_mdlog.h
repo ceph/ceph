@@ -110,10 +110,8 @@ public:
   }
 
 
-  void get_shard_oid(int id, std::string& oid) const {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", id);
-    oid = prefix + buf;
+  std::string get_shard_oid(int id) const {
+    return fmt::format("{}{}", prefix, id);
   }
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl);
@@ -123,8 +121,6 @@ public:
   struct LogListCtx {
     int cur_shard;
     std::string marker;
-    ceph::real_time from_time;
-    ceph::real_time end_time;
 
     std::string cur_oid;
 
@@ -133,14 +129,10 @@ public:
     LogListCtx() : cur_shard(0), done(false) {}
   };
 
-  void init_list_entries(int shard_id, ceph::real_time from_time,
-			 ceph::real_time end_time,
-			 const std::string& marker, void **handle);
-  void complete_list_entries(void *handle);
-  int list_entries(const DoutPrefixProvider *dpp, 
-                   void *handle,
+  int list_entries(const DoutPrefixProvider *dpp, int shard,
                    int max_entries,
-                   std::list<cls_log_entry>& entries,
+		   std::string_view marker,
+                   std::vector<cls_log_entry>& entries,
 		   std::string *out_marker,
 		   bool *truncated);
 

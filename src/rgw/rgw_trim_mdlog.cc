@@ -41,7 +41,7 @@ class PurgeLogShardsCR : public RGWShardCollectCR {
     if (i == num_shards) {
       return false;
     }
-    mdlog->get_shard_oid(i++, obj.oid);
+    obj.oid = mdlog->get_shard_oid(i++);
     spawn(new RGWRadosRemoveCR(store, obj), false);
     return true;
   }
@@ -295,7 +295,7 @@ bool MetaMasterTrimShardCollectCR::spawn_next()
       continue;
     }
 
-    mdlog->get_shard_oid(shard_id, oid);
+    auto oid = mdlog->get_shard_oid(shard_id);
 
     ldpp_dout(env.dpp, 10) << "trimming log shard " << shard_id
         << " at marker=" << stable
@@ -497,8 +497,7 @@ int MetaPeerTrimShardCR::operate(const DoutPrefixProvider *dpp)
         << " at timestamp=" << stable
         << " last_trim=" << *last_trim << dendl;
     yield {
-      std::string oid;
-      mdlog->get_shard_oid(shard_id, oid);
+      auto oid = mdlog->get_shard_oid(shard_id);
       call(new RGWRadosTimelogTrimCR(dpp, env.store, oid, real_time{}, stable, "", ""));
     }
     if (retcode < 0 && retcode != -ENODATA) {

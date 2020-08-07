@@ -178,48 +178,31 @@ int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<c
   return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
 }
 
-void RGWMetadataLog::init_list_entries(int shard_id, ceph::real_time from_time, ceph::real_time end_time, 
-				       const string& marker, void **handle)
-{
-  LogListCtx *ctx = new LogListCtx();
-
-  ctx->cur_shard = shard_id;
-  ctx->from_time = from_time;
-  ctx->end_time  = end_time;
-  ctx->marker    = marker;
-
-  get_shard_oid(ctx->cur_shard, ctx->cur_oid);
-
-  *handle = (void *)ctx;
-}
-
-void RGWMetadataLog::complete_list_entries(void *handle) {
-  LogListCtx *ctx = static_cast<LogListCtx *>(handle);
-  delete ctx;
-}
-
-int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
+int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, int shard,
 				 int max_entries,
-				 list<cls_log_entry>& entries,
+				 std::string_view marker,
+				 std::vector<cls_log_entry>& entries,
 				 string *last_marker,
 				 bool *truncated) {
-  LogListCtx *ctx = static_cast<LogListCtx *>(handle);
 
   if (!max_entries) {
     *truncated = false;
     return 0;
   }
 
+  auto oid = get_shard_oid(shard);
   std::string next_marker;
-  int ret = svc.cls->timelog.list(dpp, ctx->cur_oid, ctx->from_time, ctx->end_time,
-                                  max_entries, entries, ctx->marker,
+  std::list<cls_log_entry> lentries;
+  int ret = svc.cls->timelog.list(dpp, oid, {}, {},
+                                  max_entries, lentries, string(marker),
                                   &next_marker, truncated, null_yield);
+  entries.clear();
+  std::move(lentries.begin(), lentries.end(), std::back_inserter(entries));
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
-  ctx->marker = std::move(next_marker);
   if (last_marker) {
-    *last_marker = ctx->marker;
+    *last_marker = next_marker;
   }
 
   if (ret == -ENOENT)
@@ -230,8 +213,7 @@ int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
 
 int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info)
 {
-  string oid;
-  get_shard_oid(shard_id, oid);
+  auto oid = get_shard_oid(shard_id);
 
   cls_log_header header;
 
@@ -266,8 +248,7 @@ RGWMetadataLogInfoCompletion::~RGWMetadataLogInfoCompletion()
 
 int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfoCompletion *completion)
 {
-  string oid;
-  get_shard_oid(shard_id, oid);
+  auto oid = get_shard_oid(shard_id);
 
   completion->get(); // hold a ref until the completion fires
 
@@ -279,23 +260,20 @@ int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, 
 int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, ceph::real_time from_time, ceph::real_time end_time,
                          const string& start_marker, const string& end_marker)
 {
-  string oid;
-  get_shard_oid(shard_id, oid);
+  auto oid = get_shard_oid(shard_id);
 
   return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
                                end_marker, nullptr, null_yield);
 }
 
 int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {
-  string oid;
-  get_shard_oid(shard_id, oid);
+  auto oid = get_shard_oid(shard_id);
 
   return svc.cls->lock.lock_exclusive(dpp, svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
 int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& zone_id, string& owner_id) {
-  string oid;
-  get_shard_oid(shard_id, oid);
+  auto oid = get_shard_oid(shard_id);
 
   return svc.cls->lock.unlock(dpp, svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
@@ -874,7 +852,7 @@ string RGWMetadataManager::get_marker(void *handle)
   return h->handler->get_marker(h->handle);
 }
 
-void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
+void RGWMetadataManager::dump_log_entry(const cls_log_entry& entry, Formatter *f)
 {
   f->open_object_section("entry");
   f->dump_string("id", entry.id);

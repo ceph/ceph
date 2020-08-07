@@ -8258,26 +8258,22 @@ next:
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
-      void *handle;
-      list<cls_log_entry> entries;
+      std::vector<cls_log_entry> entries;
 
-      meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
       do {
-	  int ret = meta_log->list_entries(dpp(), handle, 1000, entries, NULL, &truncated);
+	int ret = meta_log->list_entries(dpp(), i, 1000, marker, entries, &marker,
+					 &truncated);
         if (ret < 0) {
           cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
 
-        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-          cls_log_entry& entry = *iter;
-          static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
+        for (const auto& entry : entries) {
+          store->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
         }
         formatter->flush(cout);
       } while (truncated);
-
-      meta_log->complete_list_entries(handle);
 
       if (specified_shard_id)
         break;

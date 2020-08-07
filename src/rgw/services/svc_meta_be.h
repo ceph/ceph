@@ -22,7 +22,7 @@
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_mdlog_types.h"
 
-class RGWMetadataLogData;
+struct RGWMetadataLogData;
 
 class RGWSI_MDLog;
 class RGWSI_Meta;
