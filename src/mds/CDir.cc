@@ -1888,7 +1888,7 @@ CDentry *CDir::_load_dentry(
         if (in->get_inode()->is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        in->maybe_ephemeral_rand(true, rand_threshold);
+        in->maybe_ephemeral_rand(rand_threshold);
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
@@ -2634,6 +2634,26 @@ void CDir::_committed(int r, version_t v)
 
 
 // IMPORT/EXPORT
+
+mds_rank_t CDir::get_export_pin(bool inherit) const
+{
+  mds_rank_t export_pin = inode->get_export_pin(inherit);
+  if (export_pin == MDS_RANK_EPHEMERAL_DIST)
+    export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
+  else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
+    export_pin = mdcache->hash_into_rank_bucket(ino());
+  return export_pin;
+}
+
+bool CDir::is_exportable(mds_rank_t dest) const
+{
+  mds_rank_t export_pin = get_export_pin();
+  if (export_pin == dest)
+    return true;
+  if (export_pin >= 0)
+    return false;
+  return true;
+}
 
 void CDir::encode_export(bufferlist& bl)
 {
@@ -3699,6 +3719,20 @@ bool CDir::should_split_fast() const
   }
 
   return effective_size > fast_limit;
+}
+
+bool CDir::should_merge() const
+{
+  if (get_frag() == frag_t())
+    return false;
+
+  if (inode->is_ephemeral_dist()) {
+    unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+    if (min_frag_bits > 0 && get_frag().bits() < min_frag_bits + 1)
+      return false;
+  }
+
+  return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CDir, co_dir, mds_co);
