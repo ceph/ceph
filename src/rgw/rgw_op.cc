@@ -235,22 +235,21 @@ int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
 }
 
 static int get_obj_policy_from_attr(CephContext *cct,
-				    rgw::sal::RGWRadosStore *store,
+				    rgw::sal::RGWStore *store,
 				    RGWObjectCtx& obj_ctx,
 				    RGWBucketInfo& bucket_info,
 				    map<string, bufferlist>& bucket_attrs,
 				    RGWAccessControlPolicy *policy,
                                     string *storage_class,
-				    rgw_obj& obj,
+				    rgw::sal::RGWObject* obj,
                                     optional_yield y)
 {
   bufferlist bl;
   int ret = 0;
 
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
-  RGWRados::Object::Read rop(&op_target);
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> rop = obj->get_read_op(&obj_ctx);
 
-  ret = rop.get_attr(RGW_ATTR_ACL, bl, y);
+  ret = rop->get_attr(RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -258,17 +257,17 @@ static int get_obj_policy_from_attr(CephContext *cct,
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
     ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
-    rgw::sal::RGWRadosUser user(store, bucket_info.owner);
-    ret = user.load_by_id(y);
+    std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(bucket_info.owner);
+    ret = user->load_by_id(y);
     if (ret < 0)
       return ret;
 
-    policy->create_default(bucket_info.owner, user.get_display_name());
+    policy->create_default(bucket_info.owner, user->get_display_name());
   }
 
   if (storage_class) {
     bufferlist scbl;
-    int r = rop.get_attr(RGW_ATTR_STORAGE_CLASS, scbl, y);
+    int r = rop->get_attr(RGW_ATTR_STORAGE_CLASS, scbl, y);
     if (r >= 0) {
       *storage_class = scbl.to_str();
     } else {
@@ -281,7 +280,6 @@ static int get_obj_policy_from_attr(CephContext *cct,
 
 
 static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
-							rgw::sal::RGWRadosStore* store,
 							map<string, bufferlist>& attrs,
 							const string& tenant) {
   auto i = attrs.find(RGW_ATTR_IAM_POLICY);
@@ -472,19 +470,20 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
   return ret;
 }
 
-static int read_obj_policy(rgw::sal::RGWRadosStore *store,
+static int read_obj_policy(rgw::sal::RGWStore *store,
                            struct req_state *s,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
                            RGWAccessControlPolicy* acl,
                            string *storage_class,
-                           boost::optional<Policy>& policy,
-                           rgw_bucket& bucket,
-                           rgw_obj_key& object,
+			   boost::optional<Policy>& policy,
+                           rgw::sal::RGWBucket* bucket,
+                           rgw::sal::RGWObject* object,
                            bool copy_src=false)
 {
   string upload_id;
   upload_id = s->info.args.get("uploadId");
+  std::unique_ptr<rgw::sal::RGWObject> mpobj;
   rgw_obj obj;
 
   if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
@@ -497,18 +496,17 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
   // 'copy_src' is used to make this function backward compatible.
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
-    RGWMPObj mp(object.name, upload_id);
+    RGWMPObj mp(object->get_name(), upload_id);
     string oid = mp.get_meta();
-    obj.init_ns(bucket, oid, mp_ns);
-    obj.set_in_extra_data(true);
-  } else {
-    obj = rgw_obj(bucket, object);
+    mpobj = bucket->get_object(rgw_obj_key(oid, string(), mp_ns));
+    mpobj->set_in_extra_data(true);
+    object = mpobj.get();
   }
-  policy = get_iam_policy_from_attr(s->cct, store, bucket_attrs, bucket.tenant);
+  policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
-                                     bucket_info, bucket_attrs, acl, storage_class, obj, s->yield);
+                                     bucket_info, bucket_attrs, acl, storage_class, object, s->yield);
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
@@ -521,7 +519,7 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
     if (bucket_owner.compare(s->user->get_id()) != 0 &&
         ! s->auth.identity->is_admin_of(bucket_owner)) {
       if (policy) {
-        auto r =  policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket));
+        auto r =  policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
         if (r == Effect::Allow)
           return -ENOENT;
         if (r == Effect::Deny)
@@ -575,16 +573,15 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
 
   /* check if copy source is within the current domain */
   if (!s->src_bucket_name.empty()) {
-    RGWBucketInfo source_info;
-
-    if (s->bucket_instance_id.empty()) {
-      ret = store->getRados()->get_bucket_info(store->svc(), s->src_tenant_name, s->src_bucket_name, source_info, NULL, s->yield);
-    } else {
-      ret = store->getRados()->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL, s->yield);
+    std::unique_ptr<rgw::sal::RGWBucket> src_bucket;
+    ret = store->get_bucket(nullptr, s->src_tenant_name, s->src_bucket_name, &src_bucket);
+    if (ret == 0) {
+      ret = src_bucket->load_by_name(s->src_tenant_name, s->src_bucket_name,
+				     s->bucket_instance_id, &obj_ctx, s->yield);
     }
     if (ret == 0) {
-      string& zonegroup = source_info.zonegroup;
-      s->local_source = store->svc()->zone->get_zonegroup().equals(zonegroup);
+      string& zonegroup = src_bucket->get_info().zonegroup;
+      s->local_source = store->get_zonegroup().equals(zonegroup);
     }
   }
 
@@ -625,7 +622,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     s->bucket_owner = s->bucket_acl->get_owner();
 
     RGWZoneGroup zonegroup;
-    int r = store->svc()->zone->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
+    int r = store->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
     if (!r) {
       if (!zonegroup.endpoints.empty()) {
 	s->zonegroup_endpoint = zonegroup.endpoints.front();
@@ -642,14 +639,14 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
       ret = r;
     }
 
-    if (!store->svc()->zone->get_zonegroup().equals(s->bucket->get_info().zonegroup)) {
+    if (!store->get_zonegroup().equals(s->bucket->get_info().zonegroup)) {
       ldpp_dout(s, 0) << "NOTICE: request for data in a different zonegroup ("
           << s->bucket->get_info().zonegroup << " != "
-          << store->svc()->zone->get_zonegroup().get_id() << ")" << dendl;
+          << store->get_zonegroup().get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (store->svc()->zone->get_zonegroup().is_master_zonegroup() && s->system_request) {
+      if (store->get_zonegroup().is_master_zonegroup() && s->system_request) {
         /*If this is the master, don't redirect*/
       } else if (s->op_type == RGW_OP_GET_BUCKET_LOCATION ) {
         /* If op is get bucket location, don't redirect */
@@ -718,8 +715,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
   }
 
   try {
-    s->iam_policy = get_iam_policy_from_attr(s->cct, store, s->bucket_attrs,
-					     s->bucket_tenant);
+    s->iam_policy = get_iam_policy_from_attr(s->cct, s->bucket_attrs, s->bucket_tenant);
   } catch (const std::exception& e) {
     // Really this is a can't happen condition. We parse the policy
     // when it's given to us, so perhaps we should abort or otherwise
@@ -760,8 +756,8 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
       s->object->set_prefetch_data(s->obj_ctx);
     }
     ret = read_obj_policy(store, s, s->bucket->get_info(), s->bucket_attrs,
-			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket->get_key(),
-                          s->object->get_key());
+			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
+                          s->object.get());
   }
 
   return ret;
@@ -1860,8 +1856,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
     }
-    _bucket_policy = get_iam_policy_from_attr(s->cct, store, bucket_attrs,
-					      s->user->get_tenant());
+    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->user->get_tenant());
     bucket_policy = &_bucket_policy;
     pbucket = ubucket.get();
   } else {
@@ -1994,7 +1989,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
           return r;
 	}
 	auto _bucket_policy = get_iam_policy_from_attr(
-	  s->cct, store, tmp_bucket->get_attrs().attrs, tmp_bucket->get_tenant());
+	  s->cct, tmp_bucket->get_attrs().attrs, tmp_bucket->get_tenant());
         bucket_policy = _bucket_policy.get_ptr();
 	buckets[bucket_name].swap(tmp_bucket);
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
@@ -2372,7 +2367,7 @@ void RGWListBuckets::execute()
     /* We need to have stats for all our policies - even if a given policy
      * isn't actually used in a given account. In such situation its usage
      * stats would be simply full of zeros. */
-    for (const auto& policy : store->svc()->zone->get_zonegroup().placement_targets) {
+    for (const auto& policy : store->get_zonegroup().placement_targets) {
       policies_stats.emplace(policy.second.name,
                              decltype(policies_stats)::mapped_type());
     }
@@ -2515,7 +2510,7 @@ void RGWStatAccount::execute()
       /* We need to have stats for all our policies - even if a given policy
        * isn't actually used in a given account. In such situation its usage
        * stats would be simply full of zeros. */
-      for (const auto& policy : store->svc()->zone->get_zonegroup().placement_targets) {
+      for (const auto& policy : store->get_zonegroup().placement_targets) {
         policies_stats.emplace(policy.second.name,
                                decltype(policies_stats)::mapped_type());
       }
@@ -3107,22 +3102,22 @@ void RGWCreateBucket::execute()
       return;
   }
 
-  if (!relaxed_region_enforcement && !store->svc()->zone->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
-      store->svc()->zone->get_zonegroup().api_name != location_constraint) {
+  if (!relaxed_region_enforcement && !store->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
+      store->get_zonegroup().api_name != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
-                     << " doesn't match zonegroup" << " (" << store->svc()->zone->get_zonegroup().api_name << ")"
+                     << " doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")"
                      << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified location-constraint is not valid";
     return;
   }
 
-  const auto& zonegroup = store->svc()->zone->get_zonegroup();
+  const auto& zonegroup = store->get_zonegroup();
   if (!placement_rule.name.empty() &&
       !zonegroup.placement_targets.count(placement_rule.name)) {
     ldpp_dout(this, 0) << "placement target (" << placement_rule.name << ")"
                      << " doesn't exist in the placement targets of zonegroup"
-                     << " (" << store->svc()->zone->get_zonegroup().api_name << ")" << dendl;
+                     << " (" << store->get_zonegroup().api_name << ")" << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified placement target does not exist";
     return;
@@ -3148,10 +3143,10 @@ void RGWCreateBucket::execute()
   if (s->system_request) {
     zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
     if (zonegroup_id.empty()) {
-      zonegroup_id = store->svc()->zone->get_zonegroup().get_id();
+      zonegroup_id = store->get_zonegroup().get_id();
     }
   } else {
-    zonegroup_id = store->svc()->zone->get_zonegroup().get_id();
+    zonegroup_id = store->get_zonegroup().get_id();
   }
 
   /* Encode special metadata first as we're using std::map::emplace under
@@ -3504,7 +3499,7 @@ int RGWPutObj::verify_permission()
 
     /* check source object permissions */
     if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
-			policy, cs_bucket->get_key(), cs_object->get_key(), true) < 0) {
+			policy, cs_bucket.get(), cs_object.get(), true) < 0) {
       return -EACCES;
     }
 
@@ -5003,7 +4998,7 @@ int RGWCopyObj::verify_permission()
 
     /* check source object permissions */
     op_ret = read_obj_policy(store, s, src_bucket->get_info(), src_bucket->get_attrs().attrs, &src_acl, &src_placement.storage_class,
-			     src_policy, src_bucket->get_key(), src_object->get_key());
+			     src_policy, src_bucket.get(), src_object.get());
     if (op_ret < 0) {
       return op_ret;
     }
@@ -5075,7 +5070,7 @@ int RGWCopyObj::verify_permission()
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, store, dest_bucket->get_attrs().attrs, dest_bucket->get_tenant());
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, dest_bucket->get_attrs().attrs, dest_bucket->get_tenant());
   /* admin request overrides permission checks */
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
     if (dest_iam_policy != boost::none) {
@@ -6634,7 +6629,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  auto policy = get_iam_policy_from_attr(s->cct, store, battrs, binfo.bucket.tenant);
+  auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
 
   bucket_owner = bacl.get_owner();
 
@@ -6934,7 +6929,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   forward_req_info(s->cct, info, bucket_name);
 
   op_ret = store->create_bucket(*s->user, new_bucket,
-                                store->svc()->zone->get_zonegroup().get_id(),
+                                store->get_zonegroup().get_id(),
                                 placement_rule, swift_ver_location,
                                 pquota_info, attrs,
                                 out_info, ep_objv,
@@ -6995,7 +6990,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  auto policy = get_iam_policy_from_attr(s->cct, store, battrs, binfo.bucket.tenant);
+  auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
 
   bucket_owner = bacl.get_owner();
   if (policy || ! s->iam_user_policies.empty()) {

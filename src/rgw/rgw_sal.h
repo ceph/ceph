@@ -97,6 +97,8 @@ class RGWStore : public DoutPrefixProvider {
 				  bufferlist& in_data, JSONParser *jp, req_info& info) = 0;
     virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) = 0;
+    virtual const RGWZoneGroup& get_zonegroup() = 0;
+    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) = 0;
 
     virtual void finalize(void)=0;
 
@@ -299,7 +301,8 @@ class RGWObject {
     uint64_t obj_size;
     RGWAttrs attrs;
     ceph::real_time mtime;
-    bool delete_marker;
+    bool delete_marker{false};
+    bool in_extra_data{false};
 
   public:
 
@@ -328,6 +331,7 @@ class RGWObject {
       virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) = 0;
       virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) = 0;
       virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) = 0;
+      virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) = 0;
     };
 
     RGWObject()
@@ -336,24 +340,21 @@ class RGWObject {
       index_hash_source(),
       obj_size(),
       attrs(),
-      mtime(),
-      delete_marker(false) {}
+      mtime() {}
     RGWObject(const rgw_obj_key& _k)
       : key(_k),
       bucket(),
       index_hash_source(),
       obj_size(),
       attrs(),
-      mtime(),
-      delete_marker(false) {}
+      mtime() {}
     RGWObject(const rgw_obj_key& _k, RGWBucket* _b)
       : key(_k),
       bucket(_b),
       index_hash_source(),
       obj_size(),
       attrs(),
-      mtime(),
-      delete_marker(false) {}
+      mtime() {}
     RGWObject(RGWObject& _o) = default;
 
     virtual ~RGWObject() = default;
@@ -404,6 +405,8 @@ class RGWObject {
     void set_hash_source(std::string s) { index_hash_source = s; }
     std::string get_oid(void) const { return key.get_oid(); }
     bool get_delete_marker(void) { return delete_marker; }
+    bool get_in_extra_data(void) { return in_extra_data; }
+    void set_in_extra_data(bool i) { in_extra_data = i; }
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
 
     /* OPs */
@@ -421,7 +424,11 @@ class RGWObject {
     void set_obj_size(uint64_t s) { obj_size = s; }
     virtual void set_name(const std::string& n) { key = n; }
     virtual void set_key(const rgw_obj_key& k) { key = k; }
-    virtual rgw_obj get_obj(void) const { return rgw_obj(bucket->get_key(), key); }
+    virtual rgw_obj get_obj(void) const {
+      rgw_obj obj(bucket->get_key(), key);
+      obj.set_in_extra_data(in_extra_data);
+      return obj;
+    }
     virtual void gen_rand_obj_instance_name() = 0;
 
     /* dang - This is temporary, until the API is completed */
