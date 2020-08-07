@@ -4,6 +4,7 @@
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_sal.h"
+#include "rgw_rados.h"
 
 #include "services/svc_zone.h"
 

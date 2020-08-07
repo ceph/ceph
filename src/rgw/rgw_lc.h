@@ -20,6 +20,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
 #include "rgw_sal.h"
+#include "rgw_rados.h"
 
 #include <atomic>
 #include <tuple>
@@ -533,7 +534,7 @@ public:
   int remove_bucket_config(RGWBucketInfo& bucket_info,
                            const map<string, bufferlist>& bucket_attrs);
 
-  CephContext *get_cct() const override { return store->ctx(); }
+  CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 

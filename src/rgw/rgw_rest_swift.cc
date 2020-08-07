@@ -27,6 +27,7 @@
 #include "rgw_process.h"
 
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 
