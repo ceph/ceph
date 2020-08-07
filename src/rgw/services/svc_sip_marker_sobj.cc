@@ -76,6 +76,7 @@ public:
                  int shard_id,
                  const std::string& marker,
                  const ceph::real_time& mtime,
+                 bool init_client,
                  RGWSI_SIP_Marker::Handler::set_result *result) override {
 
 #define NUM_RACE_RETRY 10
@@ -92,21 +93,26 @@ public:
         return r;
       }
 
+      RGWSI_SIP_Marker::client_marker_info *marker_info;
+
       auto citer = sinfo.clients.find(client_id);
       if (citer == sinfo.clients.end()) {
-        ldout(cct, 20) << __func__ << "(): couldn't find client (client_id=" << client_id << ")" << dendl;
-        return -ENOENT;
+        if (!init_client) {
+          ldout(cct, 20) << __func__ << "(): couldn't find client (client_id=" << client_id << ")" << dendl;
+          return -ENOENT;
+        }
+        marker_info = &sinfo.clients[client_id];
+      } else {
+        marker_info = &citer->second;
       }
 
-      auto& marker_info = citer->second;
-
-      if (marker <= marker_info.pos) { /* can a client marker go backwards? */
+      if (marker <= marker_info->pos) { /* can a client marker go backwards? */
         result->modified = false;
         break;
       }
 
-      marker_info.pos = marker;
-      marker_info.mtime = mtime;
+      marker_info->pos = marker;
+      marker_info->mtime = mtime;
 
       if (sinfo.clients.size() > 1) {
         string min = std::move(marker);
@@ -207,12 +213,9 @@ public:
   int get_min_clients_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
                           int shard_id,
                           std::optional<std::string> *pos) override {
-    ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
     stage_shard_info sinfo;
-    RGWObjVersionTracker objv_tracker;
-
-    int r = sobj.read(&sinfo, &objv_tracker, null_yield);
-    if (r < 0 && r != -ENOENT) {
+    int r = get_info(sid, shard_id, &sinfo);
+    if (r < 0) {
       ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
       return r;
     }
@@ -222,6 +225,19 @@ public:
     return 0;
   }
 
+  int get_info(const RGWSI_SIP_Marker::stage_id_t& sid,
+               int shard_id,
+               stage_shard_info *info) override {
+    ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
+
+    int r = sobj.read(info, nullptr, null_yield);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+      return r;
+    }
+
+    return 0;
+  }
 };
 
 int RGWSI_SIP_Marker_SObj_Handler::ShardObj::read(stage_shard_info *result,

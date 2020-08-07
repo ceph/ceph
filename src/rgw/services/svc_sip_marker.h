@@ -79,6 +79,7 @@ public:
                            int shard_id,
                            const std::string& marker,
                            const ceph::real_time& mtime,
+                           bool init_client,
                            set_result *result) = 0;
 
     virtual int set_low_pos(const stage_id_t& sid,
@@ -88,6 +89,10 @@ public:
     virtual int get_min_clients_pos(const stage_id_t& sid,
                                     int shard_id,
                                     std::optional<std::string> *pos) = 0;
+
+    virtual int get_info(const stage_id_t& sid,
+                         int shard_id,
+                         stage_shard_info *info) = 0;
   };
 
   using HandlerRef = std::shared_ptr<Handler>;
