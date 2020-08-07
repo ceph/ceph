@@ -3473,14 +3473,14 @@ ObjectContextRef PrimaryLogPG::get_prev_clone_obc(ObjectContextRef obc)
   return nullptr;
 }
 
-void PrimaryLogPG::dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs)
+void PrimaryLogPG::dec_refcount(const hobject_t& soid, const object_ref_delta_t& refs)
 {
   for (auto p = refs.begin(); p != refs.end(); ++p) {
     int dec_ref_count = p->second;
     ceph_assert(dec_ref_count < 0);
     while (dec_ref_count < 0) {
       dout(10) << __func__ << ": decrement reference on offset oid: " << p->first << dendl;
-      refcount_manifest(obc->obs.oi.soid, p->first, 
+      refcount_manifest(soid, p->first, 
 			refcount_t::DECREMENT_REF, NULL);
       dec_ref_count++;
     }
@@ -3513,9 +3513,7 @@ void PrimaryLogPG::dec_refcount_by_dirty(OpContext* ctx)
     ceph_assert(ctx);
     ctx->register_on_commit(
       [soid, this, refs](){
-	ObjectContextRef obc = get_object_context(soid, false, NULL);
-	ceph_assert(obc);
-	dec_refcount(obc, refs);
+	dec_refcount(soid, refs);
       });
   }
 }
@@ -3565,9 +3563,7 @@ void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext*
       hobject_t soid = ctx->obc->obs.oi.soid;
       ctx->register_on_commit(
 	[soid, this, refs](){
-	  ObjectContextRef obc = get_object_context(soid, false, NULL);
-	  ceph_assert(obc);
-	  dec_refcount(obc, refs);
+	  dec_refcount(soid, refs);
 	});
     }
   } else if (oi.manifest.is_redirect()) {
