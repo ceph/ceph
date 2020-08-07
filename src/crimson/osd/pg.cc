@@ -676,7 +676,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
     throw crimson::common::system_shutdown_exception();
   }
 
-  auto ox = std::make_unique<OpsExecuter>(*this/* as const& */, m);
+  auto ox = std::make_unique<PgOpsExecuter>(*this/* as const& */, m);
   return seastar::do_for_each(m->ops, [ox = ox.get()](OSDOp& osd_op) {
     logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
     return ox->execute_pg_op(osd_op);
