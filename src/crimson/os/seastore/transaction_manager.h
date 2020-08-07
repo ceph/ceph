@@ -55,6 +55,14 @@ public:
     return;
   }
 
+  journal_seq_t get_journal_tail_target() const final {
+    // TODO -- part of gc
+    return journal_seq_t{};
+  }
+  void update_journal_tail_committed(journal_seq_t committed) final {
+    // TODO -- part of gc
+  }
+
   /// Writes initial metadata to disk
   using mkfs_ertr = crimson::errorator<
     crimson::ct_error::input_output_error

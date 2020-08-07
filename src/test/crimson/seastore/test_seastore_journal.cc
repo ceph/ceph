@@ -89,6 +89,9 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     return;
   }
 
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+  void update_journal_tail_committed(journal_seq_t paddr) final {}
+
   seastar::future<> set_up_fut() final {
     journal.reset(new Journal(*segment_manager));
     journal->set_segment_provider(this);

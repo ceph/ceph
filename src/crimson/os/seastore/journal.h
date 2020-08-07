@@ -35,7 +35,7 @@ struct segment_header_t {
   segment_seq_t journal_segment_seq;
   segment_id_t physical_segment_id; // debugging
 
-  paddr_t journal_tail;
+  journal_seq_t journal_tail;
 
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
@@ -79,6 +79,9 @@ public:
 
   /* TODO: we'll want to use this to propogate information about segment contents */
   virtual void put_segment(segment_id_t segment) = 0;
+
+  virtual journal_seq_t get_journal_tail_target() const = 0;
+  virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
 
   virtual ~JournalSegmentProvider() {}
 };
@@ -169,8 +172,6 @@ private:
 
   JournalSegmentProvider *segment_provider = nullptr;
   SegmentManager &segment_manager;
-
-  paddr_t current_replay_point;
 
   segment_seq_t current_journal_segment_seq = 0;
 
