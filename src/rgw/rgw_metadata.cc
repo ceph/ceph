@@ -169,13 +169,15 @@ int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
   return 0;
 }
 
-int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, std::vector<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
   mark_modified(shard_id);
   rgw_shard_name(prefix, shard_id, oid);
-  return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
+  std::list<cls_log_entry> lentries(std::move_iterator(entries.begin()),
+				    std::move_iterator(entries.end()));
+  return svc.cls->timelog.add(dpp, oid, lentries, completion, false, null_yield);
 }
 
 int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, int shard,
@@ -257,13 +259,12 @@ int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, 
                                      completion->get_completion());
 }
 
-int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, ceph::real_time from_time, ceph::real_time end_time,
-                         const string& start_marker, const string& end_marker)
+int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker)
 {
   auto oid = get_shard_oid(shard_id);
 
-  return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
-                               end_marker, nullptr, null_yield);
+  return svc.cls->timelog.trim(dpp, oid, {}, {}, {},
+                               string(marker), nullptr, null_yield);
 }
 
 int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {

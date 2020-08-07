@@ -223,7 +223,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   }
   RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
 
-  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker);
+  op_ret = meta_log.trim(this, shard_id, marker);
 }
 
 void RGWOp_MDLog_Lock::execute(optional_yield y) {

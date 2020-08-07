@@ -2444,11 +2444,9 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
-  list<cls_log_entry> dest_entries;
+  std::vector<cls_log_entry> dest_entries;
 
-  vector<rgw_mdlog_entry>::iterator iter;
-  for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
-    rgw_mdlog_entry& entry = *iter;
+  for (auto& entry : data.entries) {
     ldpp_dout(sync_env->dpp, 20) << "entry: name=" << entry.name << dendl;
 
     cls_log_entry dest_entry;
@@ -2456,7 +2454,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;
     dest_entry.timestamp = utime_t(entry.timestamp);
-  
+
     encode(entry.log_data, dest_entry.data);
 
     dest_entries.push_back(dest_entry);
