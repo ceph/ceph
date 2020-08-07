@@ -68,7 +68,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
 EOL
 
 sudo apt-get -y install mingw-w64 cmake pkg-config python3-dev python3-pip \
-                autoconf libtool ninja-build
+                autoconf libtool ninja-build zip
 sudo python3 -m pip install cython
 
 cd $depsSrcDir
