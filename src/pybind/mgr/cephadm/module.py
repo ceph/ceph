@@ -1815,10 +1815,10 @@ you may want to run:
                 deps.append(dd.name())
         return sorted(deps)
 
-    def _get_config_and_keyring(self, daemon_type, daemon_id, host=None,
+    def _get_config_and_keyring(self, daemon_type, daemon_id, host,
                                 keyring=None,
                                 extra_ceph_config=None):
-        # type: (str, str, Optional[str], Optional[str], Optional[str]) -> Dict[str, Any]
+        # type: (str, str, str, Optional[str], Optional[str]) -> Dict[str, Any]
         # keyring
         if not keyring:
             ename = utils.name_to_auth_entity(daemon_type, daemon_id, host=host)
