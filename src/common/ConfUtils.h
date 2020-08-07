@@ -73,6 +73,13 @@ public:
   int read(const std::string& section, std::string_view key,
 	   std::string &val) const;
   static std::string normalize_key_name(std::string_view key);
+  // print warnings to os if any old-style section name is found
+  //
+  // consider a section name as old-style name if it starts with any of the
+  // given prefixes, but does not follow with a "."
+  void check_old_style_section_names(const std::vector<std::string>& prefixes,
+				     std::ostream& os);
+
 private:
   bool load_from_buffer(std::string_view buf, std::ostream* warning);
 };

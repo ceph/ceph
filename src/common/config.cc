@@ -13,7 +13,13 @@
  */
 
 #include <boost/type_traits.hpp>
-
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -350,80 +356,34 @@ int md_config_t::parse_config_files(ConfigValues& values,
   if (safe_to_start_threads)
     return -ENOSYS;
 
-  if (!values.cluster.size() && !conf_files_str) {
-    /*
-     * set the cluster name to 'ceph' when neither cluster name nor
-     * configuration file are specified.
-     */
-    values.cluster = "ceph";
+  if (values.cluster.empty() && !conf_files_str) {
+    values.cluster = get_cluster_name(nullptr);
   }
-
-  if (!conf_files_str) {
-    const char *c = getenv("CEPH_CONF");
-    if (c) {
-      conf_files_str = c;
-    }
-    else {
-      if (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)
-	return 0;
-      conf_files_str = CEPH_CONF_FILE_DEFAULT;
-    }
-  }
-
-  std::list<std::string> conf_files;
-  get_str_list(conf_files_str, conf_files);
-  auto p = conf_files.begin();
-  while (p != conf_files.end()) {
-    string &s = *p;
-    if (s.find("$data_dir") != string::npos &&
-	data_dir_option.empty()) {
-      // useless $data_dir item, skip
-      p = conf_files.erase(p);
-    } else {
-      early_expand_meta(values, s, warnings);
-      ++p;
-    }
-  }
-
   // open new conf
-  list<string>::const_iterator c;
-  for (c = conf_files.begin(); c != conf_files.end(); ++c) {
-    cf.clear();
-    string fn = *c;
+  string conffile;
+  for (auto& fn : get_conffile_paths(values, conf_files_str, warnings, flags)) {
     ostringstream oss;
     int ret = cf.parse_file(fn.c_str(), &oss);
-    parse_error = oss.str();
     if (ret == 0) {
+      parse_error.clear();
+      conffile = fn;
       break;
+    } else {
+      parse_error = oss.str();
+      if (ret != -ENOENT) {
+	return ret;
+      }
     }
-    if (ret != -ENOENT)
-      return ret;
   }
   // it must have been all ENOENTs, that's the only way we got here
-  if (c == conf_files.end())
+  if (conffile.empty())
     return -ENOENT;
 
-  if (values.cluster.size() == 0) {
-    /*
-     * If cluster name is not set yet, use the prefix of the
-     * basename of configuration file as cluster name.
-     */
-    auto start = c->rfind('/') + 1;
-    auto end = c->find(".conf", start);
-    if (end == c->npos) {
-        /*
-         * If the configuration file does not follow $cluster.conf
-         * convention, we do the last try and assign the cluster to
-         * 'ceph'.
-         */
-        values.cluster = "ceph";
-    } else {
-      values.cluster = c->substr(start, end - start);
-    }
+  if (values.cluster.empty()) {
+    values.cluster = get_cluster_name(conffile.c_str());
   }
 
-  std::vector <std::string> my_sections;
-  _get_my_sections(values, my_sections);
+  std::vector<std::string> my_sections = get_my_sections(values);
   for (const auto &i : schema) {
     const auto &opt = i.second;
     std::string val;
@@ -441,30 +401,61 @@ int md_config_t::parse_config_files(ConfigValues& values,
       }
     }
   }
-
-  // Warn about section names that look like old-style section names
-  std::deque < std::string > old_style_section_names;
-  for (auto& [name, section] : cf) {
-    if (((name.find("mds") == 0) || (name.find("mon") == 0) ||
-	 (name.find("osd") == 0)) && (name.size() > 3) && (name[3] != '.')) {
-      old_style_section_names.push_back(name);
-    }
-  }
-  if (!old_style_section_names.empty()) {
-    ostringstream oss;
-    cerr << "ERROR! old-style section name(s) found: ";
-    string sep;
-    for (std::deque < std::string >::const_iterator os = old_style_section_names.begin();
-	 os != old_style_section_names.end(); ++os) {
-      cerr << sep << *os;
-      sep = ", ";
-    }
-    cerr << ". Please use the new style section names that include a period.";
-  }
-
+  cf.check_old_style_section_names({"mds", "mon", "osd"}, cerr);
   update_legacy_vals(values);
-
   return 0;
+}
+
+std::list<std::string>
+md_config_t::get_conffile_paths(const ConfigValues& values,
+				const char *conf_files_str,
+				std::ostream *warnings,
+				int flags) const
+{
+  if (!conf_files_str) {
+    const char *c = getenv("CEPH_CONF");
+    if (c) {
+      conf_files_str = c;
+    } else {
+      if (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)
+	return {};
+      conf_files_str = CEPH_CONF_FILE_DEFAULT;
+    }
+  }
+
+  std::list<std::string> paths;
+  get_str_list(conf_files_str, paths);
+  for (auto i = paths.begin(); i != paths.end(); ) {
+    string& path = *i;
+    if (path.find("$data_dir") != path.npos &&
+	data_dir_option.empty()) {
+      // useless $data_dir item, skip
+      i = paths.erase(i);
+    } else {
+      early_expand_meta(values, path, warnings);
+      ++i;
+    }
+  }
+  return paths;
+}
+
+std::string md_config_t::get_cluster_name(const char* conffile)
+{
+  if (conffile) {
+    // If cluster name is not set yet, use the prefix of the
+    // basename of configuration file as cluster name.
+    if (fs::path path{conffile}; path.extension() == ".conf") {
+      return path.stem();
+    } else {
+      // If the configuration file does not follow $cluster.conf
+      // convention, we do the last try and assign the cluster to
+      // 'ceph'.
+      return "ceph";
+    }
+  } else {
+    // set the cluster name to 'ceph' when configuration file is not specified.
+    return "ceph";
+  }
 }
 
 void md_config_t::parse_env(unsigned entity_type,
@@ -1309,20 +1300,12 @@ void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
  * looking. The lowest priority section is the one we look in only if all
  * others had nothing.  This should always be the global section.
  */
-void md_config_t::get_my_sections(const ConfigValues& values,
-				  std::vector <std::string> &sections) const
+std::vector <std::string>
+md_config_t::get_my_sections(const ConfigValues& values) const
 {
-  _get_my_sections(values, sections);
-}
-
-void md_config_t::_get_my_sections(const ConfigValues& values,
-				   std::vector <std::string> &sections) const
-{
-  sections.push_back(values.name.to_str());
-
-  sections.push_back(values.name.get_type_name().data());
-
-  sections.push_back("global");
+  return {values.name.to_str(),
+	  values.name.get_type_name().data(),
+	  "global"};
 }
 
 // Return a list of all sections

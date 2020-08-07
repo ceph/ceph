@@ -205,8 +205,7 @@ public:
   void get_all_keys(std::vector<std::string> *keys) const;
 
   // Return a list of all the sections that the current entity is a member of.
-  void get_my_sections(const ConfigValues& values,
-		       std::vector <std::string> &sections) const;
+  std::vector<std::string> get_my_sections(const ConfigValues& values) const;
 
   // Return a list of all sections
   int get_all_sections(std::vector <std::string> &sections) const;
@@ -265,9 +264,6 @@ private:
   void _show_config(const ConfigValues& values,
 		    std::ostream *out, ceph::Formatter *f) const;
 
-  void _get_my_sections(const ConfigValues& values,
-			std::vector<std::string> &sections) const;
-
   int _get_val_from_conf_file(const std::vector<std::string> &sections,
 			      const std::string_view key, std::string &out) const;
 
@@ -317,10 +313,11 @@ public:  // for global_init
   bool finalize_reexpand_meta(ConfigValues& values,
 			      const ConfigTracker& tracker);
 private:
-
-  /// expand all metavariables in config structure.
-  void expand_all_meta();
-
+  std::list<std::string> get_conffile_paths(const ConfigValues& values,
+					    const char *conf_files,
+					    std::ostream *warnings,
+					    int flags) const;
+  static std::string get_cluster_name(const char* conffile_path);
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
 public:

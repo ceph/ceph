@@ -170,9 +170,9 @@ public:
     std::lock_guard l{lock};
     return config.diff(values, f, name);
   }
-  void get_my_sections(std::vector <std::string> &sections) const {
+  std::vector<std::string> get_my_sections() const {
     std::lock_guard l{lock};
-    config.get_my_sections(values, sections);
+    return config.get_my_sections(values);
   }
   int get_all_sections(std::vector<std::string>& sections) const {
     std::lock_guard l{lock};
