@@ -64,7 +64,10 @@ class NFSService(CephadmService):
         cephadm_config.update(
             self.mgr._get_config_and_keyring(
                 daemon_type, daemon_id,
-                keyring=keyring))
+                keyring=keyring,
+                host=host
+            )
+        )
 
         return cephadm_config, deps
 
