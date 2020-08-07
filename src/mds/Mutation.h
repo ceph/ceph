@@ -415,7 +415,7 @@ typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 struct MDSlaveUpdate {
   int origop;
   bufferlist rollback;
-  Context *waiter;
+  Context *waiter = nullptr;
   set<CInode*> olddirs;
   set<CInode*> unlinked;
   MDSlaveUpdate(int oo, bufferlist &rbl) :
