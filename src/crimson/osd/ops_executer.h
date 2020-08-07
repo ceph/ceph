@@ -35,6 +35,8 @@ class PGLSFilter;
 class OSDOp;
 
 namespace crimson::osd {
+
+// PgOpsExecuter -- a class for executing ops targeting a certain object.
 class OpsExecuter {
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
@@ -159,13 +161,6 @@ private:
     return std::forward<Func>(f)(backend, obc->obs, txn);
   }
 
-  // PG operations are being provided with pg instead of os.
-  template <class Func>
-  auto do_pg_op(Func&& f) {
-    return std::forward<Func>(f)(std::as_const(pg),
-                                 std::as_const(msg->get_hobj().nspace));
-  }
-
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
   }
@@ -178,12 +173,8 @@ public:
       backend(pg.get_backend()),
       msg(std::move(msg)) {
   }
-  OpsExecuter(PG& pg, Ref<MOSDOp> msg)
-    : OpsExecuter{ObjectContextRef(), nullptr, pg, std::move(msg)}
-  {}
 
   osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
-  seastar::future<> execute_pg_op(class OSDOp& osd_op);
 
   template <typename Func, typename MutFunc>
   osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
@@ -274,5 +265,26 @@ OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
     });
   }
 }
+
+// PgOpsExecuter -- a class for executing ops targeting a certain PG.
+class PgOpsExecuter {
+public:
+  PgOpsExecuter(PG& pg, Ref<MOSDOp> msg)
+    : pg(pg), msg(std::move(msg)) {
+  }
+
+  seastar::future<> execute_pg_op(class OSDOp& osd_op);
+
+private:
+  // PG operations are being provided with pg instead of os.
+  template <class Func>
+  auto do_pg_op(Func&& f) {
+    return std::forward<Func>(f)(std::as_const(pg),
+                                 std::as_const(msg->get_hobj().nspace));
+  }
+
+  PG& pg;
+  Ref<MOSDOp> msg;
+};
 
 } // namespace crimson::osd

@@ -947,7 +947,7 @@ static seastar::future<> do_pgls_filtered(
 }
 
 seastar::future<>
-OpsExecuter::execute_pg_op(OSDOp& osd_op)
+PgOpsExecuter::execute_pg_op(OSDOp& osd_op)
 {
   logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
