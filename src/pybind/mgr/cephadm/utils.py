@@ -2,9 +2,11 @@ import logging
 import re
 import json
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List
+from typing import TYPE_CHECKING, Optional, Callable, TypeVar, List
 from orchestrator import OrchestratorError
 
+if TYPE_CHECKING:
+    from mgr_module import MgrModule
 
 T = TypeVar('T')
 logger = logging.getLogger(__name__)
@@ -26,7 +28,7 @@ def name_to_config_section(name: str) -> str:
 def name_to_auth_entity(daemon_type: str,
                         daemon_id: str,
                         host: Optional[str] = None
-                        ):
+                        ) -> str:
     """
     Map from daemon names/host to ceph entity names (as seen in config)
     """
@@ -44,6 +46,7 @@ def name_to_auth_entity(daemon_type: str,
         return daemon_type + "." + daemon_id
     else:
         raise OrchestratorError("unknown auth entity name")
+
 
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
     @wraps(f)
@@ -73,10 +76,10 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
         assert CephadmOrchestrator.instance is not None
         return CephadmOrchestrator.instance._worker_pool.map(do_work, vals)
 
-
     return forall_hosts_wrapper
 
-def get_cluster_health(mgr):
+
+def get_cluster_health(mgr: "MgrModule") -> str:
     # check cluster health
     ret, out, err = mgr.check_mon_command({
         'prefix': 'health',
