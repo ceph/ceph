@@ -3,5 +3,5 @@ overrides:
     conf:
       osd:
         osd inject bad map crc probability: 0.1
-    log-whitelist:
+    log-ignorelist:
       - failed to encode map
