@@ -1,18 +1,13 @@
 import logging
-
-import rados
-from typing import Dict, Optional, Tuple, Any, List, Set, cast
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Any, List, Set, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
+import rados
 
-import orchestrator
-from orchestrator import OrchestratorError
-from orchestrator import DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription
 
-import cephadm
-from .. import utils
-
-from .cephadmservice import CephadmService, CephadmDaemonSpec
+from cephadm import utils
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +26,7 @@ class NFSService(CephadmService):
 
         # find the matching NFSServiceSpec
         # TODO: find the spec and pass via _create_daemon instead ??
-        dd = orchestrator.DaemonDescription()
+        dd = DaemonDescription()
         dd.daemon_type = daemon_type
         dd.daemon_id = daemon_id
         dd.hostname = host
