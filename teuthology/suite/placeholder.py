@@ -75,6 +75,8 @@ dict_templ = {
             },
             'log-whitelist': ['\(MDS_ALL_DOWN\)',
                               '\(MDS_UP_LESS_THAN_MAX\)'],
+            'log-ignorelist': ['\(MDS_ALL_DOWN\)',
+                              '\(MDS_UP_LESS_THAN_MAX\)'],
             'sha1': Placeholder('ceph_hash'),
         },
         'ceph-deploy': {
