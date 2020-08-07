@@ -939,7 +939,7 @@ namespace crimson {
 	  // proportion tag -- O(1) -- or the client with the lowest
 	  // previous proportion tag -- O(n) where n = # clients.
 	  //
-	  // So we don't have to maintain a propotional queue that
+	  // So we don't have to maintain a proportional queue that
 	  // keeps the minimum on proportional tag alone (we're
 	  // instead using a ready queue), we'll have to check each
 	  // client.

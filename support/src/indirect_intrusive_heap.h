@@ -394,7 +394,7 @@ namespace crimson {
       return out;
     }
 
-    // can only be called if I is copyable; copies heap into a vector
+    // can only be called if I is copiable; copies heap into a vector
     // and sorts it before displaying it
     std::ostream&
     display_sorted(std::ostream& out,
