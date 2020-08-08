@@ -72,6 +72,8 @@ public:
     struct set_result {
       bool modified{false};
       std::optional<std::string> min_pos;
+
+      void dump(Formatter *f) const;
     };
 
     virtual int set_marker(const string& client_id,

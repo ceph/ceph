@@ -18,6 +18,7 @@
 #include "services/svc_notify.h"
 #include "services/svc_otp.h"
 #include "services/svc_rados.h"
+#include "services/svc_sip_marker_sobj.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
@@ -71,6 +72,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify = std::make_unique<RGWSI_Notify>(cct);
   otp = std::make_unique<RGWSI_OTP>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
+  sip_marker_sobj = std::make_unique<RGWSI_SIP_Marker_SObj>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
@@ -104,6 +106,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify->init(zone.get(), rados.get(), finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
+  sip_marker_sobj->init(zone.get(), sysobj.get());
   zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
@@ -309,6 +312,8 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   notify = _svc.notify.get();
   otp = _svc.otp.get();
   rados = _svc.rados.get();
+  sip_marker_sobj = _svc.sip_marker_sobj.get();
+  sip_marker = sip_marker_sobj;
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
   quota = _svc.quota.get();

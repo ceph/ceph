@@ -65,6 +65,8 @@ class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
 class RGWSI_OTP;
 class RGWSI_RADOS;
+class RGWSI_SIP_Marker;
+class RGWSI_SIP_Marker_SObj;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
@@ -95,6 +97,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_OTP> otp;
   std::unique_ptr<RGWSI_RADOS> rados;
+  std::unique_ptr<RGWSI_SIP_Marker_SObj> sip_marker_sobj;
   std::unique_ptr<RGWSI_Zone> zone;
   std::unique_ptr<RGWSI_ZoneUtils> zone_utils;
   std::unique_ptr<RGWSI_Quota> quota;
@@ -138,6 +141,8 @@ struct RGWServices
   RGWSI_Notify *notify{nullptr};
   RGWSI_OTP *otp{nullptr};
   RGWSI_RADOS *rados{nullptr};
+  RGWSI_SIP_Marker *sip_marker{nullptr};
+  RGWSI_SIP_Marker_SObj *sip_marker_sobj{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
   RGWSI_Quota *quota{nullptr};

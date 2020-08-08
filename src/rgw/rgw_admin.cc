@@ -67,6 +67,7 @@ extern "C" {
 #include "services/svc_bilog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
+#include "services/svc_sip_marker.h"
 #include "services/svc_zone.h"
 
 #include "rgw_sip_meta.h"
@@ -820,6 +821,8 @@ enum class OPT {
   SI_PROVIDER_FETCH,
   SI_PROVIDER_TRIM,
   SI_PROVIDER_STATE,
+  SI_PROVIDER_MARKER_SET,
+  SI_PROVIDER_MARKER_INFO,
 };
 
 }
@@ -1057,6 +1060,8 @@ static SimpleCmd::Commands all_cmds = {
   { "sip fetch", OPT::SI_PROVIDER_FETCH },
   { "sip trim", OPT::SI_PROVIDER_TRIM },
   { "sip state", OPT::SI_PROVIDER_STATE },
+  { "sip marker set", OPT::SI_PROVIDER_MARKER_SET },
+  { "sip marker info", OPT::SI_PROVIDER_MARKER_INFO },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3510,6 +3515,7 @@ int main(int argc, const char **argv)
   string infile;
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
+  std::optional<string> opt_marker;
   string marker;
   string start_marker;
   string end_marker;
@@ -3652,6 +3658,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_sip;
   std::optional<string> opt_sip_instance;
   std::optional<SIProvider::stage_id_t> opt_stage_id;
+  std::optional<bool> opt_init_client;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
@@ -3909,6 +3916,7 @@ int main(int argc, const char **argv)
       metadata_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
       marker = val;
+      opt_marker = marker;
     } else if (ceph_argparse_witharg(args, i, &val, "--start-marker", (char*)NULL)) {
       start_marker = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*)NULL)) {
@@ -4128,6 +4136,8 @@ int main(int argc, const char **argv)
       opt_sip_instance = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--stage-id", (char*)NULL)) {
       opt_stage_id = val;
+    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--init-client", (char*)NULL)) {
+      opt_init_client = (bool)tmp_int;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
@@ -4297,6 +4307,7 @@ int main(int argc, const char **argv)
 			 OPT::SI_PROVIDER_INFO,
 			 OPT::SI_PROVIDER_FETCH,
 			 OPT::SI_PROVIDER_STATE,
+			 OPT::SI_PROVIDER_MARKER_INFO,
   };
 
     std::set<OPT> gc_ops_list = {
@@ -10327,6 +10338,120 @@ next:
      encode_json("marker", marker, formatter.get());
    }
    formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_SET) {
+   if (client_id.empty()) {
+     cerr << "ERROR: --client-id not specified" << std::endl;
+     return EINVAL;
+   }
+
+   if (!opt_marker) {
+     cerr << "ERROR: --marker not specified" << std::endl;
+     return EINVAL;
+   }
+
+   if (!opt_sip) {
+     cerr << "ERROR: --sip not specified" << std::endl;
+     return EINVAL;
+   }
+
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
+   if (!provider) {
+     cerr << "ERROR: sync info provider not found" << std::endl;
+     return ENOENT;
+   }
+
+   auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
+
+   SIProvider::StageInfo stage_info;
+   int r = provider->get_stage_info(stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   if (!marker_handler) {
+     cerr << "ERROR: can't get sip marker handler" << std::endl;
+     return EIO;
+   }
+
+   RGWSI_SIP_Marker::Handler::set_result result;
+
+   auto init_flag = opt_init_client.value_or(false);
+
+   r = marker_handler->set_marker(client_id, stage_id, shard_id, *opt_marker, real_clock::now(), init_flag, &result);
+   if (r < 0) {
+     cerr << "ERROR: failed to fetch marker handler stage info: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("result", result, formatter.get());
+   }
+   formatter->flush(cout);
+
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_INFO) {
+   if (!opt_sip) {
+     cerr << "ERROR: --sip not specified" << std::endl;
+     return EINVAL;
+   }
+
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
+   if (!provider) {
+     cerr << "ERROR: sync info provider not found" << std::endl;
+     return ENOENT;
+   }
+
+   auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
+
+   SIProvider::StageInfo stage_info;
+   int r = provider->get_stage_info(stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   if (!marker_handler) {
+     cerr << "ERROR: can't get sip marker handler" << std::endl;
+     return EIO;
+   }
+
+   RGWSI_SIP_Marker::stage_shard_info sinfo;
+
+   r = marker_handler->get_info(stage_id, shard_id, &sinfo);
+   if (r < 0) {
+     cerr << "ERROR: failed to fetch marker handler stage info: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("info", sinfo, formatter);
+   }
+   formatter->flush(cout);
+
  }
 
   return 0;
