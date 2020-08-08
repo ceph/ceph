@@ -134,7 +134,11 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
+%if 0%{with seastar}
+BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
+%else
 BuildRequires:	gcc-c++
+%endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 %if 0%{?fedora} || 0%{?rhel}
@@ -207,6 +211,12 @@ BuildRequires:  fmt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  libatomic
+%if 0%{with seastar}
+BuildRequires:  gcc-toolset-9-annobin
+BuildRequires:  gcc-toolset-9-libubsan-devel
+BuildRequires:  gcc-toolset-9-libasan-devel
+BuildRequires:  gcc-toolset-9-libatomic-devel
+%endif
 %endif
 %endif
 #################################################################################
@@ -1075,6 +1085,10 @@ This package provides Ceph’s default alerts for Prometheus.
 # LTO can be enabled as soon as the following GCC bug is fixed:
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200
 %define _lto_cflags %{nil}
+
+%if 0%{with seastar}
+. /opt/rh/gcc-toolset-9/enable
+%endif
 
 %if 0%{with cephfs_java}
 # Find jni.h
