@@ -178,6 +178,26 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
     ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
   inline void decode(cl &c, ::ceph::bufferlist::const_iterator &p) { c.decode(p); }
 
+// enum
+// only match enums not supported by denc
+template <typename T>
+constexpr bool is_legacy_enum_v = std::is_enum_v<T> && !denc_traits<T>::supported;
+
+template <typename T>
+inline auto encode(T v, ::ceph::bufferlist& bl, uint64_t features=0)
+  -> std::enable_if_t<is_legacy_enum_v<T>>
+{
+  auto e = static_cast<std::underlying_type<T>>(v);
+  ::ceph::encode(e, bl, features);
+}
+template <typename T>
+inline auto decode(T &v, ::ceph::bufferlist::const_iterator& p)
+  -> std::enable_if_t<is_legacy_enum_v<T>>
+{
+  std::underlying_type<T> e;
+  ::ceph::decode(e, p);
+  v = static_cast<T>(e);
+}
 
 // string
 inline void encode(std::string_view s, bufferlist& bl, uint64_t features=0)
