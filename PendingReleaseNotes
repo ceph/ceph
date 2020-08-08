@@ -73,10 +73,6 @@
   or use any other convenient way to restore the schedule after the
   upgrade.
 
-
->=16.0.0
----------
-
 * librbd: The shared, read-only parent cache has been moved to a separate librbd
   plugin. If the parent cache was previously in-use, you must also instruct
   librbd to load the plugin by adding the following to your configuration::
@@ -100,3 +96,7 @@
 * Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
   scheduled scrubs of the type disabled will be aborted. All user initiated
   scrubs are NOT interrupted.
+
+* Alpine build related script, documentation and test have been removed since
+  the most updated APKBUILD script of Ceph is already included by Alpine Linux's
+  aports repository.
