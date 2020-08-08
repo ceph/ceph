@@ -53,7 +53,7 @@ class RGWSI_MDLog : public RGWServiceInstance
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
   std::unique_ptr<RGWPeriodHistory> period_history;
-
+  rgw::sal::RGWRadosStore* store;
 public:
   RGWSI_MDLog(CephContext *cct, bool run_sync);
   virtual ~RGWSI_MDLog();
@@ -66,8 +66,9 @@ public:
     RGWSI_Cls *cls{nullptr};
   } svc;
 
-  int init(RGWSI_RADOS *_rados_svc,
-           RGWSI_Zone *_zone_svc,
+  int init(rgw::sal::RGWRadosStore* _store,
+	   RGWSI_RADOS *_rados_svc,
+	   RGWSI_Zone *_zone_svc,
            RGWSI_SysObj *_sysobj_svc,
            RGWSI_Cls *_cls_svc);
 

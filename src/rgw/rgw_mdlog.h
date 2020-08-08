@@ -80,6 +80,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
 
 class RGWMetadataLog {
   CephContext *cct;
+  rgw::sal::RGWRadosStore* store;
   const std::string prefix;
 
   struct Svc {
@@ -99,10 +100,11 @@ class RGWMetadataLog {
   void mark_modified(int shard_id);
 public:
   RGWMetadataLog(CephContext *cct,
+		 rgw::sal::RGWRadosStore* store,
                  RGWSI_Zone *_zone_svc,
                  RGWSI_Cls *_cls_svc,
                  const std::string& period)
-    : cct(cct),
+    : cct(cct), store(store),
       prefix(make_prefix(period)) {
     svc.zone = _zone_svc;
     svc.cls = _cls_svc;
@@ -145,6 +147,7 @@ public:
   int unlock(int shard_id, std::string& zone_id, string& owner_id);
 
   bc::flat_set<int> read_clear_modified();
+  RGWCoroutine* purge_cr();
 };
 
 struct LogStatusDump {
