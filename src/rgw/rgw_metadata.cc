@@ -12,6 +12,7 @@
 #include "rgw_tools.h"
 #include "rgw_mdlog.h"
 #include "rgw_sal.h"
+#include "rgw_sync.h"
 
 #include "rgw_cr_rados.h"
 
@@ -281,6 +282,43 @@ bc::flat_set<int> RGWMetadataLog::read_clear_modified()
   modified_shards.clear();
   return m;
 }
+
+
+/// purge all log shards for the given mdlog
+class PurgeLogShardsCR : public RGWShardCollectCR {
+  rgw::sal::RGWRadosStore *const store;
+  rgw_raw_obj obj;
+  std::size_t i = 0;
+  std::vector<std::string> oids;
+
+  static constexpr int max_concurrent = 16;
+
+ public:
+  PurgeLogShardsCR(rgw::sal::RGWRadosStore *store, const rgw_pool& pool,
+		   std::vector<std::string>&& oids)
+    : RGWShardCollectCR(store->ctx(), max_concurrent),
+      store(store), obj(pool, ""), oids(std::move(oids)) {}
+
+  bool spawn_next() override {
+    if (i == oids.size()) {
+      return false;
+    }
+    obj.oid = oids[i++];
+    spawn(new RGWRadosRemoveCR(store, obj), false);
+    return true;
+  }
+};
+
+RGWCoroutine* RGWMetadataLog::purge_cr()
+{
+  std::vector<std::string> oids;
+  for (auto i = 0; i < cct->_conf->rgw_md_log_max_shards; ++i)
+    oids.push_back(get_shard_oid(i));
+
+  return new PurgeLogShardsCR(store, svc.zone->get_zone_params().log_pool,
+			      std::move(oids));
+}
+
 
 obj_version& RGWMetadataObject::get_version()
 {

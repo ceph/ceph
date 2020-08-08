@@ -46,6 +46,7 @@ RGWServices_Def::~RGWServices_Def()
 }
 
 int RGWServices_Def::init(CephContext *cct,
+			  rgw::sal::RGWRadosStore* store,
 			  bool have_cache,
                           bool raw,
 			  bool run_sync,
@@ -93,7 +94,7 @@ int RGWServices_Def::init(CephContext *cct,
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());
   config_key_rados->init(rados.get());
-  mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
+  mdlog->init(store, rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
@@ -277,11 +278,13 @@ void RGWServices_Def::shutdown()
 }
 
 
-int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWServices::do_init(CephContext *_cct, rgw::sal::RGWRadosStore *_store,
+			 bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
 {
   cct = _cct;
+  store = _store;
 
-  int r = _svc.init(cct, have_cache, raw, run_sync, y, dpp);
+  int r = _svc.init(cct, store, have_cache, raw, run_sync, y, dpp);
   if (r < 0) {
     return r;
   }

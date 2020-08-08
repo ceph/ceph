@@ -20,33 +20,6 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "meta trim: ")
 
-/// purge all log shards for the given mdlog
-class PurgeLogShardsCR : public RGWShardCollectCR {
-  rgw::sal::RadosStore* const store;
-  const RGWMetadataLog* mdlog;
-  const int num_shards;
-  rgw_raw_obj obj;
-  int i{0};
-
-  static constexpr int max_concurrent = 16;
-
- public:
-  PurgeLogShardsCR(rgw::sal::RadosStore* store, const RGWMetadataLog* mdlog,
-                   const rgw_pool& pool, int num_shards)
-    : RGWShardCollectCR(store->ctx(), max_concurrent),
-      store(store), mdlog(mdlog), num_shards(num_shards), obj(pool, "")
-  {}
-
-  bool spawn_next() override {
-    if (i == num_shards) {
-      return false;
-    }
-    obj.oid = mdlog->get_shard_oid(i++);
-    spawn(new RGWRadosRemoveCR(store, obj), false);
-    return true;
-  }
-};
-
 using Cursor = RGWPeriodHistory::Cursor;
 
 /// purge mdlogs from the oldest up to (but not including) the given realm_epoch
@@ -92,9 +65,7 @@ int PurgePeriodLogsCR::operate(const DoutPrefixProvider *dpp)
           << " period=" << cursor.get_period().get_id() << dendl;
       yield {
         const auto mdlog = svc.mdlog->get_log(cursor.get_period().get_id());
-        const auto& pool = svc.zone->get_zone_params().log_pool;
-        auto num_shards = cct->_conf->rgw_md_log_max_shards;
-        call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));
+        call(mdlog->purge_cr());
       }
       if (retcode < 0) {
         ldpp_dout(dpp, 1) << "failed to remove log shards: "
