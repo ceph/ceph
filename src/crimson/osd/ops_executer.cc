@@ -691,9 +691,21 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
           return osd_op_errorator::now();
         });
     });
+  case CEPH_OSD_OP_SPARSE_READ:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.sparse_read(os, osd_op);
+    });
+  case CEPH_OSD_OP_CHECKSUM:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.checksum(os, osd_op);
+    });
   case CEPH_OSD_OP_GETXATTR:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.getxattr(os, osd_op);
+    });
+  case CEPH_OSD_OP_GETXATTRS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.get_xattrs(os, osd_op);
     });
   case CEPH_OSD_OP_CREATE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
