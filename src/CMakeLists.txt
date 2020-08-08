@@ -250,12 +250,6 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-# Python stuff
-option(WITH_PYTHON2 "build python2 bindings" OFF)
-if(WITH_PYTHON2)
-  message(FATAL_ERROR "Python 2 is not supported anymore")
-endif()
-
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS gperftools::tcmalloc)
