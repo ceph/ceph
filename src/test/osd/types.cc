@@ -2069,6 +2069,52 @@ TEST(chunk_info_test, calc_refs_modify_match) {
     mk_delta({{"bar", -1}}));
 }
 
+TEST(chunk_info_test, calc_refs_modify_match_dirty_overlap) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 256);
+  clean_regions.mark_data_region_dirty(256, 4096);
+  ci_ref_test_on_modify(
+    mk_manifest({}),
+    mk_manifest({{0, {0, 256, "bar"}}, {512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}, {"foo", -1}, {"ttt", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_modify_match_dirty_overlap2) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 256);
+  clean_regions.mark_data_region_dirty(256, 1024);
+  clean_regions.mark_data_region_dirty(3584, 1024);
+  ci_ref_test_on_modify(
+    mk_manifest({{512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    mk_manifest({{0, {0, 256, "bar"}}, {512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_modify_match_dirty_overlap3) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 256);
+  clean_regions.mark_data_region_dirty(256, 4096);
+  ci_ref_test_on_modify(
+    mk_manifest({{512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    mk_manifest({{0, {0, 256, "bar"}}, {512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_modify_match_clone_overlap) {
+  ObjectCleanRegions clean_regions(0, 8192, false);
+  clean_regions.mark_data_region_dirty(0, 256);
+  clean_regions.mark_data_region_dirty(256, 1024);
+  clean_regions.mark_data_region_dirty(3584, 1024);
+  ci_ref_test_on_modify(
+    mk_manifest({{512, {2048, 1024, "foo"}}, {4096, {0, 1024, "ttt"}}}),
+    mk_manifest({{0, {0, 256, "bar"}}, {256, {2048, 1024, "foo"}}, {3584, {0, 1024, "ttt"}}}),
+    clean_regions,
+    mk_delta({{"bar", -1}, {"foo", -1}, {"ttt", -1}}));
+}
+
 TEST(chunk_info_test, calc_refs_modify_no_snap) {
   ObjectCleanRegions clean_regions(0, 8192, false);
   clean_regions.mark_data_region_dirty(0, 1024);
