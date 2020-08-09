@@ -2464,14 +2464,13 @@ public:
       /* unset redirect target */
       comp = context->rados.aio_create_completion();
       bool present = !src_value.deleted();
-      context->remove_object(oid);
-      op.remove();
+      op.unset_manifest();
       context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				  librados::OPERATION_ORDER_READS_WRITES |
 				  librados::OPERATION_IGNORE_REDIRECT);
       comp->wait_for_complete();
       if ((r = comp->get_return_value())) {
-	if (!(r == -ENOENT && !present)) {
+	if (!(r == -ENOENT && !present) && r != -EOPNOTSUPP) {
 	  cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
 	  ceph_abort();
 	}
