@@ -2344,7 +2344,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   maybe_force_recovery();
 }
 
-bool PrimaryLogPG::is_dedup_chunk(const object_info_t& oi, const chunk_info_t& chunk)
+bool PrimaryLogPG::is_dedup_chunk(const chunk_info_t& chunk)
 {
   if (pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
       chunk.has_reference() &&
@@ -2574,7 +2574,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
      *
      */
 
-    if (is_dedup_chunk(obc->obs.oi, iter->second)) {
+    if (is_dedup_chunk(iter->second)) {
       pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
       object_t fp_oid = [&fp_algo, &chunk_data]() -> string {
         switch (fp_algo) {
@@ -3493,12 +3493,14 @@ void PrimaryLogPG::dec_refcount_by_dirty(OpContext* ctx)
   ObjectContextRef cobc = nullptr;
   ObjectContextRef obc = ctx->obc;
   for (auto &p : ctx->obs->oi.manifest.chunk_map) {
-    if (!ctx->clean_regions.is_clean_region(p.first, p.second.length)) {
-      ctx->new_obs.oi.manifest.chunk_map.erase(p.first);
-      if (ctx->new_obs.oi.manifest.chunk_map.empty()) {
-	ctx->new_obs.oi.manifest.type = object_manifest_t::TYPE_NONE;
-	ctx->new_obs.oi.clear_flag(object_info_t::FLAG_MANIFEST);
-	ctx->delta_stats.num_objects_manifest--;
+    if (is_dedup_chunk(p.second)) {
+      if (!ctx->clean_regions.is_clean_region(p.first, p.second.length)) {
+	ctx->new_obs.oi.manifest.chunk_map.erase(p.first);
+	if (ctx->new_obs.oi.manifest.chunk_map.empty()) {
+	  ctx->new_obs.oi.manifest.type = object_manifest_t::TYPE_NONE;
+	  ctx->new_obs.oi.clear_flag(object_info_t::FLAG_MANIFEST);
+	  ctx->delta_stats.num_objects_manifest--;
+	}
       }
     }
   }
