@@ -23,6 +23,14 @@ def lock_machines(ctx, config):
     new machines.  This is not called if the one has teuthology-locked
     machines and placed those keys in the Targets section of a yaml file.
     """
+    lock_machines_helper(ctx, config)
+    try:
+        yield
+    finally:
+        unlock_machines(ctx)
+
+
+def lock_machines_helper(ctx, config, reimage=True):
     # It's OK for os_type and os_version to be None here.  If we're trying
     # to lock a bare metal machine, we'll take whatever is available.  If
     # we want a vps, defaults will be provided by misc.get_distro and
@@ -75,10 +83,11 @@ def lock_machines(ctx, config):
         try:
             newly_locked = teuthology.lock.ops.lock_many(ctx, requested, machine_type,
                                                          ctx.owner, ctx.archive, os_type,
-                                                         os_version, arch)
+                                                         os_version, arch, reimage=reimage)
         except Exception:
             # Lock failures should map to the 'dead' status instead of 'fail'
-            set_status(ctx.summary, 'dead')
+            if 'summary' in ctx:
+                set_status(ctx.summary, 'dead')
             raise
         all_locked.update(newly_locked)
         log.info(
@@ -144,16 +153,16 @@ def lock_machines(ctx, config):
         )
         log.warn('Could not lock enough machines, waiting...')
         time.sleep(10)
-    try:
-        yield
-    finally:
-        # If both unlock_on_failure and nuke-on-error are set, don't unlock now
-        # because we're just going to nuke (and unlock) later.
-        unlock_on_failure = (
+
+
+def unlock_machines(ctx):
+    # If both unlock_on_failure and nuke-on-error are set, don't unlock now
+    # because we're just going to nuke (and unlock) later.
+    unlock_on_failure = (
             ctx.config.get('unlock_on_failure', False)
             and not ctx.config.get('nuke-on-error', False)
         )
-        if get_status(ctx.summary) == 'pass' or unlock_on_failure:
-            log.info('Unlocking machines...')
-            for machine in ctx.config['targets'].keys():
-                teuthology.lock.ops.unlock_one(ctx, machine, ctx.owner, ctx.archive)
+    if get_status(ctx.summary) == 'pass' or unlock_on_failure:
+        log.info('Unlocking machines...')
+        for machine in ctx.config['targets'].keys():
+            teuthology.lock.ops.unlock_one(ctx, machine, ctx.owner, ctx.archive)
