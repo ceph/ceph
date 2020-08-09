@@ -3568,16 +3568,14 @@ void PrimaryLogPG::dec_all_refcount_manifest(const object_info_t& oi, OpContext*
 	  dec_refcount(soid, refs);
 	});
     }
-  } else if (oi.manifest.is_redirect()) {
-    ceph_assert(oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE);
+  } else if (oi.manifest.is_redirect() && 
+	     oi.test_flag(object_info_t::FLAG_REDIRECT_HAS_REFERENCE)) {
     ctx->register_on_commit(
       [oi, this](){
 	refcount_manifest(oi.soid, oi.manifest.redirect_target, 
 			  refcount_t::DECREMENT_REF, NULL);
       });
-  } else {
-    ceph_abort_msg("unrecognized manifest type");
-  }
+  } 
 }
 
 void PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type, 
