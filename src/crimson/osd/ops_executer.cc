@@ -421,7 +421,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
 }
 
 OpsExecuter::osd_op_errorator::future<>
-OpsExecuter::execute_osd_op(OSDOp& osd_op)
+OpsExecuter::execute_op(OSDOp& osd_op)
 {
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
@@ -947,7 +947,7 @@ static seastar::future<> do_pgls_filtered(
 }
 
 seastar::future<>
-PgOpsExecuter::execute_pg_op(OSDOp& osd_op)
+PgOpsExecuter::execute_op(OSDOp& osd_op)
 {
   logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
