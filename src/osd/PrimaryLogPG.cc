@@ -9426,6 +9426,13 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
       } else {
 	// finish writing to temp object, then move into place
 	dout(20) << "fill_in_final_tx: writing to temp object" << dendl;
+	if (obs.oi.has_manifest() && obs.oi.manifest.is_redirect() && obs.exists) {
+	  /* In redirect manifest case, the object exists in the upper tier.
+	   * So, to avoid a conflict when rename() is called, remove existing
+	   * object first
+	   */
+	  t->remove(obs.oi.soid);
+	}
 	_write_copy_chunk(cop, t);
 	t->rename(obs.oi.soid, cop->results.temp_oid);
       }
