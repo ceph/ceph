@@ -174,7 +174,7 @@ public:
       msg(std::move(msg)) {
   }
 
-  osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
+  osd_op_errorator::future<> execute_op(class OSDOp& osd_op);
 
   template <typename Func, typename MutFunc>
   osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
@@ -273,7 +273,7 @@ public:
     : pg(pg), nspace(msg.get_hobj().nspace) {
   }
 
-  seastar::future<> execute_pg_op(class OSDOp& osd_op);
+  seastar::future<> execute_op(class OSDOp& osd_op);
 
 private:
   const PG& pg;
