@@ -294,6 +294,8 @@ class DriveGroupSpec(ServiceSpec):
         for s in filter(None, specs):
             s.validate()
         for s in filter(None, [self.db_devices, self.wal_devices, self.journal_devices]):
+            if s.paths:
+                raise DriveGroupValidationError("`paths` is only allowed for data_devices")
             if s.all:
                 raise DriveGroupValidationError("`all` is only allowed for data_devices")
 
