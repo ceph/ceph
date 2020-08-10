@@ -352,7 +352,6 @@ int md_config_t::parse_config_files(ConfigValues& values,
 				    std::ostream *warnings,
 				    int flags)
 {
-
   if (safe_to_start_threads)
     return -ENOSYS;
 
@@ -362,42 +361,59 @@ int md_config_t::parse_config_files(ConfigValues& values,
   // open new conf
   string conffile;
   for (auto& fn : get_conffile_paths(values, conf_files_str, warnings, flags)) {
+    bufferlist bl;
+    std::string error;
+    if (bl.read_file(fn.c_str(), &error)) {
+      parse_error = error;
+      continue;
+    }
     ostringstream oss;
-    int ret = cf.parse_file(fn.c_str(), &oss);
+    int ret = parse_buffer(values, tracker, bl.c_str(), bl.length(), &oss);
     if (ret == 0) {
       parse_error.clear();
       conffile = fn;
       break;
-    } else {
-      parse_error = oss.str();
-      if (ret != -ENOENT) {
-	return ret;
-      }
+    }
+    parse_error = oss.str();
+    if (ret != -ENOENT) {
+      return ret;
     }
   }
   // it must have been all ENOENTs, that's the only way we got here
-  if (conffile.empty())
+  if (conffile.empty()) {
     return -ENOENT;
-
+  }
   if (values.cluster.empty()) {
     values.cluster = get_cluster_name(conffile.c_str());
   }
+  return 0;
+}
 
-  std::vector<std::string> my_sections = get_my_sections(values);
+int
+md_config_t::parse_buffer(ConfigValues& values,
+			  const ConfigTracker& tracker,
+			  const char* buf, size_t len,
+			  std::ostream* warnings)
+{
+  if (!cf.parse_buffer(string_view{buf, len}, warnings)) {
+    return -EINVAL;
+  }
+  const auto my_sections = get_my_sections(values);
   for (const auto &i : schema) {
     const auto &opt = i.second;
     std::string val;
-    int ret = _get_val_from_conf_file(my_sections, opt.name, val);
-    if (ret == 0) {
-      std::string error_message;
-      int r = _set_val(values, tracker, val, opt, CONF_FILE, &error_message);
-      if (warnings != nullptr && (r < 0 || !error_message.empty())) {
-        *warnings << "parse error setting '" << opt.name << "' to '" << val
-                  << "'";
+    if (_get_val_from_conf_file(my_sections, opt.name, val)) {
+      continue;
+    }
+    std::string error_message;
+    if (_set_val(values, tracker, val, opt, CONF_FILE, &error_message) < 0) {
+      if (warnings != nullptr) {
+        *warnings << "parse error setting " << std::quoted(opt.name)
+                  << " to " << std::quoted(val);
         if (!error_message.empty()) {
           *warnings << " (" << error_message << ")";
         }
-        *warnings << std::endl;
+        *warnings << '\n';
       }
     }
   }

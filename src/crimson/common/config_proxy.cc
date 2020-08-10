@@ -3,6 +3,20 @@
 
 #include "config_proxy.h"
 
+#if __has_include(<filesystem>)
+#include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
+
+#include "crimson/common/buffer_io.h"
+
+#if defined(__cpp_lib_filesystem)
+namespace fs = std::filesystem;
+#elif defined(__cpp_lib_experimental_filesystem)
+namespace fs = std::experimental::filesystem;
+#endif
+
 namespace crimson::common {
 
 ConfigProxy::ConfigProxy(const EntityName& name, std::string_view cluster)
@@ -44,6 +58,41 @@ seastar::future<> ConfigProxy::start()
 
 void ConfigProxy::show_config(ceph::Formatter* f) const {
   get_config().show_config(*values, f);
+}
+
+seastar::future<> ConfigProxy::parse_config_files(const std::string& conf_files)
+{
+  auto conffile_paths =
+    get_config().get_conffile_paths(*values,
+                                    conf_files.empty() ? nullptr : conf_files.c_str(),
+                                    &std::cerr,
+                                    CODE_ENVIRONMENT_DAEMON);
+  return seastar::do_with(std::move(conffile_paths), [this] (auto& paths) {
+    return seastar::repeat([path=paths.begin(), e=paths.end(), this]() mutable {
+      if (path == e) {
+        // tried all conffile, none of them works
+        return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
+      }
+      return crimson::read_file(*path++).then([this](auto&& buf) {
+        return do_change([buf=std::move(buf), this](ConfigValues& values) {
+          if (get_config().parse_buffer(values, obs_mgr, buf.get(), buf.size(), &std::cerr)) {
+            throw std::invalid_argument("parse error");
+          }
+        }).then([] {
+          // this one works!
+	  return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        });
+      }).handle_exception_type([] (const fs::filesystem_error&) {
+        return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::no);
+      }).handle_exception_type([] (const std::invalid_argument&) {
+        return seastar::make_ready_future<seastar::stop_iteration>(
+         seastar::stop_iteration::no);
+      });
+    });
+  });
 }
 
 ConfigProxy::ShardedConfig ConfigProxy::sharded_conf;
