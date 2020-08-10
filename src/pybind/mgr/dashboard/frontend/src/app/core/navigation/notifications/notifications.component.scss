@@ -10,8 +10,8 @@
 
 a {
   .dot {
-    background-color: bd.$color-primary;
-    border: 2px solid bd.$color-navbar-bg;
+    background-color: bd.$primary;
+    border: 2px solid bd.$secondary;
     border-radius: 50%;
     height: 11px;
     position: absolute;
@@ -21,7 +21,7 @@ a {
   }
 
   &:hover .dot {
-    background-color: bd.$color-solid-white;
-    border-color: bd.$color-primary;
+    background-color: bd.$white;
+    border-color: bd.$primary;
   }
 }
