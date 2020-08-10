@@ -109,6 +109,7 @@ class SpecStore():
         self.mgr = mgr
         self.specs = {} # type: Dict[str, ServiceSpec]
         self.spec_created = {} # type: Dict[str, datetime.datetime]
+        self.spec_preview = {} # type: Dict[str, ServiceSpec]
 
     def load(self):
         # type: () -> None
@@ -129,6 +130,9 @@ class SpecStore():
 
     def save(self, spec):
         # type: (ServiceSpec) -> None
+        if spec.preview_only:
+            self.spec_preview[spec.service_name()] = spec
+            return None
         self.specs[spec.service_name()] = spec
         self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
         self.mgr.set_store(
@@ -173,10 +177,13 @@ class HostCache():
         self.daemon_refresh_queue = [] # type: List[str]
         self.device_refresh_queue = [] # type: List[str]
         self.osdspec_previews_refresh_queue = [] # type: List[str]
+
+        # host -> daemon name -> dict
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
         self.loading_osdspec_preview = set()  # type: Set[str]
-        self.etc_ceph_ceph_conf_refresh_queue: Set[str] = set()
+        self.last_etc_ceph_ceph_conf: Dict[str, datetime.datetime] = {}
+        self.registry_login_queue: Set[str] = set()
 
     def load(self):
         # type: () -> None
@@ -218,7 +225,10 @@ class HostCache():
                 if 'last_host_check' in j:
                     self.last_host_check[host] = datetime.datetime.strptime(
                         j['last_host_check'], DATEFMT)
-                self.etc_ceph_ceph_conf_refresh_queue.add(host)
+                if 'last_etc_ceph_ceph_conf' in j:
+                    self.last_etc_ceph_ceph_conf[host] = datetime.datetime.strptime(
+                        j['last_etc_ceph_ceph_conf'], DATEFMT)
+                self.registry_login_queue.add(host)
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
                     '%d devices, %d networks' % (
@@ -263,7 +273,7 @@ class HostCache():
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
         self.osdspec_previews_refresh_queue.append(host)
-        self.etc_ceph_ceph_conf_refresh_queue.add(host)
+        self.registry_login_queue.add(host)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
@@ -278,9 +288,9 @@ class HostCache():
         if host in self.last_device_update:
             del self.last_device_update[host]
         self.mgr.event.set()
-
-    def distribute_new_etc_ceph_ceph_conf(self):
-        self.etc_ceph_ceph_conf_refresh_queue = set(self.mgr.inventory.keys())
+    
+    def distribute_new_registry_login_info(self):
+        self.registry_login_queue = set(self.mgr.inventory.keys())
 
     def save_host(self, host):
         # type: (str) -> None
@@ -309,6 +319,10 @@ class HostCache():
 
         if host in self.last_host_check:
             j['last_host_check'] = self.last_host_check[host].strftime(DATEFMT)
+
+        if host in self.last_etc_ceph_ceph_conf:
+            j['last_etc_ceph_ceph_conf'] = self.last_etc_ceph_ceph_conf[host].strftime(DATEFMT)
+
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
 
     def rm_host(self, host):
@@ -363,7 +377,7 @@ class HostCache():
         result = []   # type: List[orchestrator.DaemonDescription]
         for host, dm in self.daemons.items():
             for name, d in dm.items():
-                if name.startswith(service_name + '.'):
+                if d.service_name() == service_name:
                     result.append(d)
         return result
 
@@ -427,21 +441,34 @@ class HostCache():
             seconds=self.mgr.host_check_interval)
         return host not in self.last_host_check or self.last_host_check[host] < cutoff
 
-    def host_needs_new_etc_ceph_ceph_conf(self, host):
+    def host_needs_new_etc_ceph_ceph_conf(self, host: str):
         if not self.mgr.manage_etc_ceph_ceph_conf:
             return False
         if self.mgr.paused:
             return False
         if host in self.mgr.offline_hosts:
             return False
-        if host in self.etc_ceph_ceph_conf_refresh_queue:
-            # We're read-only here.
-            # self.etc_ceph_ceph_conf_refresh_queue.remove(host)
+        if not self.mgr.last_monmap:
+            return False
+        if host not in self.last_etc_ceph_ceph_conf:
+            return True
+        if self.mgr.last_monmap > self.last_etc_ceph_ceph_conf[host]:
+            return True
+        # already up to date:
+        return False
+    
+    def update_last_etc_ceph_ceph_conf(self, host: str):
+        if not self.mgr.last_monmap:
+            return
+        self.last_etc_ceph_ceph_conf[host] = self.mgr.last_monmap
+
+    def host_needs_registry_login(self, host):
+        if host in self.mgr.offline_hosts:
+            return False
+        if host in self.registry_login_queue:
+            self.registry_login_queue.remove(host)
             return True
         return False
-
-    def remove_host_needs_new_etc_ceph_ceph_conf(self, host):
-        self.etc_ceph_ceph_conf_refresh_queue.remove(host)
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None

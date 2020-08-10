@@ -126,14 +126,13 @@ class CephadmUpgrade:
             if not self.upgrade_state or self.upgrade_state.get('paused'):
                 return False
 
-            ok = self.mgr.cephadm_services[s.daemon_type].ok_to_stop([s.daemon_id])
+            r = self.mgr.cephadm_services[s.daemon_type].ok_to_stop([s.daemon_id])
 
-            if ok:
-                logger.info('Upgrade: It is presumed safe to stop %s.%s' %
-                              (s.daemon_type, s.daemon_id))
+            if not r.retval:
+                logger.info(f'Upgrade: {r.stdout}')
                 return True
-            logger.info('Upgrade: It is NOT safe to stop %s.%s' %
-                          (s.daemon_type, s.daemon_id))
+            logger.error('Upgrade: {r.stderr}')
+
             time.sleep(15)
             tries -= 1
         return False
