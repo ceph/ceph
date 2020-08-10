@@ -1063,7 +1063,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_server(None)
 
-    def get_metadata(self, svc_type, svc_id):
+    def get_metadata(self, svc_type, svc_id, default=None):
         """
         Fetch the daemon metadata for a particular service.
 
@@ -1076,7 +1076,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             calling this
         :rtype: dict, or None if no metadata found
         """
-        return self._ceph_get_metadata(svc_type, svc_id)
+        metadata = self._ceph_get_metadata(svc_type, svc_id)
+        if metadata is None:
+            return default
+        return metadata
 
     def get_daemon_status(self, svc_type, svc_id):
         """
