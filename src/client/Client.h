@@ -37,6 +37,7 @@
 #include "msg/Messenger.h"
 #include "osdc/ObjectCacher.h"
 
+#include "RWRef.h"
 #include "InodeRef.h"
 #include "MetaSession.h"
 #include "UserPerm.h"
@@ -66,6 +67,7 @@ class WritebackHandler;
 
 class MDSMap;
 class Message;
+class destructive_lock_ref_t;
 
 enum {
   l_c_first = 20000,
@@ -237,6 +239,8 @@ public:
   friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
+  template <typename T> friend struct RWRefState;
+  template <typename T> friend class RWRef;
 
   using Dispatcher::cct;
 
@@ -761,9 +765,6 @@ protected:
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
 
-
-  bool is_initialized() const { return initialized; }
-
   void check_caps(Inode *in, unsigned flags);
 
   void set_cap_epoch_barrier(epoch_t e);
@@ -983,6 +984,124 @@ protected:
 
   client_t whoami;
 
+  /* The state migration mechanism */
+  enum _state {
+    /* For the initialize_state */
+    CLIENT_NEW, // The initial state for the initialize_state or after Client::shutdown()
+    CLIENT_INITIALIZING, // At the beginning of the Client::init()
+    CLIENT_INITIALIZED, // At the end of CLient::init()
+
+    /* For the mount_state */
+    CLIENT_UNMOUNTED, // The initial state for the mount_state or after unmounted
+    CLIENT_MOUNTING, // At the beginning of Client::mount()
+    CLIENT_MOUNTED, // At the end of Client::mount()
+    CLIENT_UNMOUNTING, // At the beginning of the Client::_unmout()
+  };
+
+  typedef enum _state state_t;
+  using RWRef_t = RWRef<state_t>;
+
+  struct mount_state_t : public RWRefState<state_t> {
+    public:
+      bool is_valid_state(state_t state) override {
+        switch (state) {
+	  case Client::CLIENT_MOUNTING:
+	  case Client::CLIENT_MOUNTED:
+	  case Client::CLIENT_UNMOUNTING:
+	  case Client::CLIENT_UNMOUNTED:
+            return true;
+          default:
+            return false;
+        }
+      }
+
+      int check_reader_state(state_t require) override {
+        if (require == Client::CLIENT_MOUNTING &&
+            (state == Client::CLIENT_MOUNTING || state == Client::CLIENT_MOUNTED))
+          return true;
+        else
+          return false;
+      }
+
+      /* The state migration check */
+      int check_writer_state(state_t require) override {
+        if (require == Client::CLIENT_MOUNTING &&
+            state == Client::CLIENT_UNMOUNTED)
+          return true;
+	else if (require == Client::CLIENT_MOUNTED &&
+            state == Client::CLIENT_MOUNTING)
+          return true;
+	else if (require == Client::CLIENT_UNMOUNTING &&
+            state == Client::CLIENT_MOUNTED)
+          return true;
+	else if (require == Client::CLIENT_UNMOUNTED &&
+            state == Client::CLIENT_UNMOUNTING)
+          return true;
+        else
+          return false;
+      }
+
+      mount_state_t(state_t state, const char *lockname, uint64_t reader_cnt=0)
+        : RWRefState (state, lockname, reader_cnt) {}
+      ~mount_state_t() {}
+  };
+
+  struct initialize_state_t : public RWRefState<state_t> {
+    public:
+      bool is_valid_state(state_t state) override {
+        switch (state) {
+	  case Client::CLIENT_NEW:
+          case Client::CLIENT_INITIALIZING:
+	  case Client::CLIENT_INITIALIZED:
+            return true;
+          default:
+            return false;
+        }
+      }
+
+      int check_reader_state(state_t require) override {
+        if (require == Client::CLIENT_INITIALIZED &&
+            state >= Client::CLIENT_INITIALIZED)
+          return true;
+        else
+          return false;
+      }
+
+      /* The state migration check */
+      int check_writer_state(state_t require) override {
+        if (require == Client::CLIENT_INITIALIZING &&
+            (state == Client::CLIENT_NEW))
+          return true;
+	else if (require == Client::CLIENT_INITIALIZED &&
+            (state == Client::CLIENT_INITIALIZING))
+          return true;
+	else if (require == Client::CLIENT_NEW &&
+            (state == Client::CLIENT_INITIALIZED))
+          return true;
+        else
+          return false;
+      }
+
+      initialize_state_t(state_t state, const char *lockname, uint64_t reader_cnt=0)
+        : RWRefState (state, lockname, reader_cnt) {}
+      ~initialize_state_t() {}
+  };
+
+  struct mount_state_t mount_state;
+  bool is_unmounting() {
+    return mount_state.check_current_state(CLIENT_UNMOUNTING);
+  }
+  bool is_mounted() {
+    return mount_state.check_current_state(CLIENT_MOUNTED);
+  }
+  bool is_mounting() {
+    return mount_state.check_current_state(CLIENT_MOUNTING);
+  }
+
+  struct initialize_state_t initialize_state;
+  bool is_initialized() {
+    return initialize_state.check_current_state(CLIENT_INITIALIZED);
+  }
 
 private:
   struct C_Readahead : public Context {
@@ -1250,9 +1369,6 @@ private:
   ceph::unordered_set<dir_result_t*> opened_dirs;
   uint64_t fd_gen = 1;
 
-  bool   initialized = false;
-  bool   mounted = false;
-  bool   unmounting = false;
   bool   blacklisted = false;
 
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
@@ -1263,8 +1379,6 @@ private:
 
   int local_osd = -ENXIO;
   epoch_t local_osd_epoch = 0;
-
-  int unsafe_sync_write = 0;
 
   // mds requests
   ceph_tid_t last_tid = 0;
