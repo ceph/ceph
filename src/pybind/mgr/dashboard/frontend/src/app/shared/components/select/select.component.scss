@@ -1,13 +1,13 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .select-menu-item {
-  border-bottom: 1px solid bd.$color-transparent;
+  border-bottom: 1px solid bd.$datatable-divider-color;
   cursor: pointer;
   display: block;
   font-size: 1rem;
 
   &:hover {
-    background-color: bd.$color-whitesmoke-gray;
+    background-color: bd.$gray-200;
   }
 }
 

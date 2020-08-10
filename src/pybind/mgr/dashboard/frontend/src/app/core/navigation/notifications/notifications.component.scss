@@ -1,11 +1,11 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .running i {
-  color: bd.$color-primary;
+  color: bd.$primary;
 }
 
 .running:hover i {
-  color: bd.$color-solid-white;
+  color: bd.$white;
 }
 
 a {
