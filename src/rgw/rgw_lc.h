@@ -152,7 +152,11 @@ public:
     decode(storage_class, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const {  
+    f->dump_string("days", days);
+    f->dump_string("date", date);
+    f->dump_string("storage_class", storage_class);
+  }
 };
 WRITE_CLASS_ENCODER(LCTransition)
 
@@ -369,6 +373,14 @@ struct transition_action
   boost::optional<ceph::real_time> date;
   string storage_class;
   transition_action() : days(0) {}
+  void dump(Formatter *f) const {
+    if (!date) {
+      f->dump_int("days", days);
+    } else {
+      utime_t ut(*date);
+      f->dump_stream("date") << ut;
+    }
+  }
 };
 
 /* XXX why not LCRule? */

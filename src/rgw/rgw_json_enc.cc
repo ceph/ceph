@@ -1994,6 +1994,17 @@ void lc_op::dump(Formatter *f) const
   if (obj_tags) {
     f->dump_object("obj_tags", *obj_tags);
   }
+  f->open_object_section("transitions");  
+  for(auto& [storage_class, transition] : transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
+
+  f->open_object_section("noncur_transitions");  
+  for (auto& [storage_class, transition] : noncur_transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
 }
 
 void LCFilter::dump(Formatter *f) const
@@ -2017,6 +2028,17 @@ void LCRule::dump(Formatter *f) const
   f->dump_object("noncur_expiration", noncur_expiration);
   f->dump_object("mp_expiration", mp_expiration);
   f->dump_object("filter", filter);
+  f->open_object_section("transitions");  
+  for (auto& [storage_class, transition] : transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
+
+  f->open_object_section("noncur_transitions");  
+  for (auto& [storage_class, transition] : noncur_transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
   f->dump_bool("dm_expiration", dm_expiration);
 }
 
@@ -2073,4 +2095,3 @@ void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
 }
-
