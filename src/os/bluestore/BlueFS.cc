@@ -2920,7 +2920,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
-      if (h->iocv[i] && h->iocv[i]->has_pending_aios()) {
+      if (h->iocv[i]->has_pending_aios()) {
         bdev[i]->aio_submit(h->iocv[i]);
       }
     }
