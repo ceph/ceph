@@ -325,19 +325,14 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
   return policies;
 }
 
-static int get_obj_head(rgw::sal::RGWRadosStore *store, struct req_state *s,
-                        const rgw_obj& obj,
-                        map<string, bufferlist> *attrs,
-                         bufferlist *pbl)
+static int get_obj_head(struct req_state *s,
+                        rgw::sal::RGWObject* obj,
+			bufferlist *pbl)
 {
-  store->getRados()->set_prefetch_data(s->obj_ctx, obj);
+  std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op = obj->get_read_op(s->obj_ctx);
+  obj->set_prefetch_data(s->obj_ctx);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  read_op.params.attrs = attrs;
-
-  int ret = read_op.prepare(s->yield);
+  int ret = read_op->prepare(s->yield);
   if (ret < 0) {
     return ret;
   }
@@ -346,7 +341,7 @@ static int get_obj_head(rgw::sal::RGWRadosStore *store, struct req_state *s,
     return 0;
   }
 
-  ret = read_op.read(0, s->cct->_conf->rgw_max_chunk_size, *pbl, s->yield);
+  ret = read_op->read(0, s->cct->_conf->rgw_max_chunk_size, *pbl, s->yield);
 
   return 0;
 }
@@ -369,10 +364,8 @@ struct multipart_upload_info
 };
 WRITE_CLASS_ENCODER(multipart_upload_info)
 
-static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *s,
-			      const rgw_obj& obj,
-                              RGWAccessControlPolicy *policy,
-			      map<string, bufferlist> *attrs,
+static int get_multipart_info(struct req_state *s,
+			      rgw::sal::RGWObject* obj,
                               multipart_upload_info *upload_info)
 {
   bufferlist header;
@@ -380,7 +373,7 @@ static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *
   bufferlist headbl;
   bufferlist *pheadbl = (upload_info ? &headbl : nullptr);
 
-  int op_ret = get_obj_head(store, s, obj, attrs, pheadbl);
+  int op_ret = get_obj_head(s, obj, pheadbl);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       return -ERR_NO_SUCH_UPLOAD;
@@ -398,40 +391,21 @@ static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *
     }
   }
 
-  if (policy && attrs) {
-    for (auto& iter : *attrs) {
-      string name = iter.first;
-      if (name.compare(RGW_ATTR_ACL) == 0) {
-        bufferlist& bl = iter.second;
-        auto bli = bl.cbegin();
-        try {
-          decode(*policy, bli);
-        } catch (buffer::error& err) {
-          ldpp_dout(s, 0) << "ERROR: could not decode policy" << dendl;
-          return -EIO;
-        }
-        break;
-      }
-    }
-  }
-
   return 0;
 }
 
-static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *s,
+static int get_multipart_info(struct req_state *s,
 			      const string& meta_oid,
-                              RGWAccessControlPolicy *policy,
-			      map<string, bufferlist> *attrs,
                               multipart_upload_info *upload_info)
 {
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
-  rgw_obj meta_obj;
-  meta_obj.init_ns(s->bucket->get_key(), meta_oid, mp_ns);
-  meta_obj.set_in_extra_data(true);
+  std::unique_ptr<rgw::sal::RGWObject> meta_obj;
+  meta_obj = s->bucket->get_object(rgw_obj_key(meta_oid, string(), mp_ns));
+  meta_obj->set_in_extra_data(true);
 
-  return get_multipart_info(store, s, meta_obj, policy, attrs, upload_info);
+  return get_multipart_info(s, meta_obj.get(), upload_info);
 }
 
 static int read_bucket_policy(rgw::sal::RGWStore *store,
@@ -3831,7 +3805,7 @@ void RGWPutObj::execute()
   if (multipart) {
     RGWMPObj mp(s->object->get_name(), multipart_upload_id);
 
-    op_ret = get_multipart_info(store, s, mp.get_meta(), nullptr, nullptr, &upload_info);
+    op_ret = get_multipart_info(s, mp.get_meta(), &upload_info);
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
         ldpp_dout(this, 0) << "ERROR: get_multipart_info returned " << op_ret << ": " << cpp_strerror(-op_ret) << dendl;
@@ -6306,7 +6280,7 @@ void RGWAbortMultipart::execute()
   mp.init(s->object->get_name(), upload_id);
   meta_oid = mp.get_meta();
 
-  op_ret = get_multipart_info(store, s, meta_oid, nullptr, nullptr, nullptr);
+  op_ret = get_multipart_info(s, meta_oid, nullptr);
   if (op_ret < 0)
     return;
 
@@ -6339,7 +6313,7 @@ void RGWListMultipart::execute()
   mp.init(s->object->get_name(), upload_id);
   meta_oid = mp.get_meta();
 
-  op_ret = get_multipart_info(store, s, meta_oid, &policy, nullptr, nullptr);
+  op_ret = get_multipart_info(s, meta_oid, nullptr);
   if (op_ret < 0)
     return;
 
