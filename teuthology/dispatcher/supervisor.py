@@ -16,6 +16,9 @@ from teuthology.lock.ops import reimage_many
 from teuthology.misc import get_user
 from teuthology.config import FakeNamespace
 from teuthology.worker import run_with_watchdog, symlink_worker_log
+from teuthology.job_status import get_status
+import teuthology
+from teuthology.nuke import nuke
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -42,7 +45,7 @@ def main(args):
     suite_dir = os.path.join(archive_dir, job_config['name'])
     if (not os.path.exists(suite_dir)):
         os.mkdir(suite_dir)
-    log_file_path = os.path.join(suite_dir, 'worker.{job_id}'.format(
+    log_file_path = os.path.join(suite_dir, 'supervisor.{job_id}'.format(
                                  job_id=job_config['job_id']))
     setup_log_file(log_file_path)
 
@@ -164,6 +167,8 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
             log.error('Child exited with code %d', p.returncode)
         else:
             log.info('Success!')
+    if 'targets' in job_config:
+        unlock_targets(job_config)
 
 
 def reimage_machines(job_config):
@@ -177,6 +182,20 @@ def reimage_machines(job_config):
     ctx.config['targets'] = reimaged
     # change the status to running after the reimaging process
     report.try_push_job_info(ctx.config, dict(status='waiting'))
+
+
+def unlock_targets(job_config):
+    serializer = report.ResultsSerializer(teuth_config.archive_base)
+    job_info = serializer.job_info(job_config['name'], job_config['job_id'])
+    job_status = get_status(job_info)
+    if job_status == 'pass' or job_config.get('unlock_on_failure', False):
+        log.info('Unlocking machines...')
+        fake_ctx = create_fake_context(job_config)
+        for machine in job_info['targets'].keys():
+            teuthology.lock.ops.unlock_one(fake_ctx, machine, job_info['owner'], job_info['archive_path'])
+    if job_status != 'pass' and job_config.get('nuke-on-error', False):
+        fake_ctx = create_fake_context(job_config)
+        nuke(fake_ctx, True)
 
 
 def create_fake_context(job_config, block=False):
@@ -196,6 +215,7 @@ def create_fake_context(job_config, block=False):
         'machine_type': job_config['machine_type'],
         'os_type': job_config['os_type'],
         'os_version': os_version,
+        'name': job_config['name'],
     }
 
     fake_ctx = FakeNamespace(ctx_args)
