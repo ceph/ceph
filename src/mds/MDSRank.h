@@ -546,6 +546,7 @@ class MDSRank {
     int dispatch_depth = 0;
 
     ceph::heartbeat_handle_d *hb = nullptr;  // Heartbeat for threads using mds_lock
+    double heartbeat_grace;
 
     map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
