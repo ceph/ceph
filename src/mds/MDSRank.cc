@@ -531,6 +531,7 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
@@ -1318,9 +1319,8 @@ void MDSRank::heartbeat_reset()
   // NB not enabling suicide grace, because the mon takes care of killing us
   // (by blacklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.
-  auto grace = g_conf().get_val<double>("mds_heartbeat_grace");
   g_ceph_context->get_heartbeat_map()->reset_timeout(hb,
-    ceph::make_timespan(grace),
+    ceph::make_timespan(heartbeat_grace),
     ceph::timespan::zero());
 }
 
@@ -3624,6 +3624,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_request_load_average_decay_rate",
     "mds_session_cache_liveness_decay_rate",
     "mds_replay_unsafe_with_closed_session",
+    "mds_heartbeat_grace",
     NULL
   };
   return KEYS;
@@ -3633,6 +3634,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
 {
   // XXX with or without mds_lock!
 
+  if (changed.count("mds_heartbeat_grace")) {
+    heartbeat_grace = conf.get_val<double>("mds_heartbeat_grace");
+  }
   if (changed.count("mds_op_complaint_time") || changed.count("mds_op_log_threshold")) {
     op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time, conf->mds_op_log_threshold);
   }
