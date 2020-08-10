@@ -4945,7 +4945,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   if (subdir_name.empty()) {
     return false;
-  } else if (subdir_name.back() == '/') {
+  } else if (subdir_name.back() == '/' && subdir_name.size() > 1) {
     subdir_name.pop_back();
   }
 
