@@ -541,7 +541,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
 
 def maybe_redirect_stderr(args, config, cluster, type_, id_):
     if type_ == 'osd' and \
-       config.get('flavor', 'default') != 'crimson':
+       config.get('flavor', 'default') == 'crimson':
         log_path = f'/var/log/ceph/{cluster}-{type_}.{id_}.log'
         return args + [run.Raw('2>>'), log_path]
     else:
