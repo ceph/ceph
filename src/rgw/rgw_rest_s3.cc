@@ -2222,9 +2222,11 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
-  int r = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-  if (r)
-    return r;
+  int r;
+  if (!s->system_request) {
+    r = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+    if (r) return r;
+  }
 
   r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
