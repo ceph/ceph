@@ -424,6 +424,8 @@ void MonClient::handle_monmap(MMonMap *m)
     }
   }
 
+  cct->set_mon_addrs(monmap);
+
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
   want_monmap = false;
