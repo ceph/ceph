@@ -206,7 +206,7 @@ int RGWRadosBucket::read_bucket_stats(optional_yield y)
 
 int RGWRadosBucket::sync_user_stats()
 {
-      return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, &ent);
+      return store->ctl()->bucket->sync_user_stats(owner->get_id(), info);
 }
 
 int RGWRadosBucket::update_container_stats(void)
