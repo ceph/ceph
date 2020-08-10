@@ -13,9 +13,8 @@ $card-font-max-size: 21px;
     $card-font-min-size,
     $card-font-max-size
   );
-  border: 0.5px solid bd.$color-info-card-border;
+  border: 0.5px solid bd.$gray-300;
   border-radius: 3px;
-  box-shadow: 0 1px 1px bd.$color-shadow-gray;
   height: 100%;
 
   .card-body {

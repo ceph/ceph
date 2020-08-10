@@ -27,12 +27,12 @@
 
 /* Buttons */
 .btn-light {
-  background-color: bd.$color-solid-white;
-  border-color: bd.$color-input-border !important;
+  background-color: bd.$white;
+  border-color: bd.$gray-400 !important;
 
   &:hover {
-    background-color: bd.$color-soft-gray;
-    border-color: bd.$color-input-border-hover !important;
+    background-color: bd.$gray-300;
+    border-color: bd.$gray-600 !important;
   }
 }
 
@@ -55,12 +55,16 @@
 }
 
 .btn-primary .badge {
-  background-color: bd.$color-button-badge;
-  color: bd.$color-primary;
+  background-color: bd.$gray-200;
+  color: bd.$primary;
 }
 
 .btn-group > .btn > i.fa,
 .cd-datatable-actions button.btn i.fa {
   /** Add space between icon and text */
   margin-right: 5px;
+}
+
+.card-footer button.btn:not(:first-child) {
+  margin-left: 5px;
 }

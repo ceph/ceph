@@ -12,9 +12,9 @@ canvas {
 }
 
 .chartjs-tooltip {
-  background: bd.$color-chart-tooltip-bg;
+  background: rgba(bd.$black, 0.7);
   border-radius: 3px;
-  color: bd.$color-chat-tooltip-text;
+  color: bd.$white;
   font-family: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif !important;
   opacity: 0;
   pointer-events: none;
@@ -41,7 +41,7 @@ canvas {
 }
 
 .chartjs-tooltip::after {
-  border-color: bd.$color-chart-tooltip-border transparent transparent transparent;
+  border-color: bd.$black transparent transparent transparent;
   border-style: solid;
   border-width: 5px;
   content: ' ';

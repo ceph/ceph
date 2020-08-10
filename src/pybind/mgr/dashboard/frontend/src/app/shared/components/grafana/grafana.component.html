@@ -14,10 +14,10 @@
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
   <div class="row">
-    <div class="col-12">
+    <div class="col">
       <div class="form-inline timepicker">
         <label for="timepicker"
-               class="ml-1 my-1 col-form-label"
+               class="ml-1 my-1"
                i18n>Grafana Time Picker</label>
 
         <select id="timepicker"
@@ -41,7 +41,7 @@
   </div>
 
   <div class="row">
-    <div class="col-12">
+    <div class="col">
       <div class="grafana-container">
         <iframe #iframe
                 id="iframe"

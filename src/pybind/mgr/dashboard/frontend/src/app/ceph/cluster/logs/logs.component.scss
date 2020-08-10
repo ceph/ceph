@@ -27,22 +27,18 @@ p {
   }
 
   .err {
-    color: bd.$color-pink;
+    color: bd.$danger;
   }
 
   .warn {
-    color: bd.$color-bright-yellow;
+    color: bd.$warning;
   }
 
   .info {
-    color: bd.$color-brand-teal;
+    color: bd.$info;
   }
 }
 
 ::ng-deep ngb-timepicker input.ngb-tp-input {
   width: 3.5rem !important;
-}
-
-.middle {
-  padding-top: 7px;
 }

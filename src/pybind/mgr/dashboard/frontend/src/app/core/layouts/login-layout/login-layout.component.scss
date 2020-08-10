@@ -1,25 +1,23 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 ::ng-deep .login {
-  background-color: bd.$color-login-row-bg;
+  background-color: bd.$secondary;
   background-image: url('../../../../assets/ceph_background.gif');
   background-position: right bottom;
   background-repeat: no-repeat;
-  color: bd.$color-login-row-text;
+  color: bd.$body-color-bright;
 
   header {
     position: absolute;
     width: 100vw;
 
     .navbar {
-      padding: 1rem 2rem;
-
       .dropdown-menu {
         margin-top: 0.2rem;
 
         li a {
           &:hover {
-            background-color: bd.$color-brand-teal;
+            background-color: bd.$primary;
           }
         }
       }

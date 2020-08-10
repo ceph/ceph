@@ -89,3 +89,22 @@ cd-about {
     @extend .col-8;
   }
 }
+
+.cd-header,
+legend {
+  @extend .pb-1;
+  @extend .mt-4;
+  @extend .mb-4;
+  @extend .border-bottom;
+}
+
+// All '.fa' icons will have fixed width
+.fa {
+  @extend .fa-fw;
+}
+
+pre {
+  @extend .card;
+  @extend .bg-light;
+  @extend .p-2;
+}
