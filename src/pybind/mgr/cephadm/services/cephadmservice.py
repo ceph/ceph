@@ -20,7 +20,7 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
     # typing.NamedTuple + Generic is broken in py36
-    def __init__(self, host, daemon_id,
+    def __init__(self, host: str, daemon_id,
                  spec: Optional[ServiceSpecs]=None,
                  network: Optional[str]=None,
                  keyring: Optional[str]=None,
@@ -34,7 +34,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         Would be great to have a consistent usage where all properties are set.
         """
-        self.host = host
+        self.host: str = host
         self.daemon_id = daemon_id
         daemon_type = daemon_type or (spec.service_type if spec else None)
         assert daemon_type is not None
