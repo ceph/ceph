@@ -6161,10 +6161,10 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
     }
   }
   if (changed.count("filestore_op_thread_timeout")) {
-    op_wq.set_timeout(conf->osd_op_thread_timeout);
+    op_wq.set_timeout(ceph::make_timespan(conf->filestore_op_thread_timeout));
   }
   if (changed.count("filestore_op_thread_suicide_timeout")) {
-    op_wq.set_suicide_timeout(conf->osd_op_thread_suicide_timeout);
+    op_wq.set_suicide_timeout(ceph::make_timespan(conf->filestore_op_thread_suicide_timeout));
   }
 }
 
