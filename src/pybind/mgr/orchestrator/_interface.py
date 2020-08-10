@@ -1382,6 +1382,8 @@ class DaemonDescription(object):
         out['version'] = self.version
         out['status'] = self.status
         out['status_desc'] = self.status_desc
+        if self.daemon_type == 'osd':
+            out['osdspec_affinity'] = self.osdspec_affinity
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
