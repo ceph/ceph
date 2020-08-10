@@ -46,6 +46,7 @@ class RADOS;
 namespace librbd {
 
   struct AsioEngine;
+  template <typename> class ConfigWatcher;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -122,6 +123,7 @@ namespace librbd {
     librados::IoCtx data_ctx;
     librados::IoCtx md_ctx;
 
+    ConfigWatcher<ImageCtx> *config_watcher = nullptr;
     ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
 
@@ -245,9 +247,6 @@ namespace librbd {
                             librados::snap_t snap_id, IoCtx& p,
                             bool read_only) {
       return new ImageCtx(image_name, image_id, snap_id, p, read_only);
-    }
-    void destroy() {
-      delete this;
     }
 
     /**

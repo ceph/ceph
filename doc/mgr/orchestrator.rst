@@ -59,8 +59,6 @@ Status
 Show current orchestrator mode and high-level status (whether the module able
 to talk to it)
 
-Also show any in-progress actions.
-
 Host Management
 ===============
 
@@ -158,25 +156,19 @@ Create OSDs on a set of devices on a single host::
 
     ceph orch daemon add osd <host>:device1,device2
 
-Example::
-=========
-or::
+Another way of doing it is using ``apply`` interface::
 
     ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
-
 
 Where the ``json_file/yaml_file`` is a DriveGroup specification.
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
 
-or::
-
-    ceph orch apply osd --all-available-devices [--dry-run]
-
-If the 'apply' method is used. You will be presented with a preview of what will happen.
+Along with ``apply`` interface if ``dry-run`` option is used, it will present a
+preview of what will happen.
 
 Example::
 
-    # ceph orch apply osd --all-available-devices
+    # ceph orch apply osd --all-available-devices --dry-run
     NAME                  HOST  DATA     DB WAL
     all-available-devices node1 /dev/vdb -  -
     all-available-devices node2 /dev/vdc -  -
@@ -207,16 +199,16 @@ In the case that you have already created the OSD's using the ``all-available-de
     ceph orch osd spec --service-name  osd.all-available-devices --unmanaged
 
 Remove an OSD
--------------------
+-------------
 ::
 
-    ceph orch osd rm <svc_id>... [--replace] [--force]
+    ceph orch osd rm <svc_id(s)> [--replace] [--force]
 
-Removes one or more OSDs from the cluster.
+Evacuates PGs from an OSD and removes it from the cluster.
 
 Example::
 
-    # ceph orch osd rm 4
+    # ceph orch osd rm 0
     Scheduled OSD(s) for removal
 
 
@@ -225,10 +217,10 @@ OSDs that are not safe-to-destroy will be rejected.
 You can query the state of the operation with::
 
     # ceph orch osd rm status
-    NAME  HOST  PGS STARTED_AT
-    osd.7 node1 55 2020-04-22 19:28:38.785761
-    osd.5 node3 3 2020-04-22 19:28:34.201685
-    osd.3 node2 0 2020-04-22 19:28:34.201695
+    OSD_ID  HOST         STATE                    PG_COUNT  REPLACE  FORCE  STARTED_AT
+    2       cephadm-dev  done, waiting for purge  0         True     False  2020-07-17 13:01:43.147684
+    3       cephadm-dev  draining                 17        False    True   2020-07-17 13:01:45.162158
+    4       cephadm-dev  started                  42        False    True   2020-07-17 13:01:45.162158
 
 
 When no PGs are left on the osd, it will be decommissioned and removed from the cluster.
@@ -237,11 +229,28 @@ When no PGs are left on the osd, it will be decommissioned and removed from the 
     After removing an OSD, if you wipe the LVM physical volume in the device used by the removed OSD, a new OSD will be created.
     Read information about the ``unmanaged`` parameter in :ref:`orchestrator-cli-create-osds`.
 
+Stopping OSD Removal
+--------------------
+
+You can stop the operation with
+
+::
+
+    ceph orch osd rm stop <svc_id(s)>
+
+Example::
+
+    # ceph orch osd rm stop 4
+    Stopped OSD(s) removal
+
+This will reset the initial state of the OSD and remove it from the queue.
+
+
 Replace an OSD
 -------------------
 ::
 
-    orch osd rm <svc_id>... --replace [--force]
+    orch osd rm <svc_id(s)> --replace [--force]
 
 Example::
 

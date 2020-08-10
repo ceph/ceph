@@ -313,7 +313,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         pass
 
     @deferred_write("daemon_action")
-    def daemon_action(self, action, daemon_type, daemon_id):
+    def daemon_action(self, action, daemon_name, image=None):
         pass
 
     @deferred_write("Adding NFS service")
@@ -353,8 +353,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_host(self, spec):
         # type: (orchestrator.HostSpec) -> None
         host = spec.hostname
-        if host == 'raise_no_support':
+        if host == 'raise_validation_error':
             raise orchestrator.OrchestratorValidationError("MON count must be either 1, 3 or 5")
+        if host == 'raise_error':
+            raise orchestrator.OrchestratorError("host address is empty")
         if host == 'raise_bug':
             raise ZeroDivisionError()
         if host == 'raise_not_implemented':

@@ -23,23 +23,6 @@
 
 namespace crimson::os::seastore {
 
-class LBAPin;
-using LBAPinRef = std::unique_ptr<LBAPin>;
-class LBAPin {
-public:
-  virtual extent_len_t get_length() const = 0;
-  virtual paddr_t get_paddr() const = 0;
-  virtual laddr_t get_laddr() const = 0;
-  virtual LBAPinRef duplicate() const = 0;
-
-  virtual ~LBAPin() {}
-};
-std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
-
-using lba_pin_list_t = std::list<LBAPinRef>;
-
-std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
-
 /**
  * Abstract interface for managing the logical to physical mapping
  */
@@ -128,14 +111,26 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  // TODO: probably unused, removed
-  using submit_lba_transaction_ertr = crimson::errorator<
+  using complete_transaction_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using submit_lba_transaction_ret = submit_lba_transaction_ertr::future<>;
-  virtual submit_lba_transaction_ret submit_lba_transaction(
+  using complete_transaction_ret = complete_transaction_ertr::future<>;
+  virtual complete_transaction_ret complete_transaction(
     Transaction &t) = 0;
 
-  virtual TransactionRef create_transaction() = 0;
+  /**
+   * Should be called after replay on each cached extent.
+   * Implementation must initialize the LBAPin on any
+   * LogicalCachedExtent's and may also read in any dependent
+   * structures, etc.
+   */
+  using init_cached_extent_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using init_cached_extent_ret = init_cached_extent_ertr::future<>;
+  virtual init_cached_extent_ret init_cached_extent(
+    Transaction &t,
+    CachedExtentRef e) = 0;
+
+  virtual void add_pin(LBAPin &pin) = 0;
 
   virtual ~LBAManager() {}
 };

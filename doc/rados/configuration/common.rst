@@ -89,10 +89,6 @@ authentication in the ``[global]`` section of your Ceph configuration file. ::
 
 Additionally, you should enable message signing. See `Cephx Config Reference`_ for details.
 
-.. important:: When upgrading, we recommend expressly disabling authentication
-   first, then perform the upgrade. Once the upgrade is complete, re-enable
-   authentication.
-
 .. _Cephx Config Reference: ../auth-config-ref
 
 

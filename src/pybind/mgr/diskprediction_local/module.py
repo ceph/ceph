@@ -218,7 +218,7 @@ class Module(MgrModule):
         else:
             self.log.error('unable to predict device due to health data records less than 6 days')
 
-        if predict_datas:
+        if len(predict_datas) >= 6:
             predicted_result = obj_predictor.predict(predict_datas)
         return predicted_result
 

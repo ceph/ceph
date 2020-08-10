@@ -192,7 +192,7 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
       } catch (const ErrorT& obj) {
         return std::invoke(std::forward<Func>(func), obj);
       }
-      assert("exception type mismatch – impossible!" == nullptr);
+      ceph_abort_msg("exception type mismatch – impossible!");
     };
   }
 
@@ -698,6 +698,7 @@ private:
       using decayed_t = std::decay_t<decltype(e)>;
       auto&& handler =
         decayed_t::error_t::handle(std::forward<ErrorFunc>(func));
+      static_assert(std::is_invocable_v<decltype(handler), ErrorT>);
       return std::invoke(std::move(handler), std::forward<ErrorT>(e));
     }
   };
@@ -747,7 +748,7 @@ public:
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
       if (msg) {
-        ceph_abort(msg);
+        ceph_abort_msg(msg);
       } else {
         ceph_abort();
       }
@@ -963,6 +964,8 @@ namespace ct_error {
   using value_too_large = ct_error_code<std::errc::value_too_large>;
   using eagain =
     ct_error_code<std::errc::resource_unavailable_try_again>;
+  using file_too_large =
+    ct_error_code<std::errc::file_too_large>;
 
   struct pass_further_all {
     template <class ErrorT>

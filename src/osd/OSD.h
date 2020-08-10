@@ -1574,8 +1574,8 @@ protected:
 
   public:
     ShardedOpWQ(OSD *o,
-		time_t ti,
-		time_t si,
+		ceph::timespan ti,
+		ceph::timespan si,
 		ShardedThreadPool* tp)
       : ShardedThreadPool::ShardedWQ<OpSchedulerItem>(ti, si, tp),
         osd(o) {

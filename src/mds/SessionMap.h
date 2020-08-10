@@ -354,6 +354,10 @@ public:
     return info.completed_flushes.count(tid);
   }
 
+  uint64_t get_num_caps() const {
+    return caps.size();
+  }
+
   unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }
   unsigned get_num_trim_flushes_warnings() const {
     return num_trim_flushes_warnings;

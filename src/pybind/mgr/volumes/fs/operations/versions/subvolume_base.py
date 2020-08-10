@@ -1,30 +1,22 @@
 import os
-import uuid
 import errno
 import logging
-from enum import Enum, unique
 from hashlib import md5
 
 import cephfs
 
 from ..pin_util import pin
+from .subvolume_attrs import SubvolumeTypes, SubvolumeStates
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
+from .op_sm import SubvolumeOpSm
 
 log = logging.getLogger(__name__)
 
-@unique
-class SubvolumeFeatures(Enum):
-    FEATURE_SNAPSHOT_CLONE       = "snapshot-clone"
-    FEATURE_SNAPSHOT_AUTOPROTECT = "snapshot-autoprotect"
-
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
-
-    SUBVOLUME_TYPE_NORMAL = "subvolume"
-    SUBVOLUME_TYPE_CLONE  = "clone"
 
     def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
         self.fs = fs
@@ -101,8 +93,23 @@ class SubvolumeBase(object):
         self.legacy = mode
 
     @property
-    def features(self):
+    def path(self):
+        """ Path to subvolume data directory """
         raise NotImplementedError
+
+    @property
+    def features(self):
+        """ List of features supported by the subvolume, containing items from SubvolumeFeatures """
+        raise NotImplementedError
+
+    @property
+    def state(self):
+        """ Subvolume state, one of SubvolumeStates """
+        raise NotImplementedError
+
+    @property
+    def subvol_type(self):
+        return SubvolumeTypes.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE))
 
     def load_config(self):
         if self.legacy_mode:
@@ -210,7 +217,7 @@ class SubvolumeBase(object):
         return pin(self.fs, self.base_path, pin_type, pin_setting)
 
     def init_config(self, version, subvolume_type, subvolume_path, subvolume_state):
-        self.metadata_mgr.init(version, subvolume_type, subvolume_path, subvolume_state)
+        self.metadata_mgr.init(version, subvolume_type.value, subvolume_path, subvolume_state.value)
         self.metadata_mgr.flush()
 
     def discover(self):
@@ -231,14 +238,16 @@ class SubvolumeBase(object):
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
             raise VolumeException(-e.args[0], "error accessing subvolume '{0}'".format(self.subvolname))
 
+    def _trash_dir(self, path):
+        create_trashcan(self.fs, self.vol_spec)
+        with open_trashcan(self.fs, self.vol_spec) as trashcan:
+            trashcan.dump(path)
+            log.info("subvolume path '{0}' moved to trashcan".format(path))
+
     def trash_base_dir(self):
         if self.legacy_mode:
             self.fs.unlink(self.legacy_config_path)
-        subvol_path = self.base_path
-        create_trashcan(self.fs, self.vol_spec)
-        with open_trashcan(self.fs, self.vol_spec) as trashcan:
-            trashcan.dump(subvol_path)
-            log.info("subvolume with path '{0}' moved to trashcan".format(subvol_path))
+        self._trash_dir(self.base_path)
 
     def create_base_dir(self, mode):
         try:
@@ -247,8 +256,8 @@ class SubvolumeBase(object):
             raise VolumeException(-e.args[0], e.args[1])
 
     def info (self):
-        subvolpath = self.metadata_mgr.get_global_option('path')
-        etype = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
+        subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
+        etype = self.subvol_type
         st = self.fs.statx(subvolpath, cephfs.CEPH_STATX_BTIME | cephfs.CEPH_STATX_SIZE |
                                        cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID |
                                        cephfs.CEPH_STATX_MODE | cephfs.CEPH_STATX_ATIME |
@@ -266,9 +275,9 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-        return {'path': subvolpath, 'type': etype, 'uid': int(st["uid"]), 'gid': int(st["gid"]),
+        return {'path': subvolpath, 'type': etype.value, 'uid': int(st["uid"]), 'gid': int(st["gid"]),
             'atime': str(st["atime"]), 'mtime': str(st["mtime"]), 'ctime': str(st["ctime"]),
             'mode': int(st["mode"]), 'data_pool': data_pool, 'created_at': str(st["btime"]),
             'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
             'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
-            'pool_namespace': pool_namespace, 'features': self.features}
+            'pool_namespace': pool_namespace, 'features': self.features, 'state': self.state.value}

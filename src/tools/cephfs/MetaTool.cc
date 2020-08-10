@@ -425,7 +425,7 @@ int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn)
   f->open_object_section("fnodes");
   for (const auto &frag : frags) {
     bufferlist hbl;
-    string oid = obj_name(inode_meta.get_meta()->inode.ino, frag);
+    string oid = obj_name(inode_meta.get_meta()->inode->ino, frag);
     int ret = io_meta.omap_get_header(oid, &hbl);
     if (ret < 0) {
       std::cerr << __func__ << " : can't find oid("<< oid << ")" << std::endl;
@@ -967,10 +967,10 @@ int MetaTool::show_child(std::string_view key,
     f->close_section();
     f->flush(ds);
 
-    if (sp_ino > 0 && op != NULL && sp_ino == inode_data.inode.ino) {
+    if (sp_ino > 0 && op != NULL && sp_ino == inode_data.inode->ino) {
       inode_meta_t* tmp = new inode_meta_t(first, type, &inode_data);
-      op->inodes[inode_data.inode.ino] = tmp;
-      op->okeys[inode_data.inode.ino] = key.data();
+      op->inodes[inode_data.inode->ino] = tmp;
+      op->okeys[inode_data.inode->ino] = key.data();
       return 1;
     } else {
       delete &inode_data;

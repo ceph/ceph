@@ -1,9 +1,10 @@
 import json
 import logging
+import subprocess
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
 
-from mgr_module import MonCommandFailed
+from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from orchestrator import OrchestratorError, DaemonDescription
@@ -19,7 +20,7 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
     # typing.NamedTuple + Generic is broken in py36
-    def __init__(self, host, daemon_id,
+    def __init__(self, host: str, daemon_id,
                  spec: Optional[ServiceSpecs]=None,
                  network: Optional[str]=None,
                  keyring: Optional[str]=None,
@@ -33,7 +34,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         Would be great to have a consistent usage where all properties are set.
         """
-        self.host = host
+        self.host: str = host
         self.daemon_id = daemon_id
         daemon_type = daemon_type or (spec.service_type if spec else None)
         assert daemon_type is not None
@@ -96,12 +97,14 @@ class CephadmService(metaclass=ABCMeta):
 
         return cephadm_config, []
 
-
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
-            self.config_dashboard(daemon_descrs)
-    
+            if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+                self.config_dashboard(daemon_descrs)
+            else:
+                logger.debug('Dashboard is not enabled. Skip configuration.')
+
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         """Config dashboard settings."""
         raise NotImplementedError()
@@ -191,23 +194,28 @@ class CephadmService(metaclass=ABCMeta):
 
 
 
-    def ok_to_stop(self, daemon_ids: List[str]) -> bool:
+    def ok_to_stop(self, daemon_ids: List[str]) -> HandleCommandResult:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+        out = f'It is presumed safe to stop {names}'
+        err = f'It is NOT safe to stop {names}'
 
         if self.TYPE not in ['mon', 'osd', 'mds']:
-            logger.info('Upgrade: It is presumed safe to stop %s' % names)
-            return True
+            logger.info(out)
+            return HandleCommandResult(0, out, None)
 
-        ret, out, err = self.mgr.mon_command({
+        r = HandleCommandResult(*self.mgr.mon_command({
             'prefix': f'{self.TYPE} ok-to-stop',
             'ids': daemon_ids,
-        })
+        }))
 
-        if ret:
-            logger.info(f'It is NOT safe to stop {names}: {err}')
-            return False
+        if r.retval:
+            err = f'{err}: {r.stderr}' if r.stderr else err
+            logger.error(err)
+            return HandleCommandResult(r.retval, r.stdout, err)
 
-        return True
+        out = f'{out}: {r.stdout}' if r.stdout else out
+        logger.info(out)
+        return HandleCommandResult(r.retval, out, r.stderr)
 
     def pre_remove(self, daemon_id: str) -> None:
         """
@@ -353,8 +361,12 @@ class MdsService(CephadmService):
 class RgwService(CephadmService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec) -> None:
+
+    def config(self, spec: RGWSpec, rgw_id: str):
         assert self.TYPE == spec.service_type
+
+        # create realm, zonegroup, and zone if needed
+        self.create_realm_zonegroup_zone(spec, rgw_id)
 
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
@@ -414,6 +426,13 @@ class RgwService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
 
+        keyring = self.get_keyring(rgw_id)
+
+        daemon_spec.keyring = keyring
+
+        return self.mgr._create_daemon(daemon_spec)
+
+    def get_keyring(self, rgw_id: str):
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
@@ -421,10 +440,94 @@ class RgwService(CephadmService):
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
         })
+        return keyring
 
-        daemon_spec.keyring = keyring
+    def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str):
+        if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
+            raise OrchestratorError('Health not ok, will try agin when health ok')
 
-        return self.mgr._create_daemon(daemon_spec)
+        #get keyring needed to run rados commands and strip out just the keyring
+        keyring = self.get_keyring(rgw_id).split('key = ',1)[1].rstrip()
+
+        # We can call radosgw-admin within the container, cause cephadm gives the MGR the required keyring permissions
+        # get realms
+        cmd = ['radosgw-admin',
+               '--key=%s'%keyring,
+               '--user', 'rgw.%s'%rgw_id,
+               'realm', 'list',
+               '--format=json']
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # create realm if needed
+        cmd = ['radosgw-admin',
+               '--key=%s'%keyring,
+               '--user', 'rgw.%s'%rgw_id,
+               'realm', 'create',
+               '--rgw-realm=%s'%spec.rgw_realm,
+               '--default']
+        if not result.stdout:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.mgr.log.info('created realm: %s'%spec.rgw_realm)
+        else:
+            try:
+                j = json.loads(result.stdout)
+                if 'realms' not in j or spec.rgw_realm not in j['realms']:
+                    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    self.mgr.log.info('created realm: %s'%spec.rgw_realm)
+            except Exception as e:
+                raise OrchestratorError('failed to parse realm info')
+
+        # get zonegroup
+        cmd = ['radosgw-admin',
+               '--key=%s'%keyring,
+               '--user', 'rgw.%s'%rgw_id,
+               'zonegroup', 'list',
+               '--format=json']
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        #create zonegroup if needed
+        cmd = ['radosgw-admin',
+               '--key=%s'%keyring,
+               '--user', 'rgw.%s'%rgw_id,
+               'zonegroup', 'create',
+               '--rgw-zonegroup=default',
+               '--master', '--default']
+        if not result.stdout:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.mgr.log.info('created zonegroup: default')
+        else:
+            try:
+                j = json.loads(result.stdout)
+                if 'zonegroups' not in j or 'default' not in j['zonegroups']:
+                    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    self.mgr.log.info('created zonegroup: default')
+            except Exception as e:
+                raise OrchestratorError('failed to parse zonegroup info')
+
+        #get zones
+        cmd = ['radosgw-admin',
+               '--key=%s'%keyring,
+               '--user', 'rgw.%s'%rgw_id,
+               'zone', 'list',
+               '--format=json']
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        #create zone if needed
+        cmd = ['radosgw-admin',
+               '--key=%s'%keyring,
+               '--user', 'rgw.%s'%rgw_id,
+               'zone', 'create',
+               '--rgw-zonegroup=default',
+               '--rgw-zone=%s'%spec.rgw_zone,
+               '--master', '--default']
+        if not result.stdout:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.mgr.log.info('created zone: %s'%spec.rgw_zone)
+        else:
+            try:
+                j = json.loads(result.stdout)
+                if 'zones' not in j or spec.rgw_zone not in j['zones']:
+                    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    self.mgr.log.info('created zone: %s'%spec.rgw_zone)
+            except Exception as e:
+                raise OrchestratorError('failed to parse zone info')
 
 
 class RbdMirrorService(CephadmService):

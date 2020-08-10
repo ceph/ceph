@@ -68,8 +68,8 @@ public:
   }
 
   ~AES128GCM_OnWireTxHandler() override {
-    ::ceph::crypto::zeroize_for_security(&nonce, sizeof(nonce));
-    ::ceph::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
+    ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
+    ::TOPNSPC::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
   }
 
   void reset_tx_handler(const uint32_t* first, const uint32_t* last) override;
@@ -162,7 +162,6 @@ ceph::bufferlist AES128GCM_OnWireTxHandler::authenticated_encrypt_final()
 
 // RX PART
 class AES128GCM_OnWireRxHandler : public ceph::crypto::onwire::RxHandler {
-  CephContext* const cct;
   std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)> ectx;
   nonce_t nonce;
   bool new_nonce_format;  // 64-bit counter?
@@ -173,8 +172,7 @@ public:
 			    const key_t& key,
 			    const nonce_t& nonce,
 			    bool new_nonce_format)
-    : cct(cct),
-      ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
+    : ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
       nonce(nonce), new_nonce_format(new_nonce_format) {
     ceph_assert_always(ectx);
     ceph_assert_always(key.size() * CHAR_BIT == 128);
@@ -191,7 +189,7 @@ public:
   }
 
   ~AES128GCM_OnWireRxHandler() override {
-    ::ceph::crypto::zeroize_for_security(&nonce, sizeof(nonce));
+    ::TOPNSPC::crypto::zeroize_for_security(&nonce, sizeof(nonce));
   }
 
   std::uint32_t get_extra_size_at_final() override {

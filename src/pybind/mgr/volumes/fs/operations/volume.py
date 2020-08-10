@@ -12,7 +12,7 @@ from .lock import GlobalLock
 from ..exception import VolumeException
 from ..fs_util import create_pool, remove_pool, create_filesystem, \
     remove_filesystem, create_mds, volume_exists
-from mgr_util import open_filesystem
+from mgr_util import open_filesystem, CephfsConnectionException
 
 log = logging.getLogger(__name__)
 
@@ -135,8 +135,11 @@ def open_volume(vc, volname):
     """
     g_lock = GlobalLock()
     with g_lock.lock_op():
-        with open_filesystem(vc, volname) as fs_handle:
-            yield fs_handle
+        try:
+            with open_filesystem(vc, volname) as fs_handle:
+                yield fs_handle
+        except CephfsConnectionException as ce:
+            raise VolumeException(ce.errno, ce.error_str)
 
 
 @contextmanager
@@ -149,5 +152,8 @@ def open_volume_lockless(vc, volname):
     :param volname: volume name
     :return: yields a volume handle (ceph filesystem handle)
     """
-    with open_filesystem(vc, volname) as fs_handle:
-        yield fs_handle
+    try:
+        with open_filesystem(vc, volname) as fs_handle:
+            yield fs_handle
+    except CephfsConnectionException as ce:
+        raise VolumeException(ce.errno, ce.error_str)

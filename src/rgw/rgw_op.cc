@@ -4871,19 +4871,19 @@ void RGWDeleteObj::execute()
       ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
     }
     populate_metadata_in_request(s, attrs.attrs);
-  } else {
-    op_ret = -EINVAL;
-  }
-
-  s->object->set_obj_size(s->obj_size);
-  const auto ret = rgw::notify::publish(s, s->object.get(), ceph::real_clock::now(), attrs.attrs[RGW_ATTR_ETAG].to_str(),
+    const auto obj_state = obj_ctx->get_state(s->object->get_obj());
+    s->object->set_obj_size(obj_state->size);
+    const auto ret = rgw::notify::publish(s, s->object.get(), ceph::real_clock::now(), attrs.attrs[RGW_ATTR_ETAG].to_str(),
           delete_marker && s->object->get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
           store);
-  if (ret < 0) {
-    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
-	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
-	// this should be global conf (probably returnign a different handler)
-    // so we don't need to read the configured values before we perform it
+    if (ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	    // TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	    // this should be global conf (probably returnign a different handler)
+      // so we don't need to read the configured values before we perform it
+    }
+  } else {
+    op_ret = -EINVAL;
   }
 }
 
@@ -6557,7 +6557,7 @@ void RGWDeleteMultiObj::execute()
     obj.set_obj_size(obj_state->size);
 
     const auto ret = rgw::notify::publish(s, &obj, ceph::real_clock::now(), etag,
-            del_op.result.delete_marker && s->object->get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+            del_op.result.delete_marker && obj.get_instance().empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
             store);
     if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
@@ -6893,7 +6893,9 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  op_ret = store->get_bucket(s->user, s->bucket_tenant, bucket_name, &s->bucket);
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  RGWBucketInfo binfo;
+  op_ret = store->get_bucket(s->user, s->bucket_tenant, bucket_name, &bucket);
   if (op_ret < 0 && op_ret != -ENOENT) {
     return op_ret;
   }
@@ -6901,8 +6903,9 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
 
   if (bucket_exists) {
     RGWAccessControlPolicy old_policy(s->cct);
-    int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, s->bucket->get_info(),
-                                               s->bucket->get_attrs().attrs, &old_policy);
+    binfo = bucket->get_info();
+    int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, binfo,
+                                               bucket->get_attrs().attrs, &old_policy);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user->get_user()) != 0) {
         op_ret = -EEXIST;
@@ -6943,19 +6946,19 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
     pmaster_num_shards = nullptr;
   }
 
-  rgw_placement_rule placement_rule(s->bucket->get_placement_rule(), s->info.storage_class);
+  rgw_placement_rule placement_rule(binfo.placement_rule, s->info.storage_class);
 
   if (bucket_exists) {
     rgw_placement_rule selected_placement_rule;
-    rgw_bucket bucket;
-    bucket.tenant = s->bucket_tenant;
-    bucket.name = s->bucket_name;
+    rgw_bucket new_bucket;
+    new_bucket.tenant = s->bucket_tenant;
+    new_bucket.name = s->bucket_name;
     op_ret = store->svc()->zone->select_bucket_placement(s->user->get_info(),
                                             store->svc()->zone->get_zonegroup().get_id(),
                                             placement_rule,
                                             &selected_placement_rule,
                                             nullptr);
-    if (selected_placement_rule != s->bucket->get_placement_rule()) {
+    if (selected_placement_rule != binfo.placement_rule) {
       op_ret = -EEXIST;
       ldpp_dout(this, 20) << "non-coherent placement rule" << dendl;
       return op_ret;
@@ -6973,16 +6976,16 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   RGWQuotaInfo quota_info;
   const RGWQuotaInfo * pquota_info = nullptr;
 
-  rgw_bucket bucket;
-  bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
-  bucket.name = bucket_name;
+  rgw_bucket new_bucket;
+  new_bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
+  new_bucket.name = bucket_name;
 
 
   RGWBucketInfo out_info;
   op_ret = store->getRados()->create_bucket(s->user->get_info(),
-                                bucket,
+                                new_bucket,
                                 store->svc()->zone->get_zonegroup().get_id(),
-                                placement_rule, s->bucket->get_info().swift_ver_location,
+                                placement_rule, binfo.swift_ver_location,
                                 pquota_info, attrs,
                                 out_info, pobjv, &ep_objv, creation_time,
                                 pmaster_bucket, pmaster_num_shards, true);
@@ -7008,15 +7011,15 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
       ldpp_dout(this, 20) << "conflicting bucket name" << dendl;
       return op_ret;
     }
-    bucket = out_info.bucket;
+    new_bucket = out_info.bucket;
   }
 
-  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), bucket,
+  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), new_bucket,
                                           out_info.creation_time,
 					  s->yield, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), bucket, s->yield);
+    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), new_bucket, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret << dendl;
     }
@@ -7109,7 +7112,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  if (s->bucket->versioning_enabled()) {
+  if (bucket->versioning_enabled()) {
     obj->gen_rand_obj_instance_name();
   }
 

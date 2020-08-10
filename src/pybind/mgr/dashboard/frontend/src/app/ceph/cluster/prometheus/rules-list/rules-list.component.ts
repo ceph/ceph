@@ -3,10 +3,8 @@ import { Component, Inject, OnInit } from '@angular/core';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { PrometheusRule } from '../../../../shared/models/prometheus-alerts';
-import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { DurationPipe } from '../../../../shared/pipes/duration.pipe';
 import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
-import { SummaryService } from '../../../../shared/services/summary.service';
 import { PrometheusListHelper } from '../prometheus-list-helper';
 
 @Component({
@@ -27,11 +25,9 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
 
   constructor(
     public prometheusAlertService: PrometheusAlertService,
-    @Inject(PrometheusService) prometheusService: PrometheusService,
-    @Inject(SummaryService) summaryService: SummaryService,
-    @Inject(CephReleaseNamePipe) cephReleaseNamePipe: CephReleaseNamePipe
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
-    super(prometheusService, summaryService, cephReleaseNamePipe);
+    super(prometheusService);
   }
 
   ngOnInit() {

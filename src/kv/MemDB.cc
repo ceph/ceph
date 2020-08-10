@@ -10,6 +10,13 @@
 #include <map>
 #include <string>
 #include <memory>
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -147,14 +154,15 @@ int MemDB::_init(bool create)
   int r;
   dout(1) << __func__ << dendl;
   if (create) {
-    r = compat_mkdir(m_db_path.c_str(), 0700);
-    if (r < 0) {
-      r = -errno;
-      if (r != -EEXIST) {
-	derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
-	return r;
-      }
+    if (fs::exists(m_db_path)) {
       r = 0; // ignore EEXIST
+    } else {
+      std::error_code ec;
+      if (!fs::create_directory(m_db_path, ec)) {
+	derr << __func__ << " mkdir failed: " << ec.message() << dendl;
+	return -ec.value();
+      }
+      fs::permissions(m_db_path, fs::perms::owner_all);
     }
   } else {
     r = _load();

@@ -520,17 +520,22 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
   CephXAuthorizeReply reply;
   // reply.trans_id = auth_msg.trans_id;
   reply.nonce_plus_one = auth_msg.nonce + 1;
-#ifndef WITH_SEASTAR
   if (connection_secret) {
     // generate a connection secret
     connection_secret->resize(connection_secret_required_len);
     if (connection_secret_required_len) {
+#ifdef WITH_SEASTAR
+      std::random_device rd;
+      std::generate_n(connection_secret->data(),
+		      connection_secret_required_len,
+		      std::default_random_engine{rd()});
+#else
       cct->random()->get_bytes(connection_secret->data(),
 			       connection_secret_required_len);
+#endif
     }
     reply.connection_secret = *connection_secret;
   }
-#endif
   if (encode_encrypt(cct, reply, ticket_info.session_key, *reply_bl, error)) {
     ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
     return false;

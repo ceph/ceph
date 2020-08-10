@@ -10,7 +10,7 @@ from .fs_util import listdir
 
 from .operations.volume import create_volume, \
     delete_volume, list_volumes, open_volume, get_pool_names
-from .operations.group import open_group, create_group, remove_group
+from .operations.group import open_group, create_group, remove_group, open_group_unique
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
 
@@ -18,6 +18,7 @@ from .vol_spec import VolSpec
 from .exception import VolumeException
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
+from .operations.template import SubvolumeOpType
 
 log = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class VolumeClient(CephfsClient):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     try:
-                        with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                        with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CREATE) as subvolume:
                             # idempotent creation -- valid. Attributes set is supported.
                             uid = uid if uid else subvolume.uid
                             gid = gid if gid else subvolume.gid
@@ -174,16 +175,17 @@ class VolumeClient(CephfsClient):
         return ret
 
     def remove_subvolume(self, **kwargs):
-        ret        = 0, "", ""
-        volname    = kwargs['vol_name']
-        subvolname = kwargs['sub_name']
-        groupname  = kwargs['group_name']
-        force      = kwargs['force']
+        ret         = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        groupname   = kwargs['group_name']
+        force       = kwargs['force']
+        retainsnaps = kwargs['retain_snapshots']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    remove_subvol(fs_handle, self.volspec, group, subvolname, force)
+                    remove_subvol(fs_handle, self.volspec, group, subvolname, force, retainsnaps)
                     # kick the purge threads for async removal -- note that this
                     # assumes that the subvolume is moved to trash can.
                     # TODO: make purge queue as singleton so that trash can kicks
@@ -208,7 +210,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.RESIZE) as subvolume:
                         nsize, usedbytes = subvolume.resize(newsize, noshrink)
                         ret = 0, json.dumps(
                             [{'bytes_used': usedbytes},{'bytes_quota': nsize},
@@ -229,7 +231,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.PIN) as subvolume:
                         subvolume.pin(pin_type, pin_setting)
                         ret = 0, json.dumps({}), ""
         except VolumeException as ve:
@@ -245,7 +247,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.GETPATH) as subvolume:
                         subvolpath = subvolume.path
                         ret = 0, subvolpath.decode("utf-8"), ""
         except VolumeException as ve:
@@ -261,7 +263,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.INFO) as subvolume:
                         mon_addr_lst = []
                         mon_map_mons = self.mgr.get('mon_map')['mons']
                         for mon in mon_map_mons:
@@ -301,7 +303,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_CREATE) as subvolume:
                         subvolume.create_snapshot(snapname)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -318,10 +320,14 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_REMOVE) as subvolume:
                         subvolume.remove_snapshot(snapname)
         except VolumeException as ve:
-            if not (ve.errno == -errno.ENOENT and force):
+            # ESTALE serves as an error to state that subvolume is currently stale due to internal removal and,
+            # we should tickle the purge jobs to purge the same
+            if ve.errno == -errno.ESTALE:
+                self.purge_queue.queue_job(volname)
+            elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
@@ -335,7 +341,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_INFO) as subvolume:
                         snap_info_dict = subvolume.snapshot_info(snapname)
                         ret = 0, json.dumps(snap_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
@@ -351,7 +357,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_LIST) as subvolume:
                         snapshots = subvolume.list_snapshots()
                         ret = 0, name_to_json(snapshots), ""
         except VolumeException as ve:
@@ -367,7 +373,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_PROTECT) as subvolume:
                         log.warning("snapshot protect call is deprecated and will be removed in a future release")
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -382,58 +388,65 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_UNPROTECT) as subvolume:
                         log.warning("snapshot unprotect call is deprecated and will be removed in a future release")
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
 
-    def _prepare_clone_subvolume(self, fs_handle, volname, subvolume, snapname, target_group, target_subvolname, target_pool):
-        create_clone(fs_handle, self.volspec, target_group, target_subvolname, target_pool, volname, subvolume, snapname)
-        with open_subvol(fs_handle, self.volspec, target_group, target_subvolname, need_complete=False) as target_subvolume:
+    def _prepare_clone_subvolume(self, fs_handle, volname, s_subvolume, s_snapname, t_group, t_subvolname, **kwargs):
+        t_pool              = kwargs['pool_layout']
+        s_subvolname        = kwargs['sub_name']
+        s_groupname         = kwargs['group_name']
+        t_groupname         = kwargs['target_group_name']
+
+        create_clone(fs_handle, self.volspec, t_group, t_subvolname, t_pool, volname, s_subvolume, s_snapname)
+        with open_subvol(fs_handle, self.volspec, t_group, t_subvolname, SubvolumeOpType.CLONE_INTERNAL) as t_subvolume:
             try:
-                subvolume.attach_snapshot(snapname, target_subvolume)
+                if t_groupname == s_groupname and t_subvolname == s_subvolname:
+                    t_subvolume.attach_snapshot(s_snapname, t_subvolume)
+                else:
+                    s_subvolume.attach_snapshot(s_snapname, t_subvolume)
                 self.cloner.queue_job(volname)
             except VolumeException as ve:
                 try:
-                    target_subvolume.remove()
+                    t_subvolume.remove()
                     self.purge_queue.queue_job(volname)
                 except Exception as e:
-                    log.warning("failed to cleanup clone subvolume '{0}' ({1})".format(target_subvolname, e))
+                    log.warning("failed to cleanup clone subvolume '{0}' ({1})".format(t_subvolname, e))
                 raise ve
 
-    def _clone_subvolume_snapshot(self, fs_handle, volname, subvolume, **kwargs):
-        snapname          = kwargs['snap_name']
-        target_pool       = kwargs['pool_layout']
-        target_subvolname = kwargs['target_sub_name']
-        target_groupname  = kwargs['target_group_name']
+    def _clone_subvolume_snapshot(self, fs_handle, volname, s_group, s_subvolume, **kwargs):
+        s_snapname          = kwargs['snap_name']
+        target_subvolname   = kwargs['target_sub_name']
+        target_groupname    = kwargs['target_group_name']
+        s_groupname         = kwargs['group_name']
 
-        if not snapname.encode('utf-8') in subvolume.list_snapshots():
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+        if not s_snapname.encode('utf-8') in s_subvolume.list_snapshots():
+            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(s_snapname))
 
-        # TODO: when the target group is same as source, reuse group object.
-        with open_group(fs_handle, self.volspec, target_groupname) as target_group:
+        with open_group_unique(fs_handle, self.volspec, target_groupname, s_group, s_groupname) as target_group:
             try:
-                with open_subvol(fs_handle, self.volspec, target_group, target_subvolname, need_complete=False):
+                with open_subvol(fs_handle, self.volspec, target_group, target_subvolname, SubvolumeOpType.CLONE_CREATE):
                     raise VolumeException(-errno.EEXIST, "subvolume '{0}' exists".format(target_subvolname))
             except VolumeException as ve:
                 if ve.errno == -errno.ENOENT:
-                    self._prepare_clone_subvolume(fs_handle, volname, subvolume, snapname,
-                                                  target_group, target_subvolname, target_pool)
+                    self._prepare_clone_subvolume(fs_handle, volname, s_subvolume, s_snapname,
+                                                  target_group, target_subvolname, **kwargs)
                 else:
                     raise
 
     def clone_subvolume_snapshot(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
-        subvolname = kwargs['sub_name']
-        groupname  = kwargs['group_name']
+        s_subvolname = kwargs['sub_name']
+        s_groupname  = kwargs['group_name']
 
         try:
             with open_volume(self, volname) as fs_handle:
-                with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
-                        self._clone_subvolume_snapshot(fs_handle, volname, subvolume, **kwargs)
+                with open_group(fs_handle, self.volspec, s_groupname) as s_group:
+                    with open_subvol(fs_handle, self.volspec, s_group, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as s_subvolume:
+                        self._clone_subvolume_snapshot(fs_handle, volname, s_group, s_subvolume, **kwargs)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -447,8 +460,7 @@ class VolumeClient(CephfsClient):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(fs_handle, self.volspec, group, clonename,
-                                     need_complete=False, expected_types=["clone"]) as subvolume:
+                    with open_subvol(fs_handle, self.volspec, group, clonename, SubvolumeOpType.CLONE_STATUS) as subvolume:
                         ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -522,12 +534,14 @@ class VolumeClient(CephfsClient):
     def list_subvolume_groups(self, **kwargs):
         volname = kwargs['vol_name']
         ret     = 0, '[]', ""
+        volume_exists = False
         try:
             with open_volume(self, volname) as fs_handle:
+                volume_exists = True
                 groups = listdir(fs_handle, self.volspec.base_dir)
                 ret = 0, name_to_json(groups), ""
         except VolumeException as ve:
-            if not ve.errno == -errno.ENOENT:
+            if not ve.errno == -errno.ENOENT or not volume_exists:
                 ret = self.volume_exception_to_retval(ve)
         return ret
 

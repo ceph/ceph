@@ -19,6 +19,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/event_type.h"
 #include "include/err.h"
+#include "common/ceph_mutex.h"
 
 #include "gtest/gtest.h"
 
@@ -197,7 +198,7 @@ public:
     rados_shutdown(_cluster);
     _rados.wait_for_latest_osdmap();
     _pool_names.insert(_pool_names.end(), _unique_pool_names.begin(),
-		       _unique_pool_names.end());
+                       _unique_pool_names.end());
     for (size_t i = 1; i < _pool_names.size(); ++i) {
       ASSERT_EQ(0, _rados.pool_delete(_pool_names[i].c_str()));
     }
@@ -214,6 +215,26 @@ public:
     std::string value;
     EXPECT_EQ(0, _rados.conf_get("rbd_skip_partial_discard", value));
     return value == "true";
+  }
+
+  bool is_skip_partial_discard_enabled(rbd_image_t image) {
+    if (is_skip_partial_discard_enabled()) {
+      rbd_flush(image);
+      uint64_t features;
+      EXPECT_EQ(0, rbd_get_features(image, &features));
+      return !(features & RBD_FEATURE_DIRTY_CACHE);
+    }
+    return false;
+  }
+
+  bool is_skip_partial_discard_enabled(librbd::Image& image) {
+    if (is_skip_partial_discard_enabled()) {
+      image.flush();
+      uint64_t features;
+      EXPECT_EQ(0, image.features(&features));
+      return !(features & RBD_FEATURE_DIRTY_CACHE);
+    }
+    return false;
   }
 
   void validate_object_map(rbd_image_t image, bool *passed) {
@@ -710,8 +731,8 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
   uint64_t size = 2 << 20;
   struct Watcher {
     rbd_image_t &m_image;
-    mutex m_lock;
-    condition_variable m_cond;
+    std::mutex m_lock;
+    std::condition_variable m_cond;
     size_t m_size = 0;
     static void cb(void *arg) {
       Watcher *watcher = static_cast<Watcher *>(arg);
@@ -721,12 +742,12 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
     void handle_notify() {
       rbd_image_info_t info;
       ASSERT_EQ(0, rbd_stat(m_image, &info, sizeof(info)));
-      lock_guard<mutex> locker(m_lock);
+      std::lock_guard<std::mutex> locker(m_lock);
       m_size = info.size;
       m_cond.notify_one();
     }
     void wait_for_size(size_t size) {
-      unique_lock<mutex> locker(m_lock);
+      std::unique_lock<std::mutex> locker(m_lock);
       ASSERT_TRUE(m_cond.wait_for(locker, seconds(5),
       				  [size, this] {
 				    return this->m_size == size;}));
@@ -768,19 +789,19 @@ TEST_F(TestLibRBD, UpdateWatchAndResizePP)
       void handle_notify() override {
         librbd::image_info_t info;
 	ASSERT_EQ(0, m_image.stat(info, sizeof(info)));
-        lock_guard<mutex> locker(m_lock);
+        std::lock_guard<std::mutex> locker(m_lock);
         m_size = info.size;
 	m_cond.notify_one();
       }
       void wait_for_size(size_t size) {
-	unique_lock<mutex> locker(m_lock);
+	std::unique_lock<std::mutex> locker(m_lock);
 	ASSERT_TRUE(m_cond.wait_for(locker, seconds(5),
 				    [size, this] {
 				      return this->m_size == size;}));
       }
       librbd::Image &m_image;
-      mutex m_lock;
-      condition_variable m_cond;
+      std::mutex m_lock;
+      std::condition_variable m_cond;
       size_t m_size = 0;
     } watcher(image);
     uint64_t handle;
@@ -983,7 +1004,7 @@ TEST_F(TestLibRBD, TestCopy)
   ASSERT_EQ(0, rbd_copy(image, ioctx, name2.c_str()));
   ASSERT_EQ(2, test_ls(ioctx, 2, name.c_str(), name2.c_str()));
   ASSERT_EQ(0, rbd_open(ioctx, name2.c_str(), &image2, NULL));
-  ASSERT_EQ(0, rbd_metadata_list(image2, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image2, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, sum_key_len);
   ASSERT_EQ(vals_len, sum_value_len);
@@ -1004,7 +1025,7 @@ TEST_F(TestLibRBD, TestCopy)
   keys_len = sizeof(keys);
   vals_len = sizeof(vals);
   ASSERT_EQ(0, rbd_open(ioctx, name3.c_str(), &image3, NULL));
-  ASSERT_EQ(0, rbd_metadata_list(image3, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image3, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, sum_key_len);
   ASSERT_EQ(vals_len, sum_value_len);
@@ -1167,7 +1188,7 @@ TEST_F(TestLibRBD, TestDeepCopy)
   BOOST_SCOPE_EXIT_ALL( (&image2) ) {
     ASSERT_EQ(0, rbd_close(image2));
   };
-  ASSERT_EQ(0, rbd_metadata_list(image2, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image2, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, sum_key_len);
   ASSERT_EQ(vals_len, sum_value_len);
@@ -1191,7 +1212,7 @@ TEST_F(TestLibRBD, TestDeepCopy)
   BOOST_SCOPE_EXIT_ALL( (&image3) ) {
     ASSERT_EQ(0, rbd_close(image3));
   };
-  ASSERT_EQ(0, rbd_metadata_list(image3, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image3, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, sum_key_len);
   ASSERT_EQ(vals_len, sum_value_len);
@@ -1227,7 +1248,7 @@ TEST_F(TestLibRBD, TestDeepCopy)
   BOOST_SCOPE_EXIT_ALL( (&image5) ) {
     ASSERT_EQ(0, rbd_close(image5));
   };
-  ASSERT_EQ(0, rbd_metadata_list(image5, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image5, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, sum_key_len);
   ASSERT_EQ(vals_len, sum_value_len);
@@ -1252,7 +1273,7 @@ TEST_F(TestLibRBD, TestDeepCopy)
   BOOST_SCOPE_EXIT_ALL( (&image6) ) {
     ASSERT_EQ(0, rbd_close(image6));
   };
-  ASSERT_EQ(0, rbd_metadata_list(image6, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image6, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, sum_key_len);
   ASSERT_EQ(vals_len, sum_value_len);
@@ -1940,8 +1961,6 @@ TEST_F(TestLibRBD, TestIO)
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  bool skip_discard = is_skip_partial_discard_enabled();
-
   rbd_image_t image;
   int order = 0;
   std::string name = get_temp_image_name();
@@ -1950,7 +1969,9 @@ TEST_F(TestLibRBD, TestIO)
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_read_from_replica_policy", "balance"));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
-  
+
+  bool skip_discard = is_skip_partial_discard_enabled(image);
+
   char test_data[TEST_IO_SIZE + 1];
   char zero_data[TEST_IO_SIZE + 1];
   char mismatch_data[TEST_IO_SIZE + 1];
@@ -2062,8 +2083,6 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  bool skip_discard = is_skip_partial_discard_enabled();
-
   rbd_image_t image;
   int order = 0;
   std::string name = get_temp_image_name();
@@ -2071,6 +2090,8 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
 
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  bool skip_discard = is_skip_partial_discard_enabled(image);
 
   char test_data[TEST_IO_SIZE + 1];
   char zero_data[TEST_IO_SIZE + 1];
@@ -2208,8 +2229,6 @@ TEST_F(TestLibRBD, TestDataPoolIO)
 
   std::string data_pool_name = create_pool(true);
 
-  bool skip_discard = is_skip_partial_discard_enabled();
-
   rbd_image_t image;
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
@@ -2235,6 +2254,8 @@ TEST_F(TestLibRBD, TestDataPoolIO)
   ASSERT_EQ(0, rbd_create4(ioctx, name.c_str(), size, image_options));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
   ASSERT_NE(-1, rbd_get_data_pool_id(image));
+
+  bool skip_discard = is_skip_partial_discard_enabled(image);
 
   char test_data[TEST_IO_SIZE + 1];
   char zero_data[TEST_IO_SIZE + 1];
@@ -2684,8 +2705,6 @@ TEST_F(TestLibRBD, TestIOPP)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
-  bool skip_discard = is_skip_partial_discard_enabled();
-
   {
     librbd::RBD rbd;
     librbd::Image image;
@@ -2695,6 +2714,8 @@ TEST_F(TestLibRBD, TestIOPP)
 
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
     char test_data[TEST_IO_SIZE + 1];
     char zero_data[TEST_IO_SIZE + 1];
@@ -3049,7 +3070,7 @@ TEST_F(TestLibRBD, TestClone)
   printf("sizes and overlaps are good between parent and child\n");
 
   // check key/value pairs in child image
-  ASSERT_EQ(0, rbd_metadata_list(child, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(child, "key", 70, keys, &keys_len, vals,
                                 &vals_len));
   ASSERT_EQ(sum_key_len, keys_len);
   ASSERT_EQ(sum_value_len, vals_len);
@@ -3183,7 +3204,7 @@ TEST_F(TestLibRBD, TestClone2)
   printf("made and opened clone \"child\"\n");
 
   // check key/value pairs in child image
-  ASSERT_EQ(0, rbd_metadata_list(child, "", 70, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(child, "key", 70, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(sum_key_len, keys_len);
   ASSERT_EQ(sum_value_len, vals_len);
@@ -3949,8 +3970,6 @@ TYPED_TEST(DiffIterateTest, DiffIterate)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
-  bool skip_discard = this->is_skip_partial_discard_enabled();
-
   {
     librbd::RBD rbd;
     librbd::Image image;
@@ -3960,6 +3979,8 @@ TYPED_TEST(DiffIterateTest, DiffIterate)
 
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
     uint64_t object_size = 0;
     if (this->whole_object) {
@@ -4096,10 +4117,9 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
 
 TYPED_TEST(DiffIterateTest, DiffIterateStress)
 {
+  REQUIRE(!is_rbd_rwl_enabled((CephContext *)this->_rados.cct()));
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
-
-  bool skip_discard = this->is_skip_partial_discard_enabled();
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -4109,6 +4129,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateStress)
 
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
   uint64_t object_size = 0;
   if (this->whole_object) {
@@ -4220,8 +4242,6 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
-  bool skip_discard = this->is_skip_partial_discard_enabled();
-
   librbd::RBD rbd;
   librbd::Image image;
   std::string name = this->get_temp_image_name();
@@ -4230,6 +4250,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
   uint64_t object_size = 0;
   if (this->whole_object) {
@@ -4271,8 +4293,6 @@ TYPED_TEST(DiffIterateTest, DiffIterateCallbackError)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
-  bool skip_discard = this->is_skip_partial_discard_enabled();
-
   {
     librbd::RBD rbd;
     librbd::Image image;
@@ -4282,6 +4302,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateCallbackError)
 
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
     interval_set<uint64_t> exists;
     interval_set<uint64_t> one;
@@ -4303,8 +4325,6 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
-  bool skip_discard = this->is_skip_partial_discard_enabled();
-
   librbd::RBD rbd;
   librbd::Image image;
   std::string name = this->get_temp_image_name();
@@ -4313,6 +4333,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
 
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
   uint64_t object_size = 0;
   if (this->whole_object) {
@@ -5412,7 +5434,7 @@ TEST_F(TestLibRBD, Metadata)
   memset_rand(keys, keys_len);
   memset_rand(vals, vals_len);
 
-  ASSERT_EQ(0, rbd_metadata_list(image, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(0U, keys_len);
   ASSERT_EQ(0U, vals_len);
@@ -5429,13 +5451,13 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(-ERANGE, rbd_metadata_get(image1, "key1", value, &value_len));
   ASSERT_EQ(value_len, strlen("value1") + 1);
 
-  ASSERT_EQ(-ERANGE, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(-ERANGE, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                        &vals_len));
   keys_len = sizeof(keys);
   vals_len = sizeof(vals);
   memset_rand(keys, keys_len);
   memset_rand(vals, vals_len);
-  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1);
   ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1);
@@ -5448,7 +5470,7 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(-ENOENT, rbd_metadata_remove(image1, "key3"));
   value_len = sizeof(value);
   ASSERT_EQ(-ENOENT, rbd_metadata_get(image1, "key3", value, &value_len));
-  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, strlen("key2") + 1);
   ASSERT_EQ(vals_len, strlen("value2") + 1);
@@ -5472,7 +5494,7 @@ TEST_F(TestLibRBD, Metadata)
   vals_len = sizeof(vals);
   memset_rand(keys, keys_len);
   memset_rand(vals, vals_len);
-  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len,
             strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
@@ -5490,7 +5512,7 @@ TEST_F(TestLibRBD, Metadata)
   vals_len = sizeof(vals);
   memset_rand(keys, keys_len);
   memset_rand(vals, vals_len);
-  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len,
             strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
@@ -5518,7 +5540,7 @@ TEST_F(TestLibRBD, Metadata)
   vals_len = sizeof(vals);
   memset_rand(keys, keys_len);
   memset_rand(vals, vals_len);
-  ASSERT_EQ(0, rbd_metadata_list(image2, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image2, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") +
             1 + strlen("key4") + 1);
@@ -5529,7 +5551,7 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_STREQ(vals + strlen("value1") + 1 + strlen("value2") + 1 +
                strlen("value3") + 1, "value4");
 
-  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image1, "key", 0, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len,
             strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
@@ -5542,19 +5564,19 @@ TEST_F(TestLibRBD, Metadata)
   vals_len = strlen("value1") + 1;
   memset_rand(keys, keys_len);
   memset_rand(vals, vals_len);
-  ASSERT_EQ(0, rbd_metadata_list(image2, "", 1, keys, &keys_len, vals,
+  ASSERT_EQ(0, rbd_metadata_list(image2, "key", 1, keys, &keys_len, vals,
                                  &vals_len));
   ASSERT_EQ(keys_len, strlen("key1") + 1);
   ASSERT_EQ(vals_len, strlen("value1") + 1);
   ASSERT_STREQ(keys, "key1");
   ASSERT_STREQ(vals, "value1");
 
-  ASSERT_EQ(-ERANGE, rbd_metadata_list(image2, "", 2, keys, &keys_len, vals,
+  ASSERT_EQ(-ERANGE, rbd_metadata_list(image2, "key", 2, keys, &keys_len, vals,
                                        &vals_len));
   ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1);
   ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1);
 
-  ASSERT_EQ(-ERANGE, rbd_metadata_list(image2, "", 0, keys, &keys_len, vals,
+  ASSERT_EQ(-ERANGE, rbd_metadata_list(image2, "key", 0, keys, &keys_len, vals,
                                        &vals_len));
   ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") +
             1 + strlen("key4") + 1);
@@ -5597,14 +5619,14 @@ TEST_F(TestLibRBD, MetadataPP)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
   map<string, bufferlist> pairs;
-  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_TRUE(pairs.empty());
 
   ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
   ASSERT_EQ(0, image1.metadata_set("key2", "value2"));
   ASSERT_EQ(0, image1.metadata_get("key1", &value));
   ASSERT_EQ(0, strcmp("value1", value.c_str()));
-  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_EQ(2U, pairs.size());
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
@@ -5613,7 +5635,7 @@ TEST_F(TestLibRBD, MetadataPP)
   ASSERT_EQ(0, image1.metadata_remove("key1"));
   ASSERT_EQ(-ENOENT, image1.metadata_remove("key3"));
   ASSERT_TRUE(image1.metadata_get("key3", &value) < 0);
-  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_EQ(1U, pairs.size());
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
@@ -5630,14 +5652,14 @@ TEST_F(TestLibRBD, MetadataPP)
   pairs.clear();
   ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
   ASSERT_EQ(0, image1.metadata_set("key3", "value3"));
-  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value3", pairs["key3"].c_str(), 6));
 
   ASSERT_EQ(0, image1.snap_set(NULL));
-  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
@@ -5652,10 +5674,10 @@ TEST_F(TestLibRBD, MetadataPP)
   ASSERT_EQ(0, rbd.open(ioctx, image2, cname.c_str(), NULL));
   ASSERT_EQ(0, image2.metadata_set("key4", "value4"));
   pairs.clear();
-  ASSERT_EQ(0, image2.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image2.metadata_list("key", 0, &pairs));
   ASSERT_EQ(4U, pairs.size());
   pairs.clear();
-  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
+  ASSERT_EQ(0, image1.metadata_list("key", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(-ENOENT, image1.metadata_get("key4", &value));
 }
@@ -5948,8 +5970,6 @@ TEST_F(TestLibRBD, BlockingAIO)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
-  bool skip_discard = is_skip_partial_discard_enabled();
-
   librbd::RBD rbd;
   std::string name = get_temp_image_name();
   uint64_t size = 1 << 20;
@@ -5966,6 +5986,8 @@ TEST_F(TestLibRBD, BlockingAIO)
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
   bufferlist bl;
   ASSERT_EQ(0, image.write(0, bl.length(), bl));
@@ -6755,11 +6777,11 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_FALSE(lock_owner);
 
   int owner_id = -1;
-  mutex lock;
+  std::mutex lock;
   const auto pingpong = [&](int m_id, rbd_image_t &m_image) {
       for (int i = 0; i < 10; i++) {
 	{
-	  lock_guard<mutex> locker(lock);
+	  std::lock_guard<std::mutex> locker(lock);
 	  if (owner_id == m_id) {
 	    std::cout << m_id << ": releasing exclusive lock" << std::endl;
 	    EXPECT_EQ(0, rbd_lock_release(m_image));
@@ -6787,13 +6809,13 @@ TEST_F(TestLibRBD, ExclusiveLock)
 	EXPECT_TRUE(lock_owner);
 	std::cout << m_id << ": exclusive lock acquired" << std::endl;
 	{
-	  lock_guard<mutex> locker(lock);
+	  std::lock_guard<std::mutex> locker(lock);
 	  owner_id = m_id;
 	}
 	usleep(rand() % 50000);
       }
 
-      lock_guard<mutex> locker(lock);
+      std::lock_guard<std::mutex> locker(lock);
       if (owner_id == m_id) {
 	EXPECT_EQ(0, rbd_lock_release(m_image));
 	int lock_owner;
@@ -6825,6 +6847,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
 TEST_F(TestLibRBD, BreakLock)
 {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+  REQUIRE(!is_rbd_rwl_enabled((CephContext *)_rados.cct()));
 
   static char buf[10];
 
@@ -6876,8 +6899,6 @@ TEST_F(TestLibRBD, BreakLock)
 
 TEST_F(TestLibRBD, DiscardAfterWrite)
 {
-  REQUIRE(!is_skip_partial_discard_enabled());
-
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -6889,6 +6910,10 @@ TEST_F(TestLibRBD, DiscardAfterWrite)
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  if (this->is_skip_partial_discard_enabled(image)) {
+    return;
+  }
 
   // enable writeback cache
   ASSERT_EQ(0, image.flush());
@@ -8204,6 +8229,9 @@ TEST_F(TestLibRBD, QuiesceWatch)
     size_t quiesce_count = 0;
     size_t unquiesce_count = 0;
 
+    ceph::mutex lock = ceph::make_mutex("lock");
+    ceph::condition_variable cv;
+
     Watcher(rbd_image_t &image) : image(image) {
     }
 
@@ -8213,8 +8241,15 @@ TEST_F(TestLibRBD, QuiesceWatch)
       rbd_quiesce_complete(image, 0);
     }
     void handle_unquiesce() {
+      std::unique_lock locker(lock);
       unquiesce_count++;
       ASSERT_EQ(quiesce_count, unquiesce_count);
+      cv.notify_one();
+    }
+    bool wait_for_unquiesce(size_t c) {
+      std::unique_lock locker(lock);
+      return cv.wait_for(locker, seconds(60),
+                         [this, c]() { return unquiesce_count >= c; });
     }
   } watcher1(image1), watcher2(image2);
 
@@ -8225,15 +8260,15 @@ TEST_F(TestLibRBD, QuiesceWatch)
 
   ASSERT_EQ(0, rbd_snap_create(image1, "snap1"));
   ASSERT_EQ(1U, watcher1.quiesce_count);
-  ASSERT_EQ(1U, watcher1.unquiesce_count);
+  ASSERT_TRUE(watcher1.wait_for_unquiesce(1U));
   ASSERT_EQ(1U, watcher2.quiesce_count);
-  ASSERT_EQ(1U, watcher2.unquiesce_count);
+  ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
 
   ASSERT_EQ(0, rbd_snap_create(image2, "snap2"));
   ASSERT_EQ(2U, watcher1.quiesce_count);
-  ASSERT_EQ(2U, watcher1.unquiesce_count);
+  ASSERT_TRUE(watcher1.wait_for_unquiesce(2U));
   ASSERT_EQ(2U, watcher2.quiesce_count);
-  ASSERT_EQ(2U, watcher2.unquiesce_count);
+  ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
   ASSERT_EQ(0, rbd_quiesce_unwatch(image1, handle1));
 
@@ -8241,7 +8276,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
   ASSERT_EQ(2U, watcher1.quiesce_count);
   ASSERT_EQ(2U, watcher1.unquiesce_count);
   ASSERT_EQ(3U, watcher2.quiesce_count);
-  ASSERT_EQ(3U, watcher2.unquiesce_count);
+  ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
   ASSERT_EQ(0, rbd_quiesce_unwatch(image2, handle2));
 
@@ -8274,6 +8309,9 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
+      ceph::mutex lock = ceph::make_mutex("lock");
+      ceph::condition_variable cv;
+
       Watcher(librbd::Image &image) : image(image) {
       }
 
@@ -8283,8 +8321,15 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
         image.quiesce_complete(0);
       }
       void handle_unquiesce() override {
+        std::unique_lock locker(lock);
         unquiesce_count++;
         ASSERT_EQ(quiesce_count, unquiesce_count);
+        cv.notify_one();
+      }
+      bool wait_for_unquiesce(size_t c) {
+        std::unique_lock locker(lock);
+        return cv.wait_for(locker, seconds(60),
+                           [this, c]() { return unquiesce_count >= c; });
       }
     } watcher1(image1), watcher2(image2);
     uint64_t handle1, handle2;
@@ -8294,15 +8339,15 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
 
     ASSERT_EQ(0, image1.snap_create("snap1"));
     ASSERT_EQ(1U, watcher1.quiesce_count);
-    ASSERT_EQ(1U, watcher1.unquiesce_count);
+    ASSERT_TRUE(watcher1.wait_for_unquiesce(1U));
     ASSERT_EQ(1U, watcher2.quiesce_count);
-    ASSERT_EQ(1U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
 
     ASSERT_EQ(0, image2.snap_create("snap2"));
     ASSERT_EQ(2U, watcher1.quiesce_count);
-    ASSERT_EQ(2U, watcher1.unquiesce_count);
+    ASSERT_TRUE(watcher1.wait_for_unquiesce(2U));
     ASSERT_EQ(2U, watcher2.quiesce_count);
-    ASSERT_EQ(2U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
     ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
 
@@ -8310,7 +8355,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
     ASSERT_EQ(2U, watcher1.quiesce_count);
     ASSERT_EQ(2U, watcher1.unquiesce_count);
     ASSERT_EQ(3U, watcher2.quiesce_count);
-    ASSERT_EQ(3U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
     ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
 
@@ -8344,6 +8389,9 @@ TEST_F(TestLibRBD, QuiesceWatchError)
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
+      ceph::mutex lock = ceph::make_mutex("lock");
+      ceph::condition_variable cv;
+
       Watcher(librbd::Image &image, int r) : image(image), r(r) {
       }
 
@@ -8353,7 +8401,15 @@ TEST_F(TestLibRBD, QuiesceWatchError)
       }
 
       void handle_unquiesce() override {
+        std::unique_lock locker(lock);
         unquiesce_count++;
+        cv.notify_one();
+      }
+
+      bool wait_for_unquiesce(size_t c) {
+        std::unique_lock locker(lock);
+        return cv.wait_for(locker, seconds(60),
+                           [this, c]() { return unquiesce_count >= c; });
       }
     } watcher1(image1, -EINVAL), watcher2(image2, 0);
     uint64_t handle1, handle2;
@@ -8365,7 +8421,7 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_LT(0U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
     ASSERT_EQ(1U, watcher2.quiesce_count);
-    ASSERT_EQ(1U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(1U));
 
     PrintProgress prog_ctx;
     watcher1.quiesce_count = 0;
@@ -8375,13 +8431,13 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_LT(0U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
     ASSERT_EQ(2U, watcher2.quiesce_count);
-    ASSERT_EQ(2U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(2U));
 
     ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
 
     ASSERT_EQ(0, image1.snap_create("snap3"));
     ASSERT_EQ(3U, watcher2.quiesce_count);
-    ASSERT_EQ(3U, watcher2.unquiesce_count);
+    ASSERT_TRUE(watcher2.wait_for_unquiesce(3U));
 
     ASSERT_EQ(0, image2.snap_create2("snap4", RBD_SNAP_CREATE_SKIP_QUIESCE,
                                      prog_ctx));
@@ -8419,8 +8475,8 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     struct Watcher : public librbd::QuiesceWatchCtx {
       librbd::Image &image;
-      mutex m_lock;
-      condition_variable m_cond;
+      std::mutex m_lock;
+      std::condition_variable m_cond;
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
@@ -8428,19 +8484,19 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
       }
 
       void handle_quiesce() override {
-        lock_guard<mutex> locker(m_lock);
+        std::lock_guard<std::mutex> locker(m_lock);
         quiesce_count++;
         m_cond.notify_one();
       }
 
       void handle_unquiesce() override {
-        lock_guard<mutex> locker(m_lock);
+        std::lock_guard<std::mutex> locker(m_lock);
         unquiesce_count++;
         m_cond.notify_one();
       }
 
       void wait_for_quiesce_count(size_t count) {
-        unique_lock<mutex> locker(m_lock);
+        std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
                                     [this, count] {
                                       return this->quiesce_count == count;
@@ -8448,7 +8504,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
       }
 
       void wait_for_unquiesce_count(size_t count) {
-        unique_lock<mutex> locker(m_lock);
+        std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
                                     [this, count] {
                                       return this->unquiesce_count == count;

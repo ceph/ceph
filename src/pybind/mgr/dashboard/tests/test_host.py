@@ -163,27 +163,37 @@ class TestHosts(unittest.TestCase):
         fake_client = mock.Mock()
         fake_client.available.return_value = True
         fake_client.hosts.list.return_value = [
-            HostSpec('node1'), HostSpec('node2')
+            HostSpec('node1', labels=['foo', 'bar']),
+            HostSpec('node2', labels=['bar'])
         ]
         instance.return_value = fake_client
 
         hosts = get_hosts()
         self.assertEqual(len(hosts), 3)
-        check_sources = {
+        checks = {
             'localhost': {
-                'ceph': True,
-                'orchestrator': False
+                'sources': {
+                    'ceph': True,
+                    'orchestrator': False
+                },
+                'labels': []
             },
             'node1': {
-                'ceph': True,
-                'orchestrator': True
+                'sources': {
+                    'ceph': True,
+                    'orchestrator': True
+                },
+                'labels': ['bar', 'foo']
             },
             'node2': {
-                'ceph': False,
-                'orchestrator': True
+                'sources': {
+                    'ceph': False,
+                    'orchestrator': True
+                },
+                'labels': ['bar']
             }
         }
         for host in hosts:
             hostname = host['hostname']
-            sources = host['sources']
-            self.assertDictEqual(sources, check_sources[hostname])
+            self.assertDictEqual(host['sources'], checks[hostname]['sources'])
+            self.assertListEqual(host['labels'], checks[hostname]['labels'])

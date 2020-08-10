@@ -1,9 +1,5 @@
 <cd-rbd-tabs></cd-rbd-tabs>
 
-<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
-               [status]="viewCacheStatus.status"
-               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
-
 <cd-table #table
           [data]="images"
           columnMode="flex"
@@ -13,6 +9,9 @@
           forceIdentifier="true"
           selectionType="single"
           [hasDetails]="true"
+          [status]="tableStatus"
+          [autoReload]="-1"
+          (fetchData)="taskListService.fetch()"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"

@@ -98,7 +98,7 @@ seastar::future<> make_keyring()
       keyring.encode_plaintext(bl);
       const auto permissions = (seastar::file_permissions::user_read |
                               seastar::file_permissions::user_write);
-      return ceph::buffer::write_file(std::move(bl), path, permissions);
+      return crimson::write_file(std::move(bl), path, permissions);
     }
   }).handle_exception_type([path](const fs::filesystem_error& e) {
     seastar::fprint(std::cerr, "FATAL: writing new keyring to %s: %s\n", path, e.what());
@@ -172,6 +172,8 @@ int main(int argc, char* argv[])
           ceph_abort_msg(fmt::format("pidfile_write failed with {} {}",
                                      ret, cpp_strerror(-ret)));
         }
+        // just ignore SIGHUP, we don't reread settings
+        seastar::engine().handle_signal(SIGHUP, [] {});
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = get_nonce();
         crimson::net::MessengerRef cluster_msgr, client_msgr;

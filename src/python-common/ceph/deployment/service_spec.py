@@ -1,3 +1,4 @@
+import errno
 import fnmatch
 import re
 from collections import namedtuple, OrderedDict
@@ -14,9 +15,11 @@ class ServiceSpecValidationError(Exception):
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
     """
-
-    def __init__(self, msg):
+    def __init__(self,
+                 msg: str,
+                 errno: int = -errno.EINVAL):
         super(ServiceSpecValidationError, self).__init__(msg)
+        self.errno = errno
 
 
 def assert_valid_host(name):
@@ -383,6 +386,7 @@ class ServiceSpec(object):
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
+            'alertmanager': AlertManagerSpec
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -595,11 +599,12 @@ class NFSServiceSpec(ServiceSpec):
 
     def rados_config_location(self):
         # type: () -> str
-        assert self.pool
-        url = 'rados://' + self.pool + '/'
-        if self.namespace:
-            url += self.namespace + '/'
-        url += self.rados_config_name()
+        url = ''
+        if self.pool:
+            url += 'rados://' + self.pool + '/'
+            if self.namespace:
+                url += self.namespace + '/'
+            url += self.rados_config_name()
         return url
 
 
@@ -734,3 +739,38 @@ class IscsiServiceSpec(ServiceSpec):
 
 
 yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
+
+
+class AlertManagerSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'alertmanager',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 user_data: Optional[Dict[str, Any]] = None,
+                 ):
+        assert service_type == 'alertmanager'
+        super(AlertManagerSpec, self).__init__(
+            'alertmanager', service_id=service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only)
+
+        # Custom configuration.
+        #
+        # Example:
+        # service_type: alertmanager
+        # service_id: xyz
+        # user_data:
+        #   default_webhook_urls:
+        #   - "https://foo"
+        #   - "https://bar"
+        #
+        # Documentation:
+        # default_webhook_urls - A list of additional URL's that are
+        #                        added to the default receivers'
+        #                        <webhook_configs> configuration.
+        self.user_data = user_data or {}
+
+
+yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)

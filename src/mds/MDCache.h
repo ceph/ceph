@@ -314,7 +314,6 @@ class MDCache {
   void map_dirfrag_set(const list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval, bool adjust_pop=true);
-  void subtree_merge_writebehind_finish(CInode *in, MutationRef& mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
   CDir *get_projected_subtree_root(CDir *dir);
@@ -407,17 +406,15 @@ class MDCache {
   void journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob, CDentry *dn,
                           snapid_t follows=CEPH_NOSNAP,
 			  CInode **pcow_inode=0, CDentry::linkage_t *dnl=0);
-  void journal_cow_inode(MutationRef& mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP,
-			  CInode **pcow_inode=0);
   void journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
-  void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
+  void project_rstat_inode_to_frag(const MutationRef& mut,
+				   CInode *cur, CDir *parent, snapid_t first,
 				   int linkunlink, SnapRealm *prealm);
-  void _project_rstat_inode_to_frag(CInode::mempool_inode & inode, snapid_t ofirst, snapid_t last,
+  void _project_rstat_inode_to_frag(const CInode::mempool_inode* inode, snapid_t ofirst, snapid_t last,
 				    CDir *parent, int linkunlink, bool update_inode);
-  void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
-				   snapid_t ofirst, snapid_t last, 
-				   CInode *pin, bool cow_head);
+  void project_rstat_frag_to_inode(const nest_info_t& rstat, const nest_info_t& accounted_rstat,
+				   snapid_t ofirst, snapid_t last, CInode *pin, bool cow_head);
   void broadcast_quota_to_client(CInode *in, client_t exclude_ct = -1, bool quota_change = false);
   void predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
@@ -884,7 +881,7 @@ class MDCache {
   bool is_any_uncommitted_fragment() const {
     return !uncommitted_fragments.empty();
   }
-  void wait_for_uncommitted_fragments(MDSGather *gather);
+  void wait_for_uncommitted_fragments(MDSContext* finisher);
   void rollback_uncommitted_fragments();
 
   void split_dir(CDir *dir, int byn);
@@ -1256,6 +1253,7 @@ class MDCache {
   friend class C_MDC_FragmentPrep;
   friend class C_MDC_FragmentStore;
   friend class C_MDC_FragmentCommit;
+  friend class C_MDC_FragmentRollback;
   friend class C_IO_MDC_FragmentPurgeOld;
 
   // -- subtrees --

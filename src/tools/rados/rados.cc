@@ -239,11 +239,16 @@ void usage(ostream& out)
 "   --read-percent                   percent of operations that are read\n"
 "   --target-throughput              target throughput (in bytes)\n"
 "   --run-length                     total time (in seconds)\n"
-"   --offset-align                   at what boundary to align random op offsets"
+"   --offset-align                   at what boundary to align random op offsets\n"
+"\n"
 "CACHE POOLS OPTIONS:\n"
 "   --with-clones                    include clones when doing flush or evict\n"
+"\n"
 "OMAP OPTIONS:\n"
-"    --omap-key-file file            read the omap key from a file\n";
+"    --omap-key-file file            read the omap key from a file\n"
+"\n"
+"GENERIC OPTIONS:\n";
+  generic_client_usage();
 }
 
 namespace detail {

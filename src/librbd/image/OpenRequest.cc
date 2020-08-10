@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/ConfigWatcher.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/PluginRegistry.h"
 #include "librbd/Utils.h"
@@ -500,6 +501,9 @@ void OpenRequest<I>::send_refresh() {
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->config_watcher = ConfigWatcher<I>::create(*m_image_ctx);
+  m_image_ctx->config_watcher->init();
 
   using klass = OpenRequest<I>;
   RefreshRequest<I> *req = RefreshRequest<I>::create(

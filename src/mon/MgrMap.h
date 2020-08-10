@@ -259,7 +259,7 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
-  entity_addrvec_t get_active_addrs() const { return active_addrs; }
+  const entity_addrvec_t& get_active_addrs() const { return active_addrs; }
   uint64_t get_active_gid() const { return active_gid; }
   bool get_available() const { return available; }
   const std::string &get_active_name() const { return active_name; }

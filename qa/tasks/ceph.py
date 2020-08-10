@@ -538,6 +538,16 @@ def create_simple_monmap(ctx, remote, conf, mons,
                      monmap_output, re.MULTILINE).group(1)
     return fsid
 
+
+def maybe_redirect_stderr(args, config, cluster, type_, id_):
+    if type_ == 'osd' and \
+       config.get('flavor', 'default') != 'crimson':
+        log_path = f'/var/log/ceph/{cluster}-{type_}.{id_}.log'
+        return args + [run.Raw('2>>'), log_path]
+    else:
+        return args
+
+
 @contextlib.contextmanager
 def cluster(ctx, config):
     """
@@ -902,23 +912,20 @@ def cluster(ctx, config):
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
             try:
-                remote.run(
-                    args=[
-                        'sudo',
+                args = ['sudo',
                         'MALLOC_CHECK_=3',
                         'adjust-ulimits',
-                        'ceph-coverage',
-                        coverage_dir,
+                        'ceph-coverage', coverage_dir,
                         'ceph-osd',
                         '--no-mon-config',
-                        '--cluster',
-                        cluster_name,
+                        '--cluster', cluster_name,
                         '--mkfs',
                         '--mkkey',
                         '-i', id_,
-                    '--monmap', monmap_path,
-                    ],
-                )
+                        '--monmap', monmap_path]
+                remote.run(
+                    args=maybe_redirect_stderr(args, config,
+                                               cluster_name, 'osd', id_))
             except run.CommandFailedError:
                 # try without --no-mon-config.. this may be an upgrade test
                 remote.run(
@@ -1188,8 +1195,7 @@ def osd_scrub_pgs(ctx, config):
     delays = 20
     cluster_name = config['cluster']
     manager = ctx.managers[cluster_name]
-    all_clean = False
-    for _ in range(0, retries):
+    for _ in range(retries):
         stats = manager.get_pg_stats()
         unclean = [stat['pgid'] for stat in stats if 'active+clean' not in stat['state']]
         split_merge = []
@@ -1200,12 +1206,16 @@ def osd_scrub_pgs(ctx, config):
             # we don't support pg_num_target before nautilus
             pass
         if not unclean and not split_merge:
-            all_clean = True
             break
-        log.info(
-            "Waiting for all PGs to be active+clean and split+merged, waiting on %s to go clean and/or %s to split/merge" % (unclean, split_merge))
+        waiting_on = []
+        if unclean:
+            waiting_on.append(f'{unclean} to go clean')
+        if split_merge:
+            waiting_on.append(f'{split_merge} to split/merge')
+        waiting_on = ' and '.join(waiting_on)
+        log.info('Waiting for all PGs to be active+clean and split+merged, waiting on %s', waiting_on)
         time.sleep(delays)
-    if not all_clean:
+    else:
         raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
     check_time_now = time.localtime()
     time.sleep(1)
@@ -1367,6 +1377,9 @@ def run_daemon(ctx, config, type_):
                                                        valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
+            run_cmd = maybe_redirect_stderr(run_cmd,
+                                            config,
+                                            cluster_name, type_, id_)
 
             # always register mgr; don't necessarily start
             ctx.daemons.register_daemon(

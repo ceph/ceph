@@ -177,7 +177,7 @@ public:
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-			    file_layout_t *layout=NULL);
+			    const file_layout_t *layout=nullptr);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
@@ -319,7 +319,7 @@ private:
   friend class Batch_Getattr_Lookup;
 
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
+  void flush_session(Session *session, MDSGatherBuilder& gather);
 
   MDSRank *mds;
   MDCache *mdcache;

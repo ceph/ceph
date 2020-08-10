@@ -147,7 +147,6 @@ enum {
 #define META_POOL_ID ((uint64_t)-1ull)
 
 class BlueStore : public ObjectStore,
-		  public BlueFSDeviceExpander,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
@@ -1148,6 +1147,16 @@ public:
     void rewrite_omap_key(const std::string& old, std::string *out);
     void get_omap_tail(std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
+
+    // Return the offset of an object on disk.  This function is intended *only*
+    // for use with zoned storage devices because in these devices, the objects
+    // are laid out contiguously on disk, which is not the case in general.
+    // Also, it should always be called after calling extent_map.fault_range(),
+    // so that the extent map is loaded.
+    int64_t get_ondisk_starting_offset() const {
+      return extent_map.extent_map.begin()->blob->
+	  get_blob().calc_offset(0, nullptr);
+    }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1577,6 +1586,18 @@ public:
 
     std::set<OnodeRef> onodes;     ///< these need to be updated/written
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
+
+    // A map from onode to a vector of object offset.  For new objects created
+    // in the transaction we append the new offset to the vector, for
+    // overwritten objects we append the negative of the previous ondisk offset
+    // followed by the new offset, and for truncated objects we append the
+    // negative of the previous ondisk offset.  We need to maintain a vector of
+    // offsets because *within the same transaction* an object may be truncated
+    // and then written again, or an object may be overwritten multiple times to
+    // different zones.  See update_cleaning_metadata function for how this map
+    // is used.
+    std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
+
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
@@ -1647,6 +1668,30 @@ public:
     void note_removed_object(OnodeRef& o) {
       onodes.erase(o);
       modified_objects.insert(o);
+    }
+
+    void zoned_note_new_object(OnodeRef &o) {
+      auto [_, ok] = zoned_onode_to_offset_map.emplace(
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->get_ondisk_starting_offset()}));
+      ceph_assert(ok);
+    }
+
+    void zoned_note_updated_object(OnodeRef &o, int64_t prev_offset) {
+      int64_t new_offset = o->get_ondisk_starting_offset();
+      auto [it, ok] = zoned_onode_to_offset_map.emplace(
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {-prev_offset, new_offset}));
+      if (!ok) {
+	it->second.push_back(-prev_offset);
+	it->second.push_back(new_offset);
+      }
+    }
+
+    void zoned_note_truncated_object(OnodeRef &o, int64_t offset) {
+      auto [it, ok] = zoned_onode_to_offset_map.emplace(
+	    std::pair<OnodeRef, std::vector<int64_t>>(o, {-offset}));
+      if (!ok) {
+	it->second.push_back(-offset);
+      }
     }
 
     void aio_finish(BlueStore *store) override {
@@ -2000,7 +2045,6 @@ public:
 private:
   BlueFS *bluefs = nullptr;
   bluefs_layout_t bluefs_layout;
-  ceph::mono_time bluefs_last_balance;
   utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
@@ -2030,9 +2074,6 @@ private:
   std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
   std::atomic<uint64_t> blobid_max = {0};
-
-  interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
-  interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
   ceph::mutex deferred_lock = ceph::make_mutex("BlueStore::deferred_lock");
   ceph::mutex atomic_alloc_and_submit_lock =
@@ -2331,10 +2372,6 @@ private:
 			      std::string* kv_dir, std::string* kv_backend);
   int _close_db_environment();
 
-  // updates legacy bluefs related recs in DB to a state valid for
-  // downgrades from nautilus.
-  void _sync_bluefs_and_fm();
-
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
@@ -2390,9 +2427,6 @@ private:
   void _get_statfs_overall(struct store_statfs_t *buf);
 
   void _dump_alloc_on_failure();
-
-  int64_t _get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total);
-  int _balance_bluefs_freespace();
 
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);
@@ -2963,16 +2997,6 @@ public:
     return true;
   }
 
-  /*
-  Allocate space for BlueFS from slow device.
-  Either automatically applies allocated extents to underlying 
-  BlueFS (extents == nullptr) or just return them (non-null extents) provided
-  */
-  int allocate_bluefs_freespace(
-    uint64_t min_size,
-    uint64_t size,
-    PExtentVector* extents);
-
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
@@ -3334,21 +3358,6 @@ private:
   std::array<std::tuple<uint64_t, uint64_t, uint64_t>, 5> alloc_stats_history =
   { std::make_tuple(0ul, 0ul, 0ul) };
 
-  std::atomic<uint64_t> out_of_sync_fm = {0};
-  // --------------------------------------------------------
-  // BlueFSDeviceExpander implementation
-  uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
-    uint64_t bluefs_total) override {
-    auto delta = _get_bluefs_size_delta(bluefs_free, bluefs_total);
-    return delta > 0 ? delta : 0;
-  }
-  int allocate_freespace(
-    uint64_t min_size,
-    uint64_t size,
-    PExtentVector& extents) override {
-    return allocate_bluefs_freespace(min_size, size, &extents);
-  };
-  uint64_t available_freespace(uint64_t alloc_size) override;
   inline bool _use_rotational_settings();
 
 public:
@@ -3435,6 +3444,10 @@ private:
 
   void _fsck_check_objects(FSCKDepth depth,
     FSCK_ObjectCtx& ctx);
+
+  // Zoned storage related stuff
+  void zoned_update_cleaning_metadata(TransContext *txc);
+  std::string zoned_get_prefix(uint64_t offset);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {
@@ -3608,7 +3621,6 @@ public:
   bool fix_false_free(KeyValueDB *db,
 		      FreelistManager* fm,
 		      uint64_t offset, uint64_t len);
-  bool fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_flag);
 
   void init(uint64_t total_space, uint64_t lres_tracking_unit_size);
 

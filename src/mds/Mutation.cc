@@ -14,6 +14,7 @@
 
 #include "Mutation.h"
 #include "ScatterLock.h"
+#include "CInode.h"
 #include "CDir.h"
 
 // MutationImpl
@@ -215,33 +216,6 @@ void MutationImpl::_clear_remote_auth_pinned(ObjectState &stat)
   --num_remote_auth_pins;
 }
 
-void MutationImpl::add_projected_inode(CInode *in)
-{
-  projected_inodes.push_back(in);
-}
-
-void MutationImpl::pop_and_dirty_projected_inodes()
-{
-  while (!projected_inodes.empty()) {
-    CInode *in = projected_inodes.front();
-    projected_inodes.pop_front();
-    in->pop_and_dirty_projected_inode(ls);
-  }
-}
-
-void MutationImpl::add_projected_fnode(CDir *dir)
-{
-  projected_fnodes.push_back(dir);
-}
-
-void MutationImpl::pop_and_dirty_projected_fnodes()
-{
-  for (const auto& dir : projected_fnodes) {
-    dir->pop_and_dirty_projected_fnode(ls);
-  }
-  projected_fnodes.clear();
-}
-
 void MutationImpl::add_updated_lock(ScatterLock *lock)
 {
   updated_locks.push_back(lock);
@@ -256,24 +230,34 @@ void MutationImpl::add_cow_inode(CInode *in)
 void MutationImpl::add_cow_dentry(CDentry *dn)
 {
   pin(dn);
-  dirty_cow_dentries.push_back(pair<CDentry*,version_t>(dn, dn->get_projected_version()));
+  dirty_cow_dentries.emplace_back(dn, dn->get_projected_version());
 }
 
 void MutationImpl::apply()
 {
-  pop_and_dirty_projected_inodes();
-  pop_and_dirty_projected_fnodes();
-  
+  for (auto& obj : projected_nodes) {
+    if (CInode *in = dynamic_cast<CInode*>(obj))
+      in->pop_and_dirty_projected_inode(ls, nullptr);
+  }
+
   for (const auto& in : dirty_cow_inodes) {
     in->_mark_dirty(ls);
   }
-  for (const auto& [dentry, v] : dirty_cow_dentries) {
-    dentry->mark_dirty(v, ls);
+
+  for (const auto& [dn, v] : dirty_cow_dentries) {
+    dn->mark_dirty(v, ls);
   }
-  
+
+  for (auto& obj : projected_nodes) {
+    if (CDir *dir = dynamic_cast<CDir*>(obj))
+      dir->pop_and_dirty_projected_fnode(ls, nullptr);
+  }
+
   for (const auto& lock : updated_locks) {
     lock->mark_dirty();
   }
+
+  projected_nodes.clear();
 }
 
 void MutationImpl::cleanup()
@@ -509,26 +493,28 @@ void MDRequestImpl::_dump(Formatter *f) const
       f->dump_stream("client") << _client_request->get_orig_source();
       f->dump_int("tid", _client_request->get_tid());
       f->close_section(); // client_info
-    } else if (is_peer() && _peer_request) { // replies go to an existing mdr
+    } else if (is_peer()) { // replies go to an existing mdr
       f->dump_string("op_type", "peer_request");
       f->open_object_section("leader_info");
-      f->dump_stream("leader") << _peer_request->get_orig_source();
+      f->dump_stream("leader") << peer_to_mds;
       f->close_section(); // leader_info
 
-      f->open_object_section("request_info");
-      f->dump_int("attempt", _peer_request->get_attempt());
-      f->dump_string("op_type",
-	  MMDSPeerRequest::get_opname(_peer_request->get_op()));
-      f->dump_int("lock_type", _peer_request->get_lock_type());
-      f->dump_stream("object_info") << _peer_request->get_object_info();
-      f->dump_stream("srcdnpath") << _peer_request->srcdnpath;
-      f->dump_stream("destdnpath") << _peer_request->destdnpath;
-      f->dump_stream("witnesses") << _peer_request->witnesses;
-      f->dump_bool("has_inode_export",
-	  _peer_request->inode_export_v != 0);
-      f->dump_int("inode_export_v", _peer_request->inode_export_v);
-      f->dump_stream("op_stamp") << _peer_request->op_stamp;
-      f->close_section(); // request_info
+      if (_peer_request) {
+        f->open_object_section("request_info");
+        f->dump_int("attempt", _peer_request->get_attempt());
+        f->dump_string("op_type",
+           MMDSPeerRequest::get_opname(_peer_request->get_op()));
+        f->dump_int("lock_type", _peer_request->get_lock_type());
+        f->dump_stream("object_info") << _peer_request->get_object_info();
+        f->dump_stream("srcdnpath") << _peer_request->srcdnpath;
+        f->dump_stream("destdnpath") << _peer_request->destdnpath;
+        f->dump_stream("witnesses") << _peer_request->witnesses;
+        f->dump_bool("has_inode_export",
+           _peer_request->inode_export_v != 0);
+        f->dump_int("inode_export_v", _peer_request->inode_export_v);
+        f->dump_stream("op_stamp") << _peer_request->op_stamp;
+        f->close_section(); // request_info
+      }
     }
     else if (internal_op != -1) { // internal request
       f->dump_string("op_type", "internal_op");
@@ -560,6 +546,8 @@ void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
     _client_request->print(stream);
   } else if (_peer_request) {
     _peer_request->print(stream);
+  } else if (is_peer()) {
+    stream << "peer_request:" << reqid;
   } else if (internal_op >= 0) {
     stream << "internal op " << ceph_mds_op_name(internal_op) << ":" << reqid;
   } else {

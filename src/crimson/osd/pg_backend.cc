@@ -13,6 +13,7 @@
 
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
+#include "common/Checksummer.h"
 #include "common/Clock.h"
 
 #include "crimson/common/exception.h"
@@ -215,6 +216,132 @@ PGBackend::read(const object_info_t& oi,
     });
 }
 
+PGBackend::read_errorator::future<>
+PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op)
+{
+  const auto& op = osd_op.op;
+  logger().trace("sparse_read: {} {}~{}",
+                 os.oi.soid, op.extent.offset, op.extent.length);
+  return store->fiemap(coll, ghobject_t{os.oi.soid},
+		       op.extent.offset,
+		       op.extent.length).then([&os, &osd_op, this](auto&& m) {
+    return seastar::do_with(interval_set<uint64_t>{std::move(m)},
+			    [&os, &osd_op, this](auto&& extents) {
+      return store->readv(coll, ghobject_t{os.oi.soid},
+                          extents, osd_op.op.flags).safe_then(
+        [&os, &osd_op, &extents, this](auto&& bl) -> read_errorator::future<> {
+        if (_read_verify_data(os.oi, bl)) {
+          osd_op.op.extent.length = bl.length();
+          // re-encode since it might be modified
+          ceph::encode(extents, osd_op.outdata);
+          encode_destructively(bl, osd_op.outdata);
+          logger().trace("sparse_read got {} bytes from object {}",
+                         osd_op.op.extent.length, os.oi.soid);
+          return read_errorator::make_ready_future<>();
+        } else {
+          // TODO: repair it if crc mismatches
+          return crimson::ct_error::object_corrupted::make();
+        }
+      });
+    });
+  });
+}
+
+namespace {
+
+  template<class CSum>
+  PGBackend::checksum_errorator::future<>
+  do_checksum(ceph::bufferlist& init_value_bl,
+	      size_t chunk_size,
+	      const ceph::bufferlist& buf,
+	      ceph::bufferlist& result)
+  {
+    typename CSum::init_value_t init_value;
+    auto init_value_p = init_value_bl.cbegin();
+    try {
+      decode(init_value, init_value_p);
+      // chop off the consumed part
+      init_value_bl.splice(0, init_value_p.get_off());
+    } catch (const ceph::buffer::end_of_buffer&) {
+      logger().warn("{}: init value not provided", __func__);
+      return crimson::ct_error::invarg::make();
+    }
+    const uint32_t chunk_count = buf.length() / chunk_size;
+    ceph::bufferptr csum_data{
+      ceph::buffer::create(sizeof(typename CSum::value_t) * chunk_count)};
+    Checksummer::calculate<CSum>(
+      init_value, chunk_size, 0, buf.length(), buf, &csum_data);
+    encode(chunk_count, result);
+    result.append(std::move(csum_data));
+    return PGBackend::checksum_errorator::now();
+  }
+}
+
+PGBackend::checksum_errorator::future<>
+PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
+{
+  // sanity tests and normalize the argments
+  auto& checksum = osd_op.op.checksum;
+  if (checksum.offset == 0 && checksum.length == 0) {
+    // zeroed offset+length implies checksum whole object
+    checksum.length = os.oi.size;
+  } else if (checksum.offset >= os.oi.size) {
+    // read size was trimmed to zero, do nothing,
+    // see PGBackend::read()
+    return checksum_errorator::now();
+  }
+  if (checksum.chunk_size > 0) {
+    if (checksum.length == 0) {
+      logger().warn("{}: length required when chunk size provided", __func__);
+      return crimson::ct_error::invarg::make();
+    }
+    if (checksum.length % checksum.chunk_size != 0) {
+      logger().warn("{}: length not aligned to chunk size", __func__);
+      return crimson::ct_error::invarg::make();
+    }
+  } else {
+    checksum.chunk_size = checksum.length;
+  }
+  if (checksum.length == 0) {
+    uint32_t count = 0;
+    encode(count, osd_op.outdata);
+    return checksum_errorator::now();
+  }
+
+  // read the chunk to be checksum'ed
+  return _read(os.oi.soid, checksum.offset, checksum.length, osd_op.op.flags).safe_then(
+    [&osd_op](auto&& read_bl) mutable -> checksum_errorator::future<> {
+    auto& checksum = osd_op.op.checksum;
+    if (read_bl.length() != checksum.length) {
+      logger().warn("checksum: bytes read {} != {}",
+                        read_bl.length(), checksum.length);
+      return crimson::ct_error::invarg::make();
+    }
+    // calculate its checksum and put the result in outdata
+    switch (checksum.type) {
+    case CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32:
+      return do_checksum<Checksummer::xxhash32>(osd_op.indata,
+                                                checksum.chunk_size,
+                                                read_bl,
+                                                osd_op.outdata);
+    case CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64:
+      return do_checksum<Checksummer::xxhash64>(osd_op.indata,
+                                                checksum.chunk_size,
+                                                read_bl,
+                                                osd_op.outdata);
+    case CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C:
+      return do_checksum<Checksummer::crc32c>(osd_op.indata,
+                                              checksum.chunk_size,
+                                              read_bl,
+                                              osd_op.outdata);
+    default:
+      logger().warn("checksum: unknown crc type ({})",
+		    static_cast<uint32_t>(checksum.type));
+      return crimson::ct_error::invarg::make();
+    }
+  });
+}
+
 PGBackend::stat_errorator::future<> PGBackend::stat(
   const ObjectState& os,
   OSDOp& osd_op)
@@ -248,6 +375,21 @@ bool PGBackend::maybe_create_new_object(
     // TODO: delta_stats.num_whiteouts--
   }
   return true;
+}
+
+static bool is_offset_and_length_valid(
+  const std::uint64_t offset,
+  const std::uint64_t length)
+{
+  if (const std::uint64_t max = local_conf()->osd_max_object_size;
+      offset >= max || length > max || offset + length > max) {
+    logger().debug("{} osd_max_object_size: {}, offset: {}, len: {}; "
+                   "Hard limit of object size is 4GB",
+                   __func__, max, offset, length);
+    return false;
+  } else {
+    return true;
+  }
 }
 
 seastar::future<> PGBackend::write(
@@ -340,6 +482,79 @@ seastar::future<> PGBackend::writefull(
   return seastar::now();
 }
 
+PGBackend::write_ertr::future<> PGBackend::truncate(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{} object dne, truncate is a no-op", __func__);
+    return write_ertr::now();
+  }
+  const ceph_osd_op& op = osd_op.op;
+  if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
+    return crimson::ct_error::file_too_large::make();
+  }
+  if (op.extent.truncate_seq) {
+    assert(op.extent.offset == op.extent.truncate_size);
+    if (op.extent.truncate_seq <= os.oi.truncate_seq) {
+      logger().debug("{} truncate seq {} <= current {}, no-op",
+                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
+      return write_ertr::make_ready_future<>();
+    } else {
+      logger().debug("{} truncate seq {} > current {}, truncating",
+                     __func__, op.extent.truncate_seq, os.oi.truncate_seq);
+      os.oi.truncate_seq = op.extent.truncate_seq;
+      os.oi.truncate_size = op.extent.truncate_size;
+    }
+  }
+  maybe_create_new_object(os, txn);
+  txn.truncate(coll->get_cid(),
+               ghobject_t{os.oi.soid}, op.extent.offset);
+  if (os.oi.size > op.extent.offset) {
+    // TODO: modified_ranges.union_of(trim);
+    osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
+        os.oi.size - op.extent.offset);
+  } else if (os.oi.size < op.extent.offset) {
+    osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+        op.extent.offset - os.oi.size);
+  }
+  // TODO: truncate_update_size_and_usage()
+  // TODO: ctx->delta_stats.num_wr++;
+  // ----
+  // do no set exists, or we will break above DELETE -> TRUNCATE munging.
+  os.oi.clear_data_digest();
+  return write_ertr::now();
+}
+
+PGBackend::write_ertr::future<> PGBackend::zero(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{} object dne, zero is a no-op", __func__);
+    return write_ertr::now();
+  }
+  const ceph_osd_op& op = osd_op.op;
+  if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
+    return crimson::ct_error::file_too_large::make();
+  }
+  assert(op.extent.length);
+  txn.zero(coll->get_cid(),
+           ghobject_t{os.oi.soid},
+           op.extent.offset,
+           op.extent.length);
+  // TODO: modified_ranges.union_of(zeroed);
+  osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
+						     op.extent.length);
+  // TODO: ctx->delta_stats.num_wr++;
+  os.oi.clear_data_digest();
+  return write_ertr::now();
+}
+
 seastar::future<> PGBackend::create(
   ObjectState& os,
   const OSDOp& osd_op,
@@ -418,7 +633,7 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 
 seastar::future<> PGBackend::setxattr(
   ObjectState& os,
-  const OSDOp& osd_op,
+  OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
@@ -442,6 +657,7 @@ seastar::future<> PGBackend::setxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
     bp.copy(osd_op.op.xattr.value_len, val);
+    osd_op.indata.splice(0, bp.get_off());
   }
   logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
 
@@ -461,6 +677,7 @@ PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
     std::string aname;
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
+    osd_op.indata.splice(0, bp.get_off());
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, name).safe_then([&osd_op] (ceph::bufferptr val) {
@@ -482,6 +699,28 @@ PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
   }
 
   return store->get_attr(coll, ghobject_t{soid}, key);
+}
+
+PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  return store->get_attrs(coll, ghobject_t{os.oi.soid}).safe_then(
+    [&osd_op](auto&& attrs) {
+    std::vector<std::pair<std::string, bufferlist>> user_xattrs;
+    for (auto& [key, val] : attrs) {
+      if (key.size() > 1 && key[0] == '_') {
+	ceph::bufferlist bl;
+	bl.append(std::move(val));
+	user_xattrs.emplace_back(key.substr(1), std::move(bl));
+      }
+    }
+    ceph::encode(user_xattrs, osd_op.outdata);
+    return get_attr_errorator::now();
+  });
 }
 
 static seastar::future<crimson::os::FuturizedStore::omap_values_t>
@@ -546,6 +785,7 @@ seastar::future<> PGBackend::omap_get_keys(
     auto p = osd_op.indata.cbegin();
     decode(start_after, p);
     decode(max_return, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
@@ -594,6 +834,7 @@ seastar::future<> PGBackend::omap_get_vals(
     decode(start_after, p);
     decode(max_return, p);
     decode(filter_prefix, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
@@ -646,6 +887,7 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
   try {
     auto p = osd_op.indata.cbegin();
     decode(keys_to_get, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument();
   }
@@ -663,7 +905,7 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
 
 seastar::future<> PGBackend::omap_set_vals(
   ObjectState& os,
-  const OSDOp& osd_op,
+  OSDOp& osd_op,
   ceph::os::Transaction& txn,
   osd_op_params_t& osd_op_params)
 {
@@ -673,6 +915,7 @@ seastar::future<> PGBackend::omap_set_vals(
   try {
     auto p = osd_op.indata.cbegin();
     decode_str_str_map_to_bl(p, &to_set_bl);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument{};
   }
@@ -708,7 +951,7 @@ seastar::future<> PGBackend::omap_set_header(
 
 seastar::future<> PGBackend::omap_remove_range(
   ObjectState& os,
-  const OSDOp& osd_op,
+  OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   std::string key_begin, key_end;
@@ -716,6 +959,7 @@ seastar::future<> PGBackend::omap_remove_range(
     auto p = osd_op.indata.cbegin();
     decode(key_begin, p);
     decode(key_end, p);
+    osd_op.indata.splice(0, p.get_off());
   } catch (buffer::error& e) {
     throw crimson::osd::invalid_argument{};
   }

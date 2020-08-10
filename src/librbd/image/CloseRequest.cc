@@ -4,6 +4,7 @@
 #include "librbd/image/CloseRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/ConfigWatcher.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -35,6 +36,13 @@ CloseRequest<I>::CloseRequest(I *image_ctx, Context *on_finish)
 
 template <typename I>
 void CloseRequest<I>::send() {
+  if (m_image_ctx->config_watcher != nullptr) {
+    m_image_ctx->config_watcher->shut_down();
+
+    delete m_image_ctx->config_watcher;
+    m_image_ctx->config_watcher = nullptr;
+  }
+
   send_block_image_watcher();
 }
 
@@ -297,7 +305,6 @@ void CloseRequest<I>::handle_close_parent(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  delete m_image_ctx->parent;
   m_image_ctx->parent = nullptr;
   save_result(r);
   if (r < 0) {

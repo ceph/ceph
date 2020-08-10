@@ -293,9 +293,6 @@ int lchown(const char *path, uid_t owner, gid_t group);
 #ifdef __cplusplus
 }
 
-// Windows' mkdir doesn't accept a mode argument.
-#define compat_mkdir(pathname, mode) mkdir(pathname)
-
 #endif
 
 // O_CLOEXEC is not defined on Windows. Since handles aren't inherited
@@ -307,8 +304,6 @@ int lchown(const char *path, uid_t owner, gid_t group);
 #else
 
 #define SOCKOPT_VAL_TYPE void*
-
-#define compat_mkdir(pathname, mode) mkdir(pathname, mode)
 
 #endif /* WIN32 */
 
