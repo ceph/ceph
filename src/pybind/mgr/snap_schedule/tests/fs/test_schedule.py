@@ -3,7 +3,7 @@ import json
 import pytest
 import random
 import sqlite3
-from fs.schedule import Schedule, parse_retention
+from ...fs.schedule import Schedule, parse_retention
 
 SELECT_ALL = ('select * from schedules s'
               ' INNER JOIN schedules_meta sm'

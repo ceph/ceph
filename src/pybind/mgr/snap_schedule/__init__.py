@@ -4,5 +4,5 @@ from os import environ
 
 if 'UNITTEST' in environ:
     import tests
-
-from .module import Module
+else:
+    from .module import Module
