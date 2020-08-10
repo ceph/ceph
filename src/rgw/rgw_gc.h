@@ -11,7 +11,7 @@
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "rgw_common.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "cls/rgw/cls_rgw_types.h"
 
 #include <atomic>
