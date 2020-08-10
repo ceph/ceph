@@ -138,9 +138,9 @@ command.  There are several ways to do this:
 
     # cephadm shell
 
-* It may be helpful to create an alias::
+* To execute ``ceph`` commands, you can also run commands like so::
 
-    # alias ceph='cephadm shell -- ceph'
+    # cephadm shell -- ceph -s
 
 * You can install the ``ceph-common`` package, which contains all of the
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
