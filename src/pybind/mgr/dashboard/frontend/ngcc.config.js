@@ -4,7 +4,7 @@ module.exports = {
       ignorableDeepImportMatchers: [/simplebar-core\.esm/]
     },
     '@locl/cli': {
-      ignorableDeepImportMatchers: [/@angular\/localize/]
+      ignorableDeepImportMatchers: [/@angular\/localize/, /@angular\/compiler-cli/]
     }
   }
 };
