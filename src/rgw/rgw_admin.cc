@@ -821,8 +821,10 @@ enum class OPT {
   SI_PROVIDER_FETCH,
   SI_PROVIDER_TRIM,
   SI_PROVIDER_STATE,
-  SI_PROVIDER_MARKER_SET,
-  SI_PROVIDER_MARKER_INFO,
+  SI_PROVIDER_MARKER_CLIENT_SET,
+  SI_PROVIDER_MARKER_CLIENT_RM,
+  SI_PROVIDER_MARKER_INFO_GET,
+  SI_PROVIDER_MARKER_INFO_RM,
 };
 
 }
@@ -1060,8 +1062,10 @@ static SimpleCmd::Commands all_cmds = {
   { "sip fetch", OPT::SI_PROVIDER_FETCH },
   { "sip trim", OPT::SI_PROVIDER_TRIM },
   { "sip state", OPT::SI_PROVIDER_STATE },
-  { "sip marker set", OPT::SI_PROVIDER_MARKER_SET },
-  { "sip marker info", OPT::SI_PROVIDER_MARKER_INFO },
+  { "sip marker client set", OPT::SI_PROVIDER_MARKER_CLIENT_SET },
+  { "sip marker client rm", OPT::SI_PROVIDER_MARKER_CLIENT_RM },
+  { "sip marker info get", OPT::SI_PROVIDER_MARKER_INFO_GET },
+  { "sip marker info rm", OPT::SI_PROVIDER_MARKER_INFO_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -4307,7 +4311,7 @@ int main(int argc, const char **argv)
 			 OPT::SI_PROVIDER_INFO,
 			 OPT::SI_PROVIDER_FETCH,
 			 OPT::SI_PROVIDER_STATE,
-			 OPT::SI_PROVIDER_MARKER_INFO,
+			 OPT::SI_PROVIDER_MARKER_INFO_GET,
   };
 
     std::set<OPT> gc_ops_list = {
@@ -10340,20 +10344,24 @@ next:
    formatter->flush(cout);
  }
 
- if (opt_cmd == OPT::SI_PROVIDER_MARKER_SET) {
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_CLIENT_SET ||
+     opt_cmd == OPT::SI_PROVIDER_MARKER_CLIENT_RM) {
+   bool set_cmd = (opt_cmd == OPT::SI_PROVIDER_MARKER_CLIENT_SET);
    if (client_id.empty()) {
      cerr << "ERROR: --client-id not specified" << std::endl;
      return EINVAL;
    }
 
-   if (!opt_marker) {
-     cerr << "ERROR: --marker not specified" << std::endl;
-     return EINVAL;
-   }
+   if (set_cmd) {
+     if (!opt_marker) {
+       cerr << "ERROR: --marker not specified" << std::endl;
+       return EINVAL;
+     }
 
-   if (!opt_sip) {
-     cerr << "ERROR: --sip not specified" << std::endl;
-     return EINVAL;
+     if (!opt_sip) {
+       cerr << "ERROR: --sip not specified" << std::endl;
+       return EINVAL;
+     }
    }
 
    auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
@@ -10385,14 +10393,21 @@ next:
      return EIO;
    }
 
-   RGWSI_SIP_Marker::Handler::set_result result;
+   RGWSI_SIP_Marker::Handler::modify_result result;
 
-   auto init_flag = opt_init_client.value_or(false);
-
-   r = marker_handler->set_marker(client_id, stage_id, shard_id, *opt_marker, real_clock::now(), init_flag, &result);
-   if (r < 0) {
-     cerr << "ERROR: failed to fetch marker handler stage info: " << cpp_strerror(-r) << std::endl;
-     return -r;
+   if (set_cmd) {
+     auto init_flag = opt_init_client.value_or(false);
+     r = marker_handler->set_marker(client_id, stage_id, shard_id, *opt_marker, real_clock::now(), init_flag, &result);
+     if (r < 0) {
+       cerr << "ERROR: failed to set client marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
+   } else {
+     r = marker_handler->remove_client(client_id, stage_id, shard_id, &result);
+     if (r < 0) {
+       cerr << "ERROR: failed to remove client marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
    }
 
    {
@@ -10403,7 +10418,9 @@ next:
 
  }
 
- if (opt_cmd == OPT::SI_PROVIDER_MARKER_INFO) {
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_INFO_GET ||
+     opt_cmd == OPT::SI_PROVIDER_MARKER_INFO_RM) {
+   bool opt_get = (opt_cmd != OPT::SI_PROVIDER_MARKER_INFO_RM);
    if (!opt_sip) {
      cerr << "ERROR: --sip not specified" << std::endl;
      return EINVAL;
@@ -10438,20 +10455,33 @@ next:
      return EIO;
    }
 
-   RGWSI_SIP_Marker::stage_shard_info sinfo;
+   if (opt_get) {
+     RGWSI_SIP_Marker::stage_shard_info sinfo;
 
-   r = marker_handler->get_info(stage_id, shard_id, &sinfo);
-   if (r < 0) {
-     cerr << "ERROR: failed to fetch marker handler stage info: " << cpp_strerror(-r) << std::endl;
-     return -r;
+     r = marker_handler->get_info(stage_id, shard_id, &sinfo);
+     if (r < 0) {
+       cerr << "ERROR: failed to fetch marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
+
+     {
+       Formatter::ObjectSection top_section(*formatter, "result");
+       encode_json("info", sinfo, formatter.get());
+     }
+     formatter->flush(cout);
+   } else {
+     if (!yes_i_really_mean_it) {
+       cerr << "this command will remove sync marker tracking info for requested bucket; "
+         << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+       return EINVAL;
+     }
+
+     r = marker_handler->remove_info(stage_id, shard_id);
+     if (r < 0 && r != -ENOENT) {
+       cerr << "ERROR: failed to remove marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
    }
-
-   {
-     Formatter::ObjectSection top_section(*formatter, "result");
-     encode_json("info", sinfo, formatter);
-   }
-   formatter->flush(cout);
-
  }
 
   return 0;

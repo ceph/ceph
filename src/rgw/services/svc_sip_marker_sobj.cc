@@ -48,6 +48,7 @@ class RGWSI_SIP_Marker_SObj_Handler : public RGWSI_SIP_Marker::Handler {
 
     int read(stage_shard_info *result, RGWObjVersionTracker *ot, optional_yield y);
     int write(const stage_shard_info& info, RGWObjVersionTracker *ot, optional_yield y);
+    int remove(RGWObjVersionTracker *ot, optional_yield y);
   };
 
   rgw_raw_obj shard_obj(const RGWSI_SIP_Marker::stage_id_t& sid, int shard_id) const {
@@ -77,7 +78,7 @@ public:
                  const std::string& marker,
                  const ceph::real_time& mtime,
                  bool init_client,
-                 RGWSI_SIP_Marker::Handler::set_result *result) override {
+                 RGWSI_SIP_Marker::Handler::modify_result *result) override {
 
 #define NUM_RACE_RETRY 10
     ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
@@ -104,6 +105,11 @@ public:
         marker_info = &sinfo.clients[client_id];
       } else {
         marker_info = &citer->second;
+      }
+
+      if  (marker < sinfo.low_pos) {
+        ldout(cct, 20) << __func__ << "(): can't set marker: client is too far behind: low_pos=" << sinfo.low_pos << " client: id=" << client_id << " marker=" << marker << dendl;
+        return -ERANGE;
       }
 
       if (marker <= marker_info->pos) { /* can a client marker go backwards? */
@@ -143,6 +149,77 @@ public:
     }
 
     result->modified = true;
+    result->min_pos = sinfo.min_clients_pos;
+
+    return 0;
+  }
+
+  int remove_client(const string& client_id,
+                    const SIProvider::stage_id_t& sid,
+                    int shard_id,
+                    RGWSI_SIP_Marker::Handler::modify_result *result) override {
+    ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
+    stage_shard_info sinfo;
+
+    int i;
+
+    result->modified = false;
+
+    for (i = 0; i < NUM_RACE_RETRY; ++i) {
+      RGWObjVersionTracker objv_tracker;
+      int r = sobj.read(&sinfo, &objv_tracker, null_yield);
+      if (r == -ENOENT) {
+        return 0;
+      }
+      if (r < 0) {
+        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+        return r;
+      }
+
+      auto citer = sinfo.clients.find(client_id);
+      if (citer != sinfo.clients.end()) {
+        sinfo.clients.erase(citer);
+        result->modified = true;
+      }
+
+      string min;
+
+      if (sinfo.clients.size() > 0) {
+        auto iter = sinfo.clients.begin();
+
+        min = iter->second.pos;
+
+        while (++iter != sinfo.clients.end()) {
+          if (iter->second.pos < min) {
+            min = iter->second.pos;
+          }
+        }
+      }
+
+      if (sinfo.min_clients_pos != min) {
+        result->modified |= true;
+        sinfo.min_clients_pos = std::move(min);
+      }
+
+      if (!result->modified) {
+        break;
+      }
+
+      r = sobj.write(sinfo, &objv_tracker, null_yield);
+      if (r >= 0) {
+        break;
+      }
+
+      if (r != -ECANCELED) {
+        return r;
+      }
+    }
+
+    if (i == NUM_RACE_RETRY) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
+      return -EIO;
+    }
+
     result->min_pos = sinfo.min_clients_pos;
 
     return 0;
@@ -238,6 +315,19 @@ public:
 
     return 0;
   }
+
+  int remove_info(const SIProvider::stage_id_t& sid,
+                  int shard_id) override {
+    ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
+
+    int r = sobj.remove(nullptr, null_yield);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to remove shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+      return r;
+    }
+
+    return 0;
+  }
 };
 
 int RGWSI_SIP_Marker_SObj_Handler::ShardObj::read(stage_shard_info *result,
@@ -285,6 +375,18 @@ int RGWSI_SIP_Marker_SObj_Handler::ShardObj::write(const stage_shard_info& info,
   return 0;
 }
 
+int RGWSI_SIP_Marker_SObj_Handler::ShardObj::remove(RGWObjVersionTracker *ot, optional_yield y)
+{
+  int r = sysobj.wop()
+    .set_objv_tracker(ot) /* forcing read of current version */
+    .remove(y);
+  if (r < 0 && r != -ENOENT) {
+    ldout(cct, 0) << "ERROR: failed removing stage shard markers data (obj=" << obj << "), r=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
 
 RGWSI_SIP_Marker::HandlerRef RGWSI_SIP_Marker_SObj::get_handler(SIProviderRef& sip)
 {

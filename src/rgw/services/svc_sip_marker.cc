@@ -17,7 +17,7 @@ void RGWSI_SIP_Marker::stage_shard_info::dump(Formatter *f) const
   encode_json("low_pos", low_pos, f);
 }
 
-void RGWSI_SIP_Marker::Handler::set_result::dump(Formatter *f) const
+void RGWSI_SIP_Marker::Handler::modify_result::dump(Formatter *f) const
 {
   encode_json("modified", modified, f);
   encode_json("min_pos", min_pos, f);
