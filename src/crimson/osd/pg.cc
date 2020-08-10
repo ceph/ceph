@@ -591,7 +591,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   auto ox =
-    std::make_unique<OpsExecuter>(obc, &op_info, *this/* as const& */, m);
+    std::make_unique<OpsExecuter>(obc, op_info, *this/* as const& */, m);
 
   return crimson::do_for_each(
     m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
@@ -600,7 +600,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       *m,
       obc->obs.oi.soid,
       ceph_osd_op_name(osd_op.op.op));
-    return ox->execute_osd_op(osd_op);
+    return ox->execute_op(osd_op);
   }).safe_then([this, obc, m, ox = ox.get(), &op_info] {
     logger().debug(
       "do_osd_ops: {} - object {} all operations successful",
@@ -676,10 +676,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
     throw crimson::common::system_shutdown_exception();
   }
 
-  auto ox = std::make_unique<OpsExecuter>(*this/* as const& */, m);
+  auto ox = std::make_unique<PgOpsExecuter>(std::as_const(*this),
+                                            std::as_const(*m));
   return seastar::do_for_each(m->ops, [ox = ox.get()](OSDOp& osd_op) {
     logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
-    return ox->execute_pg_op(osd_op);
+    return ox->execute_op(osd_op);
   }).then([m, this, ox = std::move(ox)] {
     auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                            CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,

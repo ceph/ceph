@@ -35,6 +35,8 @@ class PGLSFilter;
 class OSDOp;
 
 namespace crimson::osd {
+
+// PgOpsExecuter -- a class for executing ops targeting a certain object.
 class OpsExecuter {
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
@@ -82,7 +84,7 @@ private:
   };
 
   ObjectContextRef obc;
-  const OpInfo* op_info;
+  const OpInfo& op_info;
   PG& pg;
   PGBackend& backend;
   Ref<MOSDOp> msg;
@@ -159,31 +161,20 @@ private:
     return std::forward<Func>(f)(backend, obc->obs, txn);
   }
 
-  // PG operations are being provided with pg instead of os.
-  template <class Func>
-  auto do_pg_op(Func&& f) {
-    return std::forward<Func>(f)(std::as_const(pg),
-                                 std::as_const(msg->get_hobj().nspace));
-  }
-
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
   }
 
 public:
-  OpsExecuter(ObjectContextRef obc, const OpInfo* op_info, PG& pg, Ref<MOSDOp> msg)
+  OpsExecuter(ObjectContextRef obc, const OpInfo& op_info, PG& pg, Ref<MOSDOp> msg)
     : obc(std::move(obc)),
       op_info(op_info),
       pg(pg),
       backend(pg.get_backend()),
       msg(std::move(msg)) {
   }
-  OpsExecuter(PG& pg, Ref<MOSDOp> msg)
-    : OpsExecuter{ObjectContextRef(), nullptr, pg, std::move(msg)}
-  {}
 
-  osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
-  seastar::future<> execute_pg_op(class OSDOp& osd_op);
+  osd_op_errorator::future<> execute_op(class OSDOp& osd_op);
 
   template <typename Func, typename MutFunc>
   osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
@@ -274,5 +265,19 @@ OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
     });
   }
 }
+
+// PgOpsExecuter -- a class for executing ops targeting a certain PG.
+class PgOpsExecuter {
+public:
+  PgOpsExecuter(const PG& pg, const MOSDOp& msg)
+    : pg(pg), nspace(msg.get_hobj().nspace) {
+  }
+
+  seastar::future<> execute_op(class OSDOp& osd_op);
+
+private:
+  const PG& pg;
+  const std::string& nspace;
+};
 
 } // namespace crimson::osd

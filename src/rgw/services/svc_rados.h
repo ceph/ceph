@@ -166,9 +166,10 @@ public:
 
     int open();
 
-    int operate(librados::ObjectWriteOperation *op, optional_yield y);
+    int operate(librados::ObjectWriteOperation *op, optional_yield y,
+		int flags = 0);
     int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
-                optional_yield y);
+                optional_yield y, int flags = 0);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                     bufferlist *pbl);

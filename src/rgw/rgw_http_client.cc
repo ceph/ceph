@@ -941,6 +941,13 @@ void RGWHTTPManager::manage_pending_requests()
 
   std::unique_lock wl{reqs_lock};
 
+  if (!reqs_change_state.empty()) {
+    for (auto siter : reqs_change_state) {
+      _set_req_state(siter);
+    }
+    reqs_change_state.clear();
+  }
+
   if (!unregistered_reqs.empty()) {
     for (auto& r : unregistered_reqs) {
       _unlink_request(r);
@@ -963,13 +970,6 @@ void RGWHTTPManager::manage_pending_requests()
     } else {
       max_threaded_req = iter->first + 1;
     }
-  }
-
-  if (!reqs_change_state.empty()) {
-    for (auto siter : reqs_change_state) {
-      _set_req_state(siter);
-    }
-    reqs_change_state.clear();
   }
 
   for (auto piter : remove_reqs) {

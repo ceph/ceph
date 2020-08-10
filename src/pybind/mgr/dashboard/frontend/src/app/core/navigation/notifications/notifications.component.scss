@@ -1,9 +1,27 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .running i {
-  color: bd.$color-primary;
+  color: bd.$primary;
 }
 
 .running:hover i {
-  color: bd.$color-solid-white;
+  color: bd.$white;
+}
+
+a {
+  .dot {
+    background-color: bd.$color-primary;
+    border: 2px solid bd.$color-navbar-bg;
+    border-radius: 50%;
+    height: 11px;
+    position: absolute;
+    right: 17px;
+    top: 10px;
+    width: 10px;
+  }
+
+  &:hover .dot {
+    background-color: bd.$color-solid-white;
+    border-color: bd.$color-primary;
+  }
 }

@@ -121,7 +121,9 @@ public:
   int parse_config_files(ConfigValues& values, const ConfigTracker& tracker,
 			 const char *conf_files,
 			 std::ostream *warnings, int flags);
-
+  int parse_buffer(ConfigValues& values, const ConfigTracker& tracker,
+		   const char* buf, size_t len,
+		   std::ostream *warnings);
   // Absorb config settings from the environment
   void parse_env(unsigned entity_type,
 		 ConfigValues& values, const ConfigTracker& tracker,
@@ -312,11 +314,12 @@ public:  // for global_init
   // for those want to reexpand special meta, e.g, $pid
   bool finalize_reexpand_meta(ConfigValues& values,
 			      const ConfigTracker& tracker);
-private:
+
   std::list<std::string> get_conffile_paths(const ConfigValues& values,
 					    const char *conf_files,
 					    std::ostream *warnings,
 					    int flags) const;
+private:
   static std::string get_cluster_name(const char* conffile_path);
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;

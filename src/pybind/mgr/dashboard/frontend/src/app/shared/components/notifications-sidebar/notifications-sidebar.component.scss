@@ -27,14 +27,14 @@ ngx-simplebar {
 }
 
 .separator {
-  background-color: bd.$color-popover-seperator-bg;
-  color: bd.$color-popover-seperator-text;
+  background-color: bd.$gray-200;
+  color: bd.$gray-600;
   font-size: 1rem;
   padding: 5px 12px;
 }
 
 .btn-link .fa-trash-o {
-  color: bd.$color-black;
+  color: bd.$black;
 }
 
 table {

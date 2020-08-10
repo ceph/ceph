@@ -136,7 +136,7 @@ int ConfFile::parse_file(const std::string &fname,
   std::ifstream ifs{fname};
   const std::string buffer{std::istreambuf_iterator<char>(ifs),
 			   std::istreambuf_iterator<char>()};
-  if (load_from_buffer(buffer, warnings)) {
+  if (parse_buffer(buffer, warnings)) {
     return 0;
   } else {
     return -EINVAL;
@@ -247,8 +247,9 @@ struct IniGrammer : qi::grammar<Iterator, ConfFile(), Skipper>
 };
 }
 
-bool ConfFile::load_from_buffer(std::string_view buf, std::ostream* err)
+bool ConfFile::parse_buffer(std::string_view buf, std::ostream* err)
 {
+  assert(err);
   if (int err_pos = check_utf8(buf.data(), buf.size()); err_pos > 0) {
     *err << "parse error: invalid UTF-8 found at line "
 	 << std::count(buf.begin(), std::next(buf.begin(), err_pos), '\n') + 1;
@@ -271,7 +272,7 @@ int ConfFile::parse_bufferlist(ceph::bufferlist *bl,
   if (!warnings) {
     warnings = &oss;
   }
-  return load_from_buffer({bl->c_str(), bl->length()}, warnings) ? 0 : -EINVAL;
+  return parse_buffer({bl->c_str(), bl->length()}, warnings) ? 0 : -EINVAL;
 }
 
 int ConfFile::read(const std::string& section_name,

@@ -1,7 +1,7 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 .dashboard {
-  background-color: bd.$color-whitesmoke-gray;
+  background-color: bd.$gray-200;
   margin: 0;
   padding: 0;
 }

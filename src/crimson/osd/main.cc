@@ -133,7 +133,7 @@ int main(int argc, char* argv[])
     usage(argv[0]);
     return EXIT_SUCCESS;
   }
-  std::string cluster_name;
+  std::string cluster_name{"ceph"};
   std::string conf_file_list;
   // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
   // until it's started. so do the boilerplate-settings parsing here.

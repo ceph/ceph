@@ -1,8 +1,8 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use '../defaults/bootstrap-defaults' as bd;
 
 /* Forms */
 .required::after {
-  color: bd.$color-required-text;
+  color: bd.$danger;
   content: '*';
   font-size: 1.167rem;
   padding-left: 4px;
@@ -17,9 +17,8 @@
   display: table-cell;
 
   &:focus {
-    border-color: bd.$color-primary-transparent;
-    box-shadow: inset 0 1px 1px bd.$color-transparent-black1,
-      0 0 8px 2px bd.$color-primary-transparent1;
+    border-color: rgba(bd.$primary, 0.8);
+    box-shadow: inset 0 1px 1px rgba(bd.$black, 0.75), 0 0 8px 2px rgba(bd.$primary, 0.5);
     outline: 0;
   }
 }
@@ -65,4 +64,8 @@ cd-modal {
   .cd-col-form-offset {
     @extend .offset-lg-4;
   }
+}
+
+.invalid-feedback {
+  display: block;
 }

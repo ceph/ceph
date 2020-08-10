@@ -62,6 +62,16 @@ public:
     size_t truncate_size,
     uint32_t truncate_seq,
     uint32_t flags);
+  read_errorator::future<> sparse_read(
+    const ObjectState& os,
+    OSDOp& osd_op);
+
+  using checksum_errorator = ll_read_errorator::extend<
+    crimson::ct_error::object_corrupted,
+    crimson::ct_error::invarg>;
+  checksum_errorator::future<> checksum(
+    const ObjectState& os,
+    OSDOp& osd_op);
 
   using stat_errorator = crimson::errorator<crimson::ct_error::enoent>;
   stat_errorator::future<> stat(
@@ -111,7 +121,7 @@ public:
     uint64_t limit) const;
   seastar::future<> setxattr(
     ObjectState& os,
-    const OSDOp& osd_op,
+    OSDOp& osd_op,
     ceph::os::Transaction& trans);
   using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
   get_attr_errorator::future<> getxattr(
@@ -120,6 +130,9 @@ public:
   get_attr_errorator::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
+  get_attr_errorator::future<> get_xattrs(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
   seastar::future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -141,7 +154,7 @@ public:
     OSDOp& osd_op) const;
   seastar::future<> omap_set_vals(
     ObjectState& os,
-    const OSDOp& osd_op,
+    OSDOp& osd_op,
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
   seastar::future<ceph::bufferlist> omap_get_header(
@@ -156,7 +169,7 @@ public:
     ceph::os::Transaction& trans);
   seastar::future<> omap_remove_range(
     ObjectState& os,
-    const OSDOp& osd_op,
+    OSDOp& osd_op,
     ceph::os::Transaction& trans);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
