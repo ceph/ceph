@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 
 #include "rgw_lib.h"
-#include "rgw_rados.h"
 #include "rgw_resolve.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"

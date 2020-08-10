@@ -18,7 +18,6 @@
 #include <optional>
 
 #include "rgw_putobj.h"
-#include "rgw_rados.h"
 #include "services/svc_rados.h"
 #include "services/svc_tier_rados.h"
 #include "rgw_sal.h"

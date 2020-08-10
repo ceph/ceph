@@ -16,7 +16,6 @@
 #include "include/rados/librados.hpp"
 
 #include "rgw_aio_throttle.h"
-#include "rgw_rados.h"
 
 namespace rgw {
 

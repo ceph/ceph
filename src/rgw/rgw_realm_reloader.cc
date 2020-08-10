@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_realm_reloader.h"
-#include "rgw_rados.h"
 
 #include "rgw_bucket.h"
 #include "rgw_log.h"

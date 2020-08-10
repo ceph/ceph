@@ -8,7 +8,6 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
-#include "rgw_rados.h"
 #include "rgw_op.h"
 #include "rgw_multi.h"
 #include "rgw_orphan.h"
