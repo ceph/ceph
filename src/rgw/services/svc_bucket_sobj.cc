@@ -240,19 +240,19 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                     real_time mtime,
                                                     map<string, bufferlist> *pattrs,
                                                     RGWObjVersionTracker *objv_tracker,
-                                                    optional_yield y, const Span& global_parent_span)
+                                                    optional_yield y, const Span& parent_span)
 {
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, global_parent_span);
-  const Span& this_parent_span(span_1);
+   
+   
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
 
   bufferlist bl;
   encode(info, bl);
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  Span span_2 = child_span("RGWSI_MetaBackend::put()", this_parent_span);
+  Span span_2 = child_span("RGWSI_MetaBackend::put()", span_1);
   int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y);
   finish_trace(span_2);
   if (ret < 0) {
@@ -489,12 +489,10 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                   bool exclusive,
                                                   real_time mtime,
                                                   map<string, bufferlist> *pattrs,
-                                                  optional_yield y, const Span& global_parent_span)
-{
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer,  __FILENAME__, "function",  __PRETTY_FUNCTION__);  
-  Span span_1 = child_span(buffer, global_parent_span);
-  const Span& this_parent_span(span_1);
+                                                  optional_yield y, const Span& parent_span)
+{   
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
 
   bufferlist bl;
   encode(info, bl);
@@ -509,7 +507,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
      * we're here because orig_info wasn't passed in
      * we don't have info about what was there before, so need to fetch first
      */
-    Span span_2 = child_span("RGWSI_Bucket_SObj::read_bucket_instance_info", this_parent_span);
+    Span span_2 = child_span("RGWSI_Bucket_SObj::read_bucket_instance_info", span_1);
     int r  = read_bucket_instance_info(ctx,
                                        key,
                                        &shared_bucket_info,
@@ -528,7 +526,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   if (orig_info && *orig_info && !exclusive) {
-    Span span_3 = child_span("RGWSI_BucketIndex::handle_overwrite", this_parent_span);
+    Span span_3 = child_span("RGWSI_BucketIndex::handle_overwrite", span_1);
     int r = svc.bi->handle_overwrite(info, *(orig_info.value()));
     finish_trace(span_3);
     if (r < 0) {

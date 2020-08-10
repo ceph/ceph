@@ -29,7 +29,7 @@ struct obj_version;
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx,
 		   bool create = false,
-		   bool mostly_omap = false, const Span& global_parent_span = NULL);
+		   bool mostly_omap = false, const Span& parent_span = NULL);
 
 #define RGW_NO_SHARD -1
 

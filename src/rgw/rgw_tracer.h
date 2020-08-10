@@ -33,6 +33,4 @@ struct req_state;
     static inline void start_trace(req_state_span&& ss, Span&& sp, req_state* const s, const char* name) {}
     static inline void init_jager(...) {}
     static inline void set_span_tag(...) {}
-    static inline void get_span_name(...) {}
-
 #endif

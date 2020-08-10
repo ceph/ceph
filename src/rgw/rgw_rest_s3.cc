@@ -161,9 +161,9 @@ int RGWGetObj_ObjStore_S3Website::send_response_data_error()
 int RGWGetObj_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   // for multisite sync requests, only read the slo manifest itself, rather than
   // all of the data from its parts. the parts will sync as separate objects
@@ -181,9 +181,9 @@ int RGWGetObj_ObjStore_S3::get_params()
 int RGWGetObj_ObjStore_S3::send_response_data_error()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   bufferlist bl;
@@ -225,9 +225,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   const char *content_type = NULL;
@@ -455,9 +455,9 @@ send_data:
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (skip_decrypt) { // bypass decryption for multisite sync requests
     return 0;
@@ -482,9 +482,9 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry) 
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   int ret = -EINVAL;
   ret = RGWOp::verify_requester(auth_registry);
@@ -495,9 +495,9 @@ int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& a
 int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   int ret = -EINVAL;
   ldpp_dout(this, 10) << "cache override headers" << dendl;
@@ -532,9 +532,9 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
 void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -565,9 +565,9 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 int RGWPutObjTags_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   RGWXMLParser parser;
 
@@ -611,9 +611,9 @@ int RGWPutObjTags_ObjStore_S3::get_params()
 void RGWPutObjTags_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -627,9 +627,9 @@ void RGWPutObjTags_ObjStore_S3::send_response()
 void RGWDeleteObjTags_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -647,9 +647,9 @@ void RGWDeleteObjTags_ObjStore_S3::send_response()
 void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -683,9 +683,9 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
 int RGWPutBucketTags_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   RGWXMLParser parser;
@@ -736,9 +736,9 @@ int RGWPutBucketTags_ObjStore_S3::get_params()
 void RGWPutBucketTags_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -751,9 +751,9 @@ void RGWPutBucketTags_ObjStore_S3::send_response()
 void RGWDeleteBucketTags_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -1239,9 +1239,9 @@ struct ReplicationConfiguration {
 void RGWGetBucketReplication_ObjStore_S3::send_response_data()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -1277,9 +1277,9 @@ void RGWGetBucketReplication_ObjStore_S3::send_response_data()
 int RGWPutBucketReplication_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   RGWXMLParser parser;
@@ -1327,9 +1327,9 @@ int RGWPutBucketReplication_ObjStore_S3::get_params()
 void RGWPutBucketReplication_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -1348,9 +1348,9 @@ void RGWDeleteBucketReplication_ObjStore_S3::update_sync_policy(rgw_sync_policy_
 void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   if (op_ret)
@@ -1363,9 +1363,9 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -1388,9 +1388,9 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -1409,9 +1409,9 @@ void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buc
 void RGWListBuckets_ObjStore_S3::send_response_end()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -1567,9 +1567,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
 int RGWListBucket_ObjStore_S3::get_common_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   list_versions = s->info.args.exists("versions");
@@ -1604,9 +1604,9 @@ int RGWListBucket_ObjStore_S3::get_common_params()
 int RGWListBucket_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   int ret = get_common_params();
@@ -1642,9 +1642,9 @@ return 0;
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (!s->bucket_tenant.empty()) {
@@ -1678,9 +1678,9 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 void RGWListBucket_ObjStore_S3::send_versioned_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
@@ -1764,9 +1764,9 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 void RGWListBucket_ObjStore_S3::send_common_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (!s->bucket_tenant.empty()) {
@@ -1799,9 +1799,9 @@ void RGWListBucket_ObjStore_S3::send_common_response()
 void RGWListBucket_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret < 0) {
@@ -2067,9 +2067,9 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
 void RGWGetBucketVersioning_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -2126,9 +2126,9 @@ struct ver_config_status {
 int RGWSetBucketVersioning_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   int r = 0;
@@ -2196,9 +2196,9 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
 void RGWSetBucketVersioning_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   if (op_ret)
@@ -2210,9 +2210,9 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
 int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
@@ -2290,9 +2290,9 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
 void RGWSetBucketWebsite_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret < 0)
@@ -2304,9 +2304,9 @@ void RGWSetBucketWebsite_ObjStore_S3::send_response()
 void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -2321,9 +2321,9 @@ void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
 void RGWGetBucketWebsite_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -2354,9 +2354,9 @@ static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucke
 void RGWStatBucket_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -2437,9 +2437,9 @@ public:
 int RGWCreateBucket_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -2517,9 +2517,9 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret == -ERR_BUCKET_EXISTS)
@@ -2547,9 +2547,9 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 void RGWDeleteBucket_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -2578,9 +2578,9 @@ static inline void map_qs_metadata(struct req_state* s)
 int RGWPutObj_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateeway", "s3");
 
   if (!s->length)
@@ -2769,9 +2769,9 @@ int RGWPutObj_ObjStore_S3::get_params()
 int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   const int ret = RGWPutObj_ObjStore::get_data(bl);
@@ -2799,9 +2799,9 @@ static int get_success_retcode(int code)
 void RGWPutObj_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret) {
@@ -2888,9 +2888,9 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   std::map<std::string, std::string> crypt_http_responses_unused;
@@ -2920,9 +2920,9 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     rgw::putobj::DataProcessor *cb)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   int res = 0;
@@ -3490,9 +3490,9 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
 int RGWDeleteObj_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
@@ -3524,9 +3524,9 @@ int RGWDeleteObj_ObjStore_S3::get_params()
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   int r = op_ret;
@@ -3547,9 +3547,9 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 int RGWCopyObj_ObjStore_S3::init_dest_policy()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
@@ -3566,9 +3566,9 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
 int RGWCopyObj_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
@@ -3620,9 +3620,9 @@ int RGWCopyObj_ObjStore_S3::get_params()
 int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_placement)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (src_placement == s->dest_placement) {
     /* can only copy object into itself if replacing attrs */
@@ -3638,9 +3638,9 @@ int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_pl
 void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (! sent_header) {
@@ -3668,9 +3668,9 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 void RGWCopyObj_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (!sent_header)
@@ -3689,9 +3689,9 @@ void RGWCopyObj_ObjStore_S3::send_response()
 void RGWGetACLs_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -3707,9 +3707,9 @@ void RGWGetACLs_ObjStore_S3::send_response()
 int RGWPutACLs_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   int ret =  RGWPutACLs_ObjStore::get_params();
@@ -3736,9 +3736,9 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store
 						  stringstream& ss)
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
@@ -3760,9 +3760,9 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store
 void RGWPutACLs_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -3836,9 +3836,9 @@ void RGWDeleteLC_ObjStore_S3::send_response()
 void RGWGetCORS_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -3866,9 +3866,9 @@ void RGWGetCORS_ObjStore_S3::send_response()
 int RGWPutCORS_ObjStore_S3::get_params()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "swift");
 
   RGWCORSXMLParser_S3 parser(s->cct);
@@ -3940,9 +3940,9 @@ int RGWPutCORS_ObjStore_S3::get_params()
 void RGWPutCORS_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -3955,9 +3955,9 @@ void RGWPutCORS_ObjStore_S3::send_response()
 void RGWDeleteCORS_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
   set_span_tag(s->root_span, "gateway", "s3");
 
@@ -4078,9 +4078,9 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -4096,9 +4096,9 @@ int RGWInitMultipart_ObjStore_S3::get_params()
 void RGWInitMultipart_ObjStore_S3::send_response()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -4130,9 +4130,9 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
 
   int res = 0;
   res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
@@ -4142,9 +4142,9 @@ int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& at
 int RGWCompleteMultipart_ObjStore_S3::get_params()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
 
   int ret = RGWCompleteMultipart_ObjStore::get_params();
@@ -4160,9 +4160,9 @@ int RGWCompleteMultipart_ObjStore_S3::get_params()
 void RGWCompleteMultipart_ObjStore_S3::send_response()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "success", "true");
 
   if (op_ret)
@@ -4200,9 +4200,9 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
 void RGWAbortMultipart_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -4218,9 +4218,9 @@ void RGWAbortMultipart_ObjStore_S3::send_response()
 void RGWListMultipart_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 
@@ -4277,9 +4277,9 @@ void RGWListMultipart_ObjStore_S3::send_response()
 void RGWListBucketMultiparts_ObjStore_S3::send_response()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   set_span_tag(s->root_span, "gateway", "s3");
   set_span_tag(s->root_span, "success", "true");
 

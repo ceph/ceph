@@ -154,9 +154,9 @@ public:
 
   virtual int init_processing() {
     req_state_span ss;
-    char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-    get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-    start_trace(std::move(ss), {}, s, buffer);
+     
+     
+    start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
     if (dialect_handler->supports_quota()) {
       op_ret = init_quota();

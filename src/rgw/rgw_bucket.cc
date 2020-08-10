@@ -321,12 +321,9 @@ bool rgw_bucket_object_check_filter(const string& oid)
   return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
 }
 
-int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const Span& global_parent_span)
+int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const Span& parent_span)
 {
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, global_parent_span);
-  const Span& this_parent_span(span_1);
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWObjectCtx rctx(store);
 
@@ -336,7 +333,7 @@ int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucke
 
   rgw_obj obj(bucket, key);
 
-  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status(), 0, ceph::real_time(), nullptr, this_parent_span);
+  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status(), 0, ceph::real_time(), nullptr, span_1);
 }
 
 static int aio_wait(librados::AioCompletion *handle)
@@ -3118,12 +3115,12 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                RGWBucketEntryPoint& info,
                                                optional_yield y,
-                                               const Bucket::PutParams& params, const Span& global_parent_span)
+                                               const Bucket::PutParams& params, const Span& parent_span)
 {
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, global_parent_span);
-  const Span& this_parent_span(span_1);
+   
+   
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
 
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->store_bucket_entrypoint_info(ctx,
@@ -3133,7 +3130,7 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                     params.mtime,
                                                     params.attrs,
                                                     params.objv_tracker,
-                                                    y, this_parent_span);
+                                                    y, span_1);
   });
 }
 
@@ -3225,7 +3222,7 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,
                                                 optional_yield y,
-                                                const BucketInstance::PutParams& params, const Span& global_parent_span)
+                                                const BucketInstance::PutParams& params, const Span& parent_span)
 {
   if (params.objv_tracker) {
     info.objv_tracker = *params.objv_tracker;
@@ -3238,21 +3235,21 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 params.exclusive,
                                                 params.mtime,
                                                 params.attrs,
-                                                y, global_parent_span);
+                                                y, parent_span);
 }
 
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo& info,
                                             optional_yield y,
-                                            const BucketInstance::PutParams& params, const Span& global_parent_span)
+                                            const BucketInstance::PutParams& params, const Span& parent_span)
 {
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, global_parent_span);
-  const Span& this_parent_span(span_1);
+   
+   
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
 
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return do_store_bucket_instance_info(ctx, bucket, info, y, params, this_parent_span);
+    return do_store_bucket_instance_info(ctx, bucket, info, y, params, span_1);
   });
 }
 
@@ -3368,19 +3365,19 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             map<string, bufferlist>& attrs,
                                             RGWObjVersionTracker *objv_tracker,
-                                            optional_yield y, const Span& global_parent_span)
+                                            optional_yield y, const Span& parent_span)
 {
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
-  Span span_1 = child_span(buffer, global_parent_span);
-  const Span& this_parent_span(span_1);
+   
+    
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
 
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
     rgw_bucket& bucket = bucket_info.bucket;
 
     if (!bucket_info.has_instance_obj) {
       /* an old bucket object, need to convert it */
-        Span span_2 = child_span("rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info", this_parent_span);
+        Span span_2 = child_span("rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info", span_1);
         int ret = convert_old_bucket_info(ctx, bucket, y);
         finish_trace(span_2);
 
@@ -3396,7 +3393,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                          y,
                                          BucketInstance::PutParams().set_attrs(&attrs)
                                                                     .set_objv_tracker(objv_tracker)
-                                                                    .set_orig_info(&bucket_info), this_parent_span);
+                                                                    .set_orig_info(&bucket_info), span_1);
     });
 }
 

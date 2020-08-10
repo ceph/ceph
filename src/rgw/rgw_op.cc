@@ -98,9 +98,9 @@ static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 int RGWGetObj::parse_range(void)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   int r = -ERANGE;
   string rs(range_str);
@@ -334,9 +334,9 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
 static int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs, rgw_obj *target_obj = nullptr)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -447,9 +447,9 @@ static int get_multipart_info(rgw::sal::RGWRadosStore *store, struct req_state *
                               multipart_upload_info *upload_info)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   map<string, bufferlist>::iterator iter;
   bufferlist header;
@@ -469,9 +469,9 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
                               rgw_bucket& bucket)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
@@ -505,9 +505,9 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
                            rgw_obj_key& object)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   string upload_id;
@@ -577,9 +577,9 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
 int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   int ret = 0;
@@ -783,9 +783,9 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
 			      bool prefetch_data)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   int ret = 0;
 
@@ -953,9 +953,9 @@ namespace {
 template<typename F>
 int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   auto r = f();
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
@@ -972,9 +972,9 @@ int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
 int RGWGetObj::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   s->object->set_atomic(s->obj_ctx);
 
@@ -1040,9 +1040,9 @@ void populate_metadata_in_request(req_state* s, std::map<std::string, bufferlist
 int RGWOp::verify_op_mask()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   uint32_t required_mask = op_mask();
 
@@ -1065,9 +1065,9 @@ int RGWOp::verify_op_mask()
 int RGWGetObjTags::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   auto iam_action = s->object->get_instance().empty()?
     rgw::IAM::s3GetObjectTagging:
@@ -1093,9 +1093,9 @@ int RGWGetObjTags::verify_permission()
 void RGWGetObjTags::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -1103,9 +1103,9 @@ void RGWGetObjTags::pre_exec()
 void RGWGetObjTags::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   rgw::sal::RGWAttrs attrs;
@@ -1131,9 +1131,9 @@ void RGWGetObjTags::execute()
 int RGWPutObjTags::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   auto iam_action = s->object->get_instance().empty() ?
     rgw::IAM::s3PutObjectTagging:
@@ -1157,9 +1157,9 @@ int RGWPutObjTags::verify_permission()
 void RGWPutObjTags::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = get_params();
@@ -1181,9 +1181,9 @@ void RGWPutObjTags::execute()
 void RGWDeleteObjTags::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -1192,9 +1192,9 @@ void RGWDeleteObjTags::pre_exec()
 int RGWDeleteObjTags::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
     auto iam_action = s->object->get_instance().empty() ?
@@ -1220,9 +1220,9 @@ int RGWDeleteObjTags::verify_permission()
 void RGWDeleteObjTags::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (rgw::sal::RGWObject::empty(s->object.get()))
@@ -1234,9 +1234,9 @@ void RGWDeleteObjTags::execute()
 int RGWGetBucketTags::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketTagging)) {
     return -EACCES;
@@ -1248,9 +1248,9 @@ int RGWGetBucketTags::verify_permission()
 void RGWGetBucketTags::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -1258,9 +1258,9 @@ void RGWGetBucketTags::pre_exec()
 void RGWGetBucketTags::execute() 
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   auto iter = s->bucket_attrs.find(RGW_ATTR_TAGS);
   if (iter != s->bucket_attrs.end()) {
@@ -1274,9 +1274,9 @@ void RGWGetBucketTags::execute()
 
 int RGWPutBucketTags::verify_permission() {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
@@ -1284,9 +1284,9 @@ int RGWPutBucketTags::verify_permission() {
 void RGWPutBucketTags::execute() {
 
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = get_params();
@@ -1309,9 +1309,9 @@ void RGWPutBucketTags::execute() {
 void RGWDeleteBucketTags::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -1319,9 +1319,9 @@ void RGWDeleteBucketTags::pre_exec()
 int RGWDeleteBucketTags::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
@@ -1329,9 +1329,9 @@ int RGWDeleteBucketTags::verify_permission()
 void RGWDeleteBucketTags::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!store->svc()->zone->is_meta_master()) {
@@ -1359,9 +1359,9 @@ void RGWDeleteBucketTags::execute()
 int RGWGetBucketReplication::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetReplicationConfiguration)) {
     return -EACCES;
@@ -1373,9 +1373,9 @@ int RGWGetBucketReplication::verify_permission()
 void RGWGetBucketReplication::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -1383,18 +1383,18 @@ void RGWGetBucketReplication::pre_exec()
 void RGWGetBucketReplication::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   send_response_data();
 }
 
 int RGWPutBucketReplication::verify_permission() {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
 }
@@ -1402,9 +1402,9 @@ int RGWPutBucketReplication::verify_permission() {
 void RGWPutBucketReplication::execute() {
 
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = get_params();
@@ -1440,9 +1440,9 @@ void RGWPutBucketReplication::execute() {
 void RGWDeleteBucketReplication::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -1450,9 +1450,9 @@ void RGWDeleteBucketReplication::pre_exec()
 int RGWDeleteBucketReplication::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
 }
@@ -1460,9 +1460,9 @@ int RGWDeleteBucketReplication::verify_permission()
 void RGWDeleteBucketReplication::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!store->svc()->zone->is_meta_master()) {
@@ -1518,9 +1518,9 @@ int RGWOp::do_aws4_auth_completion()
 int RGWOp::init_quota()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   /* no quota enforcement for system requests */
   if (s->system_request)
@@ -1606,9 +1606,9 @@ static bool validate_cors_rule_header(RGWCORSRule *rule, const char *req_hdrs) {
 int RGWOp::read_bucket_cors()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   bufferlist bl;
 
@@ -1736,9 +1736,9 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
                                        bool swift_slo)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   ldpp_dout(this, 20) << "user manifest obj=" << ent.key.name
@@ -2031,9 +2031,9 @@ static int get_obj_user_manifest_iterate_cb(rgw::sal::RGWBucket* bucket,
 int RGWGetObj::handle_user_manifest(const char *prefix)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   const std::string_view prefix_view(prefix);
@@ -2135,9 +2135,9 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   RGWSLOInfo slo_info;
   auto bliter = bl.cbegin();
@@ -2273,9 +2273,9 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   /* garbage collection related handling */
   utime_t start_time = ceph_clock_now();
@@ -2293,9 +2293,9 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 bool RGWGetObj::prefetch_data()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   /* HEAD request, stop prefetch*/
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
@@ -2315,9 +2315,9 @@ bool RGWGetObj::prefetch_data()
 void RGWGetObj::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -2341,9 +2341,9 @@ static inline void rgw_cond_decode_objtags(
 void RGWGetObj::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   bufferlist bl;
@@ -2529,9 +2529,9 @@ done_err:
 int RGWGetObj::init_common()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (range_str) {
     /* range parsed error when prefetch */
@@ -2559,9 +2559,9 @@ int RGWGetObj::init_common()
 int RGWListBuckets::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
@@ -2585,9 +2585,9 @@ int RGWGetUsage::verify_permission()
 void RGWListBuckets::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   bool done;
@@ -2811,9 +2811,9 @@ void RGWStatAccount::execute()
 int RGWGetBucketVersioning::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketVersioning);
 }
@@ -2821,9 +2821,9 @@ int RGWGetBucketVersioning::verify_permission()
 void RGWGetBucketVersioning::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -2831,9 +2831,9 @@ void RGWGetBucketVersioning::pre_exec()
 void RGWGetBucketVersioning::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (! s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -2848,9 +2848,9 @@ void RGWGetBucketVersioning::execute()
 int RGWSetBucketVersioning::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketVersioning);
 }
@@ -2858,9 +2858,9 @@ int RGWSetBucketVersioning::verify_permission()
 void RGWSetBucketVersioning::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   rgw_bucket_object_pre_exec(s);
 }
@@ -2868,9 +2868,9 @@ void RGWSetBucketVersioning::pre_exec()
 void RGWSetBucketVersioning::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = get_params();
@@ -2973,27 +2973,27 @@ void RGWGetBucketWebsite::execute()
 int RGWSetBucketWebsite::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketWebsite);
 }
 
 void RGWSetBucketWebsite::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWSetBucketWebsite::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = get_params();
@@ -3025,27 +3025,27 @@ void RGWSetBucketWebsite::execute()
 int RGWDeleteBucketWebsite::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteBucketWebsite);
 }
 
 void RGWDeleteBucketWebsite::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteBucketWebsite::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
@@ -3071,9 +3071,9 @@ void RGWDeleteBucketWebsite::execute()
 int RGWStatBucket::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   // This (a HEAD request on a bucket) is governed by the s3:ListBucket permission.
   if (!verify_bucket_permission(this, s, rgw::IAM::s3ListBucket)) {
     return -EACCES;
@@ -3085,18 +3085,18 @@ int RGWStatBucket::verify_permission()
 void RGWStatBucket::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWStatBucket::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!s->bucket_exists) {
@@ -3114,9 +3114,9 @@ void RGWStatBucket::execute()
 int RGWListBucket::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -3144,9 +3144,9 @@ int RGWListBucket::verify_permission()
 int RGWListBucket::parse_max_keys()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   // Bound max value of max-keys to configured value for security
   // Bound min value of max-keys to '0'
   // Some S3 clients explicitly send max-keys=0 to detect if the bucket is
@@ -3159,18 +3159,18 @@ int RGWListBucket::parse_max_keys()
 void RGWListBucket::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListBucket::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!s->bucket_exists) {
@@ -3222,9 +3222,9 @@ int RGWGetBucketLocation::verify_permission()
 int RGWCreateBucket::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
   /* This check is mostly needed for S3 that doesn't support account ACL.
    * Swift doesn't allow to delegate any permission to an anonymous user,
@@ -3277,9 +3277,9 @@ int forward_request_to_master(struct req_state *s, obj_version *objv,
                               JSONParser *jp, req_info *forward_info)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (!store->svc()->zone->get_master_conn()) {
     ldpp_dout(s, 0) << "rest connection is invalid" << dendl;
@@ -3306,9 +3306,9 @@ int forward_request_to_master(struct req_state *s, obj_version *objv,
 void RGWCreateBucket::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -3481,9 +3481,9 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
 void RGWCreateBucket::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   buffer::list aclbl;
@@ -3705,9 +3705,9 @@ void RGWCreateBucket::execute()
 int RGWDeleteBucket::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (!verify_bucket_permission(this, s, rgw::IAM::s3DeleteBucket)) {
     return -EACCES;
@@ -3719,18 +3719,18 @@ int RGWDeleteBucket::verify_permission()
 void RGWDeleteBucket::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteBucket::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (s->bucket_name.empty()) {
@@ -3814,9 +3814,9 @@ void RGWDeleteBucket::execute()
 int RGWPutObj::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (! copy_source.empty()) {
 
@@ -3947,9 +3947,9 @@ int RGWPutObj::verify_permission()
 void RGWPutObj::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -3968,9 +3968,9 @@ public:
 int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   bufferlist bl_tmp;
   bl.begin(bl_ofs).copy(bl_len, bl_tmp);
 
@@ -3982,9 +3982,9 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   RGWPutObj_CB cb(this);
@@ -4082,9 +4082,9 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 void RGWPutObj::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
@@ -4988,9 +4988,9 @@ void RGWPutMetadataObject::execute()
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   RGWSLOInfo slo_info;
   auto bliter = bl.cbegin();
@@ -5042,9 +5042,9 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
 int RGWDeleteObj::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   int op_ret = get_params();
   if (op_ret) {
@@ -5107,18 +5107,18 @@ int RGWDeleteObj::verify_permission()
 void RGWDeleteObj::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteObj::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!s->bucket_exists) {
@@ -5324,9 +5324,9 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
 int RGWCopyObj::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   RGWAccessControlPolicy src_acl(s->cct);
   boost::optional<Policy> src_policy;
@@ -5479,9 +5479,9 @@ int RGWCopyObj::verify_permission()
 int RGWCopyObj::init_common()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0) {
@@ -5534,18 +5534,18 @@ void RGWCopyObj::progress_cb(off_t ofs)
 void RGWCopyObj::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWCopyObj::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (init_common() < 0)
@@ -5633,9 +5633,9 @@ void RGWCopyObj::execute()
 int RGWGetACLs::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   bool perm;
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
@@ -5669,18 +5669,18 @@ int RGWGetACLs::verify_permission()
 void RGWGetACLs::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWGetACLs::execute()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
 
   stringstream ss;
   RGWAccessControlPolicy* const acl = \
@@ -5696,9 +5696,9 @@ void RGWGetACLs::execute()
 int RGWPutACLs::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   bool perm;
 
@@ -5771,9 +5771,9 @@ void RGWDeleteLC::pre_exec()
 void RGWPutACLs::execute()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   bufferlist bl;
@@ -6027,18 +6027,18 @@ void RGWDeleteLC::execute()
 int RGWGetCORS::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketCORS);
 }
 
 void RGWGetCORS::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   op_ret = read_bucket_cors();
   if (op_ret < 0)
     return ;
@@ -6053,18 +6053,18 @@ void RGWGetCORS::execute()
 int RGWPutCORS::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWPutCORS::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   rgw_raw_obj obj;
@@ -6091,9 +6091,9 @@ void RGWPutCORS::execute()
 int RGWDeleteCORS::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   // No separate delete permission
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
@@ -6101,9 +6101,9 @@ int RGWDeleteCORS::verify_permission()
 void RGWDeleteCORS::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   if (!store->svc()->zone->is_meta_master()) {
@@ -6245,9 +6245,9 @@ void RGWSetRequestPayment::execute()
 int RGWInitMultipart::verify_permission()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
 
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
@@ -6283,18 +6283,18 @@ int RGWInitMultipart::verify_permission()
 void RGWInitMultipart::pre_exec()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWInitMultipart::execute()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   bufferlist aclbl;
@@ -6373,9 +6373,9 @@ void RGWInitMultipart::execute()
 int RGWCompleteMultipart::verify_permission()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
 
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
@@ -6411,18 +6411,18 @@ int RGWCompleteMultipart::verify_permission()
 void RGWCompleteMultipart::pre_exec()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWCompleteMultipart::execute()
 {
   req_state_span ss_1;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss_1), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss_1), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   RGWMultiCompleteUpload *parts;
@@ -6723,9 +6723,9 @@ int RGWCompleteMultipart::MPSerializer::try_lock(
 void RGWCompleteMultipart::complete()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   /* release exclusive lock iff not already */
   if (unlikely(serializer.locked)) {
     int r = serializer.unlock();
@@ -6739,9 +6739,9 @@ void RGWCompleteMultipart::complete()
 int RGWAbortMultipart::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
@@ -6775,18 +6775,18 @@ int RGWAbortMultipart::verify_permission()
 void RGWAbortMultipart::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWAbortMultipart::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   op_ret = -EINVAL;
@@ -6813,9 +6813,9 @@ void RGWAbortMultipart::execute()
 int RGWListMultipart::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   if (!verify_object_permission(this, s, rgw::IAM::s3ListMultipartUploadParts))
     return -EACCES;
 
@@ -6825,18 +6825,18 @@ int RGWListMultipart::verify_permission()
 void RGWListMultipart::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListMultipart::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   string meta_oid;
   RGWMPObj mp;
@@ -6859,9 +6859,9 @@ void RGWListMultipart::execute()
 int RGWListBucketMultiparts::verify_permission()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
 
   if (!verify_bucket_permission(this,
                                 s,
@@ -6874,18 +6874,18 @@ int RGWListBucketMultiparts::verify_permission()
 void RGWListBucketMultiparts::pre_exec()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListBucketMultiparts::execute()
 {
   req_state_span ss;
-  char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
-  get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  start_trace(std::move(ss), {}, s, buffer);
+   
+   
+  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
   const Span& this_parent_span(s->stack_span.top());
 
   vector<rgw_bucket_dir_entry> objs;
