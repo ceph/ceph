@@ -4714,7 +4714,7 @@ class HostFacts():
         self.cpu_threads = 0
         self.interfaces = {}
 
-        self._memory = read_file(['/proc/meminfo'])
+        self._meminfo = read_file(['/proc/meminfo']).splitlines()
         self._get_cpuinfo()
         self._process_nics()
         self.arch = platform.processor()
@@ -4868,6 +4868,18 @@ class HostFacts():
         return bytes_to_human(self.hdd_capacity_bytes)
 
     @property
+    def cpu_load(self):
+        # type: () -> Dict[str, float]
+        """Return the cpu load average data for the host"""
+        raw = read_file(['/proc/loadavg']).strip()
+        data = raw.split()
+        return {
+            "1min": float(data[0]),
+            "5min": float(data[1]),
+            "15min": float(data[2]),
+        }
+
+    @property
     def flash_count(self):
         # type: () -> int
         """Return the number of flash devices in the system (SSD, NVMe)"""
@@ -4938,8 +4950,6 @@ class HostFacts():
                 else:
                     iftype = 'logical'
                     driver = ''
-                
-                
 
                 self.interfaces[iface] = {
                     "mtu": mtu,
@@ -4964,16 +4974,32 @@ class HostFacts():
                 phys_devs.append(iface)
         return len(phys_devs)
 
-    @property
-    def memory_kb(self):
-        # type: () -> int
-        """Determine the memory installed"""
-        out = self._memory.splitlines()
-        for line in out:
-            if line.startswith('MemTotal'):
+
+    def _get_mem_data(self, field_name):
+        # type: (str) -> int
+        for line in self._meminfo:
+            if line.startswith(field_name):
                 _d = line.split()
                 return int(_d[1])
         return 0
+
+    @property
+    def memory_total_kb(self):
+        # type: () -> int
+        """Determine the memory installed (kb)"""
+        return self._get_mem_data('MemTotal')
+    
+    @property
+    def memory_free_kb(self):
+        # type: () -> int
+        """Determine the memory free (not cache, immediately usable)"""
+        return self._get_mem_data('MemFree')
+
+    @property
+    def memory_available_kb(self):
+        # type: () -> int
+        """Determine the memory available to new applications without swapping"""
+        return self._get_mem_data('MemAvailable')
 
     @property
     def vendor(self):
@@ -5020,7 +5046,7 @@ class HostFacts():
 
     @property
     def kernel_security(self):
-        # type: () -> Dict[str -> str]
+        # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
         def _fetch_selinux():
             """Read the selinux config file to determine state"""
@@ -5052,7 +5078,7 @@ class HostFacts():
                     except OSError:
                         pass
                     else:
-                        summary = {}
+                        summary = {}  # type: Dict[str, int]
                         for line in profiles.split('\n'):
                             item, mode = line.split(' ')
                             mode= mode.strip('()')
@@ -5061,7 +5087,7 @@ class HostFacts():
                             else:
                                 summary[mode] = 0
                         summary_str = ",".join(["{} {}".format(v, k) for k, v in summary.items()])
-                        security = {**security, **summary}
+                        security = {**security, **summary} # type: ignore
                         security['description'] += "({})".format(summary_str)
                     
                     return security
