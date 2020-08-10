@@ -541,6 +541,12 @@ public:
     int r = _flush(h, force, l);
     ceph_assert(r == 0);
   }
+  void try_flush(FileWriter *h) {
+    h->buffer_appender.flush();
+    if (h->buffer.length() >= cct->_conf->bluefs_min_flush_size) {
+      flush(h, true);
+    }
+  }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
     std::lock_guard l(lock);
     _flush_range(h, offset, length);
