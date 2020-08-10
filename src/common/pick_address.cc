@@ -285,6 +285,32 @@ static int fill_in_one_address(
   return 0;
 }
 
+unsigned networks_address_family_coverage(CephContext *cct, const std::string &networks) {
+  std::list<string> nets;
+  get_str_list(networks, nets);
+  unsigned found_ipv = 0;
+
+  for (auto& s : nets) {
+    struct sockaddr_storage net;
+    unsigned prefix_len;
+    if (!parse_network(s.c_str(), &net, &prefix_len)) {
+      lderr(cct) << "unable to parse network: " << s << dendl;
+      exit(1);
+    }
+
+    switch (net.ss_family) {
+    case AF_INET:
+      found_ipv |= CEPH_PICK_ADDRESS_IPV4;
+      break;
+    case AF_INET6:
+      found_ipv |= CEPH_PICK_ADDRESS_IPV6;
+      break;
+    }
+  }
+
+  return found_ipv;
+}
+
 int pick_addresses(
   CephContext *cct,
   unsigned flags,
@@ -358,6 +384,7 @@ int pick_addresses(
       !networks.empty()) {
     int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
     int ipv6_r = !(ipv & CEPH_PICK_ADDRESS_IPV6) ? 0 : -1;
+    unsigned found_ipv = networks_address_family_coverage(cct, networks);
     // first try on preferred numa node (if >= 0), then anywhere.
     while (true) {
       // note: pass in ipv to filter the matching addresses
@@ -377,6 +404,11 @@ int pick_addresses(
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
                                      networks, interfaces, addrs,
                                      preferred_numa_node);
+      }
+      if (found_ipv != 0 && (found_ipv & ipv != ipv)) {
+        lderr(cct) << "An IP address was found, but not enough networks to cover both address families. "
+                   << "An IPv4 and IPv6 network is required for dual stack. Continuing with one stack" << dendl;
+        break;
       }
       if (ipv4_r >= 0 && ipv6_r >= 0) {
 	break;

@@ -80,4 +80,11 @@ int get_iface_numa_node(
   const std::string& iface,
   int *node);
 
+/**
+ * Return a bitmap of address families that are covered by networks
+ *
+ * @param cct context (used for logging)
+ * @param string of networks
+ */
+unsigned networks_address_family_coverage(CephContext *cct, const std::string &networks);
 #endif
