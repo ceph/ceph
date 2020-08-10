@@ -119,15 +119,15 @@ int RGWSI_RADOS::Obj::open()
 }
 
 int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op,
-                              optional_yield y)
+                              optional_yield y, int flags)
 {
-  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, y);
+  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, y, flags);
 }
 
-int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl,
-                              optional_yield y)
+int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op,
+			      bufferlist *pbl, optional_yield y, int flags)
 {
-  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, pbl, y);
+  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, pbl, y, flags);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
