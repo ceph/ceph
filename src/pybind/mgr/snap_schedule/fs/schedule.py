@@ -14,6 +14,36 @@ from typing import Tuple, Any
 log = logging.getLogger(__name__)
 
 
+# Work around missing datetime.fromisoformat for < python3.7
+SNAP_DB_TS_FORMAT = '%Y-%m-%dT%H:%M:%S'
+try:
+    from backports.datetime_fromisoformat import MonkeyPatch
+    MonkeyPatch.patch_fromisoformat()
+except ImportError:
+    log.debug('backports.datetime_fromisoformat not found')
+
+try:
+    # have mypy ignore this line. We use the attribute error to detect if we
+    # have fromisoformat or not
+    parse_timestamp = datetime.fromisoformat  # type: ignore
+    log.debug('found datetime.fromisoformat')
+except AttributeError:
+    log.info(('Couldn\'t find datetime.fromisoformat, falling back to '
+              f'static timestamp parsing ({SNAP_DB_TS_FORMAT}'))
+
+    def parse_timestamp(ts):
+        try:
+            date = datetime.strptime(ts, SNAP_DB_TS_FORMAT)
+            return date
+        except ValueError:
+            msg = f'''The date string {ts} does not match the required format
+            {SNAP_DB_TS_FORMAT}. For more flexibel date parsing upgrade to
+            python3.7 or install
+            https://github.com/movermeyer/backports.datetime_fromisoformat'''
+            log.error(msg)
+            raise ValueError(msg)
+
+
 def parse_retention(retention):
     ret = {}
     log.debug(f'parse_retention({retention})')
@@ -71,21 +101,21 @@ class Schedule(object):
                                   now.day,
                                   tzinfo=now.tzinfo)
         else:
-            self.start = datetime.fromisoformat(start).astimezone(timezone.utc)
+            self.start = parse_timestamp(start).astimezone(timezone.utc)
         if created is None:
             self.created = datetime.now(timezone.utc)
         else:
-            self.created = datetime.fromisoformat(created)
+            self.created = parse_timestamp(created)
         if first:
-            self.first = datetime.fromisoformat(first)
+            self.first = parse_timestamp(first)
         else:
             self.first = first
         if last:
-            self.last = datetime.fromisoformat(last)
+            self.last = parse_timestamp(last)
         else:
             self.last = last
         if last_pruned:
-            self.last_pruned = datetime.fromisoformat(last_pruned)
+            self.last_pruned = parse_timestamp(last_pruned)
         else:
             self.last_pruned = last_pruned
         self.created_count = created_count
