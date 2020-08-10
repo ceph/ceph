@@ -381,7 +381,8 @@ class LocalRemote(object):
                     args[0]
                 ))
 
-        log.info("Running {0}".format(args))
+        log.info('> ' +
+                 ' '.join([str(a.value) if isinstance(a, Raw) else a for a in args]))
 
         if shell:
             subproc = subprocess.Popen(quote(args),
