@@ -8006,7 +8006,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   uint64_t num_sharded_objects = 0;
   BlueStoreRepairer repairer;
 
-  interval_set<uint64_t> bluefs_extents;
   auto alloc_size = fm->get_alloc_size();
 
   utime_t start = ceph_clock_now();
@@ -8014,16 +8013,19 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
 
-  int r = bluefs->get_block_extents(bluefs_layout.shared_bdev, &bluefs_extents);
-  ceph_assert(r == 0);
-  for (interval_set<uint64_t>::iterator it = bluefs_extents.begin(); it != bluefs_extents.end(); ++it) {
+  if (bluefs) {
+    interval_set<uint64_t> bluefs_extents;
 
-    apply_for_bitset_range(it.get_start(), it.get_len(), alloc_size, used_blocks,
-      [&](uint64_t pos, mempool_dynamic_bitset& bs) {
-        ceph_assert(pos < bs.size());
-        bs.set(pos);
-      }
-    );
+    int r = bluefs->get_block_extents(bluefs_layout.shared_bdev, &bluefs_extents);
+    ceph_assert(r == 0);
+    for (auto [start, len] : bluefs_extents) {
+      apply_for_bitset_range(start, len, alloc_size, used_blocks,
+        [&](uint64_t pos, mempool_dynamic_bitset& bs) {
+          ceph_assert(pos < bs.size());
+          bs.set(pos);
+        }
+      );
+    }
   }
 
   bluefs_used_blocks = used_blocks;
