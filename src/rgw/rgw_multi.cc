@@ -205,11 +205,11 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 
 int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
-			   RGWMPObj& mp_obj, const Span& parent_span)
+			   RGWMPObj& mp_obj, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   rgw_obj meta_obj;
@@ -305,11 +305,11 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 			   const string& delim,
 			   const int& max_uploads,
 			   vector<rgw_bucket_dir_entry> *objs,
-			   map<string, bool> *common_prefixes, bool *is_truncated, const Span& parent_span)
+			   map<string, bool> *common_prefixes, bool *is_truncated, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
@@ -326,11 +326,11 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 }
 
 int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-				string& prefix, string& delim, const Span& parent_span)
+				string& prefix, string& delim, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   constexpr int max = 1000;

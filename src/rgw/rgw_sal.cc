@@ -38,11 +38,11 @@
 namespace rgw::sal {
 
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets, const Span& parent_span)
+			       uint64_t max, bool need_stats, RGWBucketList &buckets, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   RGWUserBuckets ulist;
@@ -88,11 +88,11 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
   return nullptr;
 }
 
-int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& parent_span)
+int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   int ret;
@@ -236,11 +236,11 @@ int RGWRadosBucket::sync_user_stats()
       return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, &ent);
 }
 
-int RGWRadosBucket::update_container_stats(const Span& parent_span)
+int RGWRadosBucket::update_container_stats(const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
 
   int ret;
   map<std::string, RGWBucketEnt> m;
@@ -298,10 +298,10 @@ int RGWRadosBucket::chown(RGWUser* new_user, RGWUser* old_user, optional_yield y
 			   old_user->get_display_name(), obj_marker, y);
 }
 
-int RGWRadosBucket::put_instance_info(bool exclusive, ceph::real_time _mtime, const Span& parent_span)
+int RGWRadosBucket::put_instance_info(bool exclusive, ceph::real_time _mtime, const Span& global_parent_span)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs.attrs, parent_span);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs.attrs, global_parent_span);
 }
 
 /* Make sure to call get_bucket_info() if you need it first */
@@ -310,9 +310,9 @@ bool RGWRadosBucket::is_owner(RGWUser* user)
   return (info.owner.compare(user->get_user()) == 0);
 }
 
-int RGWRadosBucket::check_empty(optional_yield y, const Span& parent_span)
+int RGWRadosBucket::check_empty(optional_yield y, const Span& global_parent_span)
 {
-  return store->getRados()->check_bucket_empty(info, y, parent_span);
+  return store->getRados()->check_bucket_empty(info, y, global_parent_span);
 }
 
 int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
@@ -419,33 +419,33 @@ int RGWRadosObject::get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjS
   return store->getRados()->get_obj_state(rctx, bucket.get_info(), obj, state, follow_olh, y);
 }
 
-int RGWRadosObject::read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj, const Span& parent_span)
+int RGWRadosObject::read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj, const Span& global_parent_span)
 {
   read_op.params.attrs = &attrs.attrs;
   read_op.params.target_obj = target_obj;
   read_op.params.obj_size = &obj_size;
   read_op.params.lastmod = &mtime;
 
-  return read_op.prepare(y,parent_span);
+  return read_op.prepare(y,global_parent_span);
 }
 
-int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj, const Span& parent_span)
+int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj, const Span& global_parent_span)
 {
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rctx, get_obj());
   RGWRados::Object::Read read_op(&op_target);
 
-  return read_attrs(read_op, y, target_obj, parent_span);
+  return read_attrs(read_op, y, target_obj, global_parent_span);
 }
 
-int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const Span& parent_span)
+int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__); 
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   rgw_obj target_obj;
-  Span span_2 = child_span("RGWRadosObject::get_obj_attrs", parent_span);
+  Span span_2 = child_span("RGWRadosObject::get_obj_attrs", global_parent_span);
   int r = get_obj_attrs(rctx, y, &target_obj);
   finish_trace(span_2);
   if (r < 0) {
@@ -482,7 +482,7 @@ int RGWRadosObject::copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket,
 					   dpp, y);
 }
 
-int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y, const Span& parent_span)
+int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y, const Span& global_parent_span)
 {
   map <string, bufferlist> attrs;
   map <string, bufferlist> rmattr;
@@ -491,7 +491,7 @@ int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, 
   set_atomic(rctx);
   rmattr[attr_name] = bl;
   rgw_obj obj = get_obj();
-  return store->getRados()->set_attrs(rctx, bucket->get_info(), obj, attrs, &rmattr, y, parent_span);
+  return store->getRados()->set_attrs(rctx, bucket->get_info(), obj, attrs, &rmattr, y, global_parent_span);
 }
 
 void RGWRadosObject::set_atomic(RGWObjectCtx *rctx) const
@@ -761,11 +761,11 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out, const Span& parent_span)
+				 std::unique_ptr<RGWBucket>* bucket_out, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);   
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   int ret;

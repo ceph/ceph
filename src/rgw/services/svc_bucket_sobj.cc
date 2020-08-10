@@ -240,11 +240,11 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                     real_time mtime,
                                                     map<string, bufferlist> *pattrs,
                                                     RGWObjVersionTracker *objv_tracker,
-                                                    optional_yield y, const Span& parent_span)
+                                                    optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   bufferlist bl;
@@ -489,11 +489,11 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                   bool exclusive,
                                                   real_time mtime,
                                                   map<string, bufferlist> *pattrs,
-                                                  optional_yield y, const Span& parent_span)
+                                                  optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer,  __FILENAME__, "function",  __PRETTY_FUNCTION__);  
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   bufferlist bl;

@@ -200,11 +200,11 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
   return 0;
 }
 
-int AtomicObjectProcessor::prepare(optional_yield y, const Span& parent_span)
+int AtomicObjectProcessor::prepare(optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   uint64_t max_head_chunk_size;
@@ -298,11 +298,11 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const char *if_nomatch,
                                     const std::string *user_data,
                                     rgw_zone_set *zones_trace,
-                                    bool *pcanceled, optional_yield y, const Span& parent_span)
+                                    bool *pcanceled, optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   int r = writer.drain();
@@ -382,11 +382,11 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
   return 0;
 }
 
-int MultipartObjectProcessor::prepare_head(const Span& parent_span)
+int MultipartObjectProcessor::prepare_head(const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
@@ -394,7 +394,7 @@ int MultipartObjectProcessor::prepare_head(const Span& parent_span)
   uint64_t stripe_size;
   uint64_t alignment;
 
-  Span span_2 = child_span("RGWRados::get_max_chunk_size", parent_span);
+  Span span_2 = child_span("RGWRados::get_max_chunk_size", global_parent_span);
   int r = store->getRados()->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
   finish_trace(span_2);
   if (r < 0) {
@@ -433,11 +433,11 @@ int MultipartObjectProcessor::prepare_head(const Span& parent_span)
   return 0;
 }
 
-int MultipartObjectProcessor::prepare(optional_yield y, const Span& parent_span)
+int MultipartObjectProcessor::prepare(optional_yield y, const Span& global_parent_span)
 {
   manifest.set_prefix(target_obj.key.name + "." + upload_id);
 
-  return prepare_head(parent_span);
+  return prepare_head(global_parent_span);
 }
 
 int MultipartObjectProcessor::complete(size_t accounted_size,
@@ -450,11 +450,11 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        const char *if_nomatch,
                                        const std::string *user_data,
                                        rgw_zone_set *zones_trace,
-                                       bool *pcanceled, optional_yield y, const Span& parent_span)
+                                       bool *pcanceled, optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
   int r = writer.drain();
   if (r < 0) {
@@ -547,7 +547,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
   return 0;
 }
 
-int AppendObjectProcessor::prepare(optional_yield y, const Span& parent_span)
+int AppendObjectProcessor::prepare(optional_yield y, const Span& global_parent_span)
 {
   RGWObjState *astate;
   int r = store->getRados()->get_obj_state(&obj_ctx, bucket->get_info(), head_obj, &astate, y);
@@ -640,11 +640,11 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     ceph::real_time set_mtime, map <string, bufferlist> &attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
-                                    optional_yield y, const Span& parent_span)
+                                    optional_yield y, const Span& global_parent_span)
 {
   char buffer[strlen(__FILENAME__)+strlen(__PRETTY_FUNCTION__)+10];
   get_span_name(buffer , __FILENAME__,  "function",   __PRETTY_FUNCTION__);
-  Span span_1 = child_span(buffer, parent_span);
+  Span span_1 = child_span(buffer, global_parent_span);
   const Span& this_parent_span(span_1);
 
   int r = writer.drain();
