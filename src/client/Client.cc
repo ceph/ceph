@@ -393,7 +393,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
 		<< "inode " << in->ino
 		<< " " << path
 		<< " ref " << in->get_num_ref()
-		<< *in << dendl;
+		<< " " << *in << dendl;
 
   if (f) {
     f->open_object_section("inode");
