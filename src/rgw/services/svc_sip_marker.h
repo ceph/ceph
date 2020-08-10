@@ -20,7 +20,7 @@ public:
 
   using stage_id_t = string;
 
-  struct client_marker_info {
+  struct target_marker_info {
     string pos;
     ceph::real_time mtime;
 
@@ -42,23 +42,23 @@ public:
   };
 
   struct stage_shard_info {
-    map<string, client_marker_info> clients;
-    std::string min_clients_pos;
-    std::string low_pos;
+    map<string, target_marker_info> targets;
+    std::string min_targets_pos;
+    std::string min_source_pos;
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
-      encode(clients, bl);
-      encode(min_clients_pos, bl);
-      encode(low_pos, bl);
+      encode(targets, bl);
+      encode(min_targets_pos, bl);
+      encode(min_source_pos, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::const_iterator& bl) {
       DECODE_START(1, bl);
-      decode(clients, bl);
-      decode(min_clients_pos, bl);
-      decode(low_pos, bl);
+      decode(targets, bl);
+      decode(min_targets_pos, bl);
+      decode(min_source_pos, bl);
       DECODE_FINISH(bl);
     }
 
@@ -76,24 +76,24 @@ public:
       void dump(Formatter *f) const;
     };
 
-    virtual int set_marker(const string& client_id,
+    virtual int set_marker(const string& target_id,
                            const stage_id_t& sid,
                            int shard_id,
                            const std::string& marker,
                            const ceph::real_time& mtime,
-                           bool init_client,
+                           bool init_target,
                            modify_result *result) = 0;
 
-    virtual int remove_client(const string& client_id,
+    virtual int remove_target(const string& target_id,
                               const stage_id_t& sid,
                               int shard_id,
                               modify_result *result) = 0;
 
-    virtual int set_low_pos(const stage_id_t& sid,
-                            int shard_id,
-                            const std::string& pos) = 0;
+    virtual int set_min_source_pos(const stage_id_t& sid,
+                                   int shard_id,
+                                   const std::string& pos) = 0;
 
-    virtual int get_min_clients_pos(const stage_id_t& sid,
+    virtual int get_min_targets_pos(const stage_id_t& sid,
                                     int shard_id,
                                     std::optional<std::string> *pos) = 0;
 
@@ -112,5 +112,5 @@ public:
 
   virtual HandlerRef get_handler(SIProviderRef& sip) = 0;
 };
-WRITE_CLASS_ENCODER(RGWSI_SIP_Marker::client_marker_info)
+WRITE_CLASS_ENCODER(RGWSI_SIP_Marker::target_marker_info)
 WRITE_CLASS_ENCODER(RGWSI_SIP_Marker::stage_shard_info)

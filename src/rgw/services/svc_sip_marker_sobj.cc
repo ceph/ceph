@@ -7,7 +7,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static string stage_shard_info_oid_prefix = "sip.client-markers";
+static string stage_shard_info_oid_prefix = "sip.target-markers";
 
 
 void RGWSI_SIP_Marker_SObj::init(RGWSI_Zone *_zone_svc,
@@ -72,12 +72,12 @@ public:
   }
 
 
-  int set_marker(const string& client_id,
+  int set_marker(const string& target_id,
                  const RGWSI_SIP_Marker::stage_id_t& sid,
                  int shard_id,
                  const std::string& marker,
                  const ceph::real_time& mtime,
-                 bool init_client,
+                 bool init_target,
                  RGWSI_SIP_Marker::Handler::modify_result *result) override {
 
 #define NUM_RACE_RETRY 10
@@ -94,25 +94,25 @@ public:
         return r;
       }
 
-      RGWSI_SIP_Marker::client_marker_info *marker_info;
+      RGWSI_SIP_Marker::target_marker_info *marker_info;
 
-      auto citer = sinfo.clients.find(client_id);
-      if (citer == sinfo.clients.end()) {
-        if (!init_client) {
-          ldout(cct, 20) << __func__ << "(): couldn't find client (client_id=" << client_id << ")" << dendl;
+      auto citer = sinfo.targets.find(target_id);
+      if (citer == sinfo.targets.end()) {
+        if (!init_target) {
+          ldout(cct, 20) << __func__ << "(): couldn't find target (target_id=" << target_id << ")" << dendl;
           return -ENOENT;
         }
-        marker_info = &sinfo.clients[client_id];
+        marker_info = &sinfo.targets[target_id];
       } else {
         marker_info = &citer->second;
       }
 
-      if  (marker < sinfo.low_pos) {
-        ldout(cct, 20) << __func__ << "(): can't set marker: client is too far behind: low_pos=" << sinfo.low_pos << " client: id=" << client_id << " marker=" << marker << dendl;
+      if  (marker < sinfo.min_source_pos) {
+        ldout(cct, 20) << __func__ << "(): can't set marker: target is too far behind: min_source_pos=" << sinfo.min_source_pos << " target: id=" << target_id << " marker=" << marker << dendl;
         return -ERANGE;
       }
 
-      if (marker <= marker_info->pos) { /* can a client marker go backwards? */
+      if (marker <= marker_info->pos) { /* can a target marker go backwards? */
         result->modified = false;
         break;
       }
@@ -120,17 +120,17 @@ public:
       marker_info->pos = marker;
       marker_info->mtime = mtime;
 
-      if (sinfo.clients.size() > 1) {
+      if (sinfo.targets.size() > 1) {
         string min = std::move(marker);
 
-        for (auto& iter : sinfo.clients) {
+        for (auto& iter : sinfo.targets) {
           if (iter.second.pos < min) {
             min = iter.second.pos;
           }
         }
-        sinfo.min_clients_pos = std::move(min);
+        sinfo.min_targets_pos = std::move(min);
       } else {
-        sinfo.min_clients_pos = std::move(marker);
+        sinfo.min_targets_pos = std::move(marker);
       }
 
       r = sobj.write(sinfo, &objv_tracker, null_yield);
@@ -149,12 +149,12 @@ public:
     }
 
     result->modified = true;
-    result->min_pos = sinfo.min_clients_pos;
+    result->min_pos = sinfo.min_targets_pos;
 
     return 0;
   }
 
-  int remove_client(const string& client_id,
+  int remove_target(const string& target_id,
                     const SIProvider::stage_id_t& sid,
                     int shard_id,
                     RGWSI_SIP_Marker::Handler::modify_result *result) override {
@@ -176,29 +176,29 @@ public:
         return r;
       }
 
-      auto citer = sinfo.clients.find(client_id);
-      if (citer != sinfo.clients.end()) {
-        sinfo.clients.erase(citer);
+      auto citer = sinfo.targets.find(target_id);
+      if (citer != sinfo.targets.end()) {
+        sinfo.targets.erase(citer);
         result->modified = true;
       }
 
       string min;
 
-      if (sinfo.clients.size() > 0) {
-        auto iter = sinfo.clients.begin();
+      if (sinfo.targets.size() > 0) {
+        auto iter = sinfo.targets.begin();
 
         min = iter->second.pos;
 
-        while (++iter != sinfo.clients.end()) {
+        while (++iter != sinfo.targets.end()) {
           if (iter->second.pos < min) {
             min = iter->second.pos;
           }
         }
       }
 
-      if (sinfo.min_clients_pos != min) {
+      if (sinfo.min_targets_pos != min) {
         result->modified |= true;
-        sinfo.min_clients_pos = std::move(min);
+        sinfo.min_targets_pos = std::move(min);
       }
 
       if (!result->modified) {
@@ -220,14 +220,14 @@ public:
       return -EIO;
     }
 
-    result->min_pos = sinfo.min_clients_pos;
+    result->min_pos = sinfo.min_targets_pos;
 
     return 0;
   }
 
-  int set_low_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
-                  int shard_id,
-                  const std::string& pos) override {
+  int set_min_source_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
+                         int shard_id,
+                         const std::string& pos) override {
     ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
     stage_shard_info sinfo;
 
@@ -241,31 +241,31 @@ public:
         return r;
       }
 
-      if (sinfo.low_pos == pos) {
+      if (sinfo.min_source_pos == pos) {
         /* nothing changed */
         return 0;
       }
 
-      sinfo.low_pos = pos;
+      sinfo.min_source_pos = pos;
 
-      if (sinfo.low_pos > sinfo.min_clients_pos) {
-        /* need to remove any client that is too far behind */
+      if (sinfo.min_source_pos > sinfo.min_targets_pos) {
+        /* need to remove any target that is too far behind */
 
-        auto iter = sinfo.clients.begin();
-        while (iter != sinfo.clients.end()) {
+        auto iter = sinfo.targets.begin();
+        while (iter != sinfo.targets.end()) {
           auto prev = iter++;
 
-          auto& client = iter->second;
-          if (client.pos < sinfo.low_pos) {
-            ldout(cct, 20) << __func__ << "(): removing client fell behind tracking shard: sip=" << sip->get_id()
-              << " sid=" << sid << " client=" << prev->first << " low_pos=" << sinfo.low_pos << " client.pos=" << client.pos << dendl;
+          auto& target = iter->second;
+          if (target.pos < sinfo.min_source_pos) {
+            ldout(cct, 20) << __func__ << "(): removing target fell behind tracking shard: sip=" << sip->get_id()
+              << " sid=" << sid << " target=" << prev->first << " min_source_pos=" << sinfo.min_source_pos << " target.pos=" << target.pos << dendl;
 
-            sinfo.clients.erase(prev);
+            sinfo.targets.erase(prev);
           }
         }
 
-        if (sinfo.clients.empty()) {
-          sinfo.min_clients_pos.clear();
+        if (sinfo.targets.empty()) {
+          sinfo.min_targets_pos.clear();
         }
 
         r = sobj.write(sinfo, &objv_tracker, null_yield);
@@ -287,7 +287,7 @@ public:
     return 0;
   }
 
-  int get_min_clients_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
+  int get_min_targets_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
                           int shard_id,
                           std::optional<std::string> *pos) override {
     stage_shard_info sinfo;
@@ -297,7 +297,7 @@ public:
       return r;
     }
 
-    *pos = sinfo.min_clients_pos;
+    *pos = sinfo.min_targets_pos;
 
     return 0;
   }

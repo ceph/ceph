@@ -821,8 +821,8 @@ enum class OPT {
   SI_PROVIDER_FETCH,
   SI_PROVIDER_TRIM,
   SI_PROVIDER_STATE,
-  SI_PROVIDER_MARKER_CLIENT_SET,
-  SI_PROVIDER_MARKER_CLIENT_RM,
+  SI_PROVIDER_MARKER_TARGET_SET,
+  SI_PROVIDER_MARKER_TARGET_RM,
   SI_PROVIDER_MARKER_INFO_GET,
   SI_PROVIDER_MARKER_INFO_RM,
 };
@@ -1062,8 +1062,8 @@ static SimpleCmd::Commands all_cmds = {
   { "sip fetch", OPT::SI_PROVIDER_FETCH },
   { "sip trim", OPT::SI_PROVIDER_TRIM },
   { "sip state", OPT::SI_PROVIDER_STATE },
-  { "sip marker client set", OPT::SI_PROVIDER_MARKER_CLIENT_SET },
-  { "sip marker client rm", OPT::SI_PROVIDER_MARKER_CLIENT_RM },
+  { "sip marker target set", OPT::SI_PROVIDER_MARKER_TARGET_SET },
+  { "sip marker target rm", OPT::SI_PROVIDER_MARKER_TARGET_RM },
   { "sip marker info get", OPT::SI_PROVIDER_MARKER_INFO_GET },
   { "sip marker info rm", OPT::SI_PROVIDER_MARKER_INFO_RM },
 };
@@ -3662,7 +3662,8 @@ int main(int argc, const char **argv)
   std::optional<string> opt_sip;
   std::optional<string> opt_sip_instance;
   std::optional<SIProvider::stage_id_t> opt_stage_id;
-  std::optional<bool> opt_init_client;
+  std::optional<string> opt_target_id;
+  std::optional<bool> opt_init_target;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
@@ -4140,8 +4141,10 @@ int main(int argc, const char **argv)
       opt_sip_instance = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--stage-id", (char*)NULL)) {
       opt_stage_id = val;
-    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--init-client", (char*)NULL)) {
-      opt_init_client = (bool)tmp_int;
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-id", (char*)NULL)) {
+      opt_target_id = val;
+    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--init-target", (char*)NULL)) {
+      opt_init_target = (bool)tmp_int;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
@@ -10344,11 +10347,11 @@ next:
    formatter->flush(cout);
  }
 
- if (opt_cmd == OPT::SI_PROVIDER_MARKER_CLIENT_SET ||
-     opt_cmd == OPT::SI_PROVIDER_MARKER_CLIENT_RM) {
-   bool set_cmd = (opt_cmd == OPT::SI_PROVIDER_MARKER_CLIENT_SET);
-   if (client_id.empty()) {
-     cerr << "ERROR: --client-id not specified" << std::endl;
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_TARGET_SET ||
+     opt_cmd == OPT::SI_PROVIDER_MARKER_TARGET_RM) {
+   bool set_cmd = (opt_cmd == OPT::SI_PROVIDER_MARKER_TARGET_SET);
+   if (!opt_target_id) {
+     cerr << "ERROR: --target-id not specified" << std::endl;
      return EINVAL;
    }
 
@@ -10396,16 +10399,16 @@ next:
    RGWSI_SIP_Marker::Handler::modify_result result;
 
    if (set_cmd) {
-     auto init_flag = opt_init_client.value_or(false);
-     r = marker_handler->set_marker(client_id, stage_id, shard_id, *opt_marker, real_clock::now(), init_flag, &result);
+     auto init_flag = opt_init_target.value_or(false);
+     r = marker_handler->set_marker(*opt_target_id, stage_id, shard_id, *opt_marker, real_clock::now(), init_flag, &result);
      if (r < 0) {
-       cerr << "ERROR: failed to set client marker info: " << cpp_strerror(-r) << std::endl;
+       cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
        return -r;
      }
    } else {
-     r = marker_handler->remove_client(client_id, stage_id, shard_id, &result);
+     r = marker_handler->remove_target(*opt_target_id, stage_id, shard_id, &result);
      if (r < 0) {
-       cerr << "ERROR: failed to remove client marker info: " << cpp_strerror(-r) << std::endl;
+       cerr << "ERROR: failed to remove target marker info: " << cpp_strerror(-r) << std::endl;
        return -r;
      }
    }
