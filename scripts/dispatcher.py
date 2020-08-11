@@ -1,6 +1,6 @@
 """
 usage: teuthology-dispatcher --help
-       teuthology-dispatcher --supervisor [-v] --bin-path BIN_PATH --config-fd FD --archive-dir ARC_DIR
+       teuthology-dispatcher --supervisor [-v] --bin-path BIN_PATH --config-file COFNFIG --archive-dir ARC_DIR
        teuthology-dispatcher [-v] --archive-dir ARC_DIR --log-dir LOG_DIR --tube TUBE
 
 Start a dispatcher for the specified tube. Grab jobs from a beanstalk
@@ -20,7 +20,7 @@ standard arguments:
   --archive-dir ARC_DIR          path to archive results in
   --supervisor                   run dispactcher in job supervisor mode
   --bin-path BIN_PATH            teuthology bin path
-  --config-fd FD                 file descriptor of job's config file
+  --config-file CONFIG                 file descriptor of job's config file
 """
 
 import docopt

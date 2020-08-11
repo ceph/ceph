@@ -3,7 +3,6 @@ import os
 import subprocess
 import sys
 import yaml
-import tempfile
 
 from datetime import datetime
 
@@ -14,6 +13,7 @@ from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
 from teuthology.task.internal.lock_machines import lock_machines_helper
 from teuthology.dispatcher import supervisor
 from teuthology.worker import prep_job
+from teuthology import safepath
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -134,14 +134,20 @@ def main(args):
             '--archive-dir', archive_dir,
         ]
 
-        with tempfile.NamedTemporaryFile(prefix='teuthology-dispatcher.',
-                                         suffix='.tmp', mode='w+t') as tmp:
-            yaml.safe_dump(data=job_config, stream=tmp)
-            tmp.flush()
-            run_args.extend(["--config-fd", str(tmp.fileno())])
-            job_proc = subprocess.Popen(run_args, pass_fds=[tmp.fileno()])
+        # Create run archive directory if not already created and
+        # job's archive directory
+        create_job_archive(job_config['name'],
+                           job_config['archive_path'],
+                           archive_dir)
+        job_config_path = os.path.join(job_config['archive_path'], 'orig.config.yaml')
 
-        log.info('Job subprocess PID: %s', job_proc.pid)
+        # Write initial job config in job archive dir
+        with open(job_config_path, 'w') as f:
+            yaml.safe_dump(job_config, f, default_flow_style=False)
+
+        run_args.extend(["--config-file", job_config_path])
+        job_proc = subprocess.Popen(run_args)
+        log.info('Job supervisor PID: %s', job_proc.pid)
 
         # This try/except block is to keep the worker from dying when
         # beanstalkc throws a SocketError
@@ -157,3 +163,12 @@ def lock_machines(job_config):
                          job_config['machine_type']], reimage=False)
     job_config = fake_ctx.config
     return job_config
+
+
+def create_job_archive(job_name, job_archive_path, archive_dir):
+    log.info('Creating job\'s archive dir %s', job_archive_path)
+    safe_archive = safepath.munge(job_name)
+    run_archive = os.path.join(archive_dir, safe_archive)
+    if not os.path.exists(run_archive):
+        safepath.makedirs('/', run_archive)
+    safepath.makedirs('/', job_archive_path)
