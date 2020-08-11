@@ -17,7 +17,8 @@
             <input id="user"
                    class="form-control"
                    formControlName="user"
-                   type="text">
+                   type="text"
+                   autocomplete="off">
             <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('user', formDir, 'required')"
                   i18n>This field is required.</span>
@@ -39,7 +40,8 @@
               <input id="password"
                      class="form-control"
                      formControlName="password"
-                     type="password">
+                     type="password"
+                     autocomplete="new-password">
 
               <span class="input-group-append">
                 <button type="button"
@@ -73,7 +75,8 @@
             <input id="mutual_user"
                    class="form-control"
                    formControlName="mutual_user"
-                   type="text">
+                   type="text"
+                   autocomplete="off">
 
             <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('mutual_user', formDir, 'required')"
@@ -96,7 +99,8 @@
               <input id="mutual_password"
                      class="form-control"
                      formControlName="mutual_password"
-                     type="password">
+                     type="password"
+                     autocomplete="new-password">
 
               <span class="input-group-append">
                 <button type="button"
