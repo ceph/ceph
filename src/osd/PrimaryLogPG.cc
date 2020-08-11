@@ -1006,6 +1006,10 @@ void PrimaryLogPG::do_command(
     handle_query_state(f.get());
     f->close_section();
 
+    if (is_primary() && is_active()) {
+      scrubber.dump(f.get());
+    }
+
     f->open_object_section("agent_state");
     if (agent_state)
       agent_state->dump(f.get());
