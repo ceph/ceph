@@ -227,6 +227,7 @@ struct Inode {
   string    symlink;  // symlink content, if it's a symlink
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
+  map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings
 
   std::list<ceph::condition_variable*> waitfor_caps;
   std::list<ceph::condition_variable*> waitfor_commit;
