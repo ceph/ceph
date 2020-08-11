@@ -13070,16 +13070,14 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
       }
 
       bool quota_exceed = false;
-      if (todir_root && todir_root->quota.max_bytes &&
-          (old_bytes + todir_root->rstat.rbytes) >= todir_root->quota.max_bytes) {
+      if(is_quota_bytes_exceeded(todir, old_bytes, perm)){
         ldout(cct, 10) << "_rename (" << oldinode->ino << " bytes="
                        << old_bytes << ") to (" << todir->ino 
 		       << ") will exceed quota on " << *todir_root << dendl;
         quota_exceed = true;
       }
 
-      if (todir_root && todir_root->quota.max_files &&
-          (old_files + todir_root->rstat.rsize()) >= todir_root->quota.max_files) {
+      if(is_quota_files_exceeded(todir, old_files, perm)){
         ldout(cct, 10) << "_rename (" << oldinode->ino << " files="
                        << old_files << ") to (" << todir->ino 
                        << ") will exceed quota on " << *todir_root << dendl;
@@ -14507,6 +14505,16 @@ bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
   return check_quota_condition(in, perms,
       [](const Inode &in) {
         return in.quota.max_files && in.rstat.rsize() >= in.quota.max_files;
+      });
+}
+
+bool Client::is_quota_files_exceeded(Inode *in, int64_t new_files,
+                                     const UserPerm& perms)
+{
+  return check_quota_condition(in, perms,
+      [&new_files](const Inode &in) {
+        return in.quota.max_files && (in.rstat.rsize() + new_files)
+               > in.quota.max_files;
       });
 }
 
