@@ -255,7 +255,7 @@ public:
         while (iter != sinfo.targets.end()) {
           auto prev = iter++;
 
-          auto& target = iter->second;
+          auto& target = prev->second;
           if (target.pos < sinfo.min_source_pos) {
             ldout(cct, 20) << __func__ << "(): removing target fell behind tracking shard: sip=" << sip->get_id()
               << " sid=" << sid << " target=" << prev->first << " min_source_pos=" << sinfo.min_source_pos << " target.pos=" << target.pos << dendl;
@@ -267,15 +267,15 @@ public:
         if (sinfo.targets.empty()) {
           sinfo.min_targets_pos.clear();
         }
+      }
 
-        r = sobj.write(sinfo, &objv_tracker, null_yield);
-        if (r >= 0) {
-          break;
-        }
+      r = sobj.write(sinfo, &objv_tracker, null_yield);
+      if (r >= 0) {
+        break;
+      }
 
-        if (r != -ECANCELED) {
-          return r;
-        }
+      if (r != -ECANCELED) {
+        return r;
       }
     }
 

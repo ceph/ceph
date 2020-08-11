@@ -823,6 +823,7 @@ enum class OPT {
   SI_PROVIDER_STATE,
   SI_PROVIDER_MARKER_TARGET_SET,
   SI_PROVIDER_MARKER_TARGET_RM,
+  SI_PROVIDER_MARKER_SOURCE_SET,
   SI_PROVIDER_MARKER_INFO_GET,
   SI_PROVIDER_MARKER_INFO_RM,
 };
@@ -1064,6 +1065,7 @@ static SimpleCmd::Commands all_cmds = {
   { "sip state", OPT::SI_PROVIDER_STATE },
   { "sip marker target set", OPT::SI_PROVIDER_MARKER_TARGET_SET },
   { "sip marker target rm", OPT::SI_PROVIDER_MARKER_TARGET_RM },
+  { "sip marker source set", OPT::SI_PROVIDER_MARKER_SOURCE_SET },
   { "sip marker info get", OPT::SI_PROVIDER_MARKER_INFO_GET },
   { "sip marker info rm", OPT::SI_PROVIDER_MARKER_INFO_RM },
 };
@@ -10416,6 +10418,68 @@ next:
    {
      Formatter::ObjectSection top_section(*formatter, "result");
      encode_json("result", result, formatter.get());
+   }
+   formatter->flush(cout);
+
+ }
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_SOURCE_SET) {
+   if (!opt_marker) {
+     cerr << "ERROR: --marker not specified" << std::endl;
+     return EINVAL;
+   }
+
+   if (!opt_sip) {
+     cerr << "ERROR: --sip not specified" << std::endl;
+     return EINVAL;
+   }
+
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
+   if (!provider) {
+     cerr << "ERROR: sync info provider not found" << std::endl;
+     return ENOENT;
+   }
+
+   auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
+
+   SIProvider::StageInfo stage_info;
+   int r = provider->get_stage_info(stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   if (!marker_handler) {
+     cerr << "ERROR: can't get sip marker handler" << std::endl;
+     return EIO;
+   }
+
+   RGWSI_SIP_Marker::Handler::modify_result result;
+
+   r = marker_handler->set_min_source_pos(stage_id, shard_id, *opt_marker);
+   if (r < 0) {
+     cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   RGWSI_SIP_Marker::stage_shard_info sinfo;
+
+   r = marker_handler->get_info(stage_id, shard_id, &sinfo);
+   if (r < 0) {
+     cerr << "ERROR: failed to fetch marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("info", sinfo, formatter.get());
    }
    formatter->flush(cout);
 

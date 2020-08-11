@@ -3912,51 +3912,14 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
 }
 
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
-               req_info *info,
-               const rgw_zone_id& source_zone,
-               rgw::sal::Object* dest_obj,
-               rgw::sal::Object* src_obj,
-               rgw::sal::Bucket* dest_bucket,
-               rgw::sal::Bucket* src_bucket,
-               std::optional<rgw_placement_rule> dest_placement_rule,
-               real_time *src_mtime,
-               real_time *mtime,
-               const real_time *mod_ptr,
-               const real_time *unmod_ptr,
-               bool high_precision_time,
-               const char *if_match,
-               const char *if_nomatch,
-               AttrsMod attrs_mod,
-               bool copy_if_newer,
-               rgw::sal::Attrs& attrs,
-               RGWObjCategory category,
-               std::optional<uint64_t> olh_epoch,
-	       real_time delete_at,
-               string *ptag,
-               string *petag,
-               void (*progress_cb)(off_t, void *),
-               void *progress_data,
-               const DoutPrefixProvider *dpp,
-               RGWFetchObjFilter *filter,
-               rgw_zone_set *zones_trace,
-               std::optional<uint64_t>* bytes_transferred)
+                               const rgw_zone_id& source_zone,
+                               const rgw_user& user_id,
+                               rgw::sal::Object* dest_obj,
+                               rgw::sal::Object* src_obj,
+                               rgw::sal::Bucket* dest_bucket,
+                               rgw::sal::Bucket* src_bucket,
+                               const FetchRemoteObjParams& params)
 {
-  /* source is in a different zonegroup, copy from there */
-
-  RGWRESTStreamRWRequest *in_stream_req;
-  string tag;
-  int i;
-  append_rand_alpha(cct, tag, tag, 32);
-  obj_time_weight set_mtime_weight;
-  set_mtime_weight.high_precision = high_precision_time;
-  int ret;
-
-  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
-  using namespace rgw::putobj;
-  AtomicObjectProcessor processor(&aio, this->store, nullptr, user_id,
-                                  obj_ctx, dest_obj->clone(), olh_epoch,
-				  tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -3981,24 +3944,57 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     conn = iter->second;
   }
 
+  return fetch_remote_obj(obj_ctx, conn, !source_zone.empty(),
+                          user_id, dest_obj, src_obj,
+                          dest_bucket, src_bucket, params);
+}
+
+int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
+                               RGWRESTConn *conn,
+                               bool foreign_source,
+                               const rgw_user& user_id,
+                               rgw::sal::Object* dest_obj,
+                               rgw::sal::Object* src_obj,
+                               rgw::sal::Bucket* dest_bucket,
+                               rgw::sal::Bucket* src_bucket,
+                               const FetchRemoteObjParams& params)
+{
+  /* source is in a different zonegroup, copy from there */
+
+  RGWRESTStreamRWRequest *in_stream_req;
+  string tag;
+  int i;
+  append_rand_alpha(cct, tag, tag, 32);
+  obj_time_weight set_mtime_weight;
+  set_mtime_weight.high_precision = params.high_precision_time;
+  int ret;
+
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  using namespace rgw::putobj;
+  AtomicObjectProcessor processor(&aio, this->store, nullptr, user_id,
+                                  obj_ctx, dest_obj->clone(), params.olh_epoch,
+                                  tag, dpp, null_yield);
+
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
   RGWFetchObjFilter_Default source_filter;
+  auto filter = params.filter;
   if (!filter) {
     filter = &source_filter;
   }
 
   std::optional<rgw_user> override_owner;
 
-  RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+  RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor,
+                    params.progress_cb, params.progress_data,
                     [&](map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
 
                       int ret = filter->filter(cct,
                                                src_obj->get_key(),
                                                dest_bucket->get_info(),
-                                               dest_placement_rule,
+                                               params.dest_placement_rule,
                                                obj_attrs,
 					       &override_owner,
                                                &ptail_rule);
@@ -4031,11 +4027,17 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWObjState *dest_state = NULL;
 
-  const real_time *pmod = mod_ptr;
+
+  const real_time *pmod = params.mod_ptr;
 
   obj_time_weight dest_mtime_weight;
 
-  if (copy_if_newer) {
+  map<string, bufferlist> _attrs;
+  auto& attrs = (params.pattrs ? *params.pattrs : _attrs);
+
+  auto delete_at = params.delete_at;
+
+  if (params.copy_if_newer) {
     /* need to get mtime for destination */
     ret = get_obj_state(dpp, &obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), &dest_state, false, null_yield);
     if (ret < 0)
@@ -4052,7 +4054,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   static constexpr bool rgwx_stat = false;
   static constexpr bool sync_manifest = true;
   static constexpr bool skip_decrypt = true;
-  ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
+  ret = conn->get_obj(dpp, user_id, params.info, src_obj, pmod, params.unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
                       sync_manifest, skip_decrypt,
@@ -4126,7 +4128,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     obj_attrs[RGW_ATTR_ACL] = std::move(bl);
   }
 
-  if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
+  if (!foreign_source) { /* need to preserve expiration if copy in the same zonegroup */
     cb.get_attrs().erase(RGW_ATTR_DELETE_AT);
   } else {
     map<string, bufferlist>::iterator iter = cb.get_attrs().find(RGW_ATTR_DELETE_AT);
@@ -4139,27 +4141,27 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
-  if (src_mtime) {
-    *src_mtime = set_mtime;
+  if (params.src_mtime) {
+    *params.src_mtime = set_mtime;
   }
 
-  if (petag) {
+  if (params.petag) {
     const auto iter = cb.get_attrs().find(RGW_ATTR_ETAG);
     if (iter != cb.get_attrs().end()) {
-      *petag = iter->second.to_str();
+      *params.petag = iter->second.to_str();
     }
   }
 
   //erase the append attr
   cb.get_attrs().erase(RGW_ATTR_APPEND_PART_NUM);
 
-  if (source_zone.empty()) {
-    set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
+  if (!foreign_source) {
+    set_copy_attrs(cb.get_attrs(), attrs, params.attrs_mod);
   } else {
     attrs = cb.get_attrs();
   }
 
-  if (copy_if_newer) {
+  if (params.copy_if_newer) {
     uint64_t pg_ver = 0;
     auto i = attrs.find(RGW_ATTR_PG_VER);
     if (i != attrs.end() && i->second.length() > 0) {
@@ -4194,14 +4196,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
-    ret = processor.complete(cb.get_data_len(), etag, mtime, set_mtime,
+    ret = processor.complete(cb.get_data_len(), etag, params.mtime, set_mtime,
                              attrs, delete_at, nullptr, nullptr, nullptr,
-                             zones_trace, &canceled, null_yield);
+                             params.zones_trace, &canceled, null_yield);
     if (ret < 0) {
       goto set_err_state;
     }
 
-    if (copy_if_newer && canceled) {
+    if (params.copy_if_newer && canceled) {
       ldpp_dout(dpp, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.invalidate(dest_obj->get_obj()); /* object was overwritten */
       ret = get_obj_state(dpp, &obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), &dest_state, false, null_yield);
@@ -4210,7 +4212,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
         goto set_err_state;
       }
       dest_mtime_weight.init(dest_state);
-      dest_mtime_weight.high_precision = high_precision_time;
+      dest_mtime_weight.high_precision = params.high_precision_time;
       if (!dest_state->exists ||
         dest_mtime_weight < set_mtime_weight) {
         ldpp_dout(dpp, 20) << "retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
@@ -4228,18 +4230,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
-  if (bytes_transferred) {
-    *bytes_transferred = cb.get_data_len();
+  if (params.bytes_transferred) {
+    *params.bytes_transferred = cb.get_data_len();
   }
   return 0;
 set_err_state:
-  if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
+  if (params.copy_if_newer && ret == -ERR_NOT_MODIFIED) {
     // we may have already fetched during sync of OP_ADD, but were waiting
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
-    if (olh_epoch && *olh_epoch > 0) {
+    if (params.olh_epoch && *params.olh_epoch > 0) {
       constexpr bool log_data_change = true;
       ret = set_olh(dpp, obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), false, nullptr,
-                    *olh_epoch, real_time(), false, null_yield, zones_trace, log_data_change);
+                    *params.olh_epoch, real_time(), false, null_yield, params.zones_trace, log_data_change);
     } else {
       // we already have the latest copy
       ret = 0;
@@ -4358,13 +4360,31 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   ldpp_dout(dpp, 5) << "Copy object " << src_obj->get_bucket() << ":" << src_obj->get_oid() << " => " << dest_obj->get_bucket() << ":" << dest_obj->get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
-    return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
-               dest_obj, src_obj, dest_bucket, src_bucket,
-               dest_placement, src_mtime, mtime, mod_ptr,
-               unmod_ptr, high_precision_time,
-               if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, dpp,
-               nullptr /* filter */);
+    FetchRemoteObjParams params;
+    params.info = info;
+    params.dest_placement_rule = dest_placement;
+    params.src_mtime = src_mtime;
+    params.mtime = mtime;
+    params.mod_ptr = mod_ptr;
+    params.unmod_ptr = unmod_ptr;
+    params.high_precision_time = high_precision_time;
+    params.if_match = if_match;
+    params.if_nomatch = if_nomatch;
+    params.attrs_mod = attrs_mod;
+    params.copy_if_newer = copy_if_newer;
+    params.pattrs = &attrs;
+    params.category = category;
+    params.olh_epoch = olh_epoch;
+    params.delete_at = delete_at;
+    params.ptag = ptag;
+    params.petag = petag;
+    params.progress_cb = progress_cb;
+    params.progress_data = progress_data;
+    params.dpp = dpp;
+
+    return fetch_remote_obj(obj_ctx, source_zone, user_id,
+                            dest_obj, src_obj, dest_bucket,
+                            src_bucket, params);
   }
 
   map<string, bufferlist> src_attrs;

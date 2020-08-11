@@ -648,36 +648,28 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   rgw::sal::RadosObject dest_obj(store, dest_key.value_or(key), &dest_bucket);
 
   std::optional<uint64_t> bytes_transferred;
+
+  RGWRados::FetchRemoteObjParams params;
+  params.dest_placement_rule = dest_placement_rule;
+  params.high_precision_time = false;
+  params.attrs_mod = RGWRados::ATTRSMOD_NONE;
+  params.copy_if_newer = copy_if_newer;
+  params.pattrs = &attrs;
+  params.category = RGWObjCategory::Main;
+  params.olh_epoch = versioned_epoch;
+  params.dpp = dpp;
+  params.filter = filter.get();
+  params.zones_trace = &zones_trace;
+  params.bytes_transferred = &bytes_transferred;
+
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
-                       user_id.value_or(rgw_user()),
-                       NULL, /* req_info */
                        source_zone,
+                       user_id.value_or(rgw_user()),
                        &dest_obj,
                        &src_obj,
                        &dest_bucket, /* dest */
                        nullptr, /* source */
-		       dest_placement_rule,
-                       NULL, /* real_time* src_mtime, */
-                       NULL, /* real_time* mtime, */
-                       NULL, /* const real_time* mod_ptr, */
-                       NULL, /* const real_time* unmod_ptr, */
-                       false, /* high precision time */
-                       NULL, /* const char *if_match, */
-                       NULL, /* const char *if_nomatch, */
-                       RGWRados::ATTRSMOD_NONE,
-                       copy_if_newer,
-                       attrs,
-                       RGWObjCategory::Main,
-                       versioned_epoch,
-                       real_time(), /* delete_at */
-                       NULL, /* string *ptag, */
-                       NULL, /* string *petag, */
-                       NULL, /* void (*progress_cb)(off_t, void *), */
-                       NULL, /* void *progress_data*); */
-                       dpp,
-                       filter.get(),
-                       &zones_trace,
-                       &bytes_transferred);
+		       params);
 
   if (r < 0) {
     ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
