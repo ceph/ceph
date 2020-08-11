@@ -354,7 +354,7 @@ class Schedule(object):
         else:
             raise ValueError(f'schedule multiplier "{mult}" not recognized')
 
-    UPDATE_LAST = '''UPDATE schedules_meta AS sm
+    UPDATE_LAST = '''UPDATE schedules_meta
     SET
       last = ?,
       created_count = created_count + 1,
@@ -362,10 +362,10 @@ class Schedule(object):
     WHERE EXISTS(
       SELECT id
       FROM schedules s
-      WHERE s.id = sm.schedule_id
+      WHERE s.id = schedules_meta.schedule_id
       AND s.path = ?
-      AND sm.start = ?
-      AND sm.repeat = ?);'''
+      AND schedules_meta.start = ?
+      AND schedules_meta.repeat = ?);'''
 
     def update_last(self, time, db):
         with db:
@@ -379,16 +379,16 @@ class Schedule(object):
         if not self.first:
             self.first = time
 
-    UPDATE_INACTIVE = '''UPDATE schedules_meta AS sm
+    UPDATE_INACTIVE = '''UPDATE schedules_meta
     SET
       active = 0
     WHERE EXISTS(
       SELECT id
       FROM schedules s
-      WHERE s.id = sm.schedule_id
+      WHERE s.id = schedules_meta.schedule_id
       AND s.path = ?
-      AND sm.start = ?
-      AND sm.repeat = ?);'''
+      AND schedules_meta.start = ?
+      AND schedules_meta.repeat = ?);'''
 
     def set_inactive(self, db):
         with db:
@@ -398,16 +398,16 @@ class Schedule(object):
                                               self.repeat))
         self.active = False
 
-    UPDATE_ACTIVE = '''UPDATE schedules_meta AS sm
+    UPDATE_ACTIVE = '''UPDATE schedules_meta
     SET
       active = 1
     WHERE EXISTS(
       SELECT id
       FROM schedules s
-      WHERE s.id = sm.schedule_id
+      WHERE s.id = schedules_meta.schedule_id
       AND s.path = ?
-      AND sm.start = ?
-      AND sm.repeat = ?);'''
+      AND schedules_meta.start = ?
+      AND schedules_meta.repeat = ?);'''
 
     def set_active(self, db):
         with db:
@@ -417,17 +417,17 @@ class Schedule(object):
                                             self.repeat))
         self.active = True
 
-    UPDATE_PRUNED = '''UPDATE schedules_meta AS sm
+    UPDATE_PRUNED = '''UPDATE schedules_meta
     SET
       last_pruned = ?,
       pruned_count = pruned_count + ?
     WHERE EXISTS(
       SELECT id
       FROM schedules s
-      WHERE s.id = sm.schedule_id
+      WHERE s.id = schedules_meta.schedule_id
       AND s.path = ?
-      AND sm.start = ?
-      AND sm.repeat = ?);'''
+      AND schedules_meta.start = ?
+      AND schedules_meta.repeat = ?);'''
 
     def update_pruned(self, time, db, pruned):
         with db:
