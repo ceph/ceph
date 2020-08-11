@@ -6217,6 +6217,7 @@ void Client::_unmount(bool abort)
   deleg_timeout = 0;
 
   if (abort) {
+    mount_aborted = true;
     // Abort all mds sessions
     _abort_mds_sessions(-ENOTCONN);
 
@@ -6233,13 +6234,6 @@ void Client::_unmount(bool abort)
     }
     return mds_requests.empty();
   });
-
-  {
-    std::scoped_lock l(timer_lock);
-    if (tick_event)
-      timer.cancel_event(tick_event);
-    tick_event = 0;
-  }
 
   cwd.reset();
 
@@ -6327,6 +6321,13 @@ void Client::_unmount(bool abort)
     traceout.close();
   }
 
+  {
+    std::scoped_lock l(timer_lock);
+    if (tick_event)
+      timer.cancel_event(tick_event);
+    tick_event = 0;
+  }
+
   _close_sessions();
 
   mref_writer.update_state(CLIENT_UNMOUNTED);
@@ -6401,7 +6402,7 @@ void Client::tick()
     }
   }
 
-  if (mdsmap->get_epoch()) {
+  if (!mount_aborted && mdsmap->get_epoch()) {
     // renew caps?
     utime_t el = now - last_cap_renew;
     if (el > mdsmap->get_session_timeout() / 3.0)
@@ -6415,13 +6416,15 @@ void Client::tick()
   while (!p.end()) {
     Inode *in = *p;
     ++p;
-    if (in->hold_caps_until > now)
+    if (!mount_aborted && in->hold_caps_until > now)
       break;
     delayed_list.pop_front();
-    check_caps(in, CHECK_CAPS_NODELAY);
+    if (!mount_aborted)
+      check_caps(in, CHECK_CAPS_NODELAY);
   }
 
-  collect_and_send_metrics();
+  if (!mount_aborted)
+    collect_and_send_metrics();
 
   trim_cache(true);
 
