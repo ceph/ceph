@@ -61,7 +61,9 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::Imag
                   4,
                   ""),
     m_work_queue("librbd::cache::ReplicatedWriteLog::work_queue",
-                 image_ctx.config.template get_val<uint64_t>("rbd_op_thread_timeout"),
+                 ceph::make_timespan(
+                   image_ctx.config.template get_val<uint64_t>(
+		     "rbd_op_thread_timeout")),
                  &m_thread_pool)
 {
   CephContext *cct = m_image_ctx.cct;
