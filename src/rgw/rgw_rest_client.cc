@@ -803,13 +803,14 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete_request(string *etag,
+int RGWRESTStreamRWRequest::complete_request(optional_yield y,
+                                             string *etag,
                                              real_time *mtime,
                                              uint64_t *psize,
                                              map<string, string> *pattrs,
                                              map<string, string> *pheaders)
 {
-  int ret = wait(null_yield);
+  int ret = wait(y);
   if (ret < 0) {
     return ret;
   }
