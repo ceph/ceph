@@ -2630,6 +2630,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   ceph_assert(!log_t.empty());
 
   // allocate some more space (before we run out)?
+  // BTW: this triggers `flush()` in the `page_aligned_appender` of `log_writer`.
   int64_t runway = log_writer->file->fnode.get_allocated() -
     log_writer->get_effective_write_pos();
   bool just_expanded_log = false;
@@ -2858,8 +2859,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     bufferlist t;
     h->buffer.splice(0, length, &t);
     bl.claim_append_piecewise(t);
-    t.substr_of(h->buffer, length, h->buffer.length() - length);
-    h->buffer.swap(t);
     dout(20) << " leaving 0x" << std::hex << h->buffer.length() << std::dec
              << " unflushed" << dendl;
   }
