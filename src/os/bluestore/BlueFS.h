@@ -314,6 +314,9 @@ private:
   std::atomic<uint64_t> shared_bdev_used = 0;
 
 
+  bool bluefs_sync_write;
+  bool bluefs_buffered_io;
+
   class SocketHook;
   SocketHook* asok_hook = nullptr;
 

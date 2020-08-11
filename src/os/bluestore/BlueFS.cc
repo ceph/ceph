@@ -179,7 +179,9 @@ BlueFS::BlueFS(CephContext* cct)
     block_all(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0),
-    pending_release(MAX_BDEV)
+    pending_release(MAX_BDEV),
+    bluefs_sync_write(cct->_conf->bluefs_sync_write),
+    bluefs_buffered_io(cct->_conf->bluefs_buffered_io)
 {
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
@@ -1632,7 +1634,7 @@ int BlueFS::device_migrate_to_existing(
   const bluefs_layout_t& layout)
 {
   vector<byte> buf;
-  bool buffered = cct->_conf->bluefs_buffered_io;
+  bool buffered = bluefs_buffered_io;
 
   dout(10) << __func__ << " devs_source " << devs_source
 	   << " dev_target " << dev_target << dendl;
@@ -1775,7 +1777,7 @@ int BlueFS::device_migrate_to_new(
   const bluefs_layout_t& layout)
 {
   vector<byte> buf;
-  bool buffered = cct->_conf->bluefs_buffered_io;
+  bool buffered = bluefs_buffered_io;
 
   dout(10) << __func__ << " devs_source " << devs_source
 	   << " dev_target " << dev_target << dendl;
@@ -1987,7 +1989,7 @@ int64_t BlueFS::_read_random(
 	       << std::hex << x_off << "~" << l << std::dec
 	       << " of " << *p << dendl;
       int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
-					 cct->_conf->bluefs_buffered_io);
+					 bluefs_buffered_io);
       ceph_assert(r == 0);
       off += l;
       len -= l;
@@ -2102,7 +2104,7 @@ int64_t BlueFS::_read(
                  << std::hex << x_off << "~" << l << std::dec
                  << " of " << *p << dendl;
         int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				    cct->_conf->bluefs_buffered_io);
+				    bluefs_buffered_io);
         ceph_assert(r == 0);
       }
       u_lock.unlock();
@@ -2363,7 +2365,7 @@ void BlueFS::_rewrite_log_and_layout_sync(bool allocate_with_fallback,
   r = _flush(log_writer, true);
   ceph_assert(r == 0);
 #ifdef HAVE_LIBAIO
-  if (!cct->_conf->bluefs_sync_write) {
+  if (!bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(log_writer, &completed_ios);
     wait_for_aio(log_writer);
@@ -2758,7 +2760,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   if (h->file->fnode.ino == 1)
     buffered = false;
   else
-    buffered = cct->_conf->bluefs_buffered_io;
+    buffered = bluefs_buffered_io;
 
   if (offset + length <= h->pos)
     return 0;
@@ -2900,7 +2902,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     uint64_t x_len = std::min(p->length - x_off, length);
     bufferlist t;
     t.substr_of(bl, bloff, x_len);
-    if (cct->_conf->bluefs_sync_write) {
+    if (bluefs_sync_write) {
       bdev[p->bdev]->write(p->offset + x_off, t, buffered, h->write_hint);
     } else {
       bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered, h->write_hint);
@@ -3071,7 +3073,7 @@ void BlueFS::_flush_bdev_safely(FileWriter *h)
   std::array<bool, MAX_BDEV> flush_devs = h->dirty_devs;
   h->dirty_devs.fill(false);
 #ifdef HAVE_LIBAIO
-  if (!cct->_conf->bluefs_sync_write) {
+  if (!bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(h, &completed_ios);
     lock.unlock();
@@ -3681,16 +3683,14 @@ int BlueFS::do_replay_recovery_read(FileReader *log_reader,
   uint64_t e_off = 0;
   auto e = log_fnode.seek(replay_pos, &e_off);
   ceph_assert(e != log_fnode.extents.end());
-  int r = bdev[e->bdev]->read(e->offset + e_off, e->length - e_off, &fixed, ioc[e->bdev],
-				  cct->_conf->bluefs_buffered_io);
+  int r = bdev[e->bdev]->read(e->offset + e_off, e->length - e_off, &fixed, ioc[e->bdev], bluefs_buffered_io);
   ceph_assert(r == 0);
   //capture dev of last good extent
   uint8_t last_e_dev = e->bdev;
   uint64_t last_e_off = e->offset;
   ++e;
   while (e != log_fnode.extents.end()) {
-    r = bdev[e->bdev]->read(e->offset, e->length, &fixed, ioc[e->bdev],
-				  cct->_conf->bluefs_buffered_io);
+    r = bdev[e->bdev]->read(e->offset, e->length, &fixed, ioc[e->bdev], bluefs_buffered_io);
     ceph_assert(r == 0);
     last_e_dev = e->bdev;
     ++e;
@@ -3749,7 +3749,7 @@ int BlueFS::do_replay_recovery_read(FileReader *log_reader,
 	uint64_t chunk_len = len > chunk_size ? chunk_size : len;
 	dout(5) << __func__ << " read "
 		<< get_device_name(dev) << ":0x" << std::hex << pos << "+" << chunk_len << std::dec << dendl;
-	r = bdev[dev]->read_random(pos, chunk_len, raw_data + page_size, cct->_conf->bluefs_buffered_io);
+	r = bdev[dev]->read_random(pos, chunk_len, raw_data + page_size, bluefs_buffered_io);
 	ceph_assert(r == 0);
 
 	//search for fixed_last_32
@@ -3797,8 +3797,7 @@ int BlueFS::do_replay_recovery_read(FileReader *log_reader,
 	  //read candidate extent - whole
 	  bufferlist candidate;
 	  candidate.append(fixed);
-	  r = bdev[ne.bdev]->read(ne.offset, ne.length, &candidate, ioc[ne.bdev],
-				cct->_conf->bluefs_buffered_io);
+	  r = bdev[ne.bdev]->read(ne.offset, ne.length, &candidate, ioc[ne.bdev], bluefs_buffered_io);
 	  ceph_assert(r == 0);
 
 	  //check if transaction & crc is ok
