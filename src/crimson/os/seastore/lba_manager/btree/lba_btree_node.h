@@ -139,6 +139,25 @@ struct LBANode : CachedExtent {
     mutate_func_t &&f) = 0;
 
   /**
+   * mutate_internal_address
+   *
+   * Looks up internal node mapping at laddr, depth and
+   * updates the mapping to paddr.  Returns previous paddr
+   * (for debugging purposes).
+   */
+  using mutate_internal_address_ertr = crimson::errorator<
+    crimson::ct_error::enoent,            ///< mapping does not exist
+    crimson::ct_error::input_output_error
+    >;
+  using mutate_internal_address_ret = mutate_internal_address_ertr::future<
+    paddr_t>;
+  virtual mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) = 0;
+
+  /**
    * make_split_children
    *
    * Generates appropriately typed left and right nodes formed from the
@@ -201,7 +220,6 @@ struct LBANode : CachedExtent {
     resolve_relative_addrs(get_paddr());
   }
 
-protected:
   virtual void resolve_relative_addrs(paddr_t base) = 0;
 };
 using LBANodeRef = LBANode::LBANodeRef;

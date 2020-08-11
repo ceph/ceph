@@ -245,6 +245,17 @@ public:
   }
 
   /**
+   * alloc_new_extent
+   *
+   * Allocates a fresh extent.  addr will be relative until commit.
+   */
+  CachedExtentRef alloc_new_extent_by_type(
+    Transaction &t,       ///< [in, out] current transaction
+    extent_types_t type,  ///< [in] type tag
+    segment_off_t length  ///< [in] length
+    );
+
+  /**
    * Allocates mutable buffer from extent_set on offset~len
    *
    * TODO: Note, currently all implementations literally copy the
@@ -352,6 +363,31 @@ public:
 	  refs,
 	  [&t, &f](auto &e) { return f(t, e); });
       });
+  }
+
+  /**
+   * update_extent_from_transaction
+   *
+   * Updates passed extent based on t.  If extent has been retired,
+   * a null result will be returned.
+   */
+  CachedExtentRef update_extent_from_transaction(
+    Transaction &t,
+    CachedExtentRef extent) {
+    if (extent->get_type() == extent_types_t::ROOT) {
+      if (t.root) {
+	return t.root;
+      } else {
+	return extent;
+      }
+    } else {
+      auto result = t.get_extent(extent->get_paddr(), &extent);
+      if (result == Transaction::get_extent_ret::RETIRED) {
+	return CachedExtentRef();
+      } else {
+	return extent;
+      }
+    }
   }
 
   /**

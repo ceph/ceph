@@ -293,6 +293,82 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
     });
 }
 
+BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
+  Transaction &t,
+  CachedExtentRef extent)
+{
+  if (extent->is_logical()) {
+    auto lextent = extent->cast<LogicalCachedExtent>();
+    cache.retire_extent(t, extent);
+    auto nlextent = cache.alloc_new_extent_by_type(
+      t,
+      lextent->get_type(),
+      lextent->get_length())->cast<LogicalCachedExtent>();
+    lextent->get_bptr().copy_out(
+      0,
+      lextent->get_length(),
+      nlextent->get_bptr().c_str());
+    nlextent->set_laddr(lextent->get_laddr());
+    nlextent->set_pin(lextent->get_pin().duplicate());
+
+    logger().debug(
+      "{}: rewriting {} into {}",
+      __func__,
+      *lextent,
+      *nlextent);
+
+    return update_mapping(
+      t,
+      lextent->get_laddr(),
+      [prev_addr = lextent->get_paddr(), addr = nlextent->get_paddr()](
+	const lba_map_val_t &in) {
+	lba_map_val_t ret = in;
+	ceph_assert(in.paddr == prev_addr);
+	ret.paddr = addr;
+	return ret;
+      }).safe_then([nlextent](auto e) {}).handle_error(
+	rewrite_extent_ertr::pass_further{},
+        /* ENOENT in particular should be impossible */
+	crimson::ct_error::assert_all{}
+      );
+  } else if (is_lba_node(*extent)) {
+    auto lba_extent = extent->cast<LBANode>();
+    cache.retire_extent(t, extent);
+    auto nlba_extent = cache.alloc_new_extent_by_type(
+      t,
+      lba_extent->get_type(),
+      lba_extent->get_length())->cast<LBANode>();
+    lba_extent->get_bptr().copy_out(
+      0,
+      lba_extent->get_length(),
+      nlba_extent->get_bptr().c_str());
+    nlba_extent->pin.set_range(nlba_extent->get_node_meta());
+
+    /* This is a bit underhanded.  Any relative addrs here must necessarily
+     * be record relative as we are rewriting a dirty extent.  Thus, we
+     * are using resolve_relative_addrs with a (likely negative) block
+     * relative offset to correct them to block-relative offsets adjusted
+     * for our new transaction location.
+     *
+     * Upon commit, these now block relative addresses will be interpretted
+     * against the real final address.
+     */
+    nlba_extent->resolve_relative_addrs(
+      make_record_relative_paddr(0) - nlba_extent->get_paddr());
+
+    return update_internal_mapping(
+      t,
+      nlba_extent->get_node_meta().depth,
+      nlba_extent->get_node_meta().begin,
+      nlba_extent->get_paddr()).safe_then(
+	[](auto) {},
+	rewrite_extent_ertr::pass_further {},
+	crimson::ct_error::assert_all{});
+  } else {
+    return rewrite_extent_ertr::now();
+  }
+}
+
 BtreeLBAManager::BtreeLBAManager(
   SegmentManager &segment_manager,
   Cache &cache)
@@ -370,6 +446,50 @@ BtreeLBAManager::update_mapping_ret BtreeLBAManager::update_mapping(
       get_context(t),
       addr,
       std::move(f));
+  });
+}
+
+BtreeLBAManager::update_internal_mapping_ret
+BtreeLBAManager::update_internal_mapping(
+  Transaction &t,
+  depth_t depth,
+  laddr_t laddr,
+  paddr_t paddr)
+{
+  return cache.get_root(t).safe_then([=, &t](RootBlockRef croot) {
+    if (depth == croot->get_lba_root().lba_depth) {
+      logger().debug(
+	"update_internal_mapping: updating lba root to: {}->{}",
+	laddr,
+	paddr);
+      {
+	auto mut_croot = cache.duplicate_for_write(t, croot);
+	croot = mut_croot->cast<RootBlock>();
+      }
+      ceph_assert(laddr == 0);
+      auto old_paddr = croot->get_lba_root().lba_root_addr;
+      croot->get_lba_root().lba_root_addr = paddr;
+      return update_internal_mapping_ret(
+	update_internal_mapping_ertr::ready_future_marker{},
+	old_paddr);
+    } else {
+      logger().debug(
+	"update_internal_mapping: updating lba node at depth {} to: {}->{}",
+	depth,
+	laddr,
+	paddr);
+      return get_lba_btree_extent(
+	get_context(t),
+	croot->get_lba_root().lba_depth,
+	croot->get_lba_root().lba_root_addr,
+	paddr_t()).safe_then([=, &t](LBANodeRef broot) {
+	  return broot->mutate_internal_address(
+	    get_context(t),
+	    depth,
+	    laddr,
+	    paddr);
+	});
+    }
   });
 }
 

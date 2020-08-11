@@ -109,6 +109,12 @@ struct LBAInternalNode
     laddr_t laddr,
     mutate_func_t &&f) final;
 
+  mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) final;
+
   find_hole_ret find_hole(
     op_context_t c,
     laddr_t min,
@@ -347,6 +353,12 @@ struct LBALeafNode
     op_context_t c,
     laddr_t laddr,
     mutate_func_t &&f) final;
+
+  mutate_internal_address_ret mutate_internal_address(
+    op_context_t c,
+    depth_t depth,
+    laddr_t laddr,
+    paddr_t paddr) final;
 
   find_hole_ret find_hole(
     op_context_t c,
