@@ -98,12 +98,12 @@ def activate_filestore(osd_lvs, no_systemd=False):
 
 def get_osd_device_path(osd_lvs, device_type, dmcrypt_secret=None):
     """
-    ``device_type`` can be one of ``db``, ``wal`` or ``block`` so that
-    we can query ``lvs`` (a ``Volumes`` object) and fallback to querying the uuid
-    if that is not present.
+    ``device_type`` can be one of ``db``, ``wal`` or ``block`` so that we can
+     query LVs on system and fallback to querying the uuid if that is not
+     present.
 
-    Return a path if possible, failing to do that a ``None``, since some of these devices
-    are optional
+    Return a path if possible, failing to do that a ``None``, since some of
+    these devices are optional.
     """
     osd_block_lv = None
     for lv in osd_lvs:
