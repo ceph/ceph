@@ -176,7 +176,8 @@ public:
   int send_request(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
   int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
 
-  int complete_request(string *etag = nullptr,
+  int complete_request(optional_yield y,
+                       string *etag = nullptr,
                        real_time *mtime = nullptr,
                        uint64_t *psize = nullptr,
                        map<string, string> *pattrs = nullptr,
