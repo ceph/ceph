@@ -159,7 +159,8 @@ int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw::sal::RGWObject* obj, ui
   return 0;
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag, real_time *mtime)
+int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag,
+                                  real_time *mtime, optional_yield y)
 {
   int ret = req->complete_request(null_yield, &etag, mtime);
   delete req;
@@ -300,9 +301,10 @@ int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req,
                                   real_time *mtime,
                                   uint64_t *psize,
                                   map<string, string> *pattrs,
-                                  map<string, string> *pheaders)
+                                  map<string, string> *pheaders,
+                                  optional_yield y)
 {
-  int ret = req->complete_request(null_yield, etag, mtime, psize, pattrs, pheaders);
+  int ret = req->complete_request(y, etag, mtime, psize, pattrs, pheaders);
   delete req;
 
   return ret;
@@ -313,7 +315,8 @@ int RGWRESTConn::get_resource(const string& resource,
 		     map<string, string> *extra_headers,
 		     bufferlist& bl,
                      bufferlist *send_data,
-		     RGWHTTPManager *mgr)
+		     RGWHTTPManager *mgr,
+		     optional_yield y)
 {
   string url;
   int ret = get_url(url);
@@ -343,7 +346,7 @@ int RGWRESTConn::get_resource(const string& resource,
     return ret;
   }
 
-  return req.complete_request(null_yield);
+  return req.complete_request(y);
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
