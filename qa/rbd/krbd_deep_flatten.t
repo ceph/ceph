@@ -5,10 +5,10 @@ Write:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -w 0 12M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
-  $ rbd snap create cloneimg@snap
+  $ rbd snap create --no-progress cloneimg@snap
   $ DEV=$(sudo rbd map cloneimg)
   $ xfs_io -c 'pwrite -S 0xab -w 6M 1k' $DEV >/dev/null
   $ sudo rbd unmap $DEV
@@ -61,10 +61,10 @@ Write, whole object:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -w 0 12M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
-  $ rbd snap create cloneimg@snap
+  $ rbd snap create --no-progress cloneimg@snap
   $ DEV=$(sudo rbd map cloneimg)
   $ xfs_io -d -c 'pwrite -b 4M -S 0xab 4M 4M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
@@ -117,10 +117,10 @@ Zeroout:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -w 0 12M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
-  $ rbd snap create cloneimg@snap
+  $ rbd snap create --no-progress cloneimg@snap
   $ DEV=$(sudo rbd map cloneimg)
   $ fallocate -z -o 6M -l 1k $DEV
   $ sudo rbd unmap $DEV
@@ -173,10 +173,10 @@ Zeroout, whole object:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -w 0 12M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
-  $ rbd snap create cloneimg@snap
+  $ rbd snap create --no-progress cloneimg@snap
   $ DEV=$(sudo rbd map cloneimg)
   $ fallocate -z -o 4M -l 4M $DEV
   $ sudo rbd unmap $DEV
@@ -229,10 +229,10 @@ Discard, whole object, empty clone:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -w 0 12M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
-  $ rbd snap create cloneimg@snap
+  $ rbd snap create --no-progress cloneimg@snap
   $ DEV=$(sudo rbd map cloneimg)
   $ blkdiscard -o 4M -l 4M $DEV
   $ sudo rbd unmap $DEV
@@ -277,10 +277,10 @@ Discard, whole object, full clone:
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -w 0 12M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
-  $ rbd snap create cloneimg@snap
+  $ rbd snap create --no-progress cloneimg@snap
   $ DEV=$(sudo rbd map cloneimg)
   $ xfs_io -c 'pwrite -S 0xab -w 0 12M' $DEV >/dev/null
   $ blkdiscard -o 4M -l 4M $DEV
