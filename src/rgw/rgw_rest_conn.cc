@@ -76,14 +76,7 @@ int RGWRESTConn::get_url(string& endpoint)
 string RGWRESTConn::get_url()
 {
   string endpoint;
-  if (endpoints.empty()) {
-    ldout(cct, 0) << "WARNING: endpoints not configured for upstream zone" << dendl; /* we'll catch this later */
-    return endpoint;
-  }
-
-  int i = ++counter;
-  endpoint = endpoints[i % endpoints.size()];
-
+  get_url(endpoint);
   return endpoint;
 }
 
