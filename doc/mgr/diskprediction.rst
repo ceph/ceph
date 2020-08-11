@@ -50,41 +50,6 @@ Run the following command to use local predictor predict device life expectancy.
     ceph device predict-life-expectancy <device id>
 
 
-Cloud Mode 
-----------
-
-The user registration is required in cloud mode. The users have to sign up their accounts at https://www.diskprophet.com/#/ to receive the following DiskPrediction server information for connection settings. 
-
-**Certificate file path**: After user registration is confirmed, the system will send a confirmation email including a certificate file download link. Download the certificate file and save it to the Ceph system. Run the following command to verify the file. Without certificate file verification, the connection settings cannot be completed.
-	
-**DiskPrediction server**: The DiskPrediction server name. It could be an IP address if required. 
-
-**Connection account**: An account name used to set up the connection between Ceph and DiskPrediction server
-
-**Connection password**: The password used to set up the connection between Ceph and DiskPrediction server
-
-Run the following command to complete connection setup.
-
-::
-
-    ceph device set-cloud-prediction-config <diskprediction_server> <connection_account> <connection_password> <certificate file path>
-	
-
-You can use the following command to display the connection settings:
-
-::
-
-    ceph device show-prediction-config
-
-
-Additional optional configuration settings are the following:
-
-:diskprediction_upload_metrics_interval: Indicate the frequency to send Ceph performance metrics to DiskPrediction server regularly at times.  Default is 10 minutes.
-:diskprediction_upload_smart_interval: Indicate the frequency to send Ceph physical device info to DiskPrediction server regularly at times.  Default is 12 hours.
-:diskprediction_retrieve_prediction_interval: Indicate Ceph that retrieves physical device prediction data from DiskPrediction server regularly at times.  Default is 12 hours.
-
-
-
 Diskprediction Data
 ===================
 
