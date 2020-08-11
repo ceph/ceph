@@ -244,7 +244,7 @@ int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                   { NULL, NULL } };
 
-  int ret = conn->get_json_resource("/admin/log", pairs, *log_info);
+  int ret = conn->get_json_resource("/admin/log", pairs, null_yield, *log_info);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch mdlog info" << dendl;
     return ret;

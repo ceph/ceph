@@ -606,7 +606,7 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
   rgw_http_param_pair pairs[] = { { "type", "data" },
                                   { NULL, NULL } };
 
-  int ret = sc.conn->get_json_resource("/admin/log", pairs, *log_info);
+  int ret = sc.conn->get_json_resource("/admin/log", pairs, null_yield, *log_info);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch datalog info" << dendl;
     return ret;

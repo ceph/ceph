@@ -115,7 +115,8 @@ public:
   int put_obj_send_init(rgw::sal::RGWObject* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
   int put_obj_async(const rgw_user& uid, rgw::sal::RGWObject* obj, uint64_t obj_size,
                     map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
-  int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
+  int complete_request(RGWRESTStreamS3PutObj *req, string& etag,
+                       ceph::real_time *mtime, optional_yield y);
 
   struct get_obj_params {
     rgw_user uid;
@@ -154,21 +155,26 @@ public:
                        ceph::real_time *mtime,
                        uint64_t *psize,
                        map<string, string> *pattrs,
-                       map<string, string> *pheaders);
+                       map<string, string> *pheaders,
+                       optional_yield y);
 
   int get_resource(const string& resource,
 		   param_vec_t *extra_params,
                    map<string, string>* extra_headers,
                    bufferlist& bl,
-                   bufferlist *send_data = nullptr,
-                   RGWHTTPManager *mgr = nullptr);
+                   bufferlist *send_data,
+                   RGWHTTPManager *mgr,
+                   optional_yield y);
 
   template <class T>
-  int get_json_resource(const string& resource, param_vec_t *params, bufferlist *in_data, T& t);
+  int get_json_resource(const string& resource, param_vec_t *params,
+                        bufferlist *in_data, optional_yield y, T& t);
   template <class T>
-  int get_json_resource(const string& resource, param_vec_t *params, T& t);
+  int get_json_resource(const string& resource, param_vec_t *params,
+                        optional_yield y, T& t);
   template <class T>
-  int get_json_resource(const string& resource, const rgw_http_param_pair *pp, T& t);
+  int get_json_resource(const string& resource, const rgw_http_param_pair *pp,
+                        optional_yield y, T& t);
 
 private:
   void populate_zonegroup(param_vec_t& params, const string& zonegroup) {
@@ -205,10 +211,11 @@ public:
 
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, bufferlist *in_data, T& t)
+int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params,
+                                   bufferlist *in_data, optional_yield y, T& t)
 {
   bufferlist bl;
-  int ret = get_resource(resource, params, nullptr, bl, in_data);
+  int ret = get_resource(resource, params, nullptr, bl, in_data, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -222,16 +229,18 @@ int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, 
 }
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, T& t)
+int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params,
+                                   optional_yield y, T& t)
 {
-  return get_json_resource(resource, params, nullptr, t);
+  return get_json_resource(resource, params, nullptr, y, t);
 }
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param_pair *pp, T& t)
+int RGWRESTConn::get_json_resource(const string& resource, const rgw_http_param_pair *pp,
+                                   optional_yield y, T& t)
 {
   param_vec_t params = make_param_list(pp);
-  return get_json_resource(resource, &params, t);
+  return get_json_resource(resource, &params, y, t);
 }
 
 class RGWStreamIntoBufferlist : public RGWHTTPStreamRWRequest::ReceiveCB {
