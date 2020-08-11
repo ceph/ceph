@@ -447,7 +447,7 @@ public:
 
   // for giving to clients
   void get_dist_spec(std::set<mds_rank_t>& ls, mds_rank_t auth) {
-    if (is_rep()) {
+    if (is_auth()) {
       list_replicas(ls);
       if (!ls.empty()) 
 	ls.insert(auth);
