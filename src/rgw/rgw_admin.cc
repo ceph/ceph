@@ -2214,31 +2214,6 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
 }
 
-static int remote_bilog_markers(rgw::sal::RGWRadosStore *store, const RGWZone& source,
-                                RGWRESTConn *conn, const RGWBucketInfo& info,
-                                BucketIndexShardsManager *markers)
-{
-  const auto instance_key = info.bucket.get_key();
-  const rgw_http_param_pair params[] = {
-    { "type" , "bucket-index" },
-    { "bucket-instance", instance_key.c_str() },
-    { "info" , nullptr },
-    { nullptr, nullptr }
-  };
-  rgw_bucket_index_marker_info result;
-  int r = conn->get_json_resource("/admin/log/", params, null_yield, result);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to fetch remote log markers: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  r = markers->from_string(result.max_marker, -1);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to decode remote log markers" << dendl;
-    return r;
-  }
-  return 0;
-}
-
 static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
@@ -2301,7 +2276,7 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
 
   BucketIndexShardsManager remote_markers;
-  r = remote_bilog_markers(store, source, conn, source_bucket_info, &remote_markers);
+  r = rgw_read_remote_bilog_info(conn, source_bucket, remote_markers, null_yield);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
