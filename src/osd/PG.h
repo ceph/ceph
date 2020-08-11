@@ -1191,6 +1191,7 @@ public:
 
     void create_results(const hobject_t& obj);
     void cleanup_store(ObjectStore::Transaction *t);
+    void dump(ceph::Formatter *f);
   } scrubber;
 
 protected:
