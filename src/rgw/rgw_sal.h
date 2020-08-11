@@ -69,9 +69,9 @@ class RGWStore : public DoutPrefixProvider {
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) = 0;
     virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) = 0;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
-                            const string& zonegroup_id,
+                            const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
-                            string& swift_ver_location,
+                            std::string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
@@ -101,7 +101,7 @@ class RGWUser {
     RGWUser(const RGWUserInfo& _i) : info(_i) {}
     virtual ~RGWUser() = default;
 
-    virtual int list_buckets(const string& marker, const string& end_marker,
+    virtual int list_buckets(const std::string& marker, const std::string& end_marker,
 			     uint64_t max, bool need_stats, RGWBucketList& buckets) = 0;
     virtual RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
     friend class RGWBucket;
@@ -266,7 +266,7 @@ public:
     return *this;
   };
 
-  map<string, std::unique_ptr<RGWBucket>>& get_buckets() { return buckets; }
+  map<std::string, std::unique_ptr<RGWBucket>>& get_buckets() { return buckets; }
   bool is_truncated(void) const { return truncated; }
   void set_truncated(bool trunc) { truncated = trunc; }
   void add(std::unique_ptr<RGWBucket> bucket) {
@@ -351,7 +351,7 @@ class RGWObject {
     virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
-			      string& version_id,optional_yield y) = 0;
+			      std::string& version_id,optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     virtual void set_atomic(RGWObjectCtx *rctx) const = 0;
@@ -392,7 +392,7 @@ class RGWObject {
 
     /* dang - Not sure if we want this, but it simplifies things a lot */
     void set_obj_size(uint64_t s) { obj_size = s; }
-    virtual void set_name(const string& n) { key = n; }
+    virtual void set_name(const std::string& n) { key = n; }
     virtual void set_key(const rgw_obj_key& k) { key = k; }
     virtual rgw_obj get_obj(void) const { return rgw_obj(bucket->get_key(), key); }
     virtual void gen_rand_obj_instance_name() = 0;
@@ -433,7 +433,7 @@ class RGWRadosUser : public RGWUser {
     RGWRadosUser(RGWRadosStore *_st) : store(_st) { }
     RGWRadosUser() {}
 
-    int list_buckets(const string& marker, const string& end_marker,
+    int list_buckets(const std::string& marker, const std::string& end_marker,
 				uint64_t max, bool need_stats, RGWBucketList& buckets);
     RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time);
 
@@ -485,7 +485,7 @@ class RGWRadosObject : public RGWObject {
     virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
-			      string& version_id,optional_yield y) override;
+			      std::string& version_id,optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     int set_acl(const RGWAccessControlPolicy& acl) { acls = acl; return 0; }
     virtual void set_atomic(RGWObjectCtx *rctx) const;
@@ -617,9 +617,9 @@ class RGWRadosStore : public RGWStore {
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) override;
     virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) override;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
-                            const string& zonegroup_id,
+                            const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
-                            string& swift_ver_location,
+                            std::string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
