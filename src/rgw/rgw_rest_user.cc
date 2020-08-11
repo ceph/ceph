@@ -225,7 +225,7 @@ void RGWOp_User_Create::execute()
   }
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -367,7 +367,7 @@ void RGWOp_User_Modify::execute()
   }
   
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -408,7 +408,7 @@ void RGWOp_User_Remove::execute()
   op_state.set_purge_data(purge_data);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -484,7 +484,7 @@ void RGWOp_Subuser_Create::execute()
   op_state.set_key_type(key_type);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -551,7 +551,7 @@ void RGWOp_Subuser_Modify::execute()
   op_state.set_key_type(key_type);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -594,7 +594,7 @@ void RGWOp_Subuser_Remove::execute()
     op_state.set_purge_keys();
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -735,7 +735,7 @@ void RGWOp_Caps_Add::execute()
   op_state.set_caps(caps);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -773,7 +773,7 @@ void RGWOp_Caps_Remove::execute()
   op_state.set_caps(caps);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

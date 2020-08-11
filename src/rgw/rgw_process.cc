@@ -188,10 +188,11 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  rgw::sal::RGWRadosUser user(store);
-
-  struct req_state rstate(g_ceph_context, &rgw_env, &user, req->id);
+  struct req_state rstate(g_ceph_context, &rgw_env, req->id);
   struct req_state *s = &rstate;
+
+  std::unique_ptr<rgw::sal::RGWUser> u = store->get_user(rgw_user());
+  s->set_user(u);
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;

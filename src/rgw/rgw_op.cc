@@ -559,7 +559,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
 
-    ret = store->get_bucket(s->user, rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket);
+    ret = store->get_bucket(s->user.get(), rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket);
     if (ret < 0) {
       if (ret != -ENOENT) {
 	string bucket_log;
@@ -1129,7 +1129,7 @@ void RGWPutBucketTags::execute() {
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
@@ -1155,7 +1155,7 @@ int RGWDeleteBucketTags::verify_permission()
 void RGWDeleteBucketTags::execute()
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1203,7 +1203,7 @@ void RGWPutBucketReplication::execute() {
   if (op_ret < 0) 
     return;
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1241,7 +1241,7 @@ int RGWDeleteBucketReplication::verify_permission()
 void RGWDeleteBucketReplication::execute()
 {
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1307,7 +1307,7 @@ int RGWOp::init_quota()
   rgw::sal::RGWUser* user;
 
   if (s->user->get_id() == s->bucket_owner.get_id()) {
-    user = s->user;
+    user = s->user.get();
   } else {
     int r = owner_user.load_by_id(s->yield);
     if (r < 0)
@@ -1807,7 +1807,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    r = store->get_bucket(s->user, s->user->get_tenant(), bucket_name, &ubucket);
+    r = store->get_bucket(s->user.get(), s->user->get_tenant(), bucket_name, &ubucket);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 		       << bucket_name << dendl;
@@ -1936,7 +1936,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
 	std::unique_ptr<rgw::sal::RGWBucket> tmp_bucket;
         auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-	int r = store->get_bucket(s->user, s->user->get_tenant(), bucket_name, &tmp_bucket);
+	int r = store->get_bucket(s->user.get(), s->user->get_tenant(), bucket_name, &tmp_bucket);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -2579,7 +2579,7 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2655,7 +2655,7 @@ void RGWSetBucketWebsite::execute()
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2689,7 +2689,7 @@ void RGWDeleteBucketWebsite::execute()
 {
   bufferlist in_data;
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
       << "returned err=" << op_ret << dendl;
@@ -2730,7 +2730,7 @@ void RGWStatBucket::execute()
     return;
   }
 
-  op_ret = store->get_bucket(s->user, s->bucket->get_key(), &bucket);
+  op_ret = store->get_bucket(s->user.get(), s->bucket->get_key(), &bucket);
   if (op_ret) {
     return;
   }
@@ -3088,7 +3088,7 @@ void RGWCreateBucket::execute()
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  op_ret = store->get_bucket(s->user, s->bucket_tenant, s->bucket_name, &s->bucket);
+  op_ret = store->get_bucket(s->user.get(), s->bucket_tenant, s->bucket_name, &s->bucket);
   if (op_ret < 0 && op_ret != -ENOENT)
     return;
   s->bucket_exists = (op_ret != -ENOENT);
@@ -3213,7 +3213,7 @@ void RGWCreateBucket::execute()
       op_ret = s->bucket->get_bucket_info(s->yield);
       if (op_ret < 0) {
         return;
-      } else if (!s->bucket->is_owner(s->user)) {
+      } else if (!s->bucket->is_owner(s->user.get())) {
         /* New bucket doesn't belong to the account we're operating on. */
         op_ret = -EEXIST;
         return;
@@ -3314,7 +3314,7 @@ void RGWDeleteBucket::execute()
   }
 
   bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user, &ot.read_version, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), &ot.read_version, in_data, nullptr, s->info);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       /* adjust error, we want to return with NoSuchBucket and not
@@ -4934,7 +4934,7 @@ int RGWCopyObj::verify_permission()
   }
 
   /* This is a bit of a hack; create an empty bucket, then load it below. */
-  op_ret = store->get_bucket(s->user, RGWBucketInfo(), &src_bucket);
+  op_ret = store->get_bucket(s->user.get(), RGWBucketInfo(), &src_bucket);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_BUCKET;
@@ -5005,7 +5005,7 @@ int RGWCopyObj::verify_permission()
                                                            or intra region sync */
     dest_bucket = src_bucket->clone();
   } else {
-    op_ret = store->get_bucket(s->user, RGWBucketInfo(), &dest_bucket);
+    op_ret = store->get_bucket(s->user.get(), RGWBucketInfo(), &dest_bucket);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
 	op_ret = -ERR_NO_SUCH_BUCKET;
@@ -5181,7 +5181,7 @@ void RGWCopyObj::execute()
   }
 
   op_ret = src_object->copy_object(obj_ctx,
-	   s->user,
+	   s->user.get(),
 	   &s->info,
 	   source_zone,
 	   dest_object.get(),
@@ -5423,7 +5423,7 @@ void RGWPutACLs::execute()
     if (s->canned_acl.empty()) {
       in_data.append(data);
     }
-    op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+    op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -5550,7 +5550,7 @@ void RGWPutLC::execute()
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5566,7 +5566,7 @@ void RGWPutLC::execute()
 void RGWDeleteLC::execute()
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5610,7 +5610,7 @@ void RGWPutCORS::execute()
   if (op_ret < 0)
     return;
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5632,7 +5632,7 @@ int RGWDeleteCORS::verify_permission()
 void RGWDeleteCORS::execute()
 {
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -5742,7 +5742,7 @@ void RGWSetRequestPayment::pre_exec()
 void RGWSetRequestPayment::execute()
 {
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6607,7 +6607,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
   ACLOwner bowner;
   RGWObjVersionTracker ot;
 
-  int ret = store->get_bucket(s->user, s->user->get_tenant(), path.bucket_name, &bucket);
+  int ret = store->get_bucket(s->user.get(), s->user->get_tenant(), path.bucket_name, &bucket);
   if (ret < 0) {
     goto binfo_fail;
   }
@@ -6997,7 +6997,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   std::unique_ptr<rgw::sal::RGWBucket> bucket;
   ACLOwner bowner;
 
-  op_ret = store->get_bucket(s->user, rgw_bucket(rgw_bucket_key(s->user->get_tenant(), bucket_name)), &bucket);
+  op_ret = store->get_bucket(s->user.get(), rgw_bucket(rgw_bucket_key(s->user->get_tenant(), bucket_name)), &bucket);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 20) << "non existent directory=" << bucket_name << dendl;
   } else if (op_ret < 0) {
@@ -7511,7 +7511,7 @@ void RGWPutBucketPolicy::execute()
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7655,7 +7655,7 @@ void RGWPutBucketObjectLock::execute()
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7974,7 +7974,7 @@ void RGWPutBucketPublicAccessBlock::execute()
     return;
   }
 
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

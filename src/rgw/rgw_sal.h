@@ -133,6 +133,25 @@ class RGWUser {
     /* dang temporary; will be removed when User is complete */
     rgw_user& get_user() { return info.user_id; }
     RGWUserInfo& get_info() { return info; }
+
+    friend inline ostream& operator<<(ostream& out, const RGWUser& u) {
+      out << u.info.user_id;
+      return out;
+    }
+
+    friend inline ostream& operator<<(ostream& out, const RGWUser* u) {
+      if (!u)
+	out << "<NULL>";
+      else
+	out << u->info.user_id;
+      return out;
+    }
+
+    friend inline ostream& operator<<(ostream& out, const std::unique_ptr<RGWUser>& p) {
+      out << p.get();
+      return out;
+    }
+
 };
 
 class RGWBucket {

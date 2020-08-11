@@ -134,7 +134,7 @@ void RGWPutUserPolicy::execute()
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -338,7 +338,7 @@ void RGWDeleteUserPolicy::execute()
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
     // a policy might've been uploaded to this site when there was no sync
     // req. in earlier releases, proceed deletion
