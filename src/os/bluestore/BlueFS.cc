@@ -2846,10 +2846,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off -= partial;
     offset -= partial;
     length += partial;
-    dout(20) << __func__ << " waiting for previous aio to complete" << dendl;
-    for (auto p : h->iocv) {
-      if (p) {
-	p->aio_wait();
+    if (_use_aio(h)) {
+      dout(20) << __func__ << " waiting for previous aio to complete" << dendl;
+      for (auto p : h->iocv) {
+	if (p) {
+	  p->aio_wait();
+	}
       }
     }
   }
@@ -2920,10 +2922,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   if (bytes_written_slow) {
     logger->inc(l_bluefs_bytes_written_slow, bytes_written_slow);
   }
-  for (unsigned i = 0; i < MAX_BDEV; ++i) {
-    if (bdev[i]) {
-      if (h->iocv[i]->has_pending_aios()) {
-        bdev[i]->aio_submit(h->iocv[i]);
+  if (_use_aio(h)) {
+    for (unsigned i = 0; i < MAX_BDEV; ++i) {
+      if (bdev[i]) {
+	if (h->iocv[i]->has_pending_aios()) {
+	  bdev[i]->aio_submit(h->iocv[i]);
+	}
       }
     }
   }
@@ -3073,7 +3077,7 @@ void BlueFS::_flush_bdev_safely(FileWriter *h)
   std::array<bool, MAX_BDEV> flush_devs = h->dirty_devs;
   h->dirty_devs.fill(false);
 #ifdef HAVE_LIBAIO
-  if (!bluefs_sync_write) {
+  if (_use_aio(h)) {
     list<aio_t> completed_ios;
     _claim_completed_aios(h, &completed_ios);
     lock.unlock();

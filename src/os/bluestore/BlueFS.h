@@ -316,6 +316,15 @@ private:
 
   bool bluefs_sync_write;
   bool bluefs_buffered_io;
+  bool _use_aio(FileWriter *h) const {
+    if (bluefs_sync_write) {
+      return false;
+    } else if (h->file->fnode.ino == 1) {
+      return true;
+    } else {
+      return !bluefs_buffered_io;
+    }
+  }
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
