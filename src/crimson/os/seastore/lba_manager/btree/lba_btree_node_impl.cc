@@ -39,12 +39,11 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
   }
   assert(meta.begin <= addr);
   assert(meta.end > addr);
-  auto [begin, end] = bound(addr, 0);
-  assert(begin == end + 1);
+  auto iter = lower_bound(addr);
   return get_lba_btree_extent(
     c,
-    meta.depth,
-    begin->get_val(),
+    meta.depth - 1,
+    iter->get_val(),
     get_paddr()).safe_then([c, addr, depth](auto child) {
       return child->lookup(c, addr, depth);
     });
@@ -129,6 +128,54 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
   }).safe_then([c, laddr, f=std::move(f)](LBANodeRef extent) mutable {
     return extent->mutate_mapping(c, laddr, std::move(f));
   });
+}
+
+LBAInternalNode::mutate_internal_address_ret LBAInternalNode::mutate_internal_address(
+  op_context_t c,
+  depth_t depth,
+  laddr_t laddr,
+  paddr_t paddr)
+{
+  if (get_meta().depth == (depth + 1)) {
+    if (!is_pending()) {
+      return c.cache.duplicate_for_write(c.trans, this)->cast<LBAInternalNode>(
+      )->mutate_internal_address(
+	c,
+	depth,
+	laddr,
+	paddr);
+    }
+    auto iter = get_containing_child(laddr);
+    if (iter->get_key() != laddr) {
+      return crimson::ct_error::enoent::make();
+    }
+
+    auto old_paddr = iter->get_val();
+
+    journal_update(
+      iter,
+      maybe_generate_relative(paddr),
+      maybe_get_delta_buffer());
+
+    return mutate_internal_address_ret(
+      mutate_internal_address_ertr::ready_future_marker{},
+      old_paddr
+    );
+  } else {
+    auto iter = get_containing_child(laddr);
+    return get_lba_btree_extent(
+      c,
+      get_meta().depth - 1,
+      iter->get_val(),
+      get_paddr()
+    ).safe_then([=](auto node) {
+      return node->mutate_internal_address(
+	c,
+	depth,
+	laddr,
+	paddr);
+    });
+  }
 }
 
 LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
@@ -432,6 +479,18 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
       mutate_mapping_ertr::ready_future_marker{},
       mutated);
   }
+}
+
+LBALeafNode::mutate_internal_address_ret LBALeafNode::mutate_internal_address(
+  op_context_t c,
+  depth_t depth,
+  laddr_t laddr,
+  paddr_t paddr)
+{
+  ceph_assert(0 == "Impossible");
+  return mutate_internal_address_ret(
+    mutate_internal_address_ertr::ready_future_marker{},
+    paddr);
 }
 
 LBALeafNode::find_hole_ret LBALeafNode::find_hole(
