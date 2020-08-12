@@ -127,8 +127,14 @@ class Device(object):
                     self.sys_api = part
                     break
 
-        # start with lvm since it can use an absolute or relative path
-        lv = lvm.get_lv_from_argument(self.path)
+        # if the path is not absolute, we have 'vg/lv', let's use LV name
+        # to get the LV.
+        if self.path[0] == '/':
+            lv = lvm.get_first_lv(filters={'lv_path': self.path})
+        else:
+            vgname, lvname = self.path.split('/')
+            lv = lvm.get_first_lv(filters={'lv_name': lvname,
+                                           'vg_name': vgname})
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
@@ -241,7 +247,6 @@ class Device(object):
                     # actually unused (not 100% sure) and can simply be removed
                     self.vg_name = vgs[0]
                     self._is_lvm_member = True
-
                     self.lvs.extend(lvm.get_device_lvs(path))
         return self._is_lvm_member
 
