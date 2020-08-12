@@ -15,10 +15,7 @@ struct OnodeBlock final : LogicalCachedExtent {
 
   template <typename... T>
   OnodeBlock(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
-  OnodeBlock(OnodeBlock&& block) noexcept
-    : LogicalCachedExtent{std::move(block)},
-      deltas{std::move(block.deltas)}
-  {}
+  OnodeBlock(OnodeBlock&& block) = delete;
   OnodeBlock(const OnodeBlock& block, CachedExtent::share_buffer_t tag) noexcept
     : LogicalCachedExtent{block, tag},
       share_buffer{true}
