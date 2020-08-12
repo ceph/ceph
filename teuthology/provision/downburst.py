@@ -165,16 +165,21 @@ class Downburst(object):
         os_type = self.os_type.lower()
         mac_address = self.status['mac_address']
 
+        cpus = int(os.environ.get('DOWNBURST_CPUS', 1))
+        ram_size = os.environ.get('DOWNBURST_RAM_SIZE', '3.8G')
+        disk_size = os.environ.get('DOWNBURST_DISK_SIZE', '100G')
+        extra_disk_size = os.environ.get('DOWNBURST_EXTRA_DISK_SIZE', '100G')
+        extra_disk_number = int(os.environ.get('DOWNBURST_EXTRA_DISK_NUMBER', 4))
         file_info = {
-            'disk-size': '100G',
-            'ram': '3.8G',
-            'cpus': 1,
+            'disk-size': disk_size,
+            'ram': ram_size,
+            'cpus': cpus,
             'networks': [
                 {'source': 'front', 'mac': mac_address}],
             'distro': os_type,
             'distroversion': self.os_version,
-            'additional-disks': 4,
-            'additional-disks-size': '100G',
+            'additional-disks': extra_disk_number,
+            'additional-disks-size': extra_disk_size,
             'arch': 'x86_64',
         }
         fqdn = self.name.split('@')[1]
