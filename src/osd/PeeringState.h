@@ -438,6 +438,14 @@ public:
     }
   };
 
+  struct QueryUnfound : boost::statechart::event< QueryUnfound > {
+    ceph::Formatter *f;
+    explicit QueryUnfound(ceph::Formatter *f) : f(f) {}
+    void print(std::ostream *out) const {
+      *out << "QueryUnfound";
+    }
+  };
+
   struct AdvMap : boost::statechart::event< AdvMap > {
     OSDMapRef osdmap;
     OSDMapRef lastmap;
@@ -680,6 +688,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< NullEvt >,
@@ -687,6 +696,7 @@ public:
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const ActMap&);
     boost::statechart::result react(const IntervalFlush&);
@@ -703,6 +713,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< IntervalFlush >,
       // ignored
@@ -717,6 +728,7 @@ public:
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const IntervalFlush&);
     boost::statechart::result react(const boost::statechart::event_base&) {
@@ -768,6 +780,7 @@ public:
 		      NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< MInfoRec >,
@@ -775,6 +788,7 @@ public:
       > reactions;
     explicit WaitActingChange(my_context ctx);
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const MLogRec&);
     boost::statechart::result react(const MInfoRec&);
@@ -794,10 +808,12 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< Activate, Active >,
       boost::statechart::custom_reaction< AdvMap >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap &advmap);
   };
 
@@ -813,6 +829,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< MInfoRec >,
@@ -834,6 +851,7 @@ public:
       boost::statechart::custom_reaction< CheckReadable>
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const ActMap&);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const MInfoRec& infoevt);
@@ -955,23 +973,27 @@ public:
 
   struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >
       > reactions;
     explicit NotBackfilling(my_context ctx);
     void exit();
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const RemoteBackfillReserved& evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt);
   };
 
   struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
       boost::statechart::custom_reaction< DeferRecovery >,
       boost::statechart::custom_reaction< UnfoundRecovery >
       > reactions;
     explicit NotRecovering(my_context ctx);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const DeferRecovery& evt) {
       /* no-op */
       return discard_event();
@@ -991,6 +1013,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< MQuery >,
       boost::statechart::custom_reaction< MInfoRec >,
@@ -1009,6 +1032,7 @@ public:
       boost::statechart::custom_reaction< MLease >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MInfoRec& infoevt);
     boost::statechart::result react(const MLogRec& logevt);
     boost::statechart::result react(const MTrim& trimevt);
@@ -1239,11 +1263,13 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< GotInfo, GetLog >,
       boost::statechart::custom_reaction< MNotifyRec >,
       boost::statechart::transition< IsDown, Down >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MNotifyRec& infoevt);
   };
 
@@ -1260,6 +1286,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
@@ -1268,6 +1295,7 @@ public:
       > reactions;
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
     boost::statechart::result react(const GotLog&);
   };
@@ -1282,10 +1310,12 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::transition< NeedUpThru, WaitUpThru >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
   };
 
@@ -1295,10 +1325,12 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< MLogRec >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const ActMap& am);
     boost::statechart::result react(const MLogRec& logrec);
   };
@@ -1307,9 +1339,11 @@ public:
     explicit Down(my_context ctx);
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MNotifyRec >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MNotifyRec& infoevt);
     void exit();
   };
@@ -1318,11 +1352,13 @@ public:
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< MNotifyRec >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< QueryState >
       > reactions;
     explicit Incomplete(my_context ctx);
     boost::statechart::result react(const AdvMap &advmap);
     boost::statechart::result react(const MNotifyRec& infoevt);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const QueryState& q);
     void exit();
   };
@@ -1478,6 +1514,7 @@ public:
   }
 
   void update_heartbeat_peers();
+  void query_unfound(Formatter *f, string state);
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);

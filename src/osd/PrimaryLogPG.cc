@@ -1119,6 +1119,9 @@ void PrimaryLogPG::do_command(
       }
       f->close_section();
     }
+    // Get possible locations of missing objects from pg information
+    PeeringState::QueryUnfound q(f.get());
+    recovery_state.handle_event(q, 0);
     f->dump_bool("more", p != needs_recovery_map.end());
     f->close_section();
   }

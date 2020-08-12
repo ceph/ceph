@@ -318,6 +318,36 @@ void PeeringState::purge_strays()
   peer_missing_requested.clear();
 }
 
+void PeeringState::query_unfound(Formatter *f, string state)
+{
+  psdout(20) << "Enter PeeringState common QueryUnfound" << dendl;
+  {
+    f->dump_string("state", state);
+    f->dump_bool("available_might_have_unfound", true);
+    f->open_array_section("might_have_unfound");
+    for (auto p = might_have_unfound.begin();
+	 p != might_have_unfound.end();
+	 ++p) {
+      if (peer_missing.count(*p)) {
+	; // Ignore already probed OSDs
+      } else {
+        f->open_object_section("osd");
+        f->dump_stream("osd") << *p;
+	if (peer_missing_requested.count(*p)) {
+	  f->dump_string("status", "querying");
+        } else if (!get_osdmap()->is_up(p->osd)) {
+	  f->dump_string("status", "osd is down");
+        } else {
+	  f->dump_string("status", "not queried");
+        }
+        f->close_section();
+      }
+    }
+    f->close_section();
+  }
+  psdout(20) << "Exit PeeringState common QueryUnfound" << dendl;
+  return;
+}
 
 bool PeeringState::proc_replica_info(
   pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
@@ -4324,6 +4354,13 @@ boost::statechart::result PeeringState::Started::react(const QueryState& q)
   return discard_event();
 }
 
+boost::statechart::result PeeringState::Started::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "Started");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
+}
+
 void PeeringState::Started::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -4409,6 +4446,13 @@ boost::statechart::result PeeringState::Reset::react(const QueryState& q)
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
   q.f->close_section();
+  return discard_event();
+}
+
+boost::statechart::result PeeringState::Reset::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "Reset");
+  q.f->dump_bool("available_might_have_unfound", false);
   return discard_event();
 }
 
@@ -4623,6 +4667,13 @@ boost::statechart::result PeeringState::Peering::react(const QueryState& q)
 
   q.f->close_section();
   return forward_event();
+}
+
+boost::statechart::result PeeringState::Peering::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "Peering");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
 }
 
 void PeeringState::Peering::exit()
@@ -4905,6 +4956,14 @@ PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   pl->publish_stats_to_osd();
 }
 
+boost::statechart::result PeeringState::NotBackfilling::react(const QueryUnfound& q)
+{
+  DECLARE_LOCALS;
+
+  ps->query_unfound(q.f, "NotBackfilling");
+  return discard_event();
+}
+
 boost::statechart::result
 PeeringState::NotBackfilling::react(const RemoteBackfillReserved &evt)
 {
@@ -4936,6 +4995,14 @@ PeeringState::NotRecovering::NotRecovering(my_context ctx)
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_REPAIR);
   pl->publish_stats_to_osd();
+}
+
+boost::statechart::result PeeringState::NotRecovering::react(const QueryUnfound& q)
+{
+  DECLARE_LOCALS;
+
+  ps->query_unfound(q.f, "NotRecovering");
+  return discard_event();
 }
 
 void PeeringState::NotRecovering::exit()
@@ -5802,6 +5869,14 @@ boost::statechart::result PeeringState::Active::react(const QueryState& q)
   return forward_event();
 }
 
+boost::statechart::result PeeringState::Active::react(const QueryUnfound& q)
+{
+  DECLARE_LOCALS;
+
+  ps->query_unfound(q.f, "Active");
+  return discard_event();
+}
+
 boost::statechart::result PeeringState::Active::react(
   const ActivateCommitted &evt)
 {
@@ -6099,6 +6174,13 @@ boost::statechart::result PeeringState::ReplicaActive::react(const QueryState& q
   q.f->dump_stream("enter_time") << enter_time;
   q.f->close_section();
   return forward_event();
+}
+
+boost::statechart::result PeeringState::ReplicaActive::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "ReplicaActive");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
 }
 
 void PeeringState::ReplicaActive::exit()
@@ -6469,6 +6551,13 @@ boost::statechart::result PeeringState::GetInfo::react(const QueryState& q)
   return forward_event();
 }
 
+boost::statechart::result PeeringState::GetInfo::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "GetInfo");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
+}
+
 void PeeringState::GetInfo::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6603,6 +6692,13 @@ boost::statechart::result PeeringState::GetLog::react(const QueryState& q)
   return forward_event();
 }
 
+boost::statechart::result PeeringState::GetLog::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "GetLog");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
+}
+
 void PeeringState::GetLog::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6665,6 +6761,13 @@ boost::statechart::result PeeringState::WaitActingChange::react(const QueryState
   return forward_event();
 }
 
+boost::statechart::result PeeringState::WaitActingChange::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "WaitActingChange");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
+}
+
 void PeeringState::WaitActingChange::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6712,6 +6815,13 @@ boost::statechart::result PeeringState::Down::react(const QueryState& q)
 		   "not enough up instances of this PG to go active");
   q.f->close_section();
   return forward_event();
+}
+
+boost::statechart::result PeeringState::Down::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "Down");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
 }
 
 boost::statechart::result PeeringState::Down::react(const MNotifyRec& infoevt)
@@ -6789,6 +6899,13 @@ boost::statechart::result PeeringState::Incomplete::react(
   q.f->dump_string("comment", "not enough complete instances of this PG");
   q.f->close_section();
   return forward_event();
+}
+
+boost::statechart::result PeeringState::Incomplete::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "Incomplete");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
 }
 
 void PeeringState::Incomplete::exit()
@@ -6943,6 +7060,13 @@ boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
   return forward_event();
 }
 
+boost::statechart::result PeeringState::GetMissing::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "GetMising");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
+}
+
 void PeeringState::GetMissing::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6987,6 +7111,13 @@ boost::statechart::result PeeringState::WaitUpThru::react(const QueryState& q)
   q.f->dump_string("comment", "waiting for osdmap to reflect a new up_thru for this osd");
   q.f->close_section();
   return forward_event();
+}
+
+boost::statechart::result PeeringState::WaitUpThru::react(const QueryUnfound& q)
+{
+  q.f->dump_string("state", "WaitUpThru");
+  q.f->dump_bool("available_might_have_unfound", false);
+  return discard_event();
 }
 
 void PeeringState::WaitUpThru::exit()
