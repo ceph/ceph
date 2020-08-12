@@ -3268,7 +3268,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  string module;
   string err;
 
   dout(0) << "handle_command " << *m << dendl;
@@ -3287,7 +3286,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  module = fullcmd[0];
+  std::string_view module = fullcmd[0];
 
   // validate command is in leader map
 
