@@ -117,7 +117,7 @@ public:
     }
   }
 
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, bool cap_dump=false) const;
   void push_pv(version_t pv)
   {
     ceph_assert(projected.empty() || projected.back() != pv);

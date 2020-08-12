@@ -124,6 +124,8 @@
 
 #define DEBUG_GETATTR_CAPS (CEPH_CAP_XATTR_SHARED)
 
+using namespace TOPNSPC::common;
+
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
   Client *client = static_cast<Client*>(p);
@@ -150,9 +152,11 @@ int Client::CommandHook::call(
     std::lock_guard l{m_client->client_lock};
     if (command == "mds_requests")
       m_client->dump_mds_requests(f);
-    else if (command == "mds_sessions")
-      m_client->dump_mds_sessions(f);
-    else if (command == "dump_cache")
+    else if (command == "mds_sessions") {
+      bool cap_dump = false;
+      cmd_getval(cmdmap, "cap_dump", cap_dump);
+      m_client->dump_mds_sessions(f, cap_dump);
+    } else if (command == "dump_cache")
       m_client->dump_cache(f);
     else if (command == "kick_stale_sessions")
       m_client->_kick_stale_sessions();
@@ -519,7 +523,8 @@ void Client::_finish_init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
-  ret = admin_socket->register_command("mds_sessions",
+  ret = admin_socket->register_command("mds_sessions "
+		                       "name=cap_dump,type=CephBool,req=false",
 				       &m_command_hook,
 				       "show mds session state");
   if (ret < 0) {
@@ -1534,7 +1539,7 @@ void Client::connect_mds_targets(mds_rank_t mds)
   }
 }
 
-void Client::dump_mds_sessions(Formatter *f)
+void Client::dump_mds_sessions(Formatter *f, bool cap_dump)
 {
   f->dump_int("id", get_nodeid().v);
   entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr_legacy());
@@ -1544,7 +1549,7 @@ void Client::dump_mds_sessions(Formatter *f)
   f->open_array_section("sessions");
   for (const auto &p : mds_sessions) {
     f->open_object_section("session");
-    p.second.dump(f);
+    p.second.dump(f, cap_dump);
     f->close_section();
   }
   f->close_section();

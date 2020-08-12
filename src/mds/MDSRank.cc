@@ -2506,14 +2506,17 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "session ls" ||
 	     command == "client ls") {
     std::lock_guard l(mds_lock);
+    bool cap_dump = false;
     std::vector<std::string> filter_args;
+    cmd_getval(cmdmap, "cap_dump", cap_dump);
     cmd_getval(cmdmap, "filters", filter_args);
+
     SessionFilter filter;
     r = filter.parse(filter_args, &ss);
     if (r != 0) {
       goto out;
     }
-    dump_sessions(filter, f);
+    dump_sessions(filter, f, cap_dump);
   } else if (command == "session evict" ||
 	     command == "client evict") {
     std::lock_guard l(mds_lock);
@@ -2772,7 +2775,7 @@ void MDSRankDispatcher::evict_clients(
   gather.activate();
 }
 
-void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f) const
+void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f, bool cap_dump) const
 {
   // Dump sessions, decorated with recovery/replay status
   f->open_array_section("sessions");
@@ -2785,7 +2788,9 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
       continue;
     }
 
-    f->dump_object("session", *s);
+    f->open_object_section("session");
+    s->dump(f, cap_dump);
+    f->close_section();
   }
   f->close_section(); // sessions
 }

@@ -333,11 +333,15 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump snapshots");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session ls name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("session ls "
+				     "name=cap_dump,type=CephBool,req=false "
+		                     "name=filters,type=CephString,n=N,req=false ",
 				     asok_hook,
 				     "List client sessions based on a filter");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("client ls name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("client ls "
+				     "name=cap_dump,type=CephBool,req=false "
+		                     "name=filters,type=CephString,n=N,req=false ",
 				     asok_hook,
 				     "List client sessions based on a filter");
   ceph_assert(r == 0);
@@ -353,7 +357,7 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Evict a client session by id");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session ls",
+  r = admin_socket->register_command("session ls name=cap_dump,type=CephBool,req=false",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
   ceph_assert(r == 0);
