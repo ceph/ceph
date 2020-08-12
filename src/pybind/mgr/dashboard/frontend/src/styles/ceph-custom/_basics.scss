@@ -66,6 +66,10 @@ option {
   font-family: monospace;
 }
 
-.text-pre {
+.text-pre-wrap {
   white-space: pre-wrap;
+}
+
+.text-pre {
+  white-space: pre;
 }

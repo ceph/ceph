@@ -332,6 +332,13 @@ export class TaskMessageService {
     'orchestrator/identify_device': this.newTaskMessage(
       new TaskMessageOperation($localize`Identifying`, $localize`identify`, $localize`Identified`),
       (metadata) => $localize`device '${metadata.device}' on host '${metadata.hostname}'`
+    ),
+    // Service tasks
+    'service/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.service(metadata)
+    ),
+    'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.service(metadata)
     )
   };
 
@@ -371,6 +378,10 @@ export class TaskMessageService {
     return $localize`NFS '${metadata.cluster_id}\:${
       metadata.export_id ? metadata.export_id : metadata.path
     }'`;
+  }
+
+  service(metadata: any) {
+    return $localize`Service '${metadata.service_name}'`;
   }
 
   _getTaskTitle(task: Task) {

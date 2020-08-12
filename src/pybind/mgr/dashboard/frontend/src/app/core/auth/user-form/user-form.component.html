@@ -38,7 +38,7 @@
                  for="password">
             <ng-container i18n>Password</ng-container>
             <cd-helper *ngIf="passwordPolicyHelpText.length > 0"
-                       class="text-pre"
+                       class="text-pre-wrap"
                        html="{{ passwordPolicyHelpText }}">
             </cd-helper>
           </label>
@@ -110,7 +110,7 @@
                  [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}"
                  for="pwdExpirationDate">
             <ng-container i18n>Password expiration date</ng-container>
-            <cd-helper class="text-pre"
+            <cd-helper class="text-pre-wrap"
                        *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
               <p>
                 The Dashboard setting defining the expiration interval of
