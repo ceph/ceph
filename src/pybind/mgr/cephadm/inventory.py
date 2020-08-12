@@ -386,6 +386,15 @@ class HostCache():
                     result.append(d)
         return result
 
+    def get_daemons_by_type(self, service_type):
+        # type: (str) -> List[orchestrator.DaemonDescription]
+        result = []   # type: List[orchestrator.DaemonDescription]
+        for host, dm in self.daemons.items():
+            for name, d in dm.items():
+                if d.daemon_type == service_type:
+                    result.append(d)
+        return result
+
     def get_daemon_names(self):
         # type: () -> List[str]
         r = []
