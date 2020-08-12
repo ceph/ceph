@@ -4050,6 +4050,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
   return true;
 
  ignore:
+  mon->no_reply(op);
   return true;
 }
 
