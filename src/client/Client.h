@@ -790,8 +790,6 @@ protected:
   void resend_unsafe_requests(MetaSession *s);
   void wait_unsafe_requests();
 
-  void _sync_write_commit(Inode *in);
-
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
 
