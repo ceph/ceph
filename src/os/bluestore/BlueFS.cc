@@ -2745,6 +2745,52 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   return 0;
 }
 
+ceph::bufferlist BlueFS::FileWriter::flush_buffer(
+  CephContext* const cct,
+  const bool partial,
+  const unsigned length,
+  const bluefs_super_t& super)
+{
+  ceph::bufferlist bl;
+  if (partial) {
+    bl.claim_append_piecewise(tail_block);
+  }
+  if (length == bl.length() + buffer.length()) {
+    /* in case of inital allocation and need to zero, limited flush is unacceptable */
+    bl.claim_append_piecewise(buffer);
+  } else {
+    bufferlist t;
+    buffer.splice(0, length, &t);
+    bl.claim_append_piecewise(t);
+    dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
+             << " unflushed" << dendl;
+  }
+  if (const unsigned tail = bl.length() & ~super.block_mask(); tail) {
+    dout(20) << __func__ << " caching tail of 0x"
+             << std::hex << tail
+             << " and padding block with 0x" << (super.block_size - tail)
+             << " buffer.length() " << buffer.length()
+             << std::dec << dendl;
+    tail_block.substr_of(bl, bl.length() - tail, tail);
+    //Because class page_aligned_appender, bl.append_zero will create a new ptr.
+    //This make rebuild for direct-io. We split ptr into two parts which make only rebuild size < 4k.
+    if (bl.get_num_buffers() == 1) {
+      bufferptr buf = bl.buffers().front();
+      if (length > super.block_size && buf.is_aligned(super.block_size) && !buf.is_n_align_sized(super.block_size)) {
+	bl.clear();
+	bufferptr tmp(buf, length - tail, tail);
+	buf.set_length(length - tail);
+	bl.append(buf);
+	bl.append(tmp);
+      }
+    }
+    bl.append_zero(super.block_size - tail);
+  } else {
+    tail_block.clear();
+  }
+  return bl;
+}
+
 int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " " << h << " pos 0x" << std::hex << h->pos
@@ -2836,12 +2882,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
            << std::hex << x_off << std::dec << dendl;
 
   unsigned partial = x_off & ~super.block_mask();
-  bufferlist bl;
   if (partial) {
     dout(20) << __func__ << " using partial tail 0x"
              << std::hex << partial << std::dec << dendl;
-    ceph_assert(h->tail_block.length() == partial);
-    bl.claim_append_piecewise(h->tail_block);
     x_off -= partial;
     offset -= partial;
     length += partial;
@@ -2852,45 +2895,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       }
     }
   }
-  if (length == partial + h->buffer.length()) {
-    /* in case of inital allocation and need to zero, limited flush is unacceptable */
-    bl.claim_append_piecewise(h->buffer);
-  } else {
-    bufferlist t;
-    h->buffer.splice(0, length, &t);
-    bl.claim_append_piecewise(t);
-    dout(20) << " leaving 0x" << std::hex << h->buffer.length() << std::dec
-             << " unflushed" << dendl;
-  }
-  ceph_assert(bl.length() == length);
 
+  auto bl = h->flush_buffer(cct, partial, length, super);
+  ceph_assert(bl.length() >= length);
   h->pos = offset + length;
-
-  unsigned tail = bl.length() & ~super.block_mask();
-  if (tail) {
-    dout(20) << __func__ << " caching tail of 0x"
-             << std::hex << tail
-             << " and padding block with 0x" << (super.block_size - tail)
-             << std::dec << dendl;
-    h->tail_block.substr_of(bl, bl.length() - tail, tail);
-    //Because class page_aligned_appender, bl.append_zero will create a new ptr.
-    //This make rebuild for direct-io. We split ptr into two parts which make only rebuild size < 4k.
-    if (bl.get_num_buffers() == 1) {
-      bufferptr buf = bl.buffers().front();
-      if (length > super.block_size && buf.is_aligned(super.block_size) && !buf.is_n_align_sized(super.block_size)) {
-	bl.clear();
-	bufferptr tmp(buf, length - tail, tail);
-	buf.set_length(length - tail);
-	bl.append(buf);
-	bl.append(tmp);
-      }
-    }
-    bl.append_zero(super.block_size - tail);
-    length += super.block_size - tail;
-  } else {
-    h->tail_block.clear();
-  }
-  ceph_assert(bl.length() == length);
+  length = bl.length();
 
   switch (h->writer_type) {
   case WRITER_WAL:
@@ -2985,7 +2994,7 @@ int BlueFS::_flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l)
 int BlueFS::_flush(FileWriter *h, bool force, bool *flushed)
 {
   h->buffer_appender.flush();
-  uint64_t length = h->buffer.length();
+  uint64_t length = h->get_buffer_length();
   uint64_t offset = h->pos;
   if (flushed) {
     *flushed = false;
@@ -3029,15 +3038,12 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 
   // truncate off unflushed data?
   if (h->pos < offset &&
-      h->pos + h->buffer.length() > offset) {
-    bufferlist t;
+      h->pos + h->get_buffer_length() > offset) {
     dout(20) << __func__ << " tossing out last " << offset - h->pos
 	     << " unflushed bytes" << dendl;
-    t.substr_of(h->buffer, 0, offset - h->pos);
-    h->buffer.swap(t);
     ceph_abort_msg("actually this shouldn't happen");
   }
-  if (h->buffer.length()) {
+  if (h->get_buffer_length()) {
     int r = _flush(h, true);
     if (r < 0)
       return r;
@@ -3383,7 +3389,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
-  h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
+  //h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
   for (unsigned i=0; i<MAX_BDEV; ++i) {
     if (bdev[i]) {
       if (h->iocv[i]) {
