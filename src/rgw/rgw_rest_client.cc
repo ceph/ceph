@@ -950,11 +950,18 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
     if (psize) {
       string size_str;
       set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
-      string err;
-      *psize = strict_strtoll(size_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldpp_dout(this, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
-        return -EIO;
+      if (size_str.empty()) {
+        set_str_from_headers(out_headers, "CONTENT_LENGTH", size_str);
+      }
+      if (!size_str.empty()) {
+        string err;
+        *psize = strict_strtoll(size_str.c_str(), 10, &err);
+        if (!err.empty()) {
+          ldpp_dout(this, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
+          return -EIO;
+        }
+      } else {
+        *psize = 0;
       }
     }
   }
