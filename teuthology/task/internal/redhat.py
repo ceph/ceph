@@ -119,9 +119,6 @@ def _enable_rhel_repos(remote):
         remote.run(args=['sudo', 'subscription-manager',
                          'repos', '--enable={r}'.format(r=repo)])
 
-    if remote.os.version.startswith('8'):
-        workaround(remote)
-
 
 @contextlib.contextmanager
 def setup_base_repo(ctx, config):
@@ -234,12 +231,3 @@ def _create_temp_repo_file(repos, repo_file):
         repo_file.write(gpgcheck)
         repo_file.write(enabled)
     repo_file.close()
-
-
-def workaround(remote):
-    log.info('temporary workaround')
-    remote.run(args=['sudo',
-                     'yum',
-                     'install', '-y',
-                     'http://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packages/d/dbench-4.0-10.el7.x86_64.rpm'])
-
