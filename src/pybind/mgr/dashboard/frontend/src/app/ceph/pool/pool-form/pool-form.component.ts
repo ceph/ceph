@@ -12,6 +12,7 @@ import { Observable, Subscription } from 'rxjs';
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
+import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
@@ -336,6 +337,7 @@ export class PoolFormComponent implements OnInit {
       if (!rule) {
         return;
       }
+      this.setCorrectMaxSize(rule);
       this.crushRuleIsUsedBy(rule.rule_name);
       this.replicatedRuleChange();
       this.pgCalc();
@@ -427,17 +429,16 @@ export class PoolFormComponent implements OnInit {
   }
 
   getMaxSize(): number {
-    if (!this.info || this.info.osd_count < 1) {
+    const rule = this.form.getValue('crushRule');
+    if (!this.info) {
       return 0;
     }
-    const osds: number = this.info.osd_count;
-    if (this.form.getValue('crushRule')) {
-      const max: number = this.form.get('crushRule').value.max_size;
-      if (max < osds) {
-        return max;
-      }
+    if (!rule) {
+      const osds = this.info.osd_count;
+      const defaultSize = 3;
+      return Math.min(osds, defaultSize);
     }
-    return osds;
+    return rule.usable_size;
   }
 
   private pgCalc() {
@@ -456,6 +457,19 @@ export class PoolFormComponent implements OnInit {
     if (!this.externalPgChange) {
       this.externalPgChange = oldValue !== newValue;
     }
+  }
+
+  private setCorrectMaxSize(rule: CrushRule = this.form.getValue('crushRule')) {
+    if (!rule) {
+      return;
+    }
+    const domains = CrushNodeSelectionClass.searchFailureDomains(
+      this.info.nodes,
+      rule.steps[0].item_name
+    );
+    const currentDomain = domains[rule.steps[1].type];
+    const usable = currentDomain ? currentDomain.length : rule.max_size;
+    rule.usable_size = Math.min(usable, rule.max_size);
   }
 
   private replicatedPgCalc(pgs: number): number {

@@ -6,7 +6,7 @@ import { CrushNode } from '../models/crush-node';
 
 export class CrushNodeSelectionClass {
   private nodes: CrushNode[] = [];
-  private easyNodes: { [id: number]: CrushNode } = {};
+  private idTree: { [id: number]: CrushNode } = {};
   private allDevices: string[] = [];
   private controls: {
     root: AbstractControl;
@@ -20,6 +20,102 @@ export class CrushNodeSelectionClass {
   devices: string[] = [];
   deviceCount = 0;
 
+  static searchFailureDomains(
+    nodes: CrushNode[],
+    s: string
+  ): { [failureDomain: string]: CrushNode[] } {
+    return this.getFailureDomains(this.search(nodes, s));
+  }
+
+  /**
+   * Filters crush map for a node and it's tree.
+   * The node name as provided in crush rules attribute item_name is supported.
+   * This means that '$name~$deviceType' can be used and will result in a crush map
+   * that only include buckets with the specified device in use as their leaf.
+   */
+  static search(nodes: CrushNode[], s: string): CrushNode[] {
+    const [search, deviceType] = s.split('~'); // Used inside item_name in crush rules
+    const node = nodes.find((n) => ['name', 'id', 'type'].some((attr) => n[attr] === search));
+    if (!node) {
+      return [];
+    }
+    nodes = this.getSubNodes(node, this.createIdTreeFromNodes(nodes));
+    if (deviceType) {
+      nodes = this.filterNodesByDeviceType(nodes, deviceType);
+    }
+    return nodes;
+  }
+
+  static createIdTreeFromNodes(nodes: CrushNode[]): { [id: number]: CrushNode } {
+    const idTree = {};
+    nodes.forEach((node) => {
+      idTree[node.id] = node;
+    });
+    return idTree;
+  }
+
+  static getSubNodes(node: CrushNode, idTree: { [id: number]: CrushNode }): CrushNode[] {
+    let subNodes = [node]; // Includes parent node
+    if (!node.children) {
+      return subNodes;
+    }
+    node.children.forEach((id) => {
+      const childNode = idTree[id];
+      subNodes = subNodes.concat(this.getSubNodes(childNode, idTree));
+    });
+    return subNodes;
+  }
+
+  static filterNodesByDeviceType(nodes: CrushNode[], deviceType: string): any {
+    let doNotInclude = nodes
+      .filter((n) => n.device_class && n.device_class !== deviceType)
+      .map((n) => n.id);
+    let foundNewNode: boolean;
+    let childrenToRemove = doNotInclude;
+
+    // Filters out all unwanted nodes
+    do {
+      foundNewNode = false;
+      nodes = nodes.filter((n) => !doNotInclude.includes(n.id)); // Unwanted nodes
+      // Find nodes where all children were filtered
+      const toRemoveNext: number[] = [];
+      nodes.forEach((n) => {
+        if (n.children && n.children.every((id) => doNotInclude.includes(id))) {
+          toRemoveNext.push(n.id);
+          foundNewNode = true;
+        }
+      });
+      if (foundNewNode) {
+        doNotInclude = toRemoveNext; // Reduces array length
+        childrenToRemove = childrenToRemove.concat(toRemoveNext);
+      }
+    } while (foundNewNode);
+
+    // Removes filtered out children in all left nodes with children
+    nodes = _.cloneDeep(nodes); // Clone objects to not change original objects
+    nodes = nodes.map((n) => {
+      if (!n.children) {
+        return n;
+      }
+      n.children = n.children.filter((id) => !childrenToRemove.includes(id));
+      return n;
+    });
+
+    return nodes;
+  }
+
+  static getFailureDomains(nodes: CrushNode[]): { [failureDomain: string]: CrushNode[] } {
+    const domains = {};
+    nodes.forEach((node) => {
+      const type = node.type;
+      if (!domains[type]) {
+        domains[type] = [];
+      }
+      domains[type].push(node);
+    });
+    return domains;
+  }
+
   initCrushNodeSelection(
     nodes: CrushNode[],
     rootControl: AbstractControl,
@@ -27,8 +123,9 @@ export class CrushNodeSelectionClass {
     deviceControl: AbstractControl
   ) {
     this.nodes = nodes;
+    this.idTree = CrushNodeSelectionClass.createIdTreeFromNodes(nodes);
     nodes.forEach((node) => {
-      this.easyNodes[node.id] = node;
+      this.idTree[node.id] = node;
     });
     this.buckets = _.sortBy(
       nodes.filter((n) => n.children),
@@ -56,14 +153,8 @@ export class CrushNodeSelectionClass {
   }
 
   private onRootChange() {
-    const nodes = this.getSubNodes(this.controls.root.value);
-    const domains = {};
-    nodes.forEach((node) => {
-      if (!domains[node.type]) {
-        domains[node.type] = [];
-      }
-      domains[node.type].push(node);
-    });
+    const nodes = CrushNodeSelectionClass.getSubNodes(this.controls.root.value, this.idTree);
+    const domains = CrushNodeSelectionClass.getFailureDomains(nodes);
     Object.keys(domains).forEach((type) => {
       if (domains[type].length <= 1) {
         delete domains[type];
@@ -72,18 +163,6 @@ export class CrushNodeSelectionClass {
     this.failureDomains = domains;
     this.failureDomainKeys = Object.keys(domains).sort();
     this.updateFailureDomain();
-  }
-
-  private getSubNodes(node: CrushNode): CrushNode[] {
-    let subNodes = [node]; // Includes parent node
-    if (!node.children) {
-      return subNodes;
-    }
-    node.children.forEach((id) => {
-      const childNode = this.easyNodes[id];
-      subNodes = subNodes.concat(this.getSubNodes(childNode));
-    });
-    return subNodes;
   }
 
   private updateFailureDomain() {
@@ -119,7 +198,9 @@ export class CrushNodeSelectionClass {
 
   private updateDevices(failureDomain: string = this.controls.failure.value) {
     const subNodes = _.flatten(
-      this.failureDomains[failureDomain].map((node) => this.getSubNodes(node))
+      this.failureDomains[failureDomain].map((node) =>
+        CrushNodeSelectionClass.getSubNodes(node, this.idTree)
+      )
     );
     this.allDevices = subNodes.filter((n) => n.device_class).map((n) => n.device_class);
     this.devices = _.uniq(this.allDevices).sort();
