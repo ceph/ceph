@@ -313,7 +313,7 @@ private:
   }
 
 protected:
-  CachedExtent(CachedExtent &&other) = default;
+  CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
