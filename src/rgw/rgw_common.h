@@ -2214,7 +2214,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
                             const rgw::ARN& res,
-                            const uint64_t op);
+                            const uint64_t op, const Span& parent_span = nullptr);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct req_state * const s,
                                       int perm);
@@ -2429,33 +2429,5 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
-
-#ifdef WITH_JAEGER
-  inline void req_state_span::set_span(Span& span){
-      this->state->stack_span.push(std::move(span));
-    }
-  inline void req_state_span::set_req_state(req_state* _s){
-      this->state = _s;
-      this->is_inserted = true;
-    }
-  inline req_state_span::~req_state_span(){
-      if(this->state && !this->state->stack_span.empty() && this->is_inserted)
-          this->state->stack_span.pop();
-    }
-  static inline void start_trace(req_state_span&& ss, Span&& sp, req_state* const s, const char* name)
-  {
-      Span span;
-      if(s && !s->stack_span.empty()){
-        span = child_span(name, s->stack_span.top());
-        ss.set_req_state(s);
-        ss.set_span(span);
-      }
-      else if(s && s->root_span){
-        span = child_span(name, s->root_span);
-        ss.set_req_state(s);
-        ss.set_span(span);
-      }
-  }
-#endif
 
 #endif

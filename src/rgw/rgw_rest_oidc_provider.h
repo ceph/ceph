@@ -12,8 +12,8 @@ protected:
   string provider_url; //'iss' field in JWT
   string provider_arn;
 public:
-  int verify_permission() override;
-  void send_response() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   virtual uint64_t get_op() = 0;
 };
 
@@ -32,8 +32,8 @@ public:
 class RGWCreateOIDCProvider : public RGWRestOIDCProviderWrite {
 public:
   RGWCreateOIDCProvider() = default;
-  int verify_permission() override;
-  void execute() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "create_oidc_provider"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_OIDC_PROVIDER; }
@@ -43,7 +43,7 @@ public:
 class RGWDeleteOIDCProvider : public RGWRestOIDCProviderWrite {
 public:
   RGWDeleteOIDCProvider() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override { return "delete_oidc_provider"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OIDC_PROVIDER; }
   uint64_t get_op() { return rgw::IAM::iamDeleteOIDCProvider; }
@@ -52,7 +52,7 @@ public:
 class RGWGetOIDCProvider : public RGWRestOIDCProviderRead {
 public:
   RGWGetOIDCProvider() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_oidc_provider"; }
   RGWOpType get_type() override { return RGW_OP_GET_OIDC_PROVIDER; }
   uint64_t get_op() { return rgw::IAM::iamGetOIDCProvider; }
@@ -61,8 +61,8 @@ public:
 class RGWListOIDCProviders : public RGWRestOIDCProviderRead {
 public:
   RGWListOIDCProviders() = default;
-  int verify_permission() override;
-  void execute() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "list_oidc_providers"; }
   RGWOpType get_type() override { return RGW_OP_LIST_OIDC_PROVIDERS; }

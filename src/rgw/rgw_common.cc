@@ -1119,13 +1119,9 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
                             const rgw::ARN& res,
-                            const uint64_t op)
+                            const uint64_t op, const Span& parent_span)
 {
-  req_state_span ss;
-   
-   
-  start_trace(std::move(ss), {}, s, __PRETTY_FUNCTION__);
-
+  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
   perm_state_from_req_state ps(s);
   return verify_user_permission(dpp, &ps, s->user_acl.get(), s->iam_user_policies, res, op);
 }

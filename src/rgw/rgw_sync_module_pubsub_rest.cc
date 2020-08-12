@@ -45,7 +45,7 @@ public:
     return 0;
   }
 
-  void send_response() override {
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -67,7 +67,7 @@ public:
 // command: GET /topics
 class RGWPSListTopics_ObjStore : public RGWPSListTopicsOp {
 public:
-  void send_response() override {
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -91,7 +91,7 @@ public:
     return 0;
   }
 
-  void send_response() override {
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -119,11 +119,11 @@ public:
 // ceph specifc topics handler factory
 class RGWHandler_REST_PSTopic : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, const Span& parent_span = nullptr) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, const Span& parent_span = nullptr) override {
     return 0;
   }
 
@@ -193,7 +193,7 @@ public:
     sub_name = s->object->get_name();
     return 0;
   }
-  void send_response() override {
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -253,7 +253,7 @@ public:
     return 0;
   }
 
-  void send_response() override {
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -272,11 +272,11 @@ public:
 // subscriptions handler factory
 class RGWHandler_REST_PSSub : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, const Span& parent_span = nullptr) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, const Span& parent_span = nullptr) override {
     return 0;
   }
   bool supports_quota() override {
@@ -368,10 +368,10 @@ private:
 
 public:
   const char* name() const override { return "pubsub_notification_create"; }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 };
 
-void RGWPSCreateNotif_ObjStore::execute()
+void RGWPSCreateNotif_ObjStore::execute(const Span& parent_span)
 {
   ups.emplace(store, s->owner.get_id());
 
@@ -400,11 +400,11 @@ private:
   }
 
 public:
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override { return "pubsub_notification_delete"; }
 };
 
-void RGWPSDeleteNotif_ObjStore::execute() {
+void RGWPSDeleteNotif_ObjStore::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -430,8 +430,8 @@ private:
   }
 
 public:
-  void execute() override;
-  void send_response() override {
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -447,7 +447,7 @@ public:
   const char* name() const override { return "pubsub_notifications_list"; }
 };
 
-void RGWPSListNotifs_ObjStore::execute()
+void RGWPSListNotifs_ObjStore::execute(const Span& parent_span)
 {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
@@ -461,11 +461,11 @@ void RGWPSListNotifs_ObjStore::execute()
 // ceph specific notification handler factory
 class RGWHandler_REST_PSNotifs : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {
+  int init_permissions(RGWOp* op, const Span& parent_span = nullptr) override {
     return 0;
   }
 
-  int read_permissions(RGWOp* op) override {
+  int read_permissions(RGWOp* op, const Span& parent_span = nullptr) override {
     return 0;
   }
   bool supports_quota() override {

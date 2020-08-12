@@ -27,13 +27,13 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
   virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
   virtual void send_response_end();
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "list_bucket_index_log";
   }
@@ -51,11 +51,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void send_response() override;
-  void execute() override;
+  void send_response(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "bucket_index_log_info";
   }
@@ -69,7 +69,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "trim_bucket_index_log";
   }
@@ -86,11 +86,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "list_metadata_log";
   }
@@ -106,11 +106,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "get_metadata_log_info";
   }
@@ -125,11 +125,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "get_metadata_log_shard_info";
   }
@@ -143,7 +143,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "lock_mdlog_object";
   }
@@ -157,7 +157,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "unlock_mdlog_object";
   }
@@ -171,7 +171,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "mdlog_notify";
   }
@@ -185,7 +185,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "trim_metadata_log";
   }
@@ -203,11 +203,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "list_data_changes_log";
   }
@@ -222,11 +222,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "get_data_changes_log_info";
   }
@@ -241,11 +241,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "get_data_changes_log_shard_info";
   }
@@ -259,7 +259,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "datalog_notify";
   }
@@ -273,7 +273,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override {
     return "trim_data_changes_log";
   }
@@ -285,7 +285,7 @@ protected:
   RGWOp *op_delete() override;
   RGWOp *op_post() override;
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*, const Span& parent_span = nullptr) override {
     return 0;
   }
 public:

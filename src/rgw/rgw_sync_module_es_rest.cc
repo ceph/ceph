@@ -140,24 +140,24 @@ public:
     es_module = static_cast<RGWElasticSyncModuleInstance *>(sync_module_ref.get());
   }
 
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
   virtual int get_params() = 0;
-  void pre_exec() override;
-  void execute() override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "metadata_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-void RGWMetadataSearchOp::pre_exec()
+void RGWMetadataSearchOp::pre_exec(const Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWMetadataSearchOp::execute()
+void RGWMetadataSearchOp::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -307,7 +307,7 @@ public:
     next_marker = buf;
     return 0;
   }
-  void send_response() override {
+  void send_response(const Span& parent_span = nullptr) override {
     if (op_ret) {
       s->err.message = err;
       set_req_state_err(s, op_ret);

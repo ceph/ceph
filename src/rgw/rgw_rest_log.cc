@@ -52,7 +52,7 @@ static int parse_date_str(string& in, real_time& out) {
   return 0;
 }
 
-void RGWOp_MDLog_List::execute() {
+void RGWOp_MDLog_List::execute(const Span& parent_span) {
   string   period = s->info.args.get("period");
   string   shard = s->info.args.get("id");
   string   max_entries_str = s->info.args.get("max-entries");
@@ -114,7 +114,7 @@ void RGWOp_MDLog_List::execute() {
   meta_log.complete_list_entries(handle);
 }
 
-void RGWOp_MDLog_List::send_response() {
+void RGWOp_MDLog_List::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -139,13 +139,13 @@ void RGWOp_MDLog_List::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Info::execute() {
+void RGWOp_MDLog_Info::execute(const Span& parent_span) {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
   period = store->svc()->mdlog->read_oldest_log_period();
   http_ret = period.get_error();
 }
 
-void RGWOp_MDLog_Info::send_response() {
+void RGWOp_MDLog_Info::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -160,7 +160,7 @@ void RGWOp_MDLog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_ShardInfo::execute() {
+void RGWOp_MDLog_ShardInfo::execute(const Span& parent_span) {
   string period = s->info.args.get("period");
   string shard = s->info.args.get("id");
   string err;
@@ -187,7 +187,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
   http_ret = meta_log.get_info(shard_id, &info);
 }
 
-void RGWOp_MDLog_ShardInfo::send_response() {
+void RGWOp_MDLog_ShardInfo::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -196,7 +196,7 @@ void RGWOp_MDLog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Delete::execute() {
+void RGWOp_MDLog_Delete::execute(const Span& parent_span) {
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
            start_marker = s->info.args.get("start-marker"),
@@ -246,7 +246,7 @@ void RGWOp_MDLog_Delete::execute() {
   http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
-void RGWOp_MDLog_Lock::execute() {
+void RGWOp_MDLog_Lock::execute(const Span& parent_span) {
   string period, shard_id_str, duration_str, locker_id, zone_id;
   unsigned shard_id;
 
@@ -295,7 +295,7 @@ void RGWOp_MDLog_Lock::execute() {
     http_ret = -ERR_LOCKED;
 }
 
-void RGWOp_MDLog_Unlock::execute() {
+void RGWOp_MDLog_Unlock::execute(const Span& parent_span) {
   string period, shard_id_str, locker_id, zone_id;
   unsigned shard_id;
 
@@ -332,7 +332,7 @@ void RGWOp_MDLog_Unlock::execute() {
   http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
 }
 
-void RGWOp_MDLog_Notify::execute() {
+void RGWOp_MDLog_Notify::execute(const Span& parent_span) {
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
   int r = 0;
@@ -374,7 +374,7 @@ void RGWOp_MDLog_Notify::execute() {
   http_ret = 0;
 }
 
-void RGWOp_BILog_List::execute() {
+void RGWOp_BILog_List::execute(const Span& parent_span) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
@@ -438,7 +438,7 @@ void RGWOp_BILog_List::execute() {
   send_response_end();
 }
 
-void RGWOp_BILog_List::send_response() {
+void RGWOp_BILog_List::send_response(const Span& parent_span) {
   if (sent_header)
     return;
 
@@ -470,7 +470,7 @@ void RGWOp_BILog_List::send_response_end() {
   flusher.flush();
 }
       
-void RGWOp_BILog_Info::execute() {
+void RGWOp_BILog_Info::execute(const Span& parent_span) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          bucket_instance = s->info.args.get("bucket-instance");
@@ -511,7 +511,7 @@ void RGWOp_BILog_Info::execute() {
   }
 }
 
-void RGWOp_BILog_Info::send_response() {
+void RGWOp_BILog_Info::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -529,7 +529,7 @@ void RGWOp_BILog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_BILog_Delete::execute() {
+void RGWOp_BILog_Delete::execute(const Span& parent_span) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
@@ -574,7 +574,7 @@ void RGWOp_BILog_Delete::execute() {
   return;
 }
 
-void RGWOp_DATALog_List::execute() {
+void RGWOp_DATALog_List::execute(const Span& parent_span) {
   string   shard = s->info.args.get("id");
 
   string   st = s->info.args.get("start-time"),
@@ -624,7 +624,7 @@ void RGWOp_DATALog_List::execute() {
                                                     &last_marker, &truncated);
 }
 
-void RGWOp_DATALog_List::send_response() {
+void RGWOp_DATALog_List::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -654,12 +654,12 @@ void RGWOp_DATALog_List::send_response() {
 }
 
 
-void RGWOp_DATALog_Info::execute() {
+void RGWOp_DATALog_Info::execute(const Span& parent_span) {
   num_objects = s->cct->_conf->rgw_data_log_num_shards;
   http_ret = 0;
 }
 
-void RGWOp_DATALog_Info::send_response() {
+void RGWOp_DATALog_Info::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -670,7 +670,7 @@ void RGWOp_DATALog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_ShardInfo::execute() {
+void RGWOp_DATALog_ShardInfo::execute(const Span& parent_span) {
   string shard = s->info.args.get("id");
   string err;
 
@@ -684,7 +684,7 @@ void RGWOp_DATALog_ShardInfo::execute() {
   http_ret = store->svc()->datalog_rados->get_info(shard_id, &info);
 }
 
-void RGWOp_DATALog_ShardInfo::send_response() {
+void RGWOp_DATALog_ShardInfo::send_response(const Span& parent_span) {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -693,7 +693,7 @@ void RGWOp_DATALog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_Notify::execute() {
+void RGWOp_DATALog_Notify::execute(const Span& parent_span) {
   string  source_zone = s->info.args.get("source-zone");
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
@@ -740,7 +740,7 @@ void RGWOp_DATALog_Notify::execute() {
   http_ret = 0;
 }
 
-void RGWOp_DATALog_Delete::execute() {
+void RGWOp_DATALog_Delete::execute(const Span& parent_span) {
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
            start_marker = s->info.args.get("start-marker"),
@@ -784,15 +784,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_metadata_log_status"; }
 };
 
-void RGWOp_MDLog_Status::execute()
+void RGWOp_MDLog_Status::execute(const Span& parent_span)
 {
   auto sync = store->getRados()->get_meta_sync_manager();
   if (sync == nullptr) {
@@ -803,7 +803,7 @@ void RGWOp_MDLog_Status::execute()
   http_ret = sync->read_sync_status(&status);
 }
 
-void RGWOp_MDLog_Status::send_response()
+void RGWOp_MDLog_Status::send_response(const Span& parent_span)
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
@@ -822,15 +822,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
-void RGWOp_BILog_Status::execute()
+void RGWOp_BILog_Status::execute(const Span& parent_span)
 {
   const auto options = s->info.args.get("options");
   bool merge = (options == "merge");
@@ -886,7 +886,7 @@ void RGWOp_BILog_Status::execute()
     pipe.dest.zone = local_zone_id;
     pipe.dest.bucket = info.bucket;
 
-    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(): getting sync status for pipe=" << pipe << dendl;
+    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(const Span& parent_span): getting sync status for pipe=" << pipe << dendl;
 
     http_ret = rgw_bucket_sync_status(this, store, pipe, info, nullptr, &status);
 
@@ -911,14 +911,14 @@ void RGWOp_BILog_Status::execute()
   for (auto& entry : local_dests) {
     auto pipe = entry.second;
 
-    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(): getting sync status for pipe=" << pipe << dendl;
+    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(const Span& parent_span): getting sync status for pipe=" << pipe << dendl;
 
     RGWBucketInfo *pinfo = &info;
     std::optional<RGWBucketInfo> opt_dest_info;
 
     if (!pipe.dest.bucket) {
       /* Uh oh, something went wrong */
-      ldout(s->cct, 20) << "ERROR: RGWOp_BILog_Status::execute(): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
+      ldout(s->cct, 20) << "ERROR: RGWOp_BILog_Status::execute(const Span& parent_span): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
       http_ret = -EIO;
       return;
     }
@@ -969,7 +969,7 @@ void RGWOp_BILog_Status::execute()
   }
 }
 
-void RGWOp_BILog_Status::send_response()
+void RGWOp_BILog_Status::send_response(const Span& parent_span)
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
@@ -988,15 +988,15 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute() override ;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override ;
+  void send_response(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_data_changes_log_status"; }
 };
 
-void RGWOp_DATALog_Status::execute()
+void RGWOp_DATALog_Status::execute(const Span& parent_span)
 {
   const auto source_zone = s->info.args.get("source-zone");
   auto sync = store->getRados()->get_data_sync_manager(source_zone);
@@ -1008,7 +1008,7 @@ void RGWOp_DATALog_Status::execute()
   http_ret = sync->read_sync_status(&status);
 }
 
-void RGWOp_DATALog_Status::send_response()
+void RGWOp_DATALog_Status::send_response(const Span& parent_span)
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);

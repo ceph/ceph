@@ -22,12 +22,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_bucket_info"; }
 };
 
-void RGWOp_Bucket_Info::execute()
+void RGWOp_Bucket_Info::execute(const Span& parent_span)
 {
   RGWBucketAdminOpState op_state;
 
@@ -59,12 +59,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_policy"; }
 };
 
-void RGWOp_Get_Policy::execute()
+void RGWOp_Get_Policy::execute(const Span& parent_span)
 {
   RGWBucketAdminOpState op_state;
 
@@ -89,12 +89,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "check_bucket_index"; }
 };
 
-void RGWOp_Check_Bucket_Index::execute()
+void RGWOp_Check_Bucket_Index::execute(const Span& parent_span)
 {
   std::string bucket;
 
@@ -123,12 +123,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "link_bucket"; }
 };
 
-void RGWOp_Bucket_Link::execute()
+void RGWOp_Bucket_Link::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string bucket;
@@ -166,12 +166,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "unlink_bucket"; }
 };
 
-void RGWOp_Bucket_Unlink::execute()
+void RGWOp_Bucket_Unlink::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string bucket;
@@ -204,12 +204,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "remove_bucket"; }
 };
 
-void RGWOp_Bucket_Remove::execute()
+void RGWOp_Bucket_Remove::execute(const Span& parent_span)
 {
   std::string bucket_name;
   bool delete_children;
@@ -241,14 +241,14 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "set_bucket_quota"; }
 };
 
 #define QUOTA_INPUT_MAX_LEN 1024
 
-void RGWOp_Set_Bucket_Quota::execute()
+void RGWOp_Set_Bucket_Quota::execute(const Span& parent_span)
 {
   bool uid_arg_existed = false;
   std::string uid_str;
@@ -318,12 +318,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "sync_bucket"; }
 };
 
-void RGWOp_Sync_Bucket::execute()
+void RGWOp_Sync_Bucket::execute(const Span& parent_span)
 {
   std::string bucket;
   std::string tenant;
@@ -350,12 +350,12 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "remove_object"; }
 };
 
-void RGWOp_Object_Remove::execute()
+void RGWOp_Object_Remove::execute(const Span& parent_span)
 {
   std::string bucket;
   std::string object;
