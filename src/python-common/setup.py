@@ -18,6 +18,7 @@ setup(
     url="https://github.com/ceph/ceph",
     zip_safe = False,
     install_requires=(
+        'pyyaml',
         'six',
     ),
     classifiers = [
