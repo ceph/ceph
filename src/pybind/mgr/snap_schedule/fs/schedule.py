@@ -14,6 +14,9 @@ from typing import Tuple, Any
 log = logging.getLogger(__name__)
 
 
+TESTING = 'SNAP_SCHED_TESTING' in environ
+
+
 # Work around missing datetime.fromisoformat for < python3.7
 SNAP_DB_TS_FORMAT = '%Y-%m-%dT%H:%M:%S'
 try:
@@ -354,7 +357,7 @@ class Schedule(object):
     def repeat(self):
         mult = self.schedule[-1]
         period = int(self.schedule[0:-1])
-        if 'SNAP_SCHED_TESTING' in environ and mult == 'M':
+        if TESTING and mult == 'M':
             return period * 60
         elif mult == 'h':
             return period * 60 * 60
