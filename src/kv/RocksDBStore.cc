@@ -857,6 +857,12 @@ int RocksDBStore::do_open(ostream &out,
     dout(1) << __func__ << " load rocksdb options failed" << dendl;
     return r;
   }
+  // Because https://github.com/facebook/rocksdb/pull/6351.
+  // We think this recoverymode is safe for ceph.
+  if (opt.recycle_log_file_num) {
+    opt.wal_recovery_mode = rocksdb::WALRecoveryMode::kTolerateCorruptedTailRecords;
+  }
+
   rocksdb::Status status;
   if (create_if_missing) {
     status = rocksdb::DB::Open(opt, path, &db);
