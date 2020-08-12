@@ -461,7 +461,7 @@ std::string md_config_t::get_cluster_name(const char* conffile)
     // If cluster name is not set yet, use the prefix of the
     // basename of configuration file as cluster name.
     if (fs::path path{conffile}; path.extension() == ".conf") {
-      return path.stem();
+      return path.stem().string();
     } else {
       // If the configuration file does not follow $cluster.conf
       // convention, we do the last try and assign the cluster to
