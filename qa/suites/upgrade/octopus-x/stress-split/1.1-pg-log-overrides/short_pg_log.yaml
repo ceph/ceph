@@ -1,6 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        osd min pg log entries: 1
-        osd max pg log entries: 2
