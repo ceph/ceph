@@ -171,6 +171,9 @@ function nfs_stop()
 ## prepare + check host
 $SUDO $CEPHADM check-host
 
+## run a gather-facts (output to stdout)
+$SUDO $CEPHADM gather-facts
+
 ## version + --image
 $SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version
 $SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version \
