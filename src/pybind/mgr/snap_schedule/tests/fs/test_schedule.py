@@ -20,9 +20,29 @@ def assert_updated(new, old, update_expected={}):
 
     for var in vars(new):
         if var in update_expected:
-            assert getattr(new, var) == update_expected.get(var), f'new did not update value for {var}'
+            expected_val = update_expected.get(var)
+            new_val = getattr(new, var)
+            if isinstance(expected_val, datetime.datetime):
+                assert new_val.year == expected_val.year
+                assert new_val.month == expected_val.month
+                assert new_val.day == expected_val.day
+                assert new_val.hour == expected_val.hour
+                assert new_val.minute == expected_val.minute
+                assert new_val.second == expected_val.second
+            else:
+                assert new_val == expected_val, f'new did not update value for {var}'
         else:
-            assert getattr(new, var) == getattr(old, var), f'new changed unexpectedly in value for {var}'
+            expected_val = getattr(old, var)
+            new_val = getattr(new, var)
+            if isinstance(expected_val, datetime.datetime):
+                assert new_val.year == expected_val.year
+                assert new_val.month == expected_val.month
+                assert new_val.day == expected_val.day
+                assert new_val.hour == expected_val.hour
+                assert new_val.minute == expected_val.minute
+                assert new_val.second == expected_val.second
+            else:
+                assert new_val == expected_val, f'new changed unexpectedly in value for {var}'
 
 
 class TestSchedule(object):
