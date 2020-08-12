@@ -6394,10 +6394,11 @@ void RGWGetHealthCheck::execute()
 
 int RGWDeleteMultiObj::verify_permission()
 {
+  bool is_versioned = !rgw::sal::RGWObject::empty(s->object.get()) && s->object->have_instance();
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
-                                              s->object->get_instance().empty() ?
+                                              is_versioned ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
                                               ARN(s->bucket->get_bi()));
@@ -6408,10 +6409,10 @@ int RGWDeleteMultiObj::verify_permission()
     rgw::IAM::Effect r = Effect::Pass;
     if (s->iam_policy) {
       r = s->iam_policy->eval(s->env, *s->auth.identity,
-				 s->object->get_instance().empty() ?
-				 rgw::IAM::s3DeleteObject :
-				 rgw::IAM::s3DeleteObjectVersion,
-				 ARN(s->bucket->get_bi()));
+                              is_versioned ?
+                              rgw::IAM::s3DeleteObject :
+                              rgw::IAM::s3DeleteObjectVersion,
+                              ARN(s->bucket->get_bi()));
     }
     if (r == Effect::Allow)
       return 0;
