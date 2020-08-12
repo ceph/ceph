@@ -1382,6 +1382,7 @@ static ceph::spinlock debug_lock;
       _carriage = new_back;
       return { new_back->c_str(), &new_back->_len, &_len };
     } else {
+      ceph_assert(!_buffers.empty());
       if (unlikely(_carriage != &_buffers.back())) {
         auto bptr = ptr_node::create(*_carriage, _carriage->length(), 0);
 	_carriage = bptr.get();
