@@ -3268,8 +3268,6 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  string err;
-
   dout(0) << "handle_command " << *m << dendl;
 
   string format;
