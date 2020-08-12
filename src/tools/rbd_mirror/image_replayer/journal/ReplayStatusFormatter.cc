@@ -31,6 +31,23 @@ double round_to_two_places(double value) {
   return abs(round(value * 100) / 100);
 }
 
+void per_second_readable(uint64_t bytes, std::string *speed)
+{
+  std::stringstream ss;
+  static const char* units[] = { "B/s", "KB/s", "MB/s", "GB/s", "TB/s", "PB/s", "EB/s"  };
+  static const int max_units = sizeof(units)/sizeof(*units);
+
+  int unit = 0;
+  while(bytes >= 1024 && unit < max_units) {
+    if (bytes < 1048576 && (bytes % 1024 != 0))
+      break;
+    bytes >>= 10;
+    unit++;
+  }
+  ss << bytes << units[unit];
+  *speed = ss.str();
+}
+
 json_spirit::mObject to_json_object(
     const cls::journal::ObjectPosition& position) {
   json_spirit::mObject object;
@@ -255,8 +272,9 @@ void ReplayStatusFormatter<I>::format(std::string *description) {
     m_entries_behind_master > 0 ? m_entries_behind_master : 0);
 
   m_bytes_per_second(0);
-  root_obj["bytes_per_second"] = round_to_two_places(
-    m_bytes_per_second.get_average());
+  std::string replay_io_speed;
+  per_second_readable(round_to_two_places(m_bytes_per_second.get_average()), &replay_io_speed);
+  root_obj["replay_io_speed"] = replay_io_speed;
 
   m_entries_per_second(0);
   auto entries_per_second = m_entries_per_second.get_average();
