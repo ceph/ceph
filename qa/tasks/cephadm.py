@@ -407,25 +407,19 @@ def ceph_bootstrap(ctx, config, registry):
 
         # fetch keys and configs
         log.info('Fetching config...')
-        ctx.ceph[cluster_name].config_file = teuthology.get_file(
-            remote=bootstrap_remote,
-            path='/etc/ceph/{}.conf'.format(cluster_name))
+        ctx.ceph[cluster_name].config_file = \
+            bootstrap_remote.read_file(f'/etc/ceph/{cluster_name}.conf')
         log.info('Fetching client.admin keyring...')
-        ctx.ceph[cluster_name].admin_keyring = teuthology.get_file(
-            remote=bootstrap_remote,
-            path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name))
+        ctx.ceph[cluster_name].admin_keyring = \
+            bootstrap_remote.read_file(f'/etc/ceph/{cluster_name}.client.admin.keyring')
         log.info('Fetching mon keyring...')
-        ctx.ceph[cluster_name].mon_keyring = teuthology.get_file(
-            remote=bootstrap_remote,
-            path='/var/lib/ceph/%s/mon.%s/keyring' % (fsid, first_mon),
-            sudo=True)
+        ctx.ceph[cluster_name].mon_keyring = \
+            bootstrap_remote.read_file(f'/var/lib/ceph/{fsid}/mon.{first_mon}/keyring', sudo=True)
 
         # fetch ssh key, distribute to additional nodes
         log.info('Fetching pub ssh key...')
-        ssh_pub_key = teuthology.get_file(
-            remote=bootstrap_remote,
-            path='{}/{}.pub'.format(testdir, cluster_name)
-        ).decode('ascii').strip()
+        ssh_pub_key = bootstrap_remote.read_file(
+            f'{testdir}/{cluster_name}.pub').decode('ascii').strip()
 
         log.info('Installing pub ssh key for root users...')
         ctx.cluster.run(args=[
@@ -1266,10 +1260,7 @@ def add_mirror_to_cluster(ctx, mirror):
 
     for remote in ctx.cluster.remotes.keys():
         try:
-            config = teuthology.get_file(
-                remote=remote,
-                path=registries_conf
-            )
+            config = remote.read_file(registries_conf)
             new_config = toml.dumps(registries_add_mirror_to_docker_io(config.decode('utf-8'), mirror))
 
             remote.sudo_write_file(registries_conf, new_config)
