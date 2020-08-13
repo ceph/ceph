@@ -296,7 +296,8 @@ namespace crimson {
 
     protected:
 
-      using TimePoint = decltype(std::chrono::steady_clock::now());
+      using Clock = std::chrono::steady_clock;
+      using TimePoint = Clock::time_point;
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
@@ -1759,15 +1760,17 @@ namespace crimson {
 	std::unique_lock<std::mutex> l(sched_ahead_mtx);
 
 	while (!this->finishing) {
+	  // predicate for cond.wait()
+	  const auto pred = [this] () -> bool { return this->finishing; };
+
 	  if (TimeZero == sched_ahead_when) {
-	    sched_ahead_cv.wait(l);
+	    sched_ahead_cv.wait(l, pred);
 	  } else {
-	    Time now;
-	    while (!this->finishing && (now = get_time()) < sched_ahead_when) {
-	      long microseconds_l = long(1 + 1000000 * (sched_ahead_when - now));
-	      auto microseconds = std::chrono::microseconds(microseconds_l);
-	      sched_ahead_cv.wait_for(l, microseconds);
-	    }
+	    // cast from Time -> duration<Time> -> Duration -> TimePoint
+	    const auto until = typename super::TimePoint{
+		duration_cast<typename super::Duration>(
+		    std::chrono::duration<Time>{sched_ahead_when})};
+	    sched_ahead_cv.wait_until(l, until, pred);
 	    sched_ahead_when = TimeZero;
 	    if (this->finishing) return;
 
