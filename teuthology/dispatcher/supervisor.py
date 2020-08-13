@@ -162,7 +162,7 @@ def reimage_machines(job_config):
     reimaged = reimage_many(ctx, targets, job_config['machine_type'])
     ctx.config['targets'] = reimaged
     # change the status to running after the reimaging process
-    report.try_push_job_info(ctx.config, dict(status='waiting'))
+    report.try_push_job_info(ctx.config, dict(status='running'))
 
 
 def unlock_targets(job_config):
