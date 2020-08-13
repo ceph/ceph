@@ -1,9 +1,14 @@
-@import '../../../../styles/chart-tooltip.scss';
+@import './src/styles/chart-tooltip.scss';
+@import './src/styles/defaults';
 
 $canvas-width: 100%;
 $canvas-height: 100%;
 
 .chart-container {
+  @each $key_name, $value in $health-chart-colors {
+    --color-#{$key_name}: #{$value};
+  }
+
   position: unset;
   width: $canvas-width;
   height: $canvas-height;

@@ -9,6 +9,10 @@ cd-info-card {
     @extend .pb-2;
 
     .card-body {
+      .card-title {
+        @extend .pl-2;
+      }
+
       .card-text {
         @extend .pt-2;
       }
@@ -60,6 +64,21 @@ cd-health {
     &.cd-performance-card,
     &.cd-capacity-card {
       @extend .col-xl;
+    }
+
+    &.cd-capacity-card {
+      @extend .col-lg-3;
+    }
+
+    &.cd-performance-card {
+      @extend .col-lg-6;
+    }
+
+    &.cd-chart-card {
+      @extend .col-md-12;
+      @extend .col-lg-6;
+      @extend .col-xl-4;
+      @extend .col-2xl-3;
     }
   }
 }
