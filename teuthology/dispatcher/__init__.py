@@ -145,7 +145,7 @@ def main(args):
         with open(job_config_path, 'w') as f:
             yaml.safe_dump(job_config, f, default_flow_style=False)
 
-        run_args.extend(["--config-file", job_config_path])
+        run_args.extend(["--job-config", job_config_path])
         job_proc = subprocess.Popen(run_args)
         log.info('Job supervisor PID: %s', job_proc.pid)
 

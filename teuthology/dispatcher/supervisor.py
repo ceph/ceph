@@ -25,7 +25,7 @@ def main(args):
     verbose = args["--verbose"]
     archive_dir = args["--archive-dir"]
     teuth_bin_path = args["--bin-path"]
-    config_file_path = args["--config-file"]
+    config_file_path = args["--job-config"]
 
     with open(config_file_path, 'r') as config_file:
         job_config = yaml.safe_load(config_file)
