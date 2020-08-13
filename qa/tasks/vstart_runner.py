@@ -1300,6 +1300,7 @@ def exec_test():
     global opt_log_ps_output
     opt_log_ps_output = False
     use_kernel_client = False
+    opt_verbose = True
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1321,6 +1322,8 @@ def exec_test():
             clear_old_log()
         elif f == "--kclient":
             use_kernel_client = True
+        elif '--no-verbose' == f:
+            opt_verbose = False
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1363,10 +1366,16 @@ def exec_test():
         vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
-        args = [os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d",
-                    "--nolockdep"]
+        args = [
+            os.path.join(SRC_PREFIX, "vstart.sh"),
+            "-n",
+            "--nolockdep",
+        ]
         if require_memstore:
             args.append("--memstore")
+
+        if opt_verbose:
+            args.append("-d")
 
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
