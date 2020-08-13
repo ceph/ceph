@@ -1078,7 +1078,7 @@ namespace crimson {
 	  // only maintain a tag for the first request
 	  auto& r = client.requests.front();
 	  r.tag.reservation -=
-	    client.info->reservation_inv * std::max(uint32_t(1), tag.rho);
+	    client.info->reservation_inv * (tag.cost + tag.rho);
 	}
       }
 
@@ -1086,7 +1086,7 @@ namespace crimson {
       void reduce_reservation_tags(ImmediateTagCalc imm, ClientRec& client,
                                    const RequestTag& tag) {
         double res_offset =
-          client.info->reservation_inv * std::max(uint32_t(1), tag.rho);
+          client.info->reservation_inv * (tag.cost + tag.rho);
 	for (auto& r : client.requests) {
 	  r.tag.reservation -= res_offset;
 	}
@@ -1104,7 +1104,7 @@ namespace crimson {
 
 	// don't forget to update previous tag
 	client.prev_tag.reservation -=
-	  client.info->reservation_inv * std::max(uint32_t(1), tag.rho);
+	  client.info->reservation_inv * (tag.cost + tag.rho);
 	resv_heap.promote(client);
       }
 
