@@ -22,6 +22,7 @@
                    id="username"
                    name="username"
                    formControlName="username"
+                   autocomplete="off"
                    autofocus>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('username', formDir, 'required')"
@@ -86,6 +87,7 @@
                      placeholder="Confirm password..."
                      id="confirmpassword"
                      name="confirmpassword"
+                     autocomplete="new-password"
                      formControlName="confirmpassword">
               <span class="input-group-append">
                 <button type="button"
