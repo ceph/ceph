@@ -418,16 +418,8 @@ def build_ceph_cluster(ctx, config):
             admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
             first_mon = teuthology.get_first_mon(ctx, config)
             (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
-            conf_data = teuthology.get_file(
-                remote=mon0_remote,
-                path=conf_path,
-                sudo=True,
-            )
-            admin_keyring = teuthology.get_file(
-                remote=mon0_remote,
-                path=admin_keyring_path,
-                sudo=True,
-            )
+            conf_data = mon0_remote.read_file(conf_path, sudo=True)
+            admin_keyring = mon0_remote.read_file(admin_keyring_path, sudo=True)
 
             clients = ctx.cluster.only(teuthology.is_type('client'))
             for remote, roles_for_host in clients.remotes.items():
@@ -452,8 +444,7 @@ def build_ceph_cluster(ctx, config):
                             run.Raw('"'),
                         ],
                     )
-                    key_data = teuthology.get_file(
-                        remote=mon0_remote,
+                    key_data = mon0_remote.read_file(
                         path=client_keyring,
                         sudo=True,
                     )
