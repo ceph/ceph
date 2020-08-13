@@ -48,7 +48,7 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
     ceph_assert(ceph_mutex_is_locked(dispatcher->m_cache_lock));
     auto cct = dispatcher->m_image_ctx->cct;
 
-    if (r == -EBLACKLISTED) {
+    if (r == -EBLOCKLISTED) {
       lderr(cct) << "blocklisted during flush (purging)" << dendl;
       dispatcher->m_object_cacher->purge_set(dispatcher->m_object_set);
     } else if (r < 0 && purge_on_error) {

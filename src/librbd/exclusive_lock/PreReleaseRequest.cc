@@ -127,7 +127,7 @@ void PreReleaseRequest<I>::handle_block_writes(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
+  if (r == -EBLOCKLISTED) {
     // allow clean shut down if blocklisted
     lderr(cct) << "failed to block writes because client is blocklisted"
                << dendl;

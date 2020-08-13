@@ -595,7 +595,7 @@ void PurgeQueue::_execute_item(
                       new LambdaContext([this, expire_to](int r){
     std::lock_guard l(lock);
 
-    if (r == -EBLACKLISTED) {
+    if (r == -EBLOCKLISTED) {
       finisher.queue(on_error, r);
       on_error = nullptr;
       return;

@@ -129,7 +129,7 @@ TEST_F(TestMockWatcherRewatchRequest, WatchBlacklist) {
 
   InSequence seq;
   expect_aio_unwatch(mock_image_ctx, 0);
-  expect_aio_watch(mock_image_ctx, -EBLACKLISTED);
+  expect_aio_watch(mock_image_ctx, -EBLOCKLISTED);
 
   C_SaferCond ctx;
   MockRewatchRequest *req = MockRewatchRequest::create(mock_image_ctx.md_ctx,
@@ -142,7 +142,7 @@ TEST_F(TestMockWatcherRewatchRequest, WatchBlacklist) {
     std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
   ASSERT_EQ(0U, m_watch_handle);
 }
 

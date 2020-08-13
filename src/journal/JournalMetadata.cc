@@ -882,7 +882,7 @@ void JournalMetadata::handle_watch_reset() {
   if (r < 0) {
     if (r == -ENOENT) {
       ldout(m_cct, 5) << __func__ << ": journal header not found" << dendl;
-    } else if (r == -EBLACKLISTED) {
+    } else if (r == -EBLOCKLISTED) {
       ldout(m_cct, 5) << __func__ << ": client blocklisted" << dendl;
     } else {
       lderr(m_cct) << __func__ << ": failed to watch journal: "

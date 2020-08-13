@@ -97,7 +97,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
     MDSRank *mds = get_mds();
     // assume journal is reliable, so don't choose action based on
     // g_conf()->mds_action_on_write_error.
-    if (r == -EBLACKLISTED) {
+    if (r == -EBLOCKLISTED) {
       derr << "we have been blocklisted (fenced), respawning..." << dendl;
       mds->respawn();
     } else {

@@ -1226,7 +1226,7 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
   remote_peer_ack_nowait(mock_image_map.get(), shuffled_global_image_ids,
                          -ENOENT, &peer_ack_remove_ctxs);
   remote_peer_ack_wait(mock_image_map.get(), shuffled_global_image_ids,
-                       -EBLACKLISTED, &peer_ack_ctxs);
+                       -EBLOCKLISTED, &peer_ack_ctxs);
 
   wait_for_scheduled_task();
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
