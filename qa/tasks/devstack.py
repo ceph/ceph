@@ -117,7 +117,7 @@ def distribute_ceph_conf(devstack_node, ceph_node):
     log.info("Copying ceph.conf to DevStack node...")
 
     ceph_conf_path = '/etc/ceph/ceph.conf'
-    ceph_conf = misc.get_file(ceph_node, ceph_conf_path, sudo=True)
+    ceph_conf = ceph_node.read_file(ceph_conf_path, sudo=True)
     devstack_node.write_file(ceph_conf_path, ceph_conf, sudo=True)
 
 
@@ -247,7 +247,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
     for update in updates:
         file_name = update['name']
         options = update['options']
-        config_data = misc.get_file(devstack_node, file_name, sudo=True)
+        config_data = devstack_node.read_file(file_name, sudo=True)
         config_stream = StringIO(config_data)
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
