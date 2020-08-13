@@ -292,7 +292,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, Notify) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, CreateBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, CreateBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -355,7 +355,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, CreateError) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -405,7 +405,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, RegisterWatcherError) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, TrashListBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, TrashListBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -488,7 +488,7 @@ TEST_F(TestMockImageDeleterTrashWatcher, Rewatch) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
-TEST_F(TestMockImageDeleterTrashWatcher, RewatchBlacklist) {
+TEST_F(TestMockImageDeleterTrashWatcher, RewatchBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 

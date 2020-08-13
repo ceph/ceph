@@ -279,7 +279,7 @@ TEST_F(TestMockWatcher, ReregisterWatchError) {
   ASSERT_EQ(0, unregister_ctx.wait());
 }
 
-TEST_F(TestMockWatcher, ReregisterWatchBlacklist) {
+TEST_F(TestMockWatcher, ReregisterWatchBlocklist) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
