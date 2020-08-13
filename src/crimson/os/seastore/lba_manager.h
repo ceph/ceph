@@ -88,10 +88,15 @@ public:
     Transaction &t,
     laddr_t off, extent_len_t len, paddr_t addr) = 0;
 
+
+  struct ref_update_result_t {
+    unsigned refcount = 0;
+    paddr_t addr;
+  };
   using ref_ertr = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::input_output_error>;
-  using ref_ret = ref_ertr::future<unsigned>;
+  using ref_ret = ref_ertr::future<ref_update_result_t>;
 
   /**
    * Decrements ref count on extent

@@ -28,6 +28,10 @@ constexpr segment_id_t RECORD_REL_SEG_ID =
 constexpr segment_id_t BLOCK_REL_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 3;
 
+// for tests which generate fake paddrs
+constexpr segment_id_t FAKE_SEG_ID =
+  std::numeric_limits<segment_id_t>::max() - 4;
+
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
 // Offset within a segment on disk, see SegmentManager
@@ -150,6 +154,9 @@ constexpr paddr_t make_record_relative_paddr(segment_off_t off) {
 }
 constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
   return paddr_t{BLOCK_REL_SEG_ID, off};
+}
+constexpr paddr_t make_fake_paddr(segment_off_t off) {
+  return paddr_t{FAKE_SEG_ID, off};
 }
 
 struct paddr_le_t {
