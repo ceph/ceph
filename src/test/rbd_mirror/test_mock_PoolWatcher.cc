@@ -435,14 +435,14 @@ TEST_F(TestMockPoolWatcher, RegisterWatcherBlacklist) {
   InSequence seq;
   MockMirroringWatcher mock_mirroring_watcher;
   expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, true);
-  expect_mirroring_watcher_register(mock_mirroring_watcher, -EBLACKLISTED);
+  expect_mirroring_watcher_register(mock_mirroring_watcher, -EBLOCKLISTED);
 
   MockListener mock_listener(this);
   MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
                                     "remote uuid", mock_listener);
   C_SaferCond ctx;
   mock_pool_watcher.init(&ctx);
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
   ASSERT_TRUE(mock_pool_watcher.is_blocklisted());
 
   expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);

@@ -949,7 +949,7 @@ void MDSRank::damaged_unlocked()
 
 void MDSRank::handle_write_error(int err)
 {
-  if (err == -EBLACKLISTED) {
+  if (err == -EBLOCKLISTED) {
     derr << "we have been blocklisted (fenced), respawning..." << dendl;
     respawn();
     return;

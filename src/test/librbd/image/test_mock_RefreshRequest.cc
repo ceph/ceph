@@ -1445,7 +1445,7 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_open_object_map(mock_image_ctx, &mock_object_map, -EBLACKLISTED);
+  expect_open_object_map(mock_image_ctx, &mock_object_map, -EBLOCKLISTED);
   EXPECT_CALL(mock_image_ctx, rebuild_data_io_context());
 
   C_SaferCond ctx;
@@ -1453,7 +1453,7 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
                                                    &ctx);
   req->send();
 
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
   ASSERT_EQ(nullptr, mock_image_ctx.object_map);
 }
 

@@ -940,10 +940,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
-                           m_dst_snap_ids[0], OBJECT_EXISTS, -EBLACKLISTED);
+                           m_dst_snap_ids[0], OBJECT_EXISTS, -EBLOCKLISTED);
 
   request->send();
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
 }
 
 TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {

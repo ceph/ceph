@@ -95,7 +95,7 @@ template <typename I>
 void TrashWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
+  if (r == -EBLOCKLISTED) {
     dout(0) << "detected client is blocklisted" << dendl;
     return;
   } else if (r == -ENOENT) {

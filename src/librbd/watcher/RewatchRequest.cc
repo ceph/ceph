@@ -57,7 +57,7 @@ void RewatchRequest::handle_unwatch(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << "r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
+  if (r == -EBLOCKLISTED) {
     lderr(cct) << "client blocklisted" << dendl;
     finish(r);
     return;
