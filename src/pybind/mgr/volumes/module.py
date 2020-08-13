@@ -256,7 +256,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'nfs export create cephfs '
             'name=fsname,type=CephString '
-            'name=attach,type=CephString '
+            'name=clusterid,type=CephString '
             'name=binding,type=CephString '
             'name=readonly,type=CephBool,req=false '
             'name=path,type=CephString,req=false ',
@@ -265,7 +265,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'nfs export delete '
-                   'name=attach,type=CephString '
+                   'name=clusterid,type=CephString '
                    'name=binding,type=CephString ',
             'desc': "Delete a cephfs export",
             'perm': 'rw'
@@ -507,11 +507,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_nfs_export_create_cephfs(self, inbuf, cmd):
         #TODO Extend export creation for rgw.
-        return self.fs_export.create_export(fs_name=cmd['fsname'], cluster_id=cmd['attach'],
+        return self.fs_export.create_export(fs_name=cmd['fsname'], cluster_id=cmd['clusterid'],
                 pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False), path=cmd.get('path', '/'))
 
     def _cmd_nfs_export_delete(self, inbuf, cmd):
-        return self.fs_export.delete_export(cluster_id=cmd['attach'], pseudo_path=cmd['binding'])
+        return self.fs_export.delete_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
 
     def _cmd_nfs_export_ls(self, inbuf, cmd):
         return self.fs_export.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
