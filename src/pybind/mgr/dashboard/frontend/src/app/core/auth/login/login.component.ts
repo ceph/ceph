@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { Credentials } from '../../../shared/models/credentials';
@@ -14,8 +14,10 @@ import { ModalService } from '../../../shared/services/modal.service';
 export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
+  next: string;
 
   constructor(
+    private route: ActivatedRoute,
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
@@ -23,8 +25,10 @@ export class LoginComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    // console.debug(this.next);
     if (this.authStorageService.isLoggedIn()) {
-      this.router.navigate(['']);
+    this.next = this.route.snapshot.queryParams['next'] || '';
+    this.router.navigateByUrl(this.next);
     } else {
       // Make sure all open modal dialogs are closed. This might be
       // necessary when the logged in user is redirected to the login
@@ -52,7 +56,7 @@ export class LoginComponent implements OnInit {
             login.sso,
             login.pwdExpirationDate
           );
-          this.router.navigate(['']);
+          this.router.navigateByUrl(this.next);
         }
       });
     }
@@ -60,7 +64,7 @@ export class LoginComponent implements OnInit {
 
   login() {
     this.authService.login(this.model).subscribe(() => {
-      this.router.navigate(['']);
+      this.router.navigateByUrl(this.next);
     });
   }
 }
