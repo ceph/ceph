@@ -2756,14 +2756,14 @@ int RGWMetadataHandlerPut_User::put_post()
   }
 
   if (!orig_account_id.empty()) {
-    ret = uhandler->ctl.account->add_user(orig_account_id, uinfo.user_id, y);
+    ret = uhandler->ctl.account->remove_user(orig_account_id, uinfo.user_id, y);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
   }
 
   if (!new_account_id.empty()) {
-    ret = uhandler->ctl.account->remove_user(new_account_id, uinfo.user_id, y);
+    ret = uhandler->ctl.account->add_user(new_account_id, uinfo.user_id, y);
   }
   return ret;
 
