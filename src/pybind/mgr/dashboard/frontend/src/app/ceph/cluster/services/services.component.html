@@ -9,7 +9,13 @@
             [autoReload]="60000"
             (fetchData)="getServices($event)"
             [hasDetails]="true"
-            (setExpandedRow)="setExpandedRow($event)">
+            (setExpandedRow)="setExpandedRow($event)"
+            (updateSelection)="updateSelection($event)">
+    <cd-table-actions class="table-actions"
+                      [permission]="permissions.hosts"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
     <cd-service-details cdTableDetail
                         [permissions]="permissions"
                         [selection]="expandedRow">

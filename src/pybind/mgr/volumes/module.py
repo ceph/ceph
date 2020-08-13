@@ -344,6 +344,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Displays NFS Cluster info",
             'perm': 'r'
         },
+        {
+            'cmd': 'nfs cluster config set '
+                   'name=clusterid,type=CephString ',
+            'desc': "Set NFS-Ganesha config by `-i <config_file>`",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'nfs cluster config reset '
+                   'name=clusterid,type=CephString ',
+            'desc': "Reset NFS-Ganesha Config to default",
+            'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -599,3 +611,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_nfs_cluster_info(self, inbuf, cmd):
         return self.nfs.show_nfs_cluster_info(cluster_id=cmd.get('clusterid', None))
+
+    def _cmd_nfs_cluster_config_set(self, inbuf, cmd):
+        return self.nfs.set_nfs_cluster_config(cluster_id=cmd['clusterid'], nfs_config=inbuf)
+
+    def _cmd_nfs_cluster_config_reset(self, inbuf, cmd):
+        return self.nfs.reset_nfs_cluster_config(cluster_id=cmd['clusterid'])

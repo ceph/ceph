@@ -5,7 +5,6 @@
 #define RGW_PROCESS_H
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_auth_registry.h"
 #include "rgw_user.h"
