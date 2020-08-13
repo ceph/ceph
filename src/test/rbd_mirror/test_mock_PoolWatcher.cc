@@ -428,7 +428,7 @@ TEST_F(TestMockPoolWatcher, Notify) {
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
 }
 
-TEST_F(TestMockPoolWatcher, RegisterWatcherBlacklist) {
+TEST_F(TestMockPoolWatcher, RegisterWatcherBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 

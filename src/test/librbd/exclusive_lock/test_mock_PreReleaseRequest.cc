@@ -290,7 +290,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessObjectMapDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockExclusiveLockPreReleaseRequest, Blacklisted) {
+TEST_F(TestMockExclusiveLockPreReleaseRequest, Blocklisted) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;

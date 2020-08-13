@@ -121,7 +121,7 @@ TEST_F(TestMockWatcherRewatchRequest, UnwatchError) {
   ASSERT_EQ(234U, m_watch_handle);
 }
 
-TEST_F(TestMockWatcherRewatchRequest, WatchBlacklist) {
+TEST_F(TestMockWatcherRewatchRequest, WatchBlocklist) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
