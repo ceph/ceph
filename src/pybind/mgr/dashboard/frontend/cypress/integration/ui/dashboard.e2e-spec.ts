@@ -45,23 +45,22 @@ describe('Dashboard Main Page', () => {
       // order, checks for card title and position via indexing into a list of all info cards.
       const order = [
         'Cluster Status',
+        'Hosts',
         'Monitors',
         'OSDs',
-        'Manager Daemons',
-        'Hosts',
+        'Managers',
         'Object Gateways',
         'Metadata Servers',
         'iSCSI Gateways',
-        'Client IOPS',
-        'Client Throughput',
-        'Client Read/Write',
-        'Recovery Throughput',
-        'Scrub',
-        'Pools',
         'Raw Capacity',
         'Objects',
+        'PG Status',
+        'Pools',
         'PGs per OSD',
-        'PG Status'
+        'Client Read/Write',
+        'Client Throughput',
+        'Recovery Throughput',
+        'Scrubbing'
       ];
 
       for (let i = 0; i < order.length; i++) {
@@ -72,8 +71,8 @@ describe('Dashboard Main Page', () => {
     it('should verify that info card group titles are present and in the right order', () => {
       cy.location('hash').should('eq', '#/dashboard');
       dashboard.infoGroupTitle(0).should('eq', 'Status');
-      dashboard.infoGroupTitle(1).should('eq', 'Performance');
-      dashboard.infoGroupTitle(2).should('eq', 'Capacity');
+      dashboard.infoGroupTitle(1).should('eq', 'Capacity');
+      dashboard.infoGroupTitle(2).should('eq', 'Performance');
     });
   });
 

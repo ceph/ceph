@@ -12,6 +12,16 @@ $badge-font-size: 1rem;
 $form-feedback-font-size: 100%;
 $popover-max-width: 350px;
 
+// https://getbootstrap.com/docs/4.5/layout/grid/#variables
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  2xl: 1450px
+);
+
 @import '~bootstrap/scss/bootstrap';
 @import '~fork-awesome/scss/fork-awesome';
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';

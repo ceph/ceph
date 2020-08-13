@@ -1,9 +1,14 @@
 @use './src/styles/chart-tooltip';
+@use './src/styles/defaults/bootstrap-defaults' as bd;
 
 $canvas-width: 100%;
 $canvas-height: 100%;
 
 .chart-container {
+  @each $key_name, $value in bd.$health-chart-colors {
+    --color-#{$key_name}: #{$value};
+  }
+
   height: $canvas-height;
   margin-left: auto;
   margin-right: auto;
