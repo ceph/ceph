@@ -5255,7 +5255,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
   return r;
 }
 
-extern "C" ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs, size_t len,
+extern "C" ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs, uint64_t len,
                                     int zero_flags, int op_flags)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
