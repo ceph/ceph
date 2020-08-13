@@ -13,6 +13,8 @@ std::ostream &segment_to_stream(std::ostream &out, const segment_id_t &t)
     return out << "BLOCK_REL_SEG";
   else if (t == RECORD_REL_SEG_ID)
     return out << "RECORD_REL_SEG";
+  else if (t == FAKE_SEG_ID)
+    return out << "FAKE_SEG";
   else
     return out << t;
 }

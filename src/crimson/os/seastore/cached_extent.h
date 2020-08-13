@@ -566,8 +566,13 @@ public:
   bool is_logical() const final {
     return true;
   }
+
+  std::ostream &print_detail(std::ostream &out) const final;
 protected:
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
+  virtual std::ostream &print_detail_l(std::ostream &out) const {
+    return out;
+  }
 
 private:
   laddr_t laddr = L_ADDR_NULL;

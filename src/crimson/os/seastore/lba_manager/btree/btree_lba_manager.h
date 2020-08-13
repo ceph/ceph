@@ -145,7 +145,7 @@ private:
    * Updates mapping, removes if f returns nullopt
    */
   using update_mapping_ertr = ref_ertr;
-  using update_mapping_ret = ref_ertr::future<std::optional<lba_map_val_t>>;
+  using update_mapping_ret = ref_ertr::future<lba_map_val_t>;
   using update_func_t = LBANode::mutate_func_t;
   update_mapping_ret update_mapping(
     Transaction &t,

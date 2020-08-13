@@ -278,6 +278,38 @@ TEST_F(transaction_manager_test_t, mutate)
   });
 }
 
+TEST_F(transaction_manager_test_t, create_remove_same_transaction)
+{
+  constexpr laddr_t SIZE = 4096;
+  run_async([this] {
+    constexpr laddr_t ADDR = 0xFF * SIZE;
+    {
+      auto t = create_transaction();
+      auto extent = alloc_extent(
+	t,
+	ADDR,
+	SIZE,
+	'a');
+      ASSERT_EQ(ADDR, extent->get_laddr());
+      check_mappings(t);
+      dec_ref(t, ADDR);
+      check_mappings(t);
+
+      extent = alloc_extent(
+	t,
+	ADDR,
+	SIZE,
+	'a');
+
+      submit_transaction(std::move(t));
+      check_mappings();
+    }
+    replay();
+    check_mappings();
+  });
+}
+
+
 TEST_F(transaction_manager_test_t, inc_dec_ref)
 {
   constexpr laddr_t SIZE = 4096;

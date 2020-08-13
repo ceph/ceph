@@ -404,15 +404,12 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
   ceph_assert(!at_min_capacity());
   auto mutation_pt = find(laddr);
   if (mutation_pt == end()) {
-    ceph_assert(0 == "should be impossible");
-    return mutate_mapping_ret(
-      mutate_mapping_ertr::ready_future_marker{},
-      std::nullopt);
+    return crimson::ct_error::enoent::make();
   }
 
   auto mutated = f(mutation_pt.get_val());
-  if (mutated) {
-    journal_update(mutation_pt, *mutated, maybe_get_delta_buffer());
+  if (mutated.refcount > 0) {
+    journal_update(mutation_pt, mutated, maybe_get_delta_buffer());
     return mutate_mapping_ret(
       mutate_mapping_ertr::ready_future_marker{},
       mutated);
