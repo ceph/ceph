@@ -164,6 +164,8 @@ class OS(object):
             name = 'sle'
         elif name == 'opensuse-leap':
             name = 'opensuse'
+        elif name == 'opensuse-tumbleweed':
+            name = 'opensuse'
         version = cls._get_value(str_, 'VERSION_ID')
         obj = cls(name=name, version=version)
 
