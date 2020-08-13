@@ -1523,6 +1523,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 	if (phash_diri)
 	  *phash_diri = in;
       } else if (in->auth_cap) {
+	req->send_to_auth = true;
 	mds = in->auth_cap->session->mds_num;
       }
       if (mds >= 0) {
