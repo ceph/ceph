@@ -12,7 +12,7 @@ from teuthology import setup_log_file, install_except_hook
 from teuthology.lock.ops import reimage_many
 from teuthology.misc import get_user
 from teuthology.config import FakeNamespace
-from teuthology.worker import run_with_watchdog, symlink_worker_log
+from teuthology.worker import run_with_watchdog
 from teuthology.job_status import get_status
 import teuthology
 from teuthology.nuke import nuke
@@ -142,8 +142,6 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
         # This sleep() is to give the child time to start up and create the
         # archive dir.
         time.sleep(5)
-        symlink_worker_log(job_config['worker_log'],
-                           job_config['archive_path'])
         p.wait()
 
     if p.returncode != 0:
