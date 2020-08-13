@@ -1234,6 +1234,7 @@ def exec_test():
     global opt_use_ns
     opt_use_ns = False
     opt_brxnet= None
+    opt_verbose = True
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1262,13 +1263,15 @@ def exec_test():
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
                 sys.exit(-1)
             opt_brxnet=f.split('=')[1]
-            try:  
-                IP(opt_brxnet)  
+            try:
+                IP(opt_brxnet)
                 if IP(opt_brxnet).iptype() == 'PUBLIC':
                     raise RuntimeError('is public')
             except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
+        elif '--no-verbose' == f:
+            opt_verbose = False
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1311,10 +1314,16 @@ def exec_test():
         vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
-        args = [os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d",
-                    "--nolockdep"]
+        args = [
+            os.path.join(SRC_PREFIX, "vstart.sh"),
+            "-n",
+            "--nolockdep",
+        ]
         if require_memstore:
             args.append("--memstore")
+
+        if opt_verbose:
+            args.append("-d")
 
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
