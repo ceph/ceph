@@ -82,7 +82,8 @@
     <!-- end search -->
 
     <!-- pagination limit -->
-    <div class="input-group dataTables_paginate">
+    <div class="input-group dataTables_paginate"
+         *ngIf="limit">
       <input class="form-control"
              type="number"
              min="1"
