@@ -163,6 +163,8 @@ class Downburst(object):
         config_fd = tempfile.NamedTemporaryFile(delete=False, mode='wt')
 
         os_type = self.os_type.lower()
+        os_version = self.os_version.lower()
+
         mac_address = self.status['mac_address']
 
         cpus = int(os.environ.get('DOWNBURST_CPUS', 1))
@@ -197,6 +199,12 @@ class Downburst(object):
                 ['passwd', '-d', self.user],
             ]
         }
+        # for opensuse-15.2 we need to replace systemd-logger with rsyslog for teuthology
+        if os_type == 'opensuse' and os_version == '15.2':
+            user_info['runcmd'].extend([
+                ['zypper', 'rm', '-y', 'systemd-logger'],
+                ['zypper', 'in', '-y', 'rsyslog'],
+            ])
         # Install git on downbursted VMs to clone upstream linux-firmware.
         # Issue #17154
         if 'packages' not in user_info:
