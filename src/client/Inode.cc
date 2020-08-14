@@ -214,8 +214,7 @@ int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (const auto &pair : caps) {
-    const Cap &cap = pair.second;
+  for (const auto &[mds, cap] : caps) {
     if (cap_is_valid(cap)) {
       c |= cap.issued;
       i |= cap.implemented;
@@ -305,22 +304,18 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 int Inode::caps_used()
 {
   int w = 0;
-  for (map<int,int>::iterator p = cap_refs.begin();
-       p != cap_refs.end();
-       ++p)
-    if (p->second)
-      w |= p->first;
+  for (const auto &[cap, cnt] : cap_refs)
+    if (cnt)
+      w |= cap;
   return w;
 }
 
 int Inode::caps_file_wanted()
 {
   int want = 0;
-  for (map<int,int>::iterator p = open_by_mode.begin();
-       p != open_by_mode.end();
-       ++p)
-    if (p->second)
-      want |= ceph_caps_for_mode(p->first);
+  for (const auto &[mode, cnt] : open_by_mode)
+    if (cnt)
+      want |= ceph_caps_for_mode(mode);
   return want;
 }
 
