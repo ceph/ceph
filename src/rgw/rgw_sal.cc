@@ -162,7 +162,7 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     return ret;
   }
   Span span_5 = child_span("rgw_bucket.cc : RGWBucketCtl::unlink_bucket", span_1);
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false);
+  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false, span_1);
   finish_trace(span_5);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;

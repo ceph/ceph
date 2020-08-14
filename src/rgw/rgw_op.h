@@ -229,9 +229,9 @@ public:
    * Filter can modify content of bl.
    * When bl_len == 0 , it means 'flush
    */
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override {
     if (next) {
-      return next->handle_data(bl, bl_ofs, bl_len);
+      return next->handle_data(bl, bl_ofs, bl_len, parent_span);
     }
     return 0;
   }
@@ -379,8 +379,8 @@ public:
   explicit RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
   ~RGWGetObj_CB() override {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
-    return op->get_data_cb(bl, bl_ofs, bl_len);
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override {
+    return op->get_data_cb(bl, bl_ofs, bl_len, parent_span);
   }
 };
 

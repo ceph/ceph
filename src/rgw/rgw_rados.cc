@@ -6469,17 +6469,17 @@ struct get_obj_data {
 
 static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                off_t read_ofs, off_t len, bool is_head_obj,
-                               RGWObjState *astate, void *arg)
+                               RGWObjState *astate, void *arg, const Span& parent_span)
 {
   struct get_obj_data *d = (struct get_obj_data *)arg;
 
   return d->store->get_obj_iterate_cb(read_obj, obj_ofs, read_ofs, len,
-                                      is_head_obj, astate, arg);
+                                      is_head_obj, astate, arg, parent_span);
 }
 
 int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                  off_t read_ofs, off_t len, bool is_head_obj,
-                                 RGWObjState *astate, void *arg)
+                                 RGWObjState *astate, void *arg, const Span& parent_span)
 {
   ObjectReadOperation op;
   struct get_obj_data *d = (struct get_obj_data *)arg;
@@ -6495,7 +6495,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
         obj_ofs < astate->data.length()) {
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
 
-      r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
+      r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len, parent_span);
       if (r < 0)
         return r;
 
@@ -6545,7 +6545,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
 
   Span span_2 = child_span("rgw_rados.cc : RGWRados::iterate", span_1);
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
-                             ofs, end, chunk_size, _get_obj_iterate_cb, &data, y);
+                             ofs, end, chunk_size, _get_obj_iterate_cb, &data, y, span_1);
   finish_trace(span_2);
   if (r < 0) {
     ldout(cct, 0) << "iterate_obj() failed with " << r << dendl;
@@ -6559,7 +6559,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
 int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
                           const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                           off_t ofs, off_t end, uint64_t max_chunk_size,
-                          iterate_obj_cb cb, void *arg, optional_yield y)
+                          iterate_obj_cb cb, void *arg, optional_yield y, const Span& parent_span)
 {
   rgw_raw_obj head_obj;
   rgw_raw_obj read_obj;
@@ -6600,7 +6600,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
         }
 
         reading_from_head = (read_obj == head_obj);
-        r = cb(read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg);
+        r = cb(read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg, parent_span);
 	if (r < 0) {
 	  return r;
         }
@@ -6614,7 +6614,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       read_obj = head_obj;
       uint64_t read_len = std::min(len, max_chunk_size);
 
-      r = cb(read_obj, ofs, ofs, read_len, reading_from_head, astate, arg);
+      r = cb(read_obj, ofs, ofs, read_len, reading_from_head, astate, arg, parent_span);
       if (r < 0) {
 	return r;
       }

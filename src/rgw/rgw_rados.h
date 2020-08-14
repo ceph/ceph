@@ -146,7 +146,7 @@ struct RGWUsageIter {
 
 class RGWGetDataCB {
 public:
-  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
+  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) = 0;
   RGWGetDataCB() {}
   virtual ~RGWGetDataCB() {}
 };
@@ -1254,16 +1254,16 @@ public:
   }
 
   using iterate_obj_cb = int (*)(const rgw_raw_obj&, off_t, off_t,
-                                 off_t, bool, RGWObjState*, void*);
+                                 off_t, bool, RGWObjState*, void*, const Span& parent_span);
 
   int iterate_obj(RGWObjectCtx& ctx, const RGWBucketInfo& bucket_info,
                   const rgw_obj& obj, off_t ofs, off_t end,
                   uint64_t max_chunk_size, iterate_obj_cb cb, void *arg,
-                  optional_yield y);
+                  optional_yield y, const Span& parent_span = nullptr);
 
   int get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                          off_t read_ofs, off_t len, bool is_head_obj,
-                         RGWObjState *astate, void *arg);
+                         RGWObjState *astate, void *arg, const Span& parent_span = nullptr);
 
   void get_obj_aio_completion_cb(librados::completion_t cb, void *arg);
 

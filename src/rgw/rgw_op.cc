@@ -3387,10 +3387,8 @@ void RGWCreateBucket::execute(const Span& parent_span)
     }
   }
 
-  Span span_3 = child_span("rgw_bucket.cc : RGWBucketCtl::link_bucket", span);
   op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_bi(),
-                                          s->bucket->get_creation_time(), s->yield, false);
-  finish_trace(span_3);
+                                          s->bucket->get_creation_time(), s->yield, false, nullptr, span);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
     Span span_4 = child_span("rgw_bucket.cc : RGWBucketCtl::unlink_bucket", span);
@@ -3702,8 +3700,8 @@ public:
   explicit RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
   ~RGWPutObj_CB() override {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
-    return op->get_data_cb(bl, bl_ofs, bl_len);
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span) override {
+    return op->get_data_cb(bl, bl_ofs, bl_len, parent_span);
   }
 };
 

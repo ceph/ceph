@@ -112,7 +112,7 @@ public:
                           off_t& bl_end) override;
   virtual int handle_data(bufferlist& bl,
                           off_t bl_ofs,
-                          off_t bl_len) override;
+                          off_t bl_len, const Span& parent_span = nullptr) override;
   virtual int flush() override;
 
   int read_manifest(bufferlist& manifest_bl);

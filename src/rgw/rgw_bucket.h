@@ -867,12 +867,12 @@ public:
                   ceph::real_time creation_time,
 		  optional_yield y,
                   bool update_entrypoint = true,
-                  rgw_ep_info *pinfo = nullptr);
+                  rgw_ep_info *pinfo = nullptr, const Span& parent_span = nullptr);
 
   int unlink_bucket(const rgw_user& user_id,
                     const rgw_bucket& bucket,
 		    optional_yield y,
-                    bool update_entrypoint = true);
+                    bool update_entrypoint = true, const Span& parent_span = nullptr);
 
   int chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
             const rgw_user& user_id, const std::string& display_name,
@@ -928,13 +928,13 @@ private:
                      ceph::real_time creation_time,
 		     optional_yield y,
                      bool update_entrypoint,
-                     rgw_ep_info *pinfo);
+                     rgw_ep_info *pinfo, const Span& parent_span = nullptr);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
 		       optional_yield y,
-                       bool update_entrypoint);
+                       bool update_entrypoint, const Span& parent_span = nullptr);
 
 };
 

@@ -3403,11 +3403,11 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               ceph::real_time creation_time,
 			      optional_yield y,
                               bool update_entrypoint,
-                              rgw_ep_info *pinfo)
+                              rgw_ep_info *pinfo, const Span& parent_span)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return do_link_bucket(ctx, user_id, bucket, creation_time, y,
-                          update_entrypoint, pinfo);
+                          update_entrypoint, pinfo, parent_span);
   });
 }
 
@@ -3417,8 +3417,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                  ceph::real_time creation_time,
 				 optional_yield y,
                                  bool update_entrypoint,
-                                 rgw_ep_info *pinfo)
+                                 rgw_ep_info *pinfo, const Span& parent_span)
 {
+  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
   int ret;
 
   RGWBucketEntryPoint ep;
@@ -3433,11 +3434,13 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
       ep = pinfo->ep;
       pattrs = &pinfo->attrs;
     } else {
+      Span span_1 = child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span);
       ret = svc.bucket->read_bucket_entrypoint_info(ctx,
                                                     meta_key,
                                                     &ep, &rot,
                                                     nullptr, &attrs,
                                                     y);
+      finish_trace(span_1);
       if (ret < 0 && ret != -ENOENT) {
         ldout(cct, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
@@ -3445,8 +3448,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
       pattrs = &attrs;
     }
   }
-
+  Span span_2 = child_span("rgw_user.cc : RGWUserCtl::add_bucket", span);
   ret = ctl.user->add_bucket(user_id, bucket, creation_time);
+  finish_trace(span_2);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -3463,14 +3467,14 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   ep.owner = user_id;
   ep.bucket = bucket;
   ret = svc.bucket->store_bucket_entrypoint_info(
-    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y);
+    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y, span);
   if (ret < 0)
     goto done_err;
 
   return 0;
 
 done_err:
-  int r = do_unlink_bucket(ctx, user_id, bucket, y, true);
+  int r = do_unlink_bucket(ctx, user_id, bucket, y, true, span);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed unlinking bucket on error cleanup: "
                            << cpp_strerror(-r) << dendl;
@@ -3478,10 +3482,10 @@ done_err:
   return ret;
 }
 
-int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint)
+int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint, const Span& parent_span)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, y, update_entrypoint);
+    return do_unlink_bucket(ctx, user_id, bucket, y, update_entrypoint, parent_span);
   });
 }
 
@@ -3489,9 +3493,12 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                    const rgw_user& user_id,
                                    const rgw_bucket& bucket,
 				   optional_yield y,
-                                   bool update_entrypoint)
+                                   bool update_entrypoint, const Span& parent_span)
 {
+  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  Span span_1 = child_span("rgw_user.cc : RGWUserCtl::remove_bucket", span);
   int ret = ctl.user->remove_bucket(user_id, bucket);
+  finish_trace(span_1);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3504,7 +3511,9 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
   string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
+  Span span_2 = child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span);
   ret = svc.bucket->read_bucket_entrypoint_info(ctx, meta_key, &ep, &ot, nullptr, &attrs, y);
+  finish_trace(span_2);
   if (ret == -ENOENT)
     return 0;
   if (ret < 0)
@@ -3519,7 +3528,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   }
 
   ep.linked = false;
-  return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y);
+  return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y, span);
 }
 
 int RGWBucketCtl::set_acl(ACLOwner& owner, rgw_bucket& bucket,
