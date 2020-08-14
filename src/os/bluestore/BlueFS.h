@@ -21,6 +21,8 @@ class Allocator;
 
 enum {
   l_bluefs_first = 732600,
+  l_bluefs_gift_bytes,
+  l_bluefs_reclaim_bytes,
   l_bluefs_db_total_bytes,
   l_bluefs_db_used_bytes,
   l_bluefs_wal_total_bytes,
@@ -51,6 +53,25 @@ enum {
   l_bluefs_read_prefetch_bytes,
 
   l_bluefs_last,
+};
+
+class BlueFSDeviceExpander {
+protected:
+  ~BlueFSDeviceExpander() {}
+public:
+  virtual uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
+    uint64_t bluefs_total) = 0;
+  virtual int allocate_freespace(
+    uint64_t min_size,
+    uint64_t size,
+    PExtentVector& extents) = 0;
+  /** Reports amount of space that can be transferred to BlueFS.
+   * This gives either current state, when alloc_size is currently used
+   * BlueFS's size, or simulation when alloc_size is different.
+   * @params
+   * alloc_size - allocation unit size to check
+   */
+  virtual uint64_t available_freespace(uint64_t alloc_size) = 0;
 };
 
 class BlueFSVolumeSelector {
@@ -308,11 +329,8 @@ private:
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
+  BlueFSDeviceExpander* slow_dev_expander = nullptr;
   std::unique_ptr<BlueFSVolumeSelector> vselector;
-  bool need_shared_alloc_init = false;
-  Allocator* shared_bdev_alloc = nullptr;
-  std::atomic<uint64_t> shared_bdev_used = 0;
-
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -333,6 +351,7 @@ private:
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
   }
   const char* get_device_name(unsigned id);
+  int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
   int _allocate_without_fallback(uint8_t id, uint64_t len,
@@ -420,8 +439,8 @@ private:
     return 4096;
   }
 
-  void _add_block_extent(bool create, unsigned bdev, uint64_t offset,
-			 uint64_t len, bool skip=false);
+  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                         bool skip=false);
 
 public:
   BlueFS(CephContext* cct);
@@ -457,8 +476,7 @@ public:
   uint64_t get_used();
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
-  uint64_t get_used(unsigned id);
-  void get_usage(std::vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
+  void get_usage(std::vector<std::pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
   void dump_perf_counters(ceph::Formatter *f);
 
   void dump_block_extents(std::ostream& out);
@@ -507,6 +525,9 @@ public:
   /// test and compact log, if necessary
   void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
 
+  void set_slow_device_expander(BlueFSDeviceExpander* a) {
+    slow_dev_expander = a;
+  }
   void set_volume_selector(BlueFSVolumeSelector* s) {
     vselector.reset(s);
   }
@@ -519,19 +540,22 @@ public:
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
-		       bool shared_with_bluestore = false,
-                       Allocator* shared_bdev_alloc = nullptr);
+		       bool shared_with_bluestore=false);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
-  void add_block_extent(bool create, unsigned bdev, uint64_t offset, uint64_t len,
+  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
                         bool skip=false) {
     std::unique_lock l(lock);
-    _add_block_extent(create, bdev, offset, len, skip);
+    _add_block_extent(bdev, offset, len, skip);
     int r = _flush_and_sync_log(l);
     ceph_assert(r == 0);
   }
+
+  /// reclaim block space
+  int reclaim_blocks(unsigned bdev, uint64_t want,
+		     PExtentVector *extents);
 
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);

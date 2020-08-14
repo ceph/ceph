@@ -91,7 +91,7 @@ TEST(BlueFS, mkfs) {
   uuid_d fsid;
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
 }
 
@@ -100,7 +100,7 @@ TEST(BlueFS, mkfs_mount) {
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -117,7 +117,7 @@ TEST(BlueFS, mkfs_mount_duplicate_gift) {
   {
     BlueFS fs(g_ceph_context);
     ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-    fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+    fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
     uuid_d fsid;
     ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
     ASSERT_EQ(0, fs.mount());
@@ -177,7 +177,7 @@ TEST(BlueFS, write_read) {
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -208,7 +208,7 @@ TEST(BlueFS, small_appends) {
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -246,7 +246,7 @@ TEST(BlueFS, very_large_write) {
   uint64_t total_written = 0;
 
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -432,7 +432,7 @@ TEST(BlueFS, test_flush_1) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -467,7 +467,7 @@ TEST(BlueFS, test_flush_2) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -495,7 +495,7 @@ TEST(BlueFS, test_flush_3) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -529,7 +529,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -582,7 +582,7 @@ TEST(BlueFS, test_simple_compaction_async) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -638,7 +638,7 @@ TEST(BlueFS, test_compaction_sync) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -676,7 +676,7 @@ TEST(BlueFS, test_compaction_async) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -714,7 +714,7 @@ TEST(BlueFS, test_replay) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
@@ -760,7 +760,7 @@ TEST(BlueFS, test_replay_growth) {
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
-  fs.add_block_extent(true, BlueFS::BDEV_DB, 1048576, size - 1048576);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());

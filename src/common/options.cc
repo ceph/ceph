@@ -4069,10 +4069,48 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_CREATE)
     .set_description("Mirror bluefs data to file system for testing/validation"),
 
+    Option("bluestore_bluefs_min", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(1_G)
+    .set_description("minimum disk space allocated to BlueFS (e.g., at mkfs)"),
+
+    Option("bluestore_bluefs_min_free", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(1_G)
+    .set_description("minimum free space allocated to BlueFS"),
+
+    Option("bluestore_bluefs_max_free", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(10_G)
+    .set_description("Maximum free space allocated to BlueFS"),
+
+    Option("bluestore_bluefs_min_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.02)
+    .set_description("Minimum fraction of free space devoted to BlueFS"),
+
+    Option("bluestore_bluefs_max_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.90)
+    .set_description("Maximum fraction of free storage devoted to BlueFS"),
+
+    Option("bluestore_bluefs_gift_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.02)
+    .set_description("Maximum fraction of free space to give to BlueFS at once"),
+
+    Option("bluestore_bluefs_reclaim_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.20)
+    .set_description("Maximum fraction of free space to reclaim from BlueFS at once"),
+
+    Option("bluestore_bluefs_balance_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("How frequently (in seconds) to balance free space between BlueFS and BlueStore"),
+
     Option("bluestore_bluefs_alloc_failure_dump_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("How frequently (in seconds) to dump allocator on"
       "BlueFS space allocation failure"),
+
+    Option("bluestore_bluefs_db_compatibility", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("Sync db with legacy bluefs extents info")
+    .set_long_description("Enforces db sync with legacy bluefs extents information on close."
+                          " Enables downgrades to pre-nautilus releases"),
 
     Option("bluestore_spdk_mem", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(512)
