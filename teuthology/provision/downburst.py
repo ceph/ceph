@@ -249,20 +249,22 @@ def get_distro_from_downburst():
     or if downburst is unable to produce a json list, then use a default
     table.
     """
-    default_table = {u'rhel_minimal': [u'6.4', u'6.5'],
-                     u'fedora': [u'17', u'18', u'19', u'20', u'22'],
-                     u'centos': [u'6.3', u'6.4', u'6.5', u'7.0',
-				 u'7.2'],
-                     u'centos_minimal': [u'6.4', u'6.5'],
-                     u'ubuntu': [u'8.04(hardy)', u'9.10(karmic)',
-                                 u'10.04(lucid)', u'10.10(maverick)',
-                                 u'11.04(natty)', u'11.10(oneiric)',
-                                 u'12.04(precise)', u'12.10(quantal)',
-                                 u'13.04(raring)', u'13.10(saucy)',
-                                 u'14.04(trusty)', u'utopic(utopic)',
-                                 u'16.04(xenial)'],
-                     u'sles': [u'11-sp2'],
-                     u'debian': [u'6.0', u'7.0', u'8.0']}
+    default_table = {'rhel_minimal': ['6.4', '6.5'],
+                     'fedora': ['17', '18', '19', '20', '22'],
+                     'centos': ['6.3', '6.4', '6.5', '7.0',
+				 '7.2', '7.4', '8.2'],
+                     'centos_minimal': ['6.4', '6.5'],
+                     'ubuntu': ['8.04(hardy)', '9.10(karmic)',
+                                 '10.04(lucid)', '10.10(maverick)',
+                                 '11.04(natty)', '11.10(oneiric)',
+                                 '12.04(precise)', '12.10(quantal)',
+                                 '13.04(raring)', '13.10(saucy)',
+                                 '14.04(trusty)', 'utopic(utopic)',
+                                 '16.04(xenial)', '18.04(bionic)',
+                                 '20.04(focal)'],
+                     'sles': ['12-sp3', '15-sp1', '15-sp2'],
+                     'opensuse': ['12.3', '15.1', '15.2'],
+                     'debian': ['6.0', '7.0', '8.0']}
     executable_cmd = downburst_executable()
     if not executable_cmd:
         log.warn("Downburst not found!")
