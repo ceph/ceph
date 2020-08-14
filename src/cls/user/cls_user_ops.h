@@ -34,6 +34,31 @@ struct cls_user_set_buckets_op {
 };
 WRITE_CLASS_ENCODER(cls_user_set_buckets_op)
 
+struct cls_user_init_bucket_count_op {
+  int calculated_bucket_count;
+  int current_bucket_count;
+
+  cls_user_init_bucket_count_op() : calculated_bucket_count(0) {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(calculated_bucket_count, bl);
+    encode(current_bucket_count, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(calculated_bucket_count, bl);
+    decode(current_bucket_count, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_init_bucket_count_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_init_bucket_count_op)
+
 struct cls_user_remove_bucket_op {
   cls_user_bucket bucket;
 

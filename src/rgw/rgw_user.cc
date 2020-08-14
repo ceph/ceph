@@ -2865,6 +2865,22 @@ int RGWUserCtl::reset_stats(const rgw_user& user)
   });
 }
 
+int RGWUserCtl::get_user_buckets_header(const rgw_user& user,
+					cls_user_header& header)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->get_user_buckets_header(op->ctx(), user, header);
+  });
+}
+
+int RGWUserCtl::init_user_bucket_count(const rgw_user& user,
+				      const int bucket_count)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->init_user_bucket_count(op->ctx(), user, bucket_count);
+  });
+}
+
 int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats,
 			   ceph::real_time *last_stats_sync,
 			   ceph::real_time *last_stats_update)

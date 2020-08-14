@@ -878,6 +878,51 @@ int RGWSI_User_RADOS::cls_user_get_header_async(const string& user_str, RGWGetUs
   return 0;
 }
 
+int RGWSI_User_RADOS::get_user_buckets_header(RGWSI_MetaBackend::Context *ctx,
+					      const rgw_user& user,
+					      cls_user_header& header)
+{
+  string user_str = user.to_str();
+  int r = cls_user_get_header(rgw_user(user_str), &header);
+ 
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWSI_User_RADOS::init_user_bucket_count(RGWSI_MetaBackend::Context *ctx,
+					    const rgw_user& user,
+					    const int bucket_count)
+{
+  string user_str = user.to_str();
+  int current_bucket_count;
+  cls_user_header header;
+  rgw_raw_obj obj = get_buckets_obj(user);
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+
+  r = cls_user_get_header(rgw_user(user_str), &header);
+  if (r < 0) {
+    current_bucket_count = -1;
+  } else {
+    current_bucket_count = header.get_bucket_count();
+  }
+
+  librados::ObjectWriteOperation op;
+  cls_user_init_bucket_count(op, bucket_count, current_bucket_count);
+  r = rados_obj.operate(&op, null_yield);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
                                  const rgw_user& user, RGWStorageStats *stats,
                                  ceph::real_time *last_stats_sync,

@@ -58,7 +58,6 @@
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
-
 #include "include/ceph_assert.h"
 
 #include "compressor/Compressor.h"
@@ -2834,6 +2833,7 @@ int RGWGetBucketLocation::verify_permission()
 
 int RGWCreateBucket::verify_permission()
 {
+  int bucket_count;
   /* This check is mostly needed for S3 that doesn't support account ACL.
    * Swift doesn't allow to delegate any permission to an anonymous user,
    * so it will become an early exit in such case. */
@@ -2865,16 +2865,52 @@ int RGWCreateBucket::verify_permission()
   }
 
   if (s->user->get_max_buckets()) {
-    rgw::sal::RGWBucketList buckets;
-    string marker;
-    op_ret = rgw_read_user_buckets(store, s->user->get_id(), buckets,
-				   marker, string(), s->user->get_max_buckets(),
-				   false);
-    if (op_ret < 0) {
-      return op_ret;
+    cls_user_header header;
+    string uid_str = s->user->get_id().to_str();
+
+    op_ret = store->ctl()->user->get_user_buckets_header(rgw_user(uid_str), header);
+    if (op_ret < 0 ||
+	!header.is_bucket_count_init() ||
+	header.get_bucket_count() < 0) {
+      rgw::sal::RGWBucketList buckets;
+      const size_t max_entries = s->cct->_conf->rgw_list_buckets_max_chunk;
+      std::string marker;
+      const std::string empty_end_marker;
+      constexpr bool no_need_stats = false;
+
+      ldpp_dout(this, 10) << "calculating bucket count by listing user buckets"<< dendl;
+      do {
+	int ret = s->user->list_buckets(marker, empty_end_marker, max_entries,
+					no_need_stats, buckets);
+	if (ret < 0) {
+	  return ret;
+	}
+	const std::string* marker_cursor = nullptr;
+	map<string, std::unique_ptr<rgw::sal::RGWBucket>>& m = buckets.get_buckets();
+
+	for (const auto& i : m) {
+	  const std::string& obj_name = i.first;
+	  marker_cursor = &obj_name;
+	} // for loop
+	if (marker_cursor) {
+	  marker = *marker_cursor;
+	}
+      } while (buckets.is_truncated());
+
+      bucket_count = (int)buckets.count();
+
+      op_ret = store->ctl()->user->init_user_bucket_count(rgw_user(uid_str), (int32_t)bucket_count);
+      if (op_ret < 0 && op_ret == -ECANCELED) {
+	ldpp_dout(this, 0) << "WARNING: failed to set bucket count: ret= " << op_ret
+			    << ", will be retried" << dendl;
+      } else {
+	ldpp_dout(this, 5) << "setting bucket count to " << bucket_count << dendl;
+      }
+    } else {
+      bucket_count = header.get_bucket_count();
     }
 
-    if ((int)buckets.count() >= s->user->get_max_buckets()) {
+    if (bucket_count >= s->user->get_max_buckets()) {
       return -ERR_TOO_MANY_BUCKETS;
     }
   }
@@ -3051,7 +3087,6 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
     ws_conf.listing_enabled = boost::algorithm::iequals(lstval, "true");
   }
 }
-
 
 void RGWCreateBucket::execute()
 {

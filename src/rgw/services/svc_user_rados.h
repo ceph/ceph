@@ -119,6 +119,14 @@ public:
     return be_handler;
   }
 
+  int get_user_buckets_header(RGWSI_MetaBackend::Context *ctx,
+			      const rgw_user& user,
+			      cls_user_header& header) override;
+			      
+  int init_user_bucket_count(RGWSI_MetaBackend::Context *ctx,
+			    const rgw_user& user,
+			    const int bucket_count) override;
+
   int read_user_info(RGWSI_MetaBackend::Context *ctx,
                      const rgw_user& user,
                      RGWUserInfo *info,

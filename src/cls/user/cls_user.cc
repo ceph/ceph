@@ -151,6 +151,8 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
      entry = update_entry;
 
      ret = 0;
+     header.inc_bucket_count();
+     CLS_LOG(20, "header: bucket_count= %d", header.get_bucket_count());
     } else if (op.add) {
       // bucket id may have changed (ie reshard)
       entry.bucket.bucket_id = update_entry.bucket.bucket_id;
@@ -192,6 +194,48 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   encode(header, bl);
   
+  ret = cls_cxx_map_write_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+static int cls_user_init_bucket_count(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  auto in_iter = in->cbegin();
+
+  cls_user_init_bucket_count_op op;
+  try {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_user_init_bucket_count_op(): failed to decode op");
+    return -EINVAL;
+  }
+
+  cls_user_header header;
+
+  int ret = read_header(hctx, &header);
+  if (ret < 0)
+    return ret;
+
+  if (op.calculated_bucket_count < 0)
+    return ret;
+
+  if (op.current_bucket_count > 0 &&
+      header.get_bucket_count() > 0 &&
+      (header.get_bucket_count() != op.current_bucket_count)) {
+    CLS_LOG(1, "ERROR: cls_user_init_bucket_count_op(): detected race condition");
+    header.uninit_bucket_count();
+    return -ECANCELED;
+  }
+
+  header.set_bucket_count(op.calculated_bucket_count);
+
+  bufferlist bl;
+
+  encode(header, bl);
+
   ret = cls_cxx_map_write_header(hctx, &bl);
   if (ret < 0)
     return ret;
@@ -274,6 +318,8 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   if (!entry.user_stats_sync) {
     return 0;
   }
+
+  header.dec_bucket_count();
 
   dec_header_stats(&header.stats, entry);
 
@@ -504,6 +550,7 @@ CLS_INIT(user)
 
   cls_handle_t h_class;
   cls_method_handle_t h_user_set_buckets_info;
+  cls_method_handle_t h_user_init_bucket_count;
   cls_method_handle_t h_user_complete_stats_sync;
   cls_method_handle_t h_user_remove_bucket;
   cls_method_handle_t h_user_list_buckets;
@@ -516,6 +563,8 @@ CLS_INIT(user)
   /* log */
   cls_register_cxx_method(h_class, "set_buckets_info", CLS_METHOD_RD | CLS_METHOD_WR,
                           cls_user_set_buckets_info, &h_user_set_buckets_info);
+  cls_register_cxx_method(h_class, "init_bucket_count", CLS_METHOD_RD | CLS_METHOD_WR,
+                          cls_user_init_bucket_count, &h_user_init_bucket_count);
   cls_register_cxx_method(h_class, "complete_stats_sync", CLS_METHOD_RD | CLS_METHOD_WR,
                           cls_user_complete_stats_sync, &h_user_complete_stats_sync);
   cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);

@@ -968,6 +968,10 @@ public:
                          const RGWBucketEnt& ent);
   int complete_flush_stats(const rgw_user& user);
   int reset_stats(const rgw_user& user);
+  int get_user_buckets_header(const rgw_user& user,
+			      cls_user_header& header);
+  int init_user_bucket_count(const rgw_user& user,
+			    const int bucket_count);
   int read_stats(const rgw_user& user, RGWStorageStats *stats,
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */

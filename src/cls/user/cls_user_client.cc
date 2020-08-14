@@ -27,6 +27,16 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
   op.exec("user", "set_buckets_info", in);
 }
 
+void cls_user_init_bucket_count(librados::ObjectWriteOperation& op, int calculated_bucket_count, int current_bucket_count)
+{
+  bufferlist in;
+  cls_user_init_bucket_count_op call;
+  call.calculated_bucket_count = calculated_bucket_count;
+  call.current_bucket_count = current_bucket_count;
+  encode(call, in);
+  op.exec("user", "init_bucket_count", in);
+}
+
 void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op)
 {
   bufferlist in;

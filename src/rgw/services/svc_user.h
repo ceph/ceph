@@ -105,6 +105,14 @@ public:
 				   const rgw_user& user) = 0;
   virtual int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
 				 const rgw_user& user) = 0;
+
+  virtual int get_user_buckets_header(RGWSI_MetaBackend::Context *ctx,
+				      const rgw_user& user,
+				      cls_user_header& header) = 0;
+  virtual int init_user_bucket_count(RGWSI_MetaBackend::Context *ctx,
+				    const rgw_user& user,
+				    const int bucket_count) = 0;
+
   virtual int read_stats(RGWSI_MetaBackend::Context *ctx,
 			 const rgw_user& user, RGWStorageStats *stats,
 			 ceph::real_time *last_stats_sync,         /* last time a full stats sync completed */

@@ -192,23 +192,52 @@ WRITE_CLASS_ENCODER(cls_user_stats)
  * this needs to be compatible with rgw_bucket, as it replaces it
  */
 struct cls_user_header {
+  std::optional<int> bucket_count;
   cls_user_stats stats;
   ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
   ceph::real_time last_stats_update;   /* last time a stats update was done */
 
   void encode(ceph::buffer::list& bl) const {
-     ENCODE_START(1, 1, bl);
+     ENCODE_START(2, 1, bl);
     encode(stats, bl);
     encode(last_stats_sync, bl);
     encode(last_stats_update, bl);
+    encode(bucket_count, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(stats, bl);
     decode(last_stats_sync, bl);
     decode(last_stats_update, bl);
+    if (struct_v >= 2) {
+      decode(bucket_count, bl);
+    }
     DECODE_FINISH(bl);
+  }
+
+  bool is_bucket_count_init() {
+    return bucket_count != std::nullopt;
+  }
+
+  void uninit_bucket_count() {
+    bucket_count = std::nullopt;
+  }
+
+  void inc_bucket_count() {
+    (*bucket_count)++;
+  }
+
+  void dec_bucket_count() {
+    (*bucket_count)--;
+  }
+
+  void set_bucket_count(int count) {
+    bucket_count = count;
+  }
+
+  int get_bucket_count() {
+    return bucket_count.has_value() ? bucket_count.value() : -1;
   }
 
   void dump(ceph::Formatter *f) const;
