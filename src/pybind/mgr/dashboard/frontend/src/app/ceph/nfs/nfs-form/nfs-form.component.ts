@@ -127,7 +127,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   getData(promises: Observable<any>[]) {
     forkJoin(promises).subscribe((data: any[]) => {
       this.resolveDaemons(data[0]);
-      this.resolvefsals(data[1]);
+      this.resolveFsals(data[1]);
       this.resolveClients(data[2]);
       this.resolveFilesystems(data[3]);
       if (data[4]) {
@@ -282,7 +282,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
-  resolvefsals(res: string[]) {
+  resolveFsals(res: string[]) {
     res.forEach((fsal) => {
       const fsalItem = this.nfsService.nfsFsal.find((currentFsalItem) => {
         return fsal === currentFsalItem.value;

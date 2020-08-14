@@ -57,7 +57,7 @@
               class="form-control custom-select"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
-        <option *ngFor="let prio of prioritys"
+        <option *ngFor="let prio of priorities"
                 [value]="prio.value">{{ prio.name }}</option>
       </select>
     </div>

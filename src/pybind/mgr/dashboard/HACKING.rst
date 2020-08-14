@@ -262,7 +262,7 @@ Build the Code Documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Run ``npm run doc-build`` to generate code docs in the ``documentation/``
-directory. To make them accesible locally for a web browser, run
+directory. To make them accessible locally for a web browser, run
 ``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
 With ``npm run compodoc -- <opts>`` you may
 `fully configure it <https://compodoc.app/guides/usage.html>`_.
@@ -296,7 +296,7 @@ adjust a custom SCSS class.
 
 To get the current version of Bootstrap used inside Ceph please refer to the ``package.json`` and search for:
 
-- ``bootstrap``: For the Boostrap version used.
+- ``bootstrap``: For the Bootstrap version used.
 - ``@ng-bootstrap``: For the version of the Angular bindings which we are using.
 
 So for the future please do the following when visiting a component:
@@ -608,7 +608,7 @@ created during a test and the pool and its properties should be displayed in the
 Angular Unit Tests:
 
 Unit tests, as the name suggests, are tests for smaller units of the code.
-Those tests are designed for testing all kinds of Angulars' components (e.g. services, pipes etc.).
+Those tests are designed for testing all kinds of Angular components (e.g. services, pipes etc.).
 They do not require a connection to the backend, hence those tests are independent of it.
 The expected data of the backend is mocked in the frontend and by using this data
 the functionality of the frontend can be tested without having to have real data from the backend.
@@ -854,7 +854,7 @@ To do that, check the settings in the i18n config file
 ``src/pybind/mgr/dashboard/frontend/i18n.config.json``:: and make sure that the
 organization is *ceph*, the project is *ceph-dashboard* and the resource is
 the one you want to pull from and push to e.g. *Master:master*. To find a list
-of avaiable resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
+of available resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
 
 After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend`` and run::
 

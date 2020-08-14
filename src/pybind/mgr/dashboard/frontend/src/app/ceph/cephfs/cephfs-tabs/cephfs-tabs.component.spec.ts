@@ -36,7 +36,7 @@ describe('CephfsTabsComponent', () => {
   const setReload = (sth?: any) => (component['reloadSubscriber'] = sth);
   const mockRunOutside = () => {
     component['subscribeInterval'] = () => {
-      // It's mocked because the rxjs timer subscription ins't called through the use of 'tick'.
+      // It's mocked because the rxjs timer subscription isn't called through the use of 'tick'.
       setReload({
         unsubscribed: false,
         unsubscribe: () => {
