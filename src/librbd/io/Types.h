@@ -100,6 +100,10 @@ enum ObjectDispatchLayer {
 };
 
 enum {
+  OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE            = 1UL << 0
+};
+
+enum {
   OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE      = 1UL << 0,
   OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE = 1UL << 1
 };

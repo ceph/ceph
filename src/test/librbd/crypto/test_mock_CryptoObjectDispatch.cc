@@ -163,8 +163,8 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Read) {
 TEST_F(TestMockCryptoCryptoObjectDispatch, Write) {
   expect_encrypt();
   ASSERT_TRUE(mock_crypto_object_dispatch->write(
-        0, 0, std::move(data), mock_image_ctx->snapc, 0, {}, nullptr, nullptr,
-        &dispatch_result, &on_finish, on_dispatched));
+        0, 0, std::move(data), mock_image_ctx->snapc, 0, 0, std::nullopt, {},
+        nullptr, nullptr, &dispatch_result, &on_finish, on_dispatched));
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_CONTINUE);
   ASSERT_EQ(on_finish, &finished_cond); // not modified
   on_finish->complete(0);

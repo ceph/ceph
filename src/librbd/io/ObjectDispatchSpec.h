@@ -83,12 +83,16 @@ public:
 
   struct WriteRequest : public WriteRequestBase {
     ceph::bufferlist data;
+    int write_flags;
+    std::optional<uint64_t> assert_version;
 
     WriteRequest(uint64_t object_no, uint64_t object_off,
                  ceph::bufferlist&& data, const ::SnapContext& snapc,
+                 int write_flags, std::optional<uint64_t> assert_version,
                  uint64_t journal_tid)
       : WriteRequestBase(object_no, object_off, snapc, journal_tid),
-        data(std::move(data)) {
+        data(std::move(data)), write_flags(write_flags),
+        assert_version(assert_version) {
     }
   };
 
@@ -182,12 +186,14 @@ public:
   static ObjectDispatchSpec* create_write(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags, uint64_t journal_tid,
+      const ::SnapContext &snapc, int op_flags, int write_flags,
+      std::optional<uint64_t> assert_version, uint64_t journal_tid,
       const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   WriteRequest{object_no, object_off,
                                                std::move(data), snapc,
+                                               write_flags, assert_version,
                                                journal_tid},
                                   op_flags, parent_trace, on_finish);
   }
