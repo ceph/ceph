@@ -383,7 +383,8 @@ seastar::future<ObjectRecoveryProgress> ReplicatedRecoveryBackend::build_push_op
     object_stat_sum_t* stat,
     PushOp* pop
   ) {
-  logger().debug("{}", __func__);
+  logger().debug("{} {} @{}",
+		 __func__, recovery_info.soid, recovery_info.version);
   return seastar::do_with(ObjectRecoveryProgress(progress),
 			  object_info_t(),
 			  uint64_t(crimson::common::local_conf()
