@@ -131,13 +131,16 @@ Supported Browsers
 Ceph Dashboard is primarily tested and developed using the following web
 browsers:
 
-+-----------------------------------------------+----------+
-|                    Browser                    | Versions |
-+===============================================+==========+
-| `Chrome <https://www.google.com/chrome/>`_    | 68+      |
-+-----------------------------------------------+----------+
-| `Firefox <https://www.mozilla.org/firefox/>`_ | 61+      |
-+-----------------------------------------------+----------+
++---------------------------------------------------------------+---------------------------------------+
+|                            Browser                            |               Versions                |
++===============================================================+=======================================+
+| `Chrome <https://www.google.com/chrome/>`_ and                | latest 2 major versions               |
+| `Chromium <https://www.chromium.org/>`_ based browsers        |                                       |
++---------------------------------------------------------------+---------------------------------------+
+| `Firefox <https://www.mozilla.org/firefox/>`_                 | latest 2 major versions               |
++---------------------------------------------------------------+---------------------------------------+
+| `Firefox ESR <https://www.mozilla.org/firefox/enterprise/>`_  | latest major version                  |
++---------------------------------------------------------------+---------------------------------------+
 
 While Ceph Dashboard might work in older browsers, we cannot guarantee it and
 recommend you to update your browser to the latest version.
