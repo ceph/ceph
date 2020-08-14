@@ -17,6 +17,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { Task } from '../../../shared/models/task';
+import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../shared/services/modal.service';
@@ -58,6 +59,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   constructor(
     private authStorageService: AuthStorageService,
     private iscsiService: IscsiService,
+    private joinPipe: JoinPipe,
     private taskListService: TaskListService,
     private notAvailablePipe: NotAvailablePipe,
     private modalService: ModalService,
@@ -102,11 +104,13 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       {
         name: $localize`Portals`,
         prop: 'cdPortals',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
         name: $localize`Images`,
         prop: 'cdImages',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
