@@ -4,6 +4,8 @@
 #ifndef CEPH_LIBRBD_CACHE_UTILS_H
 #define CEPH_LIBRBD_CACHE_UTILS_H
 
+#include "acconfig.h"
+
 namespace librbd {
 
 namespace cache {
@@ -15,7 +17,7 @@ bool is_rwl_enabled(T& image_ctx) {
   return image_ctx.config.template get_val<bool>("rbd_rwl_enabled");
 #else
   return false;
-#endif
+#endif // WITH_RBD_RWL
 }
 
 } // namespace util
