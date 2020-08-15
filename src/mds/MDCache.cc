@@ -12621,6 +12621,8 @@ void MDCache::show_subtrees(int dbl, bool force_print)
 
 void MDCache::show_cache()
 {
+  if (!g_conf()->subsys.should_gather<ceph_subsys_mds, 7>())
+    return;
   dout(7) << "show_cache" << dendl;
 
   auto show_func = [this](CInode *in) {
