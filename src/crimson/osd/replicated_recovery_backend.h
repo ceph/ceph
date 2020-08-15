@@ -108,4 +108,18 @@ protected:
   seastar::future<> on_stop() final {
     return seastar::now();
   }
+private:
+  /// read the remaining extents of object to be recovered and fill push_op
+  /// with them
+  ///
+  /// @param oid object being recovered
+  /// @param copy_subset extents we want
+  /// @param offset the offset in object from where we should read
+  /// @return the new offset
+  seastar::future<uint64_t> read_object_for_push_op(
+    const hobject_t& oid,
+    const interval_set<uint64_t>& copy_subset,
+    uint64_t offset,
+    uint64_t max_len,
+    PushOp* push_op);
 };
