@@ -166,7 +166,7 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     return when_all_succeed(
       store->write_meta("ceph_fsid", cluster_fsid.to_string()),
       store->write_meta("whoami", std::to_string(whoami)));
-  }).then([cluster_fsid, this] {
+  }).then_unpack([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
@@ -277,10 +277,10 @@ seastar::future<> OSD::start()
         .then([this, chained_dispatchers]() mutable {
 	  return public_msgr->start(chained_dispatchers);
 	}));
-  }).then([this] {
+  }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
                                      mgrc->start());
-  }).then([this] {
+  }).then_unpack([this] {
     return _add_me_to_crush();
   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
@@ -430,6 +430,8 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<OsdStatusHook>(*this)),
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)));
+  }).then_unpack([] {
+    return seastar::now();
   });
 }
 
@@ -472,6 +474,8 @@ seastar::future<> OSD::stop()
       return when_all_succeed(
 	  public_msgr->shutdown(),
 	  cluster_msgr->shutdown());
+    }).then_unpack([] {
+      return seastar::now();
     }).handle_exception([](auto ep) {
       logger().error("error while stopping osd: {}", ep);
     });

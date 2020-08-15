@@ -500,7 +500,7 @@ void Client::tick()
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
-                                       active_con->renew_rotating_keyring());
+                                       active_con->renew_rotating_keyring()).then_unpack([] {});
     } else {
       return seastar::now();
     }
@@ -796,7 +796,7 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
       logger().info("handle_monmap: renewing tickets");
       return seastar::when_all_succeed(
 	active_con->renew_tickets(),
-	active_con->renew_rotating_keyring()).then([](){
+	active_con->renew_rotating_keyring()).then_unpack([](){
 	  logger().info("handle_mon_map: renewed tickets");
 	});
     } else {
