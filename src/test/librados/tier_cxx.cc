@@ -123,6 +123,8 @@ void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t co
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
     ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+  } else if (fp_algo.empty()) {
+    ioctx.getxattr(foid, CHUNK_REFCOUNT_ATTR, t);
   } else if (!fp_algo.empty()) {
     ceph_assert(0 == "unrecognized fingerprint algorithm");
   }
@@ -4776,6 +4778,123 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
 
   // check chunk's refcount
   check_fp_oid_refcount(cache_ioctx, "bb", 1u, "sha1");
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapIncCount) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk4", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   : [chunk1]          [chunk4]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk2", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]:      
+  // foo head   : [chunk1]          [chunk4]
+ 
+  ioctx.snap_set_read(my_snaps[0]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk2", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]:          [chunk2]
+  // foo head   : [chunk1]          [chunk4]
+  
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk3", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]: [chunk3] [chunk2]
+  // foo head   : [chunk1]          [chunk4]
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]: [chunk3] [chunk2] [chunk4]
+  // foo head   : [chunk1]          [chunk4]
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk1", 1u, "");
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk2", 1u, "");
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk3", 1u, "");
+  sleep(10);
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk4", 1u, "");
+
 }
 
 class LibRadosTwoPoolsECPP : public RadosTestECPP
