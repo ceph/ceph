@@ -1936,6 +1936,24 @@ void ci_ref_test_on_modify(
   }
 }
 
+void ci_ref_test_inc_on_set(
+  object_manifest_t l,
+  object_manifest_t added_set,
+  object_manifest_t g,
+  object_ref_delta_t expected_delta)
+{
+  {
+    object_ref_delta_t delta;
+    added_set.calc_refs_to_inc_on_set(
+      &l,
+      &g,
+      delta);
+    ASSERT_EQ(
+      expected_delta,
+      delta);
+  }
+}
+
 hobject_t mk_hobject(string name)
 {
   return hobject_t(
@@ -2124,6 +2142,54 @@ TEST(chunk_info_test, calc_refs_modify_no_snap) {
     mk_manifest({{0, {0, 1024, "bar"}}, {512, {2048, 1024, "ttt"}}}),
     clean_regions,
     mk_delta({{"bar", -1}, {"ttt", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_inc) {
+  ci_ref_test_inc_on_set(
+    mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{1024, {0, 1024, "bar"}}}),
+    mk_manifest({{4096, {0, 1024, "foo"}}}),
+    mk_delta({{"bar", 1}}));
+}
+
+TEST(chunk_info_test, calc_refs_inc2) {
+  ci_ref_test_inc_on_set(
+    mk_manifest({{512, {0, 1024, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{1024, {0, 1024, "bar"}}, {4096, {0, 1024, "bbb"}}}),
+    mk_manifest({{512, {0, 1024, "foo"}}}),
+    mk_delta({{"bar", 1}, {"bbb", 1}}));
+}
+
+TEST(chunk_info_test, calc_refs_inc_no_l) {
+  ci_ref_test_inc_on_set(
+    mk_manifest({}),
+    mk_manifest({{1024, {0, 1024, "bar"}}, {4096, {0, 1024, "bbb"}}}),
+    mk_manifest({{512, {0, 1024, "foo"}}}),
+    mk_delta({{"bar", 1}, {"bbb", 1}}));
+}
+
+TEST(chunk_info_test, calc_refs_inc_no_g) {
+  ci_ref_test_inc_on_set(
+    mk_manifest({{512, {0, 1024, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{1024, {0, 1024, "bar"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({}),
+    mk_delta({{"bar", 1}}));
+}
+
+TEST(chunk_info_test, calc_refs_inc_match_g_l) {
+  ci_ref_test_inc_on_set(
+    mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_delta({{"aaa", -1}, {"foo", -1}}));
+}
+
+TEST(chunk_info_test, calc_refs_inc_match) {
+  ci_ref_test_inc_on_set(
+    mk_manifest({{256, {0, 256, "bbb"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "foo"}}}),
+    mk_manifest({{256, {0, 256, "aaa"}}, {4096, {0, 1024, "ccc"}}}),
+    mk_delta({}));
 }
 
 /*

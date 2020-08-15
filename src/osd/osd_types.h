@@ -5464,6 +5464,9 @@ public:
   bool is_empty() {
     return ref_delta.empty();
   }
+  uint64_t size() {
+    return ref_delta.size();
+  }
   friend std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci);
 };
 
@@ -5580,13 +5583,30 @@ struct object_manifest_t {
   }
 
   /**
+   * calc_refs_to_inc_on_set
+   *
+   * Takes a manifest and returns the set of refs to
+   * increment upon set-chunk
+   *
+   * l should be nullptr if there are no clones, or 
+   * l and g may each be null if the corresponding clone does not exist.
+   * *this contains the set of new references to set
+   *
+   */
+  void calc_refs_to_inc_on_set(
+    const object_manifest_t* g, ///< [in] manifest for clone > *this
+    const object_manifest_t* l, ///< [in] manifest for clone < *this
+    object_ref_delta_t &delta    ///< [out] set of refs to drop
+  ) const;
+
+  /**
    * calc_refs_to_drop_on_modify
    *
    * Takes a manifest and returns the set of refs to
    * drop upon modification 
    *
    * l should be nullptr if there are no clones, or 
-   * l should be a manifest for previous clone 
+   * l may be null if the corresponding clone does not exist.
    *
    */
   void calc_refs_to_drop_on_modify(
