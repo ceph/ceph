@@ -5853,6 +5853,55 @@ std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci)
   return out << ci.ref_delta << std::endl;
 }
 
+void object_manifest_t::calc_refs_to_inc_on_set(
+  const object_manifest_t* _g,
+  const object_manifest_t* _l,
+  object_ref_delta_t &refs) const
+{
+  /* avoid to increment the same reference on adjacent clones */
+  auto iter = chunk_map.begin();
+  auto find_chunk = [](decltype(iter) &i, const object_manifest_t* cur)
+    -> bool {
+    if (cur) {
+      auto c = cur->chunk_map.find(i->first);
+      if (c != cur->chunk_map.end() && c->second == i->second) {
+	return true;
+
+      }
+    }
+    return false;
+  };
+
+  /* If at least a same chunk exists on either _g or _l, do not increment 
+   * the reference 
+   *
+   * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * 20:   [0, 2) aaa, <- set_chunk
+   * 30:   [0, 2) abc, [6, 2) bbb, [8, 2) ccc
+   * --> incremnt the reference
+   *
+   * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * 20:   [0, 2) ccc, <- set_chunk
+   * 30:   [0, 2) abc, [6, 2) bbb, [8, 2) ccc
+   * --> do not need to increment
+   *
+   * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * 20:   [0, 2) ccc, <- set_chunk
+   * 30:   [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * --> decrement the reference of ccc
+   *
+   */
+  for (; iter != chunk_map.end(); ++iter) {
+    auto found_g = find_chunk(iter, _g);
+    auto found_l = find_chunk(iter, _l);
+    if (!found_g && !found_l) {
+      refs.inc_ref(iter->second.oid);
+    } else if (found_g && found_l) {
+      refs.dec_ref(iter->second.oid);
+    }
+  }
+}
+
 void object_manifest_t::calc_refs_to_drop_on_modify(
   const object_manifest_t* _l,
   const ObjectCleanRegions& clean_regions,
