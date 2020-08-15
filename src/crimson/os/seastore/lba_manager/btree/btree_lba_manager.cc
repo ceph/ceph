@@ -173,8 +173,7 @@ btree_range_pin_t &BtreeLBAManager::get_pin(CachedExtent &e)
     return static_cast<BtreeLBAPin &>(
       e.cast<LogicalCachedExtent>()->get_pin()).pin;
   } else {
-    assert(0 == "impossible");
-    return *static_cast<btree_range_pin_t*>(nullptr);
+    ceph_abort_msg("impossible");
   }
 }
 
