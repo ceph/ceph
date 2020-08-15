@@ -80,7 +80,7 @@ class Module(MgrModule):
                 '%s crashed on host %s at %s' % (
                     crash.get('entity_name', 'unidentified daemon'),
                     crash.get('utsname_hostname', '(unknown)'),
-                    crash.get('timestamp', 'unknown time'))
+                    self.user_friendly_timestamp(crash.get('timestamp')))
                     for (_, crash) in recent.items()]
             if num > 30:
                 detail = detail[0:30]
@@ -107,12 +107,22 @@ class Module(MgrModule):
         return handler(self, command, inbuf)
 
     def time_from_string(self, timestr):
-        # drop the 'Z' timezone indication, it's always UTC
+        # drop the 'Z' timezone indication: it's always UTC
         timestr = timestr.rstrip('Z')
+        datetime_obj = None
         try:
-            return datetime.datetime.strptime(timestr, DATEFMT)
+            datetime_obj = datetime.datetime.strptime(timestr, DATEFMT)
         except ValueError:
-            return datetime.datetime.strptime(timestr, OLD_DATEFMT)
+            datetime_obj = datetime.datetime.strptime(timestr, OLD_DATEFMT)
+        # add time zone to datetime object before returning it
+        return datetime_obj.replace(tzinfo=datetime.timezone.utc)
+
+    def user_friendly_timestamp(self, timestr):
+        if timestr:
+            datetime_obj = self.time_from_string(timestr)
+            return datetime_obj.isoformat(' ', timespec='seconds')
+        else:
+            return "unknown time"
 
     def validate_crash_metadata(self, inbuf):
         # raise any exceptions to caller
