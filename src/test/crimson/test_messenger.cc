@@ -232,12 +232,14 @@ static seastar::future<> test_echo(unsigned rounds,
       client1->init(entity_name_t::OSD(2), "client1", 3),
       client2->init(entity_name_t::OSD(3), "client2", 4)
   // dispatch pingpoing
-  ).then([client1, client2, server1, server2] {
+  ).then_unpack([client1, client2, server1, server2] {
     return seastar::when_all_succeed(
         // test connecting in parallel, accepting in parallel
         client1->dispatch_pingpong(server2->msgr->get_myaddr()),
         client2->dispatch_pingpong(server1->msgr->get_myaddr()));
   // shutdown
+  }).then_unpack([] {
+    return seastar::now();
   }).finally([client1] {
     logger().info("client1 shutdown...");
     return client1->shutdown();
@@ -333,7 +335,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
   return seastar::when_all_succeed(
       server->init(entity_name_t::OSD(4), "server3", 5, addr),
       client->init(entity_name_t::OSD(5), "client3", 6)
-  ).then([server, client] {
+  ).then_unpack([server, client] {
     auto conn = client->msgr->connect(server->msgr->get_myaddr(),
                                       entity_name_t::TYPE_OSD);
     // send two messages
@@ -454,7 +456,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
   return seastar::when_all_succeed(
     server->init(entity_name_t::OSD(6), "server4", 7, addr),
     client->init(entity_name_t::OSD(7), "client4", 8)
-  ).then([server, client] {
+  ).then_unpack([server, client] {
     client->send_pings(server->get_addr());
     return seastar::sleep(100ms);
   }).then([client] {

@@ -510,7 +510,10 @@ seastar::future<> AdminSocket::register_admin_commands()
     register_command(std::make_unique<ConfigGetHook>()),
     register_command(std::make_unique<ConfigSetHook>()),
     register_command(std::make_unique<ConfigShowHook>()),
-    register_command(std::make_unique<InjectArgsHook>()));
+    register_command(std::make_unique<InjectArgsHook>())
+  ).then_unpack([] {
+    return seastar::now();
+  });
 }
 
 }  // namespace crimson::admin

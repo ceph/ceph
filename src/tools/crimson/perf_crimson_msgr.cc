@@ -661,7 +661,7 @@ static seastar::future<> run(
       return seastar::when_all_succeed(
         server->init(server_conf.v1_crc_enabled, server_conf.addr),
         client->init(client_conf.v1_crc_enabled)
-      ).then([client, addr = client_conf.server_addr] {
+      ).then_unpack([client, addr = client_conf.server_addr] {
         return client->connect_wait_verify(addr);
       }).then([client, ramptime = client_conf.ramptime,
                msgtime = client_conf.msgtime] {
