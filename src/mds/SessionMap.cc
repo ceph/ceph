@@ -40,6 +40,10 @@ class SessionMapIOContext : public MDSIOContextBase
     explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       ceph_assert(sessionmap != NULL);
     }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "SessionMapIOContext");
+  }
 };
 };
 

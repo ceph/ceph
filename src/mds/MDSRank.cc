@@ -1,3 +1,4 @@
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
@@ -40,7 +41,7 @@
 
 
 #include "MDSRank.h"
-
+#include <chrono>
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -1749,6 +1750,11 @@ public:
   void print(ostream& out) const override {
     out << "standby_replay_restart";
   }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_MDS_StandbyReplayRestartFinish");
+    f->dump_unsigned("old_read_pos", old_read_pos);
+  }
 };
 
 void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
@@ -2537,6 +2543,16 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+    }
+  } else if (command == "dump_slow_meta_ios") {
+    auto complaint_time = g_conf()->osd_op_complaint_time;
+    auto now = ceph::coarse_mono_clock::now();
+    auto cutoff = now - ceph::make_timespan(complaint_time);
+
+    std::string count;
+    ceph::coarse_mono_time oldest;
+    if (MDSIOContextBase::check_ios_in_flight(cutoff, count, oldest, f)) {
+      ss << "err?";
     }
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;

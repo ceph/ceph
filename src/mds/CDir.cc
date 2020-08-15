@@ -69,6 +69,11 @@ public:
   explicit CDirIOContext(CDir *d) : dir(d) {
     ceph_assert(dir != NULL);
   }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "CDirIOContext");
+    dir->dump(f);
+  }
 };
 
 

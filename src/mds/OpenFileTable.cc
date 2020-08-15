@@ -249,6 +249,11 @@ public:
   void print(ostream& out) const override {
     out << "openfiles_save";
   }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_IO_OFT_Save");
+    f->dump_unsigned("log_seq", log_seq);
+  }
 };
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
@@ -286,6 +291,11 @@ public:
   }
   void print(ostream& out) const override {
     out << "openfiles_journal";
+  }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_IO_OFT_Journal");
+    f->dump_unsigned("log_seq", log_seq);
   }
 };
 
@@ -699,6 +709,13 @@ public:
   void print(ostream& out) const override {
     out << "openfiles_load";
   }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_IO_OFT_Load");
+    f->dump_unsigned("index", index);
+    f->dump_bool("first", first);
+    f->dump_bool("more", more);
+  }
 };
 
 class C_IO_OFT_Recover : public MDSIOContextBase {
@@ -712,6 +729,10 @@ public:
   }
   void print(ostream& out) const override {
     out << "openfiles_recover";
+  }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_IO_OFT_Recover");
   }
 };
 

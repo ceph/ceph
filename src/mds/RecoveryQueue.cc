@@ -37,6 +37,11 @@ public:
 
   uint64_t size = 0;
   utime_t mtime;
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_MDC_Recover");
+    in->dump(f);
+  }
 protected:
   void finish(int r) override {
     rq->_recovered(in, r, size, mtime);

@@ -61,6 +61,11 @@ public:
   explicit CInodeIOContext(CInode *in_) : in(in_) {
     ceph_assert(in != NULL);
   }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "CInodeIOContext");
+    in->dump(f);
+  }
 };
 
 sr_t* const CInode::projected_inode::UNDEF_SRNODE = (sr_t*)(unsigned long)-1;

@@ -440,7 +440,7 @@ void Beacon::notify_health(MDSRank const *mds)
 
     std::string count;
     ceph::coarse_mono_time oldest;
-    if (MDSIOContextBase::check_ios_in_flight(cutoff, count, oldest)) {
+    if (MDSIOContextBase::check_ios_in_flight(cutoff, count, oldest, NULL)) {
       dout(20) << count << " slow metadata IOs found" << dendl;
 
       auto oldest_secs = std::chrono::duration<double>(now - oldest).count();

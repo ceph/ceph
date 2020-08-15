@@ -120,6 +120,10 @@ protected:
 public:
   explicit MDCacheIOContext(MDCache *mdc_, bool track=true) :
     MDSIOContextBase(track), mdcache(mdc_) {}
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "MDCacheIOContext");
+  }
 };
 
 class MDCacheLogContext : public virtual MDSLogContextBase {
