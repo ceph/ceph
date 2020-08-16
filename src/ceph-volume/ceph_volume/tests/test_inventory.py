@@ -2,6 +2,8 @@
 
 import pytest
 from ceph_volume.util.device import Devices
+from ceph_volume.util.lsmdisk import LSMDisk
+import ceph_volume.util.lsmdisk as lsmdisk
 
 
 @pytest.fixture
@@ -179,3 +181,74 @@ class TestInventory(object):
         for k in self.expected_lsm_keys:
             assert k in lsm_keys, "expected key {} in lsm_data field".format(k)
 
+
+@pytest.fixture
+def lsm_info(monkeypatch):
+    def mock_query_lsm(_, func, path):
+        query_map = {
+            'serial_num_get': "S2X9NX0H935283",
+            'link_type_get': 6,
+            'rpm_get': 0,
+            'link_speed_get': 6000,
+            'health_status_get': 2,
+            'led_status_get': 36,
+        }
+        return query_map.get(func, 'Unknown')
+
+    # mocked states and settings taken from the libstoragemgmt code base
+    # c_binding/include/libstoragemgmt/libstoragemgmt_types.h at 
+    # https://github.com/libstorage/libstoragemgmt/
+    mock_health_map = {
+            -1: "Unknown",
+            0: "Fail",
+            1: "Warn",
+            2: "Good",
+    }
+    mock_transport_map = {
+            -1: "Unavailable",
+            0: "Fibre Channel",
+            2: "IBM SSA",
+            3: "Serial Bus",
+            4: "SCSI RDMA",
+            5: "iSCSI",
+            6: "SAS",
+            7: "ADT (Tape)",
+            8: "ATA/SATA",
+            9: "USB",
+            10: "SCSI over PCI-E",
+            11: "PCI-E",
+    }
+    class MockLEDStates():
+        LED_STATUS_UNKNOWN = 1
+        LED_STATUS_IDENT_ON = 2
+        LED_STATUS_IDENT_OFF = 4
+        LED_STATUS_IDENT_UNKNOWN = 8 
+        LED_STATUS_FAULT_ON = 16
+        LED_STATUS_FAULT_OFF = 32
+        LED_STATUS_FAULT_UNKNOWN = 64
+
+    monkeypatch.setattr(LSMDisk, '_query_lsm', mock_query_lsm)
+    monkeypatch.setattr(lsmdisk, 'health_map', mock_health_map)
+    monkeypatch.setattr(lsmdisk, 'transport_map', mock_transport_map)
+    monkeypatch.setattr(lsmdisk, 'lsm_Disk', MockLEDStates)
+
+    return LSMDisk('/dev/sda')
+
+
+class TestLSM(object):
+    def test_lsmdisk_health(self, lsm_info):
+        assert lsm_info.health == "Good"
+    def test_lsmdisk_transport(self, lsm_info):
+        assert lsm_info.transport == 'SAS'
+    def test_lsmdisk_mediatype(self, lsm_info):
+        assert lsm_info.media_type == 'Flash'
+    def test_lsmdisk_led_ident_support(self, lsm_info):
+        assert lsm_info.led_ident_support == 'Supported'
+    def test_lsmdisk_led_ident(self, lsm_info):
+        assert lsm_info.led_ident_state == 'Off'
+    def test_lsmdisk_led_fault_support(self, lsm_info):
+        assert lsm_info.led_fault_support == 'Supported'
+    def test_lsmdisk_led_fault(self, lsm_info):
+        assert lsm_info.led_fault_state == 'Off'    
+    def test_lsmdisk_report(self, lsm_info):
+        assert isinstance(lsm_info.json_report(), dict)
