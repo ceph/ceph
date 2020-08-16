@@ -1291,14 +1291,21 @@ public:
     RGWRados::Object op_target(tier_ctx.store->getRados(),
                                tier_ctx.bucket_info,
                                tier_ctx.rctx, tier_ctx.obj);
+    real_time read_mtime;
 
     RGWRados::Object::Read read_op(&op_target);
 
     read_op.params.attrs = &attrs;
+    read_op.params.lastmod = &read_mtime;
 
     int r = read_op.prepare(null_yield);
     if (r < 0) {
       return r;
+    }
+
+    if (read_mtime != tier_ctx.o.meta.mtime) {
+      /* raced */
+      return -ECANCELED;
     }
 
     tier_ctx.rctx.set_atomic(tier_ctx.obj);
@@ -1307,13 +1314,17 @@ public:
     RGWObjState *s = tier_ctx.rctx.get_state(tier_ctx.obj);
 
     obj_op.meta.modify_tail = true;
+    obj_op.meta.flags = PUT_OBJ_CREATE;
     obj_op.meta.category = RGWObjCategory::CloudTiered;
     obj_op.meta.delete_at = real_time();
-    obj_op.meta.data = NULL;
+    bufferlist blo;
+    blo.append("");
+    obj_op.meta.data = &blo;
     obj_op.meta.if_match = NULL;
     obj_op.meta.if_nomatch = NULL;
     obj_op.meta.user_data = NULL;
     obj_op.meta.zones_trace = NULL;
+    obj_op.meta.delete_at = real_time();
     
     RGWObjManifest *pmanifest; 
 
@@ -1321,6 +1332,7 @@ public:
     RGWObjTier tier_config;
     tier_config.name = oc.tier.storage_class;
     tier_config.tier_placement = oc.tier;
+    tier_config.is_multipart_upload = tier_ctx.is_multipart_upload;
 
     pmanifest->set_tier_type("cloud");
     pmanifest->set_tier_config(tier_config);
@@ -1336,7 +1348,9 @@ public:
     /* should the obj_size also be set to '0' or is it needed
      * to keep track of original size before transition. 
      * But unless obj_size is set to '0', obj_iters cannot
-     * be reset I guess
+     * be reset I guess. For regular transitioned objects
+     * obj_size remains the same even when object is moved to other
+     * storage class. So maybe better to keep it the same way.
      */
     //pmanifest->set_obj_size(0);
 
@@ -1347,6 +1361,8 @@ public:
     bl.append(oc.tier.storage_class);
     attrs[RGW_ATTR_STORAGE_CLASS] = bl;
 
+    attrs.erase(RGW_ATTR_ID_TAG);
+    attrs.erase(RGW_ATTR_TAIL_TAG);
 
     obj_op.write_meta(tier_ctx.o.meta.size, 0, attrs, null_yield);
     if (r < 0) {
@@ -1391,7 +1407,19 @@ public:
     tier_ctx.multipart_sync_threshold = oc.tier.multipart_sync_threshold;
     tier_ctx.storage_class = oc.tier.storage_class;
 
-    ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
+    bool al_tiered = false;
+    ret = crs.run(new RGWLCCloudCheckCR(tier_ctx, &al_tiered));
+    
+    if (ret < 0) {
+      ldpp_dout(oc.dpp, 0) << "XXXXXXXXXXXXXX failed in RGWCloudCheckCR() ret=" << ret << dendl;
+    }
+
+    if (!al_tiered) {
+        ldout(tier_ctx.cct, 0) << "XXXXXXXXXXXXXX lc.cc is_already_tiered false" << dendl;
+	   ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
+    } else {
+        ldout(tier_ctx.cct, 0) << "XXXXXXXXXXXXXX lc.cc is_already_tiered true" << dendl;
+    }
     http_manager.stop();
          
     if (ret < 0) {

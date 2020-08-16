@@ -103,6 +103,7 @@ void RGWObjTier::dump(Formatter *f) const
 {
   f->dump_string("name", name);
   f->dump_object("tier_placement", tier_placement);
+  f->dump_bool("is_multipart_upload", is_multipart_upload);
 }
 
 void rgw_bucket_placement::dump(Formatter *f) const
