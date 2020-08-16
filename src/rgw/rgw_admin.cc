@@ -5109,6 +5109,11 @@ int main(int argc, const char **argv)
             if (iter != zonegroup.placement_targets.end()) {
               RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[placement_id];
               info.storage_classes.erase(*opt_storage_class);
+
+	      auto ptiter = info.tier_targets.find(*opt_storage_class);
+	      if (ptiter != info.tier_targets.end()) {
+		info.tier_targets.erase(ptiter);
+	      }
             }
           }
         } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {

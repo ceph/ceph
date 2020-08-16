@@ -151,7 +151,8 @@ WRITE_CLASS_ENCODER(RGWObjManifestRule)
 struct RGWObjTier {
     string name;
     RGWZoneGroupPlacementTier tier_placement;
-    /* XXX: Add multipart upload details */
+    bool is_multipart_upload{false};
+    /* XXX: Add any multipart upload details */
 
     RGWObjTier(): name("none") {}
 
@@ -159,6 +160,7 @@ struct RGWObjTier {
       ENCODE_START(2, 2, bl);
       encode(name, bl);
       encode(tier_placement, bl);
+      encode(is_multipart_upload, bl);
       ENCODE_FINISH(bl);
     }
 
@@ -166,6 +168,7 @@ struct RGWObjTier {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       decode(name, bl);
       decode(tier_placement, bl);
+      decode(is_multipart_upload, bl);
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
@@ -466,6 +469,7 @@ public:
 
       tier_config.name = t.name;
       tier_config.tier_placement = t.tier_placement;
+      tier_config.is_multipart_upload = t.is_multipart_upload;
   }
 
   void get_tier_config(RGWObjTier* t) {
@@ -474,6 +478,7 @@ public:
 
       t->name = tier_config.name;
       t->tier_placement = tier_config.tier_placement;
+      t->is_multipart_upload = tier_config.is_multipart_upload;
   }
 
   class obj_iterator {

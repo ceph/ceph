@@ -37,6 +37,8 @@ struct RGWLCCloudTierCtx {
   uint64_t multipart_min_part_size;
   uint64_t multipart_sync_threshold;
 
+  bool is_multipart_upload{false};
+
   RGWLCCloudTierCtx(CephContext* _cct, rgw_bucket_dir_entry& _o,
             rgw::sal::RGWRadosStore* _store, RGWBucketInfo &_binfo, rgw_obj _obj,
             RGWObjectCtx& _rctx, std::shared_ptr<RGWRESTConn> _conn, string _bucket,
@@ -61,6 +63,20 @@ class RGWLCCloudTierCR : public RGWCoroutine {
   public:
     RGWLCCloudTierCR(RGWLCCloudTierCtx& _tier_ctx) :
           RGWCoroutine(_tier_ctx.cct), tier_ctx(_tier_ctx) {}
+
+    int operate() override;
+};
+
+class RGWLCCloudCheckCR : public RGWCoroutine {
+  RGWLCCloudTierCtx& tier_ctx;
+  bufferlist bl;
+  bool need_retry{false};
+  int retcode;
+  bool *already_tiered;
+
+  public:
+    RGWLCCloudCheckCR(RGWLCCloudTierCtx& _tier_ctx, bool *_al_ti) :
+          RGWCoroutine(_tier_ctx.cct), tier_ctx(_tier_ctx), already_tiered(_al_ti) {}
 
     int operate() override;
 };
