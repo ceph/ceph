@@ -459,7 +459,7 @@ seastar::future<ObjectRecoveryProgress> ReplicatedRecoveryBackend::build_push_op
 				     recovery_info.copy_subset,
 				     progress.data_recovered_to,
 				     available, pop);
-    }).then([this, &recovery_info, &v, &progress, &new_progress, stat, pop]
+    }).then([&recovery_info, &v, &progress, &new_progress, stat, pop]
             (uint64_t recovered_to) {
       new_progress.data_recovered_to = recovered_to;
       if (new_progress.is_complete(recovery_info)) {

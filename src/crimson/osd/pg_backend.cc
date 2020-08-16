@@ -229,7 +229,7 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op)
 			    [&os, &osd_op, this](auto&& extents) {
       return store->readv(coll, ghobject_t{os.oi.soid},
                           extents, osd_op.op.flags).safe_then(
-        [&os, &osd_op, &extents, this](auto&& bl) -> read_errorator::future<> {
+        [&os, &osd_op, &extents](auto&& bl) -> read_errorator::future<> {
         if (_read_verify_data(os.oi, bl)) {
           osd_op.op.extent.length = bl.length();
           // re-encode since it might be modified
