@@ -13,6 +13,7 @@ except ImportError:
     lsm_available = False
     transport_map = {}
     health_map = {}
+    lsm_Disk = None
 else:
     lsm_available = True
     transport_map = {
