@@ -110,17 +110,12 @@ class Device(object):
         json returned will provide LSM attributes, and any associated errors that
         lsm encountered when probing the device.
         '''
-        devName = self.path.split('/')[-1]
-        if not os.path.exists('/sys/block/{}'.format(devName)):
+        if not self.exists or not self.is_device:
             return {}
 
         lsm_disk = LSMDisk(self.path)
-        if not lsm_disk.lsm_available:
-            return {}
-
-        lsm_json = lsm_disk.json_report()
         
-        return lsm_json
+        return  lsm_disk.json_report()
 
     def __lt__(self, other):
         '''
