@@ -10,7 +10,7 @@ from teuthology import setup_log_file, install_except_hook
 from teuthology import beanstalk
 from teuthology.config import config as teuth_config
 from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
-from teuthology.task.internal.lock_machines import lock_machines_helper
+from teuthology.lock.ops import block_and_lock_machines
 from teuthology.dispatcher import supervisor
 from teuthology.worker import prep_job
 from teuthology import safepath
@@ -159,8 +159,8 @@ def main(args):
 
 def lock_machines(job_config):
     fake_ctx = supervisor.create_fake_context(job_config, block=True)
-    lock_machines_helper(fake_ctx, [len(job_config['roles']),
-                         job_config['machine_type']], reimage=False)
+    block_and_lock_machines(fake_ctx, len(job_config['roles']),
+                            job_config['machine_type'], reimage=False)
     job_config = fake_ctx.config
     return job_config
 
