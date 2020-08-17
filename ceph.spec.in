@@ -458,7 +458,6 @@ Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
-Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{python3_pkgversion}-influxdb
@@ -515,24 +514,6 @@ Requires:       python3-scipy
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
-
-%package mgr-diskprediction-cloud
-Summary:        Ceph Manager module for cloud-based disk failure prediction
-BuildArch:      noarch
-%if 0%{?suse_version}
-Group:          System/Filesystems
-%endif
-Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
-%if 0%{without python2}
-Requires:       python3-grpcio
-Requires:       python3-protobuf
-%else
-Requires:       python2-grpcio
-Requires:       python2-protobuf
-%endif
-%description mgr-diskprediction-cloud
-ceph-mgr-diskprediction-cloud is a ceph-mgr module that tries to predict
-disk failures using services in the Google cloud.
 
 %package mgr-modules-core
 Summary:        Ceph Manager modules which are always enabled
@@ -1643,19 +1624,6 @@ if [ $1 -eq 1 ] ; then
 fi
 
 %postun mgr-diskprediction-local
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%files mgr-diskprediction-cloud
-%{_datadir}/ceph/mgr/diskprediction_cloud
-
-%post mgr-diskprediction-cloud
-if [ $1 -eq 1 ] ; then
-    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
-fi
-
-%postun mgr-diskprediction-cloud
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi

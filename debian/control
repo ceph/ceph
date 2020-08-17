@@ -225,7 +225,6 @@ Depends: ceph-base (= ${binary:Version}),
          ${shlibs:Depends},
 Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
-            ceph-mgr-diskprediction-cloud,
             ceph-mgr-k8sevents,
             ceph-mgr-cephadm
 Suggests: python3-influxdb
@@ -277,20 +276,6 @@ Description: diskprediction-local module for ceph-mgr
  block and file system storage.
  .
  This package contains the diskprediction_local module for the ceph-mgr
- daemon, which helps predict disk failures.
-
-Package: ceph-mgr-diskprediction-cloud
-Architecture: all
-Depends: ceph-mgr (= ${binary:Version}),
-         ${misc:Depends},
-         ${python:Depends},
-         ${shlibs:Depends},
-Description: diskprediction-cloud module for ceph-mgr
- Ceph is a massively scalable, open-source, distributed
- storage system that runs on commodity hardware and delivers object,
- block and file system storage.
- .
- This package contains the diskprediction_cloud module for the ceph-mgr
  daemon, which helps predict disk failures.
 
 Package: ceph-mgr-modules-core
