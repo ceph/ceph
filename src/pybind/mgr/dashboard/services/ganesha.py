@@ -4,8 +4,9 @@ from __future__ import absolute_import
 
 import logging
 import re
+from typing import List, Dict, Tuple, Optional
 
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription, ServiceDescription
 from .cephfs import CephFS
 from .cephx import CephX
 from .orchestrator import OrchClient
@@ -25,8 +26,8 @@ class NFSException(DashboardException):
 
 class Ganesha(object):
     @classmethod
-    def _get_clusters_locations(cls):
-        result = {}  # type: ignore
+    def _get_clusters_locations(cls) -> Dict[str, Tuple[str, Optional[str]]]:
+        result = {}  # type: Dict[str, Tuple[str, Optional[str]]]
         location_list_str = Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE
         if not location_list_str:
             raise NFSException("Ganesha config location is not configured. "
@@ -34,7 +35,6 @@ class Ganesha(object):
                                "setting.")
         location_list = [l.strip() for l in location_list_str.split(",")]
         for location in location_list:
-            cluster = None
             pool = None
             namespace = None
             if not location:
@@ -72,25 +72,31 @@ class Ganesha(object):
         return [cluster_id for cluster_id in cls._get_clusters_locations()]
 
     @staticmethod
-    def _get_orch_nfs_instances():
+    def _get_orch_nfs_instances() -> List[DaemonDescription]:
+        try:
+            return OrchClient.instance().services.list_daemons(daemon_type="nfs")
+        except (RuntimeError, OrchestratorError, ImportError):
+            return []
+
+    @staticmethod
+    def _get_orch_nfs_services() -> List[ServiceDescription]:
         try:
             return OrchClient.instance().services.list("nfs")
         except (RuntimeError, OrchestratorError, ImportError):
             return []
 
+
     @classmethod
-    def get_daemons_status(cls):
+    def get_daemons_status(cls) -> Optional[Dict[str, dict]]:
         instances = cls._get_orch_nfs_instances()
         if not instances:
             return None
 
         result = {}  # type: ignore
         for instance in instances:
-            if instance.service is None:
-                instance.service = "_default_"
-            if instance.service not in result:
-                result[instance.service] = {}
-            result[instance.service][instance.hostname] = {
+            if instance.service_name() not in result:
+                result[instance.service_name()] = {}
+            result[instance.service_name()][instance.hostname] = {
                 'status': instance.status,
                 'desc': instance.status_desc,
             }
@@ -118,7 +124,7 @@ class Ganesha(object):
 
     @classmethod
     def get_pool_and_namespace(cls, cluster_id):
-        instances = cls._get_orch_nfs_instances()
+        instances = cls._get_orch_nfs_services()
         # we assume that every instance stores there configuration in the
         # same RADOS pool/namespace
         if instances:
@@ -139,6 +145,8 @@ class Ganesha(object):
             return
         reload_list = []
         daemons = cls.get_daemons_status()
+        if not daemons:
+            return
         if cluster_id not in daemons:
             raise NFSException("Cluster not found: cluster_id={}"
                                .format(cluster_id))

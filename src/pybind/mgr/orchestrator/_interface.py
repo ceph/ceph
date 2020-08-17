@@ -1386,7 +1386,7 @@ class ServiceDescription(object):
 
         # Location of the service configuration when stored in rados
         # object. Format: "rados://<pool>/[<namespace/>]<object>"
-        self.rados_config_location = rados_config_location
+        self.rados_config_location: Optional[str] = rados_config_location
 
         # If the service exposes REST-like API, this attribute should hold
         # the URL.
