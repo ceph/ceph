@@ -17,6 +17,12 @@
   the balancer was included in the ``always_on_modules`` list, but needed to be
   turned on explicitly using the ``ceph balancer on`` command.
 
+* MGR: the "cloud" mode of the diskprediction module is not supported anymore
+  and the ``ceph-mgr-diskprediction-cloud`` manager module has been removed. This
+  is because the external cloud service run by ProphetStor is no longer accessible
+  and there is no immediate replacement for it at this time. The "local" prediction
+  mode will continue to be supported.
+
 * Cephadm: There were a lot of small usability improvements and bug fixes:
 
   * Grafana when deployed by Cephadm now binds to all network interfaces.
