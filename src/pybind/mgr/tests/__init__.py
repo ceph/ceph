@@ -130,6 +130,9 @@ if 'UNITTEST' in os.environ:
                 outb = config_set()
             elif cmd['prefix'] == 'config dump':
                 outb = config_dump()
+            elif hasattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_')):
+                a = getattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_'))
+                outb = a(cmd)
 
             res.complete(0, outb, '')
 
