@@ -68,8 +68,23 @@ class TestNFS(MgrTestCase):
         log.info("Disabling NFS")
         self._sys_cmd(['systemctl', 'disable', 'nfs-server', '--now'])
 
-    def _check_nfs_status(self):
-        return self._orch_cmd('ps', '--daemon_type=nfs')
+    def _fetch_nfs_status(self):
+        return self._orch_cmd('ps', f'--service_name={self.expected_name}')
+
+    def _check_nfs_cluster_status(self, expected_status, fail_msg):
+        '''
+        Tests if nfs cluster created or deleted successfully
+        :param expected_status: Status to be verified
+        :param fail_msg: Message to be printed if test failed
+        '''
+        # Wait for few seconds as ganesha daemon takes few seconds to be deleted/created
+        wait_time = 10
+        while wait_time <= 60:
+            time.sleep(wait_time)
+            if expected_status in self._fetch_nfs_status():
+                return
+            wait_time += 10
+        self.fail(fail_msg)
 
     def _check_auth_ls(self, export_id=1, check_in=False):
         '''
@@ -103,29 +118,16 @@ class TestNFS(MgrTestCase):
         # Disable any running nfs ganesha daemon
         self._check_nfs_server_status()
         self._nfs_cmd('cluster', 'create', self.export_type, self.cluster_id)
-        # Wait for few seconds as ganesha daemon take few seconds to be deployed
-        time.sleep(8)
-        orch_output = self._check_nfs_status()
-        expected_status = 'running'
         # Check for expected status and daemon name (nfs.ganesha-<cluster_id>)
-        if self.expected_name not in orch_output or expected_status not in orch_output:
-            self.fail("NFS Ganesha cluster could not be deployed")
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster deployment failed')
 
     def _test_delete_cluster(self):
         '''
         Test deletion of a single nfs cluster.
         '''
         self._nfs_cmd('cluster', 'delete', self.cluster_id)
-        expected_output = "No daemons reported\n"
-        # Wait for few seconds as ganesha daemon takes few seconds to be deleted
-        wait_time = 10
-        while wait_time <= 60:
-            time.sleep(wait_time)
-            orch_output = self._check_nfs_status()
-            if expected_output == orch_output:
-                return
-            wait_time += 10
-        self.fail("NFS Ganesha cluster could not be deleted")
+        self._check_nfs_cluster_status('No daemons reported',
+                                       'NFS Ganesha cluster could not be deleted')
 
     def _test_list_cluster(self, empty=False):
         '''
@@ -401,7 +403,6 @@ class TestNFS(MgrTestCase):
         config on reset.
         '''
         self._test_create_cluster()
-        time.sleep(30)
 
         pool = 'nfs-ganesha'
         user_id = 'test'
