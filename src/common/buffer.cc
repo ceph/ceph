@@ -1562,7 +1562,7 @@ static ceph::spinlock debug_lock;
       // partial?
       if (off + len < curbuf->length()) {
 	//cout << "copying partial of " << *curbuf << std::endl;
-	_buffers.push_back(*ptr_node::create( *curbuf, off, len ).release());
+	_buffers.push_back(*ptr_node::create(*curbuf, off, len).release());
 	_len += len;
         _num += 1;
 	break;
@@ -1571,7 +1571,7 @@ static ceph::spinlock debug_lock;
       // through end
       //cout << "copying end (all?) of " << *curbuf << std::endl;
       unsigned howmuch = curbuf->length() - off;
-      _buffers.push_back(*ptr_node::create( *curbuf, off, howmuch ).release());
+      _buffers.push_back(*ptr_node::create(*curbuf, off, howmuch).release());
       _len += howmuch;
       _num += 1;
       len -= howmuch;
@@ -1610,8 +1610,8 @@ static ceph::spinlock debug_lock;
     }
     
     if (off) {
-      // add a reference to the front bit
-      //  insert it before curbuf (which we'll hose)
+      // add a reference to the front bit, insert it before curbuf (which
+      // we'll lose).
       //cout << "keeping front " << off << " of " << *curbuf << std::endl;
       _buffers.insert_after(curbuf_prev,
 			    *ptr_node::create(*curbuf, 0, off).release());
@@ -1624,23 +1624,23 @@ static ceph::spinlock debug_lock;
 
     while (len > 0) {
       // partial?
-      if (off + len < (*curbuf).length()) {
+      if (off + len < curbuf->length()) {
 	//cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
 	if (claim_by) 
-	  claim_by->append( *curbuf, off, len );
-	(*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
-	(*curbuf).set_length( (*curbuf).length() - (len+off) );
+	  claim_by->append(*curbuf, off, len);
+	curbuf->set_offset(off+len + curbuf->offset());    // ignore beginning big
+	curbuf->set_length(curbuf->length() - (len+off));
 	_len -= off+len;
 	//cout << " now " << *curbuf << std::endl;
 	break;
       }
       
       // hose though the end
-      unsigned howmuch = (*curbuf).length() - off;
+      unsigned howmuch = curbuf->length() - off;
       //cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
       if (claim_by) 
-	claim_by->append( *curbuf, off, howmuch );
-      _len -= (*curbuf).length();
+	claim_by->append(*curbuf, off, howmuch);
+      _len -= curbuf->length();
       _num -= 1;
       curbuf = _buffers.erase_after_and_dispose(curbuf_prev);
       len -= howmuch;
