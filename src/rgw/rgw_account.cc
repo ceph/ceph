@@ -70,7 +70,8 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
 
 void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
 {
-  o.push_back(new RGWAccountInfo("tenant1","account1"));
+  o.push_back(new RGWAccountInfo("account1", "tenant1"));
+  o.push_back(new RGWAccountInfo);
 }
 
 int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
