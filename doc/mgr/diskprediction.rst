@@ -24,13 +24,23 @@ To disable prediction,::
     ceph config set global device_failure_prediction_mode none
 
 
-The local predictor module requires at least six datasets of device health metrics to implement the prediction.
+*diskprediction_local* requires at least six datasets of device health metrics to
+make prediction of the devices' life expentancy. And these health metrics are
+collected only if health monitoring is :ref:`enabled <enabling-monitoring>`.
+
 Run the following command to retrieve the life expectancy of given device.
 
 ::
 
     ceph device predict-life-expectancy <device id>
 
+Configuration
+=============
+
+The module performs the prediction on a daily basis by default. You can adjust
+this interval with::
+
+  ceph config set mgr mgr/diskprediction_local/predict_interval <interval-in-seconds>
 
 Debugging
 =========
