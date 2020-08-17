@@ -979,7 +979,7 @@ CEPH_RBD_API ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
                                    const char *buf, size_t data_len,
                                    int op_flags);
 CEPH_RBD_API ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs,
-                                      uint64_t len, int zero_flags,
+                                      size_t len, int zero_flags,
                                       int op_flags);
 CEPH_RBD_API ssize_t rbd_compare_and_write(rbd_image_t image, uint64_t ofs,
                                            size_t len, const char *cmp_buf,
