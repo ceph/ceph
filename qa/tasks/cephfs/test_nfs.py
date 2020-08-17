@@ -12,9 +12,7 @@ log = logging.getLogger(__name__)
 
 # TODO Add test for cluster update when ganesha can be deployed on multiple ports.
 class TestNFS(MgrTestCase):
-    def _cmd(self, *args, stdin=''):
-        if stdin:
-            return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args, stdin=stdin)
+    def _cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
 
     def _nfs_cmd(self, *args):
@@ -60,10 +58,6 @@ class TestNFS(MgrTestCase):
          },
          "clients": []
         }
-
-    def _check_port_status(self):
-        log.info("NETSTAT")
-        self._sys_cmd(['netstat', '-tnlp'])
 
     def _check_nfs_server_status(self):
         res = self._sys_cmd(['systemctl', 'status', 'nfs-server'])
