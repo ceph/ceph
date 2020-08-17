@@ -653,17 +653,17 @@ void Objecter::_linger_reconnect(LingerOp *info, bs::error_code ec)
 {
   ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << ec 
 		 << " (last_error " << info->last_error << ")" << dendl;
+  std::unique_lock wl(info->watch_lock);
   if (ec) {
-    std::unique_lock wl(info->watch_lock);
     if (!info->last_error) {
       ec = _normalize_watch_error(ec);
-      info->last_error = ec;
       if (info->handle) {
 	boost::asio::defer(finish_strand, CB_DoWatchError(this, info, ec));
       }
     }
-    wl.unlock();
   }
+
+  info->last_error = ec;
 }
 
 void Objecter::_send_linger_ping(LingerOp *info)
