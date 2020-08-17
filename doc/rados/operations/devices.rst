@@ -47,6 +47,8 @@ By default, the `identification` light is used.
 
      ceph orch status
 
+.. _enabling-monitoring:
+
 Enabling monitoring
 -------------------
 
