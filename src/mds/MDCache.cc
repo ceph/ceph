@@ -151,7 +151,6 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
-  forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
 
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
@@ -253,9 +252,6 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
   if (changed.count("mds_cache_trim_decay_rate")) {
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
-  }
-  if (changed.count("mds_forward_all_requests_to_auth")){
-    forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
   }
 
   migrator->handle_conf_change(changed, mdsmap);
@@ -8584,8 +8580,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       // dirfrag/dentry is not mine.
       mds_authority_t dauth = curdir->authority();
 
-      if (!forward_all_requests_to_auth &&
-	  forward &&
+      if (forward &&
 	  mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_num_fwd()){
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth

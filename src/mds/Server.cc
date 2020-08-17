@@ -228,6 +228,7 @@ Server::Server(MDSRank *m) :
   mdcache(mds->mdcache), mdlog(mds->mdlog),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
+  forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
@@ -1154,6 +1155,9 @@ void Server::evict_cap_revoke_non_responders() {
 }
 
 void Server::handle_conf_change(const std::set<std::string>& changed) {
+  if (changed.count("mds_forward_all_requests_to_auth")){
+    forward_all_requests_to_auth = g_conf().get_val<bool>("mds_forward_all_requests_to_auth");
+  }
   if (changed.count("mds_replay_unsafe_with_closed_session")) {
     replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   }
@@ -2220,7 +2224,7 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
     DirStat ds;
     ds.frag = dir->get_frag();
     ds.auth = dir->get_dir_auth().first;
-    if (dir->is_auth() && !mdcache->forward_all_reqs_to_auth())
+    if (dir->is_auth() && !forward_all_requests_to_auth)
       dir->get_dist_spec(ds.dist, whoami);
 
     dir->encode_dirstat(bl, session->info, ds);
@@ -3381,6 +3385,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
     if (!no_want_auth)
       want_auth = true;
   } else {
+    if (!no_want_auth && forward_all_requests_to_auth)
+      want_auth = true;
     flags |= MDS_TRAVERSE_RDLOCK_PATH | MDS_TRAVERSE_RDLOCK_SNAP;
   }
   if (want_auth)
@@ -4541,7 +4547,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   DirStat ds;
   ds.frag = dir->get_frag();
   ds.auth = dir->get_dir_auth().first;
-  if (dir->is_auth() && !mdcache->forward_all_reqs_to_auth())
+  if (dir->is_auth() && !forward_all_requests_to_auth)
     dir->get_dist_spec(ds.dist, mds->get_nodeid());
 
   dir->encode_dirstat(dirbl, mdr->session->info, ds);
