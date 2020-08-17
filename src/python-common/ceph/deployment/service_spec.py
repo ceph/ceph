@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List, Union, Callable, Iterator
 import yaml
 
 from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.utils import unwrap_ipv6
 
 
 class ServiceSpecValidationError(Exception):
@@ -121,13 +122,16 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         for network in networks:
             # only if we have versioned network configs
             if network.startswith('v') or network.startswith('[v'):
-                network = network.split(':')[1]
+                # if this is ipv6 we can't just simply split on ':' so do
+                # a split once and rsplit once to leave us with just ipv6 addr
+                network = network.split(':', 1)[1]
+                network = network.rsplit(':', 1)[0]
             try:
                 # if subnets are defined, also verify the validity
                 if '/' in network:
                     ip_network(network)
                 else:
-                    ip_address(network)
+                    ip_address(unwrap_ipv6(network))
             except ValueError as e:
                 # logging?
                 raise e
