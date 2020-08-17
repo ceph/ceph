@@ -82,8 +82,8 @@ display_log() {
 on_tests_error() {
     if [[ -n "$JENKINS_HOME" ]]; then
         CEPH_OUT_DIR=${CEPH_OUT_DIR:-"$LOCAL_BUILD_DIR"/out}
-        display_log "mgr" 100000
-        display_log "osd" 100000
+        display_log "mgr" 1000
+        display_log "osd" 1000
     fi
 }
 
@@ -126,7 +126,7 @@ run_teuthology_tests() {
     export COVERAGE_FILE=.coverage.mgr.dashboard
     find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
-    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries $OPTIONS $(echo $TEST_CASES)
+    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries --no-verbose $OPTIONS $(echo $TEST_CASES)
 
     deactivate
     cd $CURR_DIR
