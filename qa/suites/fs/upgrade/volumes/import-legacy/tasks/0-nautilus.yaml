@@ -8,7 +8,6 @@ tasks:
       - librados3
       - ceph-mgr-dashboard
       - ceph-mgr-diskprediction-local
-      - ceph-mgr-diskprediction-cloud
       - ceph-mgr-rook
       - ceph-mgr-cephadm
       - cephadm
