@@ -1606,29 +1606,81 @@ TEST(BufferList, is_n_page_sized) {
 
 TEST(BufferList, page_aligned_appender) {
   bufferlist bl;
-  auto a = bl.get_page_aligned_appender(5);
-  a.append("asdf", 4);
-  a.flush();
-  cout << bl << std::endl;
-  ASSERT_EQ(1u, bl.get_num_buffers());
-  a.append("asdf", 4);
-  for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
-    a.append("x", 1);
+  {
+    auto a = bl.get_page_aligned_appender(5);
+    a.append("asdf", 4);
+    a.flush();
+    cout << bl << std::endl;
+    ASSERT_EQ(1u, bl.get_num_buffers());
+    ASSERT_TRUE(bl.contents_equal("asdf", 4));
+    a.append("asdf", 4);
+    for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
+      a.append("x", 1);
+    }
+    a.flush();
+    cout << bl << std::endl;
+    ASSERT_EQ(1u, bl.get_num_buffers());
+    // verify the beginning
+    {
+      bufferlist t;
+      t.substr_of(bl, 0, 10);
+      ASSERT_TRUE(t.contents_equal("asdfasdfxx", 10));
+    }
+    for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
+      a.append("y", 1);
+    }
+    a.flush();
+    cout << bl << std::endl;
+    ASSERT_EQ(2u, bl.get_num_buffers());
+
+    a.append_zero(42);
+    a.flush();
+    // ensure append_zero didn't introduce a fragmentation
+    ASSERT_EQ(2u, bl.get_num_buffers());
+    // verify the end is actually zeroed
+    {
+      bufferlist t;
+      t.substr_of(bl, bl.length() - 42, 42);
+      ASSERT_TRUE(t.is_zero());
+    }
+
+    // let's check whether appending a bufferlist directly to `bl`
+    // doesn't fragment further C string appends via appender.
+    {
+      const auto& initial_back = bl.back();
+      {
+        bufferlist src;
+        src.append("abc", 3);
+        bl.claim_append(src);
+        // surely the extra `ptr_node` taken from `src` must get
+        // reflected in the `bl` instance
+        ASSERT_EQ(3u, bl.get_num_buffers());
+      }
+
+      // moreover, the next C string-taking `append()` had to
+      // create anoter `ptr_node` instance but...
+      a.append("xyz", 3);
+      a.flush();
+      ASSERT_EQ(4u, bl.get_num_buffers());
+
+      // ... it should point to the same `buffer::raw` instance
+      // (to the same same block of memory).
+      ASSERT_EQ(bl.back().raw_c_str(), initial_back.raw_c_str());
+    }
+
+    // check whether it'll take the first byte only and whether
+    // the auto-flushing works.
+    for (unsigned n = 0; n < 10 * CEPH_PAGE_SIZE - 3; ++n) {
+      a.append("zasdf", 1);
+    }
   }
-  a.flush();
-  cout << bl << std::endl;
-  ASSERT_EQ(1u, bl.get_num_buffers());
-  for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
-    a.append("y", 1);
+
+  // `flush()` should be called by automatically when destructing
+  // the appender.
+  {
+    cout << bl << std::endl;
+    ASSERT_EQ(6u, bl.get_num_buffers());
   }
-  a.flush();
-  cout << bl << std::endl;
-  ASSERT_EQ(2u, bl.get_num_buffers());
-  for (unsigned n = 0; n < 10 * CEPH_PAGE_SIZE; ++n) {
-    a.append("asdfasdfasdf", 1);
-  }
-  a.flush();
-  cout << bl << std::endl;
 }
 
 TEST(BufferList, rebuild_aligned_size_and_memory) {
