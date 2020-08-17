@@ -619,6 +619,7 @@ void obj_version::generate_test_instances(list<obj_version*>& o)
 
 void RGWAccountInfo::generate_test_instances(list<RGWAccountInfo*>& o)
 {
-  auto acc = std::make_unique<RGWAccountInfo>("tenant1","account1");
-  o.push_back(acc.get());
+  RGWAccountInfo* acc = new RGWAccountInfo("account1", "tenant1");
+  o.push_back(acc);
+  o.push_back(new RGWAccountInfo);
 }
