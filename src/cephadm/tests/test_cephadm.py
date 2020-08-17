@@ -177,6 +177,20 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
         for address, expected in tests:
             unwrap_test(address, expected)
 
+    def test_wrap_ipv6(self):
+        def wrap_test(address, expected):
+            assert cd.wrap_ipv6(address) == expected
+
+        tests = [
+            ('::1', '[::1]'), ('[::1]', '[::1]'),
+            ('fde4:8dba:82e1:0:5054:ff:fe6a:357',
+             '[fde4:8dba:82e1:0:5054:ff:fe6a:357]'),
+            ('myhost.example.com', 'myhost.example.com'),
+            ('192.168.0.1', '192.168.0.1'),
+            ('', ''), ('fd00::1::1', 'fd00::1::1')]
+        for address, expected in tests:
+            wrap_test(address, expected)
+
     @mock.patch('cephadm.call_throws')
     @mock.patch('cephadm.get_parm')
     def test_registry_login(self, get_parm, call_throws):
