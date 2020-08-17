@@ -51,7 +51,7 @@ class health_check_map_t;
  * bound on the actual osd death.  down_at (if it is > up_from) is an
  * upper bound on the actual osd death.
  *
- * the second is the last_clean interval [first,last].  in that case,
+ * the second is the last_clean interval [begin,end).  in that case,
  * the last interval is the last epoch known to have been either
  * _finished_, or during which the osd cleanly shut down.  when
  * possible, we push this forward to the epoch the osd was eventually
