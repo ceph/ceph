@@ -512,8 +512,7 @@ void AdminSocket::execute_command(
   }
 
   // make sure one of the registered commands with this prefix validates.
-  while (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
-    ++p;
+  if (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
     if (p->first != prefix) {
       delete f;
       return on_finish(-EINVAL, "invalid command json", empty);
