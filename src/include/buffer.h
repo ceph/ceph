@@ -1054,13 +1054,13 @@ struct error_code;
     bool is_contiguous() const;
     void rebuild();
     void rebuild(std::unique_ptr<ptr_node, ptr_node::disposer> nb);
-    bool rebuild_aligned(unsigned align);
+    unsigned  rebuild_aligned(unsigned align);
     // max_buffers = 0 mean don't care _buffers.size(), other
     // must make _buffers.size() <= max_buffers after rebuilding.
-    bool rebuild_aligned_size_and_memory(unsigned align_size,
+    unsigned rebuild_aligned_size_and_memory(unsigned align_size,
 					 unsigned align_memory,
 					 unsigned max_buffers = 0);
-    bool rebuild_page_aligned();
+    unsigned rebuild_page_aligned();
 
     void reserve(size_t prealloc);
 

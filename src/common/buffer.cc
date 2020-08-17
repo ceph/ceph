@@ -1198,16 +1198,16 @@ static ceph::spinlock debug_lock;
     invalidate_crc();
   }
 
-  bool buffer::list::rebuild_aligned(unsigned align)
+  unsigned buffer::list::rebuild_aligned(unsigned align)
   {
     return rebuild_aligned_size_and_memory(align, align);
   }
   
-  bool buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
+  unsigned buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
 						    unsigned align_memory,
 						    unsigned max_buffers)
   {
-    bool had_to_rebuild = false;
+    unsigned memcopy_count = 0;
 
     if (max_buffers && _num > max_buffers && _len > (max_buffers * align_size)) {
       align_size = round_up_to(round_up_to(_len, max_buffers) / max_buffers, align_size);
@@ -1252,16 +1252,16 @@ static ceph::spinlock debug_lock;
         unaligned.rebuild(
           ptr_node::create(
             buffer::create_aligned(unaligned._len, align_memory)));
-        had_to_rebuild = true;
+        memcopy_count += unaligned._len;
       }
       _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
       _num += 1;
       ++p_prev;
     }
-    return had_to_rebuild;
+    return memcopy_count;
   }
   
-  bool buffer::list::rebuild_page_aligned()
+  unsigned buffer::list::rebuild_page_aligned()
   {
    return  rebuild_aligned(CEPH_PAGE_SIZE);
   }

@@ -878,9 +878,11 @@ int KernelDevice::write(
     return 0;
   }
 
-  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
-      bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
-    dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX)) {
+    unsigned copy_count = bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX);
+    if (copy_count) {
+      dout(20) << __func__ << " rebuilding buffer(len=" << len <<  "to be aligned(memcopy=" << copy_count << dendl;
+    }
   }
   dout(40) << "data: ";
   bl.hexdump(*_dout);
@@ -907,10 +909,13 @@ int KernelDevice::aio_write(
     return 0;
   }
 
-  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
-      bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
-    dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX)) {
+    unsigned copy_count = bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX);
+    if (copy_count) {
+      dout(20) << __func__ << " rebuilding buffer(len=" << len <<  "to be aligned(memcopy=" << copy_count << dendl;
+    }
   }
+
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
