@@ -36,6 +36,7 @@ import { SelectBadgesComponent } from './select-badges/select-badges.component';
 import { SelectComponent } from './select/select.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
+import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { ViewCacheComponent } from './view-cache/view-cache.component';
 
@@ -80,6 +81,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     AlertPanelComponent,
     FormModalComponent,
     PwdExpirationNotificationComponent,
+    TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     OrchestratorDocModalComponent
   ],
@@ -102,6 +104,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ConfigOptionComponent,
     AlertPanelComponent,
     PwdExpirationNotificationComponent,
+    TelemetryNotificationComponent,
     OrchestratorDocPanelComponent
   ],
   entryComponents: [
