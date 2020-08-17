@@ -23,7 +23,7 @@ from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
-    with_cephadm_module
+    with_cephadm_module, with_service, assert_rm_service
 from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
 
 """
@@ -32,11 +32,6 @@ TODOs:
     I general, everything should be testes in Teuthology as well. Reasons for
     also testing this here is the development roundtrip time.
 """
-
-
-def assert_rm_service(cephadm, srv_name):
-    assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
-    cephadm._apply_all_services()
 
 
 def assert_rm_daemon(cephadm: CephadmOrchestrator, prefix, host):
@@ -64,26 +59,6 @@ def with_daemon(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, ho
             return
 
     assert False, 'Daemon not found'
-
-
-@contextmanager
-def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str):
-    if spec.placement.is_empty():
-        spec.placement = PlacementSpec(hosts=[host], count=1)
-    c = meth(cephadm_module, spec)
-    assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
-    specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
-    assert spec in specs
-
-    cephadm_module._apply_all_services()
-
-    dds = wait(cephadm_module, cephadm_module.list_daemons())
-    names = {dd.service_name() for dd in dds}
-    assert spec.service_name() in names
-
-    yield
-
-    assert_rm_service(cephadm_module, spec.service_name())
 
 
 class TestCephadm(object):

@@ -3,6 +3,7 @@ import time
 import fnmatch
 from contextlib import contextmanager
 
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm.module import CEPH_DATEFMT
 
 try:
@@ -117,3 +118,28 @@ def with_host(m:CephadmOrchestrator, name):
     wait(m, m.add_host(HostSpec(hostname=name)))
     yield
     wait(m, m.remove_host(name))
+
+
+def assert_rm_service(cephadm, srv_name):
+    assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
+    cephadm._apply_all_services()
+
+
+@contextmanager
+def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str):
+    if spec.placement.is_empty():
+        spec.placement = PlacementSpec(hosts=[host], count=1)
+    c = meth(cephadm_module, spec)
+    assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
+    assert spec in specs
+
+    cephadm_module._apply_all_services()
+
+    dds = wait(cephadm_module, cephadm_module.list_daemons())
+    names = {dd.service_name() for dd in dds}
+    assert spec.service_name() in names, dds
+
+    yield
+
+    assert_rm_service(cephadm_module, spec.service_name())
