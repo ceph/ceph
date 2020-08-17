@@ -55,6 +55,16 @@ describe('HealthPieComponent', () => {
     expect(component.chartConfig.dataset[0].data).toEqual(initialData);
   });
 
+  it('should set colors from css variables', () => {
+    const cssVar = '--my-color';
+    const cssVarColor = '#73c5c5';
+    component['getCssVar'] = (name: string) => (name === cssVar ? cssVarColor : '');
+    component.chartConfig.colors[0].backgroundColor = [cssVar, '#ffffff'];
+    fixture.detectChanges();
+
+    expect(component.chartConfig.colors[0].backgroundColor).toEqual([cssVarColor, '#ffffff']);
+  });
+
   describe('tooltip body', () => {
     const tooltipBody = ['text: 10000'];
 

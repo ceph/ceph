@@ -25,6 +25,20 @@ $green: #0b0;
 $teal: #20c997 !default;
 $cyan: #17a2b8 !default;
 
+$health-chart-colors: (
+  'red': #c9190b,
+  'blue': #06c,
+  'orange': #ef9234,
+  'yellow': #f6d173,
+  'magenta': #009596,
+  'green': #7cc674,
+  'gray': #ededed,
+  'light-blue': #519de9,
+  'light-yellow': #f9e0a2,
+  'cyan': #73c5c5,
+  'purple': #3c3d99
+);
+
 $primary: #2b99a8;
 $secondary: #374249;
 $success: $green;
