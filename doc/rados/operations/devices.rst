@@ -101,9 +101,6 @@ health metrics it collects.  There are three modes:
 
 * *none*: disable device failure prediction.
 * *local*: use a pre-trained prediction model from the ceph-mgr daemon
-* *cloud*: share device health and performance metrics an external
-  cloud service run by ProphetStor, using either their free service or
-  a paid service with more accurate predictions
 
 The prediction mode can be configured with::
 
