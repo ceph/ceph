@@ -33,6 +33,15 @@ def test_upgrade_run(cephadm_module: CephadmOrchestrator):
 
             assert wait(cephadm_module, cephadm_module.upgrade_status()).target_image == 'to_image'
 
+            def _versions_mock(cmd):
+                return json.dumps({
+                    'mgr': {
+                        'myversion': 1
+                    }
+                })
+
+            cephadm_module._mon_command_mock_versions = _versions_mock
+
             cephadm_module.upgrade._do_upgrade()
 
             _, image, _ = cephadm_module.check_mon_command({
