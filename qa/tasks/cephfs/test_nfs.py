@@ -378,6 +378,7 @@ class TestNFS(MgrTestCase):
         check_pseudo_path('invalidpath')
         check_pseudo_path('/')
         check_pseudo_path('//')
+        self._cmd('fs', 'volume', 'rm', self.fs_name, '--yes-i-really-mean-it')
         self._test_delete_cluster()
 
     def test_cluster_info(self):
@@ -459,7 +460,6 @@ class TestNFS(MgrTestCase):
                 raise
         self._cmd('fs', 'volume', 'rm', fs_name, '--yes-i-really-mean-it')
         self._test_delete_cluster()
-        time.sleep(30)
 
     def test_cluster_set_user_config_with_non_existing_clusterid(self):
         '''
