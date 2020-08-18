@@ -1681,6 +1681,16 @@ TEST(BufferList, page_aligned_appender) {
     cout << bl << std::endl;
     ASSERT_EQ(6u, bl.get_num_buffers());
   }
+
+  // Verify that `page_aligned_appender` does respect the carrying
+  // `_carriage` over multiple allocations. Although `append_zero()`
+  // is used here, this affects other members of the append family.
+  // This part would be crucial for e.g. `encode()`.
+  {
+    bl.append_zero(42);
+    cout << bl << std::endl;
+    ASSERT_EQ(6u, bl.get_num_buffers());
+  }
 }
 
 TEST(BufferList, rebuild_aligned_size_and_memory) {
