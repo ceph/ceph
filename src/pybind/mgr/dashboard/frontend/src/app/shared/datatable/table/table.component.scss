@@ -252,12 +252,12 @@
   }
 
   .datatable-footer {
-    display: unset !important;
-
     .selected-count,
     .page-count {
       font-style: italic;
-      padding-left: 5px;
+      min-height: 2rem;
+      padding-left: 0.3rem;
+      padding-top: 0.3rem;
     }
   }
 
