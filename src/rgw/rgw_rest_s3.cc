@@ -256,7 +256,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     /* JSON encode object metadata */
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
-    encode_json("attrs", attrs.attrs, &jf);
+    encode_json("attrs", attrs, &jf);
     utime_t ut(lastmod);
     encode_json("mtime", ut, &jf);
     jf.close_section();
@@ -271,14 +271,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
     uint64_t pg_ver = 0;
-    int r = decode_attr_bl_single_value(attrs.attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
+    int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     dump_header(s, "Rgwx-Obj-PG-Ver", pg_ver);
 
     uint32_t source_zone_short_id = 0;
-    r = decode_attr_bl_single_value(attrs.attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
+    r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
@@ -444,7 +444,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
 
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = rgw_s3_prepare_decrypt(s, attrs.attrs, &block_crypt, crypt_http_responses);
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
       auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
@@ -4905,7 +4905,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
       return -ERR_NO_SUCH_BUCKET;
   }
 
-  s->bucket_attrs = s->bucket->get_attrs().attrs;
+  s->bucket_attrs = s->bucket->get_attrs();
 
   if (!s->bucket->get_info().has_website) {
       // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here

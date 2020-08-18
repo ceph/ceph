@@ -1458,8 +1458,8 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     dump_etag(s, etag);
     dump_last_modified(s, mtime);
     dump_copy_info();
-    get_contype_from_attrs(attrs.attrs, content_type);
-    dump_object_metadata(this, s, attrs.attrs);
+    get_contype_from_attrs(attrs, content_type);
+    dump_object_metadata(this, s, attrs);
     end_header(s, this, !content_type.empty() ? content_type.c_str()
 	       : "binary/octet-stream");
   } else {
@@ -1554,8 +1554,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
       }
     }
 
-    get_contype_from_attrs(attrs.attrs, content_type);
-    dump_object_metadata(this, s, attrs.attrs);
+    get_contype_from_attrs(attrs, content_type);
+    dump_object_metadata(this, s, attrs);
   }
 
   end_header(s, this, !content_type.empty() ? content_type.c_str()

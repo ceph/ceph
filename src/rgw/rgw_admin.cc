@@ -1353,7 +1353,7 @@ int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& buc
 
   map<string, bufferlist>::iterator iter;
   iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
-  if (iter == obj->get_attrs().attrs.end()) {
+  if (iter == obj->get_attrs().end()) {
     *need_rewrite = (obj->get_obj_size() >= min_stripe_size);
     return 0;
   }

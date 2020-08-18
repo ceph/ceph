@@ -573,9 +573,9 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     }
 
     s->bucket_mtime = s->bucket->get_modification_time();
-    s->bucket_attrs = s->bucket->get_attrs().attrs;
+    s->bucket_attrs = s->bucket->get_attrs();
     ret = read_bucket_policy(store, s, s->bucket->get_info(),
-			     s->bucket->get_attrs().attrs,
+			     s->bucket->get_attrs(),
 			     s->bucket_acl.get(), s->bucket->get_key());
     acct_acl_user = {
       s->bucket->get_info().owner,
@@ -629,7 +629,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
       return -EINVAL;
     }
 
-    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket->get_attrs().attrs);
+    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket->get_attrs());
   }
 
   /* handle user ACL only for those APIs which support it */
@@ -755,8 +755,8 @@ static int rgw_iam_add_existing_objtags(rgw::sal::RGWRadosStore* store, struct r
   if (op_ret < 0)
     return op_ret;
   rgw::sal::RGWAttrs attrs = s->object->get_attrs();
-  auto tags = attrs.attrs.find(RGW_ATTR_TAGS);
-  if (tags != attrs.attrs.end()){
+  auto tags = attrs.find(RGW_ATTR_TAGS);
+  if (tags != attrs.end()){
     return rgw_iam_add_tags_from_bl(s, tags->second);
   }
   return 0;
@@ -926,8 +926,8 @@ int RGWGetObj::verify_permission()
 // cache the objects tags into the requests
 // use inside try/catch as "decode()" may throw
 void populate_tags_in_request(req_state* s, const rgw::sal::RGWAttrs& attrs) {
-  const auto attr_iter = attrs.attrs.find(RGW_ATTR_TAGS);
-  if (attr_iter != attrs.attrs.end()) {
+  const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
+  if (attr_iter != attrs.end()) {
     auto bliter = attr_iter->second.cbegin();
     decode(s->tagset, bliter);
   }
@@ -935,7 +935,7 @@ void populate_tags_in_request(req_state* s, const rgw::sal::RGWAttrs& attrs) {
 
 // cache the objects metadata into the request
 void populate_metadata_in_request(req_state* s, const rgw::sal::RGWAttrs& attrs) {
-  for (auto& attr : attrs.attrs) {
+  for (auto& attr : attrs) {
     if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
       std::string_view key(attr.first);
       key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
@@ -1008,8 +1008,8 @@ void RGWGetObjTags::execute()
   }
 
   attrs = s->object->get_attrs();
-  auto tags = attrs.attrs.find(RGW_ATTR_TAGS);
-  if(tags != attrs.attrs.end()){
+  auto tags = attrs.find(RGW_ATTR_TAGS);
+  if(tags != attrs.end()){
     has_tags = true;
     tags_bl.append(tags->second);
   }
@@ -1531,7 +1531,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
   if (op_ret < 0)
     return op_ret;
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(part->get_attrs().attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(part->get_attrs(), need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
@@ -1558,7 +1558,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
 	  }
   }
 
-  op_ret = rgw_policy_from_attrset(s->cct, part->get_attrs().attrs, &obj_policy);
+  op_ret = rgw_policy_from_attrset(s->cct, part->get_attrs(), &obj_policy);
   if (op_ret < 0)
     return op_ret;
 
@@ -1944,7 +1944,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         }
         bucket = tmp_bucket.get();
         bucket_acl = &_bucket_acl;
-        r = read_bucket_policy(store, s, tmp_bucket->get_info(), tmp_bucket->get_attrs().attrs, bucket_acl,
+        r = read_bucket_policy(store, s, tmp_bucket->get_info(), tmp_bucket->get_attrs(), bucket_acl,
                                tmp_bucket->get_key());
         if (r < 0) {
           ldpp_dout(this, 0) << "failed to read bucket ACL for bucket "
@@ -1952,7 +1952,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
           return r;
 	}
 	auto _bucket_policy = get_iam_policy_from_attr(
-	  s->cct, tmp_bucket->get_attrs().attrs, tmp_bucket->get_tenant());
+	  s->cct, tmp_bucket->get_attrs(), tmp_bucket->get_tenant());
         bucket_policy = _bucket_policy.get_ptr();
 	buckets[bucket_name].swap(tmp_bucket);
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
@@ -2142,7 +2142,7 @@ void RGWGetObj::execute()
   }
   /* end gettorrent */
 
-  op_ret = rgw_compression_info_from_attrset(attrs.attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
     goto done_err;
@@ -2197,7 +2197,7 @@ void RGWGetObj::execute()
   }
 
   /* Decode S3 objtags, if any */
-  rgw_cond_decode_objtags(s, attrs.attrs);
+  rgw_cond_decode_objtags(s, attrs);
 
   start = ofs;
 
@@ -3218,7 +3218,7 @@ void RGWCreateBucket::execute()
         op_ret = -EEXIST;
         return;
       } else {
-        s->bucket_attrs = s->bucket->get_attrs().attrs;
+        s->bucket_attrs = s->bucket->get_attrs();
       }
 
       attrs.clear();
@@ -3632,7 +3632,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   obj_size = obj->get_obj_size();
 
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(obj->get_attrs().attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(obj->get_attrs(), need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
@@ -3649,7 +3649,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   auto attr_iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
   op_ret = this->get_decrypt_filter(&decrypt,
                                     filter,
-                                    obj->get_attrs().attrs,
+                                    obj->get_attrs(),
                                     attr_iter != obj->get_attrs().end() ? &(attr_iter->second) : nullptr);
   if (decrypt != nullptr) {
     filter = decrypt.get();
@@ -4466,7 +4466,7 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs.attrs, false);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
   if (op_ret < 0) {
     return;
   }
@@ -4503,15 +4503,15 @@ void RGWPutMetadataBucket::execute()
       /* It's supposed that following functions WILL NOT change any
        * special attributes (like RGW_ATTR_ACL) if they are already
        * present in attrs. */
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs.attrs);
-      populate_with_generic_attrs(s, attrs.attrs);
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+      populate_with_generic_attrs(s, attrs);
 
       /* According to the Swift's behaviour and its container_quota
        * WSGI middleware implementation: anyone with write permissions
        * is able to set the bucket quota. This stays in contrast to
        * account quotas that can be set only by clients holding
        * reseller admin privileges. */
-      op_ret = filter_out_quota_info(attrs.attrs, rmattr_names, s->bucket->get_info().quota);
+      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket->get_info().quota);
       if (op_ret < 0) {
 	return op_ret;
       }
@@ -4522,7 +4522,7 @@ void RGWPutMetadataBucket::execute()
       }
 
       /* Web site of Swift API. */
-      filter_out_website(attrs.attrs, rmattr_names, s->bucket->get_info().website_conf);
+      filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
       /* Setting attributes also stores the provided bucket info. Due
@@ -4561,7 +4561,7 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs.attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }
@@ -4580,12 +4580,12 @@ void RGWPutMetadataObject::execute()
   }
 
   /* Filter currently existing attributes. */
-  prepare_add_del_attrs(s->object->get_attrs().attrs, attrs.attrs, rmattrs.attrs);
-  populate_with_generic_attrs(s, attrs.attrs);
-  encode_delete_at_attr(delete_at, attrs.attrs);
+  prepare_add_del_attrs(s->object->get_attrs(), attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+  encode_delete_at_attr(delete_at, attrs);
 
   if (dlo_manifest) {
-    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs.attrs);
+    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
@@ -4745,8 +4745,8 @@ void RGWDeleteObj::execute()
     op_ret = 0;
 
     if (check_obj_lock) {
-      auto aiter = attrs.attrs.find(RGW_ATTR_OBJECT_RETENTION);
-      if (aiter != attrs.attrs.end()) {
+      auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+      if (aiter != attrs.end()) {
         RGWObjectRetention obj_retention;
         try {
           decode(obj_retention, aiter->second);
@@ -4762,8 +4762,8 @@ void RGWDeleteObj::execute()
           }
         }
       }
-      aiter = attrs.attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-      if (aiter != attrs.attrs.end()) {
+      aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+      if (aiter != attrs.end()) {
         RGWObjectLegalHold obj_legal_hold;
         try {
           decode(obj_legal_hold, aiter->second);
@@ -4780,9 +4780,9 @@ void RGWDeleteObj::execute()
     }
 
     if (multipart_delete) {
-      const auto slo_attr = attrs.attrs.find(RGW_ATTR_SLO_MANIFEST);
+      const auto slo_attr = attrs.find(RGW_ATTR_SLO_MANIFEST);
 
-      if (slo_attr != attrs.attrs.end()) {
+      if (slo_attr != attrs.end()) {
         op_ret = handle_slo_manifest(slo_attr->second);
         if (op_ret < 0) {
           ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret << dendl;
@@ -4860,15 +4860,15 @@ void RGWDeleteObj::execute()
     // cache the objects tags and metadata into the requests
     // so it could be used in the notification mechanism
     try {
-      populate_tags_in_request(s, attrs.attrs);
+      populate_tags_in_request(s, attrs);
     } catch (buffer::error& err) {
       ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
     }
-    populate_metadata_in_request(s, attrs.attrs);
+    populate_metadata_in_request(s, attrs);
     const auto obj_state = obj_ctx->get_state(s->object->get_obj());
 
     // send request to notification manager
-    const auto ret = rgw::notify::publish_commit(s->object.get(), obj_state->size, obj_state->mtime, attrs.attrs[RGW_ATTR_ETAG].to_str(), event_type, res);
+    const auto ret = rgw::notify::publish_commit(s->object.get(), obj_state->size, obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str(), event_type, res);
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
@@ -4960,7 +4960,7 @@ int RGWCopyObj::verify_permission()
     rgw_placement_rule src_placement;
 
     /* check source object permissions */
-    op_ret = read_obj_policy(store, s, src_bucket->get_info(), src_bucket->get_attrs().attrs, &src_acl, &src_placement.storage_class,
+    op_ret = read_obj_policy(store, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), src_object.get());
     if (op_ret < 0) {
       return op_ret;
@@ -5028,12 +5028,12 @@ int RGWCopyObj::verify_permission()
 
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(store, s, dest_bucket->get_info(),
-			      dest_bucket->get_attrs().attrs,
+			      dest_bucket->get_attrs(),
                               &dest_bucket_policy, dest_bucket->get_key());
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, dest_bucket->get_attrs().attrs, dest_bucket->get_tenant());
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, dest_bucket->get_attrs(), dest_bucket->get_tenant());
   /* admin request overrides permission checks */
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
     if (dest_iam_policy != boost::none) {
@@ -5092,11 +5092,11 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs.attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
     return op_ret;
   }
-  populate_with_generic_attrs(s, attrs.attrs);
+  populate_with_generic_attrs(s, attrs);
 
   return 0;
 }
@@ -5148,7 +5148,7 @@ void RGWCopyObj::execute()
   src_object->set_atomic(&obj_ctx);
   dest_object->set_atomic(&obj_ctx);
 
-  encode_delete_at_attr(delete_at, attrs.attrs);
+  encode_delete_at_attr(delete_at, attrs);
 
   if (!s->system_request) { // no quota enforcement for system requests
     // get src object size (cached in obj_ctx from verify_permission())
@@ -6032,7 +6032,7 @@ void RGWCompleteMultipart::execute()
 		     << " ret=" << op_ret << dendl;
     return;
   }
-  attrs = meta_obj->get_attrs().attrs;
+  attrs = meta_obj->get_attrs();
 
   do {
     op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
@@ -6617,7 +6617,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     goto binfo_fail;
   }
 
-  if (!verify_permission(bucket->get_info(), bucket->get_attrs().attrs, bowner)) {
+  if (!verify_permission(bucket->get_info(), bucket->get_attrs(), bowner)) {
     ret = -EACCES;
     goto auth_fail;
   }
@@ -7008,7 +7008,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   if (! handle_file_verify_permission(bucket->get_info(),
 				      obj->get_obj(),
-				      bucket->get_attrs().attrs, bowner)) {
+				      bucket->get_attrs(), bowner)) {
     ldpp_dout(this, 20) << "object creation unauthorized" << dendl;
     op_ret = -EACCES;
     return op_ret;
@@ -7750,8 +7750,8 @@ void RGWPutObjRetention::execute()
     return;
   }
   rgw::sal::RGWAttrs attrs = s->object->get_attrs();
-  auto aiter = attrs.attrs.find(RGW_ATTR_OBJECT_RETENTION);
-  if (aiter != attrs.attrs.end()) {
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aiter != attrs.end()) {
     RGWObjectRetention old_obj_retention;
     try {
       decode(old_obj_retention, aiter->second);
@@ -7800,8 +7800,8 @@ void RGWGetObjRetention::execute()
     return;
   }
   rgw::sal::RGWAttrs attrs = s->object->get_attrs();
-  auto aiter = attrs.attrs.find(RGW_ATTR_OBJECT_RETENTION);
-  if (aiter == attrs.attrs.end()) {
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aiter == attrs.end()) {
     op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
     return;
   }
@@ -7894,8 +7894,8 @@ void RGWGetObjLegalHold::execute()
                        << " ret=" << op_ret << dendl;
     return;
   }
-  auto aiter = s->object->get_attrs().attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-  if (aiter == s->object->get_attrs().attrs.end()) {
+  auto aiter = s->object->get_attrs().find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (aiter == s->object->get_attrs().end()) {
     op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
     return;
   }
