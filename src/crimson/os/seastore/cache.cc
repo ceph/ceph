@@ -395,6 +395,36 @@ Cache::replay_delta(
   }
 }
 
+Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
+  journal_seq_t seq)
+{
+  std::vector<CachedExtentRef> ret;
+  for (auto i = dirty.begin(); i != dirty.end(); ++i) {
+    CachedExtentRef cand;
+    if (i->dirty_from < seq) {
+      assert(ret.empty() || ret.back()->dirty_from <= i->dirty_from);
+      ret.push_back(&*i);
+    } else {
+      break;
+    }
+  }
+  return seastar::do_with(
+    std::move(ret),
+    [](auto &ret) {
+      return seastar::do_for_each(
+	ret,
+	[](auto &ext) {
+	  logger().debug(
+	    "get_next_dirty_extents: waiting on {}",
+	    *ext);
+	  return ext->wait_io();
+	}).then([&ret]() mutable {
+	  return seastar::make_ready_future<std::vector<CachedExtentRef>>(
+	    std::move(ret));
+	});
+    });
+}
+
 Cache::get_root_ret Cache::get_root(Transaction &t)
 {
   if (t.root) {

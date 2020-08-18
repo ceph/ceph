@@ -20,21 +20,22 @@ namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
   SegmentManager &segment_manager,
+  SegmentCleaner &segment_cleaner,
   Journal &journal,
   Cache &cache,
   LBAManager &lba_manager)
   : segment_manager(segment_manager),
+    segment_cleaner(segment_cleaner),
     cache(cache),
     lba_manager(lba_manager),
     journal(journal)
-{
-  journal.set_segment_provider(this);
-}
+{}
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   return journal.open_for_write().safe_then([this](auto addr) {
     logger().debug("TransactionManager::mkfs: about to do_with");
+    segment_cleaner.set_journal_head(addr);
     return seastar::do_with(
       create_transaction(),
       [this](auto &transaction) {
@@ -67,6 +68,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return journal.open_for_write();
   }).safe_then([this](auto addr) {
+    segment_cleaner.set_journal_head(addr);
     return seastar::do_with(
       create_transaction(),
       [this](auto &t) {
@@ -156,23 +158,59 @@ TransactionManager::submit_transaction_ertr::future<>
 TransactionManager::submit_transaction(
   TransactionRef t)
 {
-  auto record = cache.try_construct_record(*t);
-  if (!record) {
-    return crimson::ct_error::eagain::make();
+  logger().debug("TransactionManager::submit_transaction");
+  return segment_cleaner.do_immediate_work(*t
+  ).safe_then([this, t=std::move(t)]() mutable -> submit_transaction_ertr::future<> {
+    auto record = cache.try_construct_record(*t);
+    if (!record) {
+      return crimson::ct_error::eagain::make();
+    }
+
+    return journal.submit_record(std::move(*record)).safe_then(
+      [this, t=std::move(t)](auto p) mutable {
+	auto [addr, journal_seq] = p;
+	segment_cleaner.set_journal_head(journal_seq);
+	cache.complete_commit(*t, addr, journal_seq);
+	lba_manager.complete_transaction(*t);
+      },
+      submit_transaction_ertr::pass_further{},
+      crimson::ct_error::all_same_way([](auto e) {
+	ceph_assert(0 == "Hit error submitting to journal");
+      }));
+  });
+}
+
+TransactionManager::get_next_dirty_extents_ret
+TransactionManager::get_next_dirty_extents(journal_seq_t seq)
+{
+  return cache.get_next_dirty_extents(seq);
+}
+
+TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
+  Transaction &t,
+  CachedExtentRef extent)
+{
+  {
+    auto updated = cache.update_extent_from_transaction(t, extent);
+    if (!updated) {
+      logger().debug(
+	"{}: {} is already retired, skipping",
+	__func__,
+	*extent);
+      return rewrite_extent_ertr::now();
+    }
+    extent = updated;
   }
 
-  logger().debug("TransactionManager::submit_transaction");
-
-  return journal.submit_record(std::move(*record)).safe_then(
-    [this, t=std::move(t)](auto p) mutable {
-      auto [addr, journal_seq] = p;
-      cache.complete_commit(*t, addr, journal_seq);
-      lba_manager.complete_transaction(*t);
-    },
-    submit_transaction_ertr::pass_further{},
-    crimson::ct_error::all_same_way([](auto e) {
-      ceph_assert(0 == "Hit error submitting to journal");
-    }));
+  if (extent->get_type() == extent_types_t::ROOT) {
+    logger().debug(
+      "{}: marking root {} for rewrite",
+      __func__,
+      *extent);
+    cache.duplicate_for_write(t, extent);
+    return rewrite_extent_ertr::now();
+  }
+  return lba_manager.rewrite_extent(t, extent);
 }
 
 TransactionManager::~TransactionManager() {}
