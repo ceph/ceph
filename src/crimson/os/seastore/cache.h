@@ -14,6 +14,7 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 
 namespace crimson::os::seastore {
 
@@ -399,6 +400,13 @@ public:
     std::ostream &out) const {
     return out;
   }
+
+  /// returns extents with dirty_from < seq
+  using get_next_dirty_extents_ertr = crimson::errorator<>;
+  using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
+    std::vector<CachedExtentRef>>;
+  get_next_dirty_extents_ret get_next_dirty_extents(
+    journal_seq_t seq);
 
 private:
   SegmentManager &segment_manager; ///< ref to segment_manager

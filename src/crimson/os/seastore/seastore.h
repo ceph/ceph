@@ -16,6 +16,7 @@
 #include "include/uuid.h"
 
 #include "os/Transaction.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/futurized_store.h"
 #include "transaction.h"
 
@@ -119,6 +120,7 @@ public:
 
 private:
   std::unique_ptr<SegmentManager> segment_manager;
+  std::unique_ptr<SegmentCleaner> segment_cleaner;
   std::unique_ptr<Cache> cache;
   std::unique_ptr<Journal> journal;
   std::unique_ptr<LBAManager> lba_manager;

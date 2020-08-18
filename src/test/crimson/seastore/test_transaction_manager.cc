@@ -3,6 +3,7 @@
 
 #include "test/crimson/gtest_seastar.h"
 
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -46,6 +47,7 @@ std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
 
 struct transaction_manager_test_t : public seastar_test_suite_t {
   std::unique_ptr<SegmentManager> segment_manager;
+  SegmentCleaner segment_cleaner;
   Journal journal;
   Cache cache;
   LBAManagerRef lba_manager;
@@ -53,11 +55,17 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
 
   transaction_manager_test_t()
     : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
+      segment_cleaner(
+	SegmentCleaner::config_t::default_from_segment_manager(
+	  *segment_manager)),
       journal(*segment_manager),
       cache(*segment_manager),
       lba_manager(
 	lba_manager::create_lba_manager(*segment_manager, cache)),
-      tm(*segment_manager, journal, cache, *lba_manager) {}
+      tm(*segment_manager, segment_cleaner, journal, cache, *lba_manager) {
+    journal.set_segment_provider(&segment_cleaner);
+    segment_cleaner.set_extent_callback(&tm);
+  }
 
   seastar::future<> set_up_fut() final {
     return segment_manager->init().safe_then([this] {
