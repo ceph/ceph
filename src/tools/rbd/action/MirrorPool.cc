@@ -818,8 +818,7 @@ int get_mirror_image_status(
 void get_peer_bootstrap_create_arguments(po::options_description *positional,
                                          po::options_description *options) {
   at::add_pool_options(positional, options, false);
-  options->add_options()
-    (SITE_NAME.c_str(), po::value<std::string>(), "local site name");
+  add_site_name_optional(options);
 }
 
 int execute_peer_bootstrap_create(
@@ -871,8 +870,7 @@ int execute_peer_bootstrap_create(
 void get_peer_bootstrap_import_arguments(po::options_description *positional,
                                          po::options_description *options) {
   at::add_pool_options(positional, options, false);
-  options->add_options()
-    (SITE_NAME.c_str(), po::value<std::string>(), "local site name");
+  add_site_name_optional(options);
   positional->add_options()
     ("token-path", po::value<std::string>(),
      "bootstrap token file (or '-' for stdin)");
