@@ -37,36 +37,7 @@ enum AttrsMod {
   ATTRSMOD_MERGE   = 2
 };
 
-struct RGWAttrs {
-  std::map<std::string, ceph::buffer::list> attrs;
-
-  RGWAttrs() {}
-  RGWAttrs(const std::map<std::string, ceph::buffer::list>&& _a) : attrs(std::move(_a)) {}
-  RGWAttrs(const std::map<std::string, ceph::buffer::list>& _a) : attrs(_a) {}
-
-  void emplace(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
-    map<string, bufferlist>::iterator find(const std::string& key);
-  }
-  std::size_t erase(const std::string& key) {
-    return attrs.erase(key);
-  }
-  std::map<std::string, bufferlist>::iterator find(const std::string& key) {
-    return attrs.find(key);
-  }
-  std::map<std::string, bufferlist>::iterator end() {
-    return attrs.end();
-  }
-  std::map<std::string, bufferlist>::iterator begin() {
-    return attrs.begin();
-  }
-  ceph::buffer::list& operator[](const std::string& k) {
-    return attrs[k];
-  }
-  ceph::buffer::list& operator[](std::string&& k) {
-    return attrs[k];
-  }
-};
+using RGWAttrs = std::map<std::string, ceph::buffer::list>;
 
 class RGWStore : public DoutPrefixProvider {
   public:
@@ -83,7 +54,7 @@ class RGWStore : public DoutPrefixProvider {
                             rgw_placement_rule& placement_rule,
                             std::string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
-			    map<std::string, bufferlist>& attrs,
+			    RGWAttrs& attrs,
                             RGWBucketInfo& info,
                             obj_version& ep_objv,
 			    bool exclusive,
@@ -434,7 +405,7 @@ class RGWObject {
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
-			      std::map<std::string, bufferlist> *vals) = 0;
+			      RGWAttrs *vals) = 0;
 
     static bool empty(RGWObject* o) { return (!o || o->empty()); }
     virtual std::unique_ptr<RGWObject> clone() = 0;

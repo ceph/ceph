@@ -124,7 +124,7 @@ class RGWRadosObject : public RGWObject {
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
-			      std::map<std::string, bufferlist> *vals) override;
+			      RGWAttrs *vals) override;
 
   private:
     int read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj = nullptr);
@@ -236,7 +236,7 @@ class RGWRadosStore : public RGWStore {
                             rgw_placement_rule& placement_rule,
                             std::string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
-			    map<std::string, bufferlist>& attrs,
+			    RGWAttrs& attrs,
                             RGWBucketInfo& info,
                             obj_version& ep_objv,
 			    bool exclusive,
