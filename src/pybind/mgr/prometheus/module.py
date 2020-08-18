@@ -742,7 +742,8 @@ class Module(MgrModule):
 
         # Parse rbd_stats_pools option, which is a comma or space separated
         # list of pool[/namespace] entries. If no namespace is specifed the
-        # stats are collected for every namespace in the pool.
+        # stats are collected for every namespace in the pool. The wildcard
+        # '*' can be used to indicate all pools or namespaces
         pools_string = self.get_localized_module_option('rbd_stats_pools', '')
         pool_keys = []
         for x in re.split('[\s,]+', pools_string):
@@ -773,11 +774,12 @@ class Module(MgrModule):
                 # empty set means collect for all namespaces
                 pools[pool_name] = set()
                 continue
+
             if pool_name not in pools:
                 pools[pool_name] = set()
             elif not pools[pool_name]:
                 continue
-            pools[pool_name].add(s[1])
+            pools[pool_name].add(namespace_name)
 
         rbd_stats_pools = {}
         for pool_id in self.rbd_stats['pools'].keys():
