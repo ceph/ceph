@@ -120,6 +120,9 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   return lba_manager.decref_extent(t, ref->get_laddr()
   ).safe_then([this, &t, ref](auto ret) {
     if (ret.refcount == 0) {
+      logger().debug(
+	"TransactionManager::dec_ref: extent {} refcount 0",
+	*ref);
       cache.retire_extent(t, ref);
     }
     return ret.refcount;
@@ -131,8 +134,11 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   laddr_t offset)
 {
   return lba_manager.decref_extent(t, offset
-  ).safe_then([this, &t](auto result) -> ref_ret {
+  ).safe_then([this, offset, &t](auto result) -> ref_ret {
     if (result.refcount == 0) {
+      logger().debug(
+	"TransactionManager::dec_ref: offset {} refcount 0",
+	offset);
       return cache.retire_extent_if_cached(t, result.addr).safe_then([] {
 	return ref_ret(
 	  ref_ertr::ready_future_marker{},
