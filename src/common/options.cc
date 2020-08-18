@@ -7467,6 +7467,12 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_rwl_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/tmp")
     .set_description("location of the persistent write back cache in a DAX-enabled filesystem on persistent memory"),
+
+    Option("rbd_config_pool_override_update_timestamp", Option::TYPE_UINT,
+           Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("timestamp of last update to pool-level config overrides"),
+
   });
 }
 

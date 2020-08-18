@@ -157,6 +157,7 @@ public:
   }
 
   ImageCtx::~ImageCtx() {
+    ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);
     ceph_assert(object_map == NULL);
@@ -726,6 +727,8 @@ public:
                                 bool thread_safe) {
     ldout(cct, 20) << __func__ << dendl;
 
+    std::unique_lock image_locker(image_lock);
+
     // reset settings back to global defaults
     for (auto& key : config_overrides) {
       std::string value;
@@ -763,6 +766,8 @@ public:
         }
       }
     }
+
+    image_locker.unlock();
 
 #define ASSIGN_OPTION(param, type)              \
     param = config.get_val<type>("rbd_"#param)
