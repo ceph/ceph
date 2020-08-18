@@ -53,20 +53,22 @@ int CacheServer::start_accept() {
   boost::system::error_code ec;
   m_acceptor.open(m_local_path.protocol(), ec);
   if (ec) {
-    ldout(cct, 1) << "m_acceptor open fails: " << ec.message() << dendl;
-    return -1;
+    lderr(cct) << "failed to open domain socket: " << ec.message() << dendl;
+    return -ec.value();
   }
 
   m_acceptor.bind(m_local_path, ec);
   if (ec) {
-    ldout(cct, 1) << "m_acceptor bind fails: " << ec.message() << dendl;
-    return -1;
+    lderr(cct) << "failed to bind to domain socket '"
+               << m_local_path << "': " << ec.message() << dendl;
+    return -ec.value();
   }
 
   m_acceptor.listen(boost::asio::socket_base::max_connections, ec);
   if (ec) {
-    ldout(cct, 1) << "m_acceptor listen fails: " << ec.message() << dendl;
-    return -1;
+    lderr(cct) << "failed to listen on domain socket: " << ec.message()
+               << dendl;
+    return -ec.value();
   }
 
   accept();

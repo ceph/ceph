@@ -45,10 +45,13 @@ int CacheController::init() {
 int CacheController::shutdown() {
   ldout(m_cct, 20) << dendl;
 
-  int r = m_cache_server->stop();
-  if (r < 0) {
-    lderr(m_cct) << "stop error\n" << dendl;
-    return r;
+  int r;
+  if (m_cache_server != nullptr) {
+    r = m_cache_server->stop();
+    if (r < 0) {
+      lderr(m_cct) << "stop error\n" << dendl;
+      return r;
+    }
   }
 
   r = m_object_cache_store->shutdown();
@@ -64,10 +67,15 @@ void CacheController::handle_signal(int signum) {
   shutdown();
 }
 
-void CacheController::run() {
+int CacheController::run() {
   try {
     std::string controller_path =
       m_cct->_conf.get_val<std::string>("immutable_object_cache_sock");
+    if (controller_path.empty()) {
+      lderr(m_cct) << "'immutable_object_cache_sock' path not set" << dendl;
+      return -EINVAL;
+    }
+
     std::remove(controller_path.c_str());
 
     m_cache_server = new CacheServer(m_cct, controller_path,
@@ -76,10 +84,13 @@ void CacheController::run() {
 
     int ret = m_cache_server->run();
     if (ret != 0) {
-      throw std::runtime_error("io serivce run error");
+      return ret;
     }
+
+    return 0;
   } catch (std::exception& e) {
     lderr(m_cct) << "Exception: " << e.what() << dendl;
+    return -EFAULT;
   }
 }
 
