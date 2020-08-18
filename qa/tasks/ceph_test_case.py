@@ -20,6 +20,7 @@ class CephTestCase(unittest.TestCase):
     mounts = None
     fs = None
     recovery_fs = None
+    backup_fs = None
     ceph_cluster = None
     mds_cluster = None
     mgr_cluster = None
