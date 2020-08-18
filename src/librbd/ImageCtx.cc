@@ -122,7 +122,6 @@ public:
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
       io_work_queue(nullptr), op_work_queue(nullptr),
-      external_callback_completions(32),
       event_socket_completions(32),
       asok_hook(nullptr),
       trace_endpoint("librbd")
