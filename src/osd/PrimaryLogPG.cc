@@ -7008,6 +7008,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  goto fail;
 	}
+	if (src_offset + src_length > oi.size) {
+	  result = -ERANGE;
+	  goto fail;
+	}
 
 	for (auto &p : oi.manifest.chunk_map) {
 	  if ((p.first <= src_offset && p.first + p.second.length > src_offset) ||
