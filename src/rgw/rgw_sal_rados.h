@@ -206,6 +206,9 @@ class RGWRadosBucket : public RGWBucket {
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) override;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(ceph::real_time *pmtime) override;
+    virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+			   bool *is_truncated, RGWUsageIter& usage_iter,
+			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual std::unique_ptr<RGWBucket> clone() {
       return std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this));
     }

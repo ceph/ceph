@@ -22,6 +22,13 @@ class RGWGetDataCB;
 struct RGWObjState;
 class RGWAccessListFilter;
 
+struct RGWUsageIter {
+  string read_iter;
+  uint32_t index;
+
+  RGWUsageIter() : index(0) {}
+};
+
 namespace rgw { namespace sal {
 
 #define RGW_SAL_VERSION 1
@@ -198,6 +205,9 @@ class RGWBucket {
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) = 0;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) = 0;
     virtual int try_refresh_info(ceph::real_time *pmtime) = 0;
+    virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+			   bool *is_truncated, RGWUsageIter& usage_iter,
+			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
 
     bool empty() const { return info.bucket.name.empty(); }
     const std::string& get_name() const { return info.bucket.name; }
