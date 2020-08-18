@@ -47,8 +47,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
-thread_local SharedDriverQueueData *queue_t;
-
 static constexpr uint16_t data_buffer_default_num = 1024;
 
 static constexpr uint32_t data_buffer_size = 8192;
@@ -757,8 +755,6 @@ void NVMEDevice::close()
 {
   dout(1) << __func__ << dendl;
 
-  delete queue_t;
-  queue_t = nullptr;
   name.clear();
   driver->remove_device(this);
 
@@ -796,9 +792,9 @@ void NVMEDevice::aio_submit(IOContext *ioc)
     ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
     // Only need to push the first entry
     ioc->nvme_task_first = ioc->nvme_task_last = nullptr;
-    if (!queue_t)
-	queue_t = new SharedDriverQueueData(this, driver);
-    queue_t->_aio_handle(t, ioc);
+
+    thread_local SharedDriverQueueData queue_t = SharedDriverQueueData(this, driver);
+    queue_t._aio_handle(t, ioc);
   }
 }
 
