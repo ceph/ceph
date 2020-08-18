@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import datetime
@@ -1277,3 +1278,12 @@ class CephFSMount(object):
             "used": int(used),
             "available": int(avail)
         }
+
+    def dir_checksum(self, path=None):
+        cmd = ["find"]
+        if path:
+            cmd.append(path)
+        cmd.extend(["-type", "f", "-exec", "md5sum", "{}", "+"])
+        checksum_text = self.run_shell(cmd).stdout.getvalue().strip()
+        checksum_sorted = sorted(checksum_text.split('\n'), key=lambda v: v.split()[1])
+        return hashlib.md5(('\n'.join(checksum_sorted)).encode('utf-8')).hexdigest()
