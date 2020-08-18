@@ -638,7 +638,9 @@ class RGWRadosStore : public RGWStore {
     RGWRados *getRados(void) { return rados; }
 
     RGWServices *svc() { return &rados->svc; }
+    const RGWServices *svc() const { return &rados->svc; }
     RGWCtl *ctl() { return &rados->ctl; }
+    const RGWCtl *ctl() const { return &rados->ctl; }
 
     void setUserCtl(RGWUserCtl *_ctl) { user_ctl = _ctl; }
 
