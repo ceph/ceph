@@ -85,7 +85,7 @@ class SystemDState(DaemonState):
             #    Main process exited, code=exited, status=1/FAILURE
             self.status_cmd + " | grep 'Main.*code=exited'",
         )
-        line = out.split('\n')[-1]
+        line = out.strip().split('\n')[-1]
         exit_code = int(re.match('.*status=(\d+).*', line).groups()[0])
         if exit_code:
             self.remote.run(
@@ -167,10 +167,12 @@ class SystemDState(DaemonState):
         :return: The PID if remote run command value is set, False otherwise.
         """
         pid = self.pid
-        if pid > 0:
-            return pid
-        else:
+        if pid is None:
             return None
+        elif pid <= 0:
+            return None
+        else:
+            return pid
 
     def signal(self, sig, silent=False):
         """
