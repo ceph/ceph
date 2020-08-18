@@ -2766,25 +2766,27 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
              << " unflushed" << dendl;
   }
   if (const unsigned tail = bl.length() & ~super.block_mask(); tail) {
+    const auto padding_len = super.block_size - tail;
     dout(20) << __func__ << " caching tail of 0x"
              << std::hex << tail
-             << " and padding block with 0x" << (super.block_size - tail)
+             << " and padding block with 0x" << padding_len
              << " buffer.length() " << buffer.length()
              << std::dec << dendl;
-    tail_block.substr_of(bl, bl.length() - tail, tail);
-    //Because class page_aligned_appender, bl.append_zero will create a new ptr.
-    //This make rebuild for direct-io. We split ptr into two parts which make only rebuild size < 4k.
-    if (bl.get_num_buffers() == 1) {
-      bufferptr buf = bl.buffers().front();
-      if (length > super.block_size && buf.is_aligned(super.block_size) && !buf.is_n_align_sized(super.block_size)) {
-	bl.clear();
-	bufferptr tmp(buf, length - tail, tail);
-	buf.set_length(length - tail);
-	bl.append(buf);
-	bl.append(tmp);
-      }
-    }
-    bl.append_zero(super.block_size - tail);
+    // We need to go through the `buffer_appender` to get a chance to
+    // preserve in-memory contiguity and not mess with the alignment.
+    // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
+    buffer_appender.append_zero(padding_len);
+    buffer_appender.flush();
+    buffer.splice(buffer.length() - padding_len, padding_len, &bl);
+    // Deep copy the tail here. This allows to avoid costlier copy on
+    // bufferlist rebuild in e.g. `KernelDevice` and minimizes number
+    // of memory allocations.
+    // The alternative approach would be to place the entire tail and
+    // padding on a dedicated, 4 KB long memory chunk. This shouldn't
+    // trigger the rebuild while still being less expensive.
+    buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
+    buffer_appender.flush();
+    buffer.splice(buffer.length() - tail, tail, &tail_block);
   } else {
     tail_block.clear();
   }

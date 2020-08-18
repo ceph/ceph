@@ -854,6 +854,32 @@ struct error_code;
 	  min_alloc(min_pages * CEPH_PAGE_SIZE),
 	  pos(nullptr), end(nullptr) {}
 
+      template <class Func>
+      void _append_common(size_t len, Func&& impl_f) {
+	while (len > 0) {
+	  if (!pos) {
+	    size_t alloc = (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK;
+	    if (alloc < min_alloc) {
+	      alloc = min_alloc;
+	    }
+	    buffer = create_page_aligned(alloc);
+	    pos = buffer.c_str();
+	    end = buffer.end_c_str();
+	  }
+	  size_t l = len;
+	  if (l > (size_t)(end - pos)) {
+	    l = end - pos;
+	  }
+	  impl_f(l, pos);
+	  pos += l;
+	  len -= l;
+	  if (pos == end) {
+	    pbl->append(buffer, 0, buffer.length());
+	    pos = end = nullptr;
+	  }
+	}
+      }
+
       friend class list;
 
     public:
@@ -870,29 +896,31 @@ struct error_code;
 	}
       }
 
-      void append(const char *buf, size_t len) {
-	while (len > 0) {
-	  if (!pos) {
-	    size_t alloc = (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK;
-	    if (alloc < min_alloc) {
-	      alloc = min_alloc;
-	    }
-	    buffer = create_page_aligned(alloc);
-	    pos = buffer.c_str();
-	    end = buffer.end_c_str();
+      void append(const char* buf, size_t entire_len) {
+	 _append_common(entire_len, [buf] (const size_t chunk_len,
+					   char* const dst) mutable {
+	  memcpy(dst, buf, chunk_len);
+	  buf += chunk_len;
+	});
+      }
+
+      void append_zero(size_t entire_len) {
+	_append_common(entire_len, [] (const size_t chunk_len,
+				       char* const dst) {
+	  memset(dst, '\0', chunk_len);
+	});
+      }
+
+      void substr_of(const list& bl, unsigned off, unsigned len) {
+	for (const auto& bptr : bl.buffers()) {
+	  if (off >= bptr.length()) {
+	    off -= bptr.length();
+	    continue;
 	  }
-	  size_t l = len;
-	  if (l > (size_t)(end - pos)) {
-	    l = end - pos;
-	  }
-	  memcpy(pos, buf, l);
-	  pos += l;
-	  buf += l;
-	  len -= l;
-	  if (pos == end) {
-	    pbl->append(buffer, 0, buffer.length());
-	    pos = end = nullptr;
-	  }
+	  const auto round_size = std::min(bptr.length() - off, len);
+	  append(bptr.c_str() + off, round_size);
+	  len -= round_size;
+	  off = 0;
 	}
       }
     };
