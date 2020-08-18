@@ -33,6 +33,7 @@ Cache::retire_extent_ret Cache::retire_extent_if_cached(
   Transaction &t, paddr_t addr)
 {
   if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
+    logger().debug("{}: found {} in t.write_set", __func__, addr);
     t.add_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_ertr::now();
   } else if (auto iter = extents.find_offset(addr);
@@ -165,6 +166,10 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   }
 
   if (t.root) {
+    logger().debug(
+      "{}: writing out root delta for {}",
+      __func__,
+      *t.root);
     record.deltas.push_back(
       delta_info_t{
 	extent_types_t::ROOT,
