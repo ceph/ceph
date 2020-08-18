@@ -6,6 +6,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
+import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -20,10 +21,11 @@ import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../../shared/models/finished-task';
+import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
 import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { DepCheckerService } from '../../../../shared/services/dep-checker.service';
 import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
@@ -66,6 +68,12 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   selection = new CdTableSelection();
   osds: any[] = [];
 
+  orchStatus: OrchestratorStatus;
+  actionOrchFeatures = {
+    create: [OrchestratorFeature.OSD_CREATE],
+    delete: [OrchestratorFeature.OSD_DELETE]
+  };
+
   protected static collectStates(osd: any) {
     const states = [osd['in'] ? 'in' : 'out'];
     if (osd['up']) {
@@ -85,10 +93,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     private router: Router,
-    private depCheckerService: DepCheckerService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n,
-    public notificationService: NotificationService
+    public notificationService: NotificationService,
+    private orchService: OrchestratorService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -97,15 +105,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () => {
-          this.depCheckerService.checkOrchestratorOrModal(
-            this.actionLabels.CREATE,
-            $localize`OSD`,
-            () => {
-              this.router.navigate([this.urlBuilder.getCreate()]);
-            }
-          );
-        },
+        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
+        disable: (selection: CdTableSelection) => this.getDisable('create', selection),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
@@ -218,7 +219,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         click: () => this.delete(),
-        disable: () => !this.hasOsdSelected,
+        disable: (selection: CdTableSelection) => this.getDisable('delete', selection),
         icon: Icons.destroy
       }
     ];
@@ -311,6 +312,18 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         cellTransformation: CellTemplate.perSecond
       }
     ];
+
+    this.orchService.status().subscribe((status: OrchestratorStatus) => (this.orchStatus = status));
+  }
+
+  getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
+    if (action === 'delete' && !selection.hasSelection) {
+      return true;
+    }
+    return this.orchService.getTableActionDisableDesc(
+      this.orchStatus,
+      this.actionOrchFeatures[action]
+    );
   }
 
   /**
@@ -443,32 +456,26 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       preserve: new FormControl(false)
     });
 
-    this.depCheckerService.checkOrchestratorOrModal(
-      this.actionLabels.DELETE,
+    this.showCriticalConfirmationModal(
+      $localize`delete`,
       $localize`OSD`,
-      () => {
-        this.showCriticalConfirmationModal(
-          $localize`delete`,
-          $localize`OSD`,
-          $localize`deleted`,
-          (ids: number[]) => {
-            return this.osdService.safeToDelete(JSON.stringify(ids));
-          },
-          'is_safe_to_delete',
-          (id: number) => {
-            this.selection = new CdTableSelection();
-            return this.taskWrapper.wrapTaskAroundCall({
-              task: new FinishedTask('osd/' + URLVerbs.DELETE, {
-                svc_id: id
-              }),
-              call: this.osdService.delete(id, deleteFormGroup.value.preserve, true)
-            });
-          },
-          true,
-          deleteFormGroup,
-          this.deleteOsdExtraTpl
-        );
-      }
+      $localize`deleted`,
+      (ids: number[]) => {
+        return this.osdService.safeToDelete(JSON.stringify(ids));
+      },
+      'is_safe_to_delete',
+      (id: number) => {
+        this.selection = new CdTableSelection();
+        return this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('osd/' + URLVerbs.DELETE, {
+            svc_id: id
+          }),
+          call: this.osdService.delete(id, deleteFormGroup.value.preserve, true)
+        });
+      },
+      true,
+      deleteFormGroup,
+      this.deleteOsdExtraTpl
     );
   }
 
