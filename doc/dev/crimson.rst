@@ -215,7 +215,7 @@ when it comes to a stripped binary. So before planting a signal handler for
 those signals in crimson, we could to use `script/ceph-debug-docker.sh` to parse
 the addresses in the backtrace::
 
-  # assumeing you are under the source tree of ceph
+  # assuming you are under the source tree of ceph
   $ ./src/script/ceph-debug-docker.sh  --flavor crimson master:27e237c137c330ebb82627166927b7681b20d0aa centos:8
   ....
   [root@3deb50a8ad51 ~]# wget -q https://raw.githubusercontent.com/scylladb/seastar/master/scripts/seastar-addr2line
