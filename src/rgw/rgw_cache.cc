@@ -67,6 +67,11 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   }
 
   ObjectCacheInfo& src = iter->second.info;
+  if(src.status == -ENOENT) {
+    ldout(cct, 10) << "cache get: name=" << name << " : hit (negative entry)" << dendl;
+    if (perfcounter) perfcounter->inc(l_rgw_cache_hit);
+    return -ENODATA;
+  }
   if ((src.flags & mask) != mask) {
     ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=0x"
                    << std::hex << mask << ", cached=0x" << src.flags
