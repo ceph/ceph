@@ -33,7 +33,6 @@ import { LanguageSelectorComponent } from './language-selector/language-selector
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
-import { OrchestratorDocModalComponent } from './orchestrator-doc-modal/orchestrator-doc-modal.component';
 import { OrchestratorDocPanelComponent } from './orchestrator-doc-panel/orchestrator-doc-panel.component';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification/pwd-expiration-notification.component';
 import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
@@ -87,7 +86,6 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
-    OrchestratorDocModalComponent,
     DateTimePickerComponent,
     DocComponent
   ],

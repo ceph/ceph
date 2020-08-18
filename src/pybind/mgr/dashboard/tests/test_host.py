@@ -112,6 +112,7 @@ class HostControllerTest(ControllerTestCase):
 
         fake_client = mock.Mock()
         fake_client.available.return_value = True
+        fake_client.get_missing_features.return_value = []
         fake_client.hosts.list.return_value = [
             HostSpec('node0', labels=['aaa', 'bbb'])
         ]
