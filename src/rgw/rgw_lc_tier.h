@@ -22,6 +22,7 @@ struct RGWLCCloudTierCtx {
   rgw_bucket_dir_entry& o;
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
+  string storage_class;
 
   rgw_obj obj;
   RGWObjectCtx& rctx;
@@ -49,7 +50,6 @@ class RGWLCCloudTierCR : public RGWCoroutine {
   RGWLCCloudTierCtx& tier_ctx;
   bufferlist out_bl;
   int retcode;
-  bool bucket_created = false;
   struct CreateBucketResult {
     string code;
 
@@ -132,6 +132,8 @@ WRITE_CLASS_ENCODER(rgw_lc_obj_properties)
 struct rgw_lc_multipart_upload_info {
   string upload_id;
   uint64_t obj_size;
+  ceph::real_time mtime;
+  string etag;
   uint32_t part_size{0};
   uint32_t num_parts{0};
 
@@ -144,6 +146,8 @@ struct rgw_lc_multipart_upload_info {
     ENCODE_START(1, 1, bl);
     encode(upload_id, bl);
     encode(obj_size, bl);
+    encode(mtime, bl);
+    encode(etag, bl);
     encode(part_size, bl);
     encode(num_parts, bl);
     encode(cur_part, bl);
@@ -156,6 +160,8 @@ struct rgw_lc_multipart_upload_info {
     DECODE_START(1, bl);
     decode(upload_id, bl);
     decode(obj_size, bl);
+    decode(mtime, bl);
+    decode(etag, bl);
     decode(part_size, bl);
     decode(num_parts, bl);
     decode(cur_part, bl);

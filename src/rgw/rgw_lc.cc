@@ -1389,6 +1389,7 @@ public:
     tier_ctx.acl_mappings = oc.tier.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.multipart_min_part_size;
     tier_ctx.multipart_sync_threshold = oc.tier.multipart_sync_threshold;
+    tier_ctx.storage_class = oc.tier.storage_class;
 
     ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
     http_manager.stop();
