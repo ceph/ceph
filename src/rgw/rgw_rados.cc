@@ -4620,7 +4620,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     if (r < 0 ||
         (!bucket_info.bucket.bucket_id.empty() &&
          ep.bucket.bucket_id != bucket_info.bucket.bucket_id)) {
-      if (r != -ENOENT) {
+      if (r != -ERR_NO_SUCH_BUCKET) {
         ldout(cct, 0) << "ERROR: read_bucket_entrypoint_info() bucket=" << bucket_info.bucket << " returned error: r=" << r << dendl;
         /* we have no idea what caused the error, will not try to remove it */
       }

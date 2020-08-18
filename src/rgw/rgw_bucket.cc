@@ -3431,7 +3431,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
                                                     &entry_point, &ot, &ep_mtime, &attrs, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
+    ldout(cct, 0) << "ERROR: read_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
     return ret;
   }
 
@@ -3521,8 +3521,8 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                                     &ep, &rot,
                                                     nullptr, &attrs,
                                                     y);
-      if (ret < 0 && ret != -ENOENT) {
-        ldout(cct, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
+      if (ret < 0 && ret != -ERR_NO_SUCH_BUCKET) {
+        ldout(cct, 0) << "ERROR: store->read_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
       }
       pattrs = &attrs;
@@ -3588,7 +3588,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   map<string, bufferlist> attrs;
   string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
   ret = svc.bucket->read_bucket_entrypoint_info(ctx, meta_key, &ep, &ot, nullptr, &attrs, y);
-  if (ret == -ENOENT)
+  if (ret == -ERR_NO_SUCH_BUCKET)
     return 0;
   if (ret < 0)
     return ret;

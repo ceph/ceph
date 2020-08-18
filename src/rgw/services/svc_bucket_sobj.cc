@@ -220,6 +220,9 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                     
   int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
+    if (ret == -ENOENT) {
+      return -ERR_NO_SUCH_BUCKET;
+    }
     return ret;
   }
 
