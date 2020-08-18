@@ -312,6 +312,16 @@ int RGWRadosBucket::try_refresh_info(ceph::real_time *pmtime)
   return store->getRados()->try_refresh_bucket_info(info, pmtime, &attrs);
 }
 
+int RGWRadosBucket::read_usage(uint64_t start_epoch, uint64_t end_epoch,
+			       uint32_t max_entries, bool *is_truncated,
+			       RGWUsageIter& usage_iter,
+			       map<rgw_user_bucket, rgw_usage_log_entry>& usage)
+{
+    return store->getRados()->read_usage(owner->get_id(), get_name(), start_epoch,
+					 end_epoch, max_entries, is_truncated,
+					 usage_iter, usage);
+}
+
 int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
 {
   bufferlist aclbl;

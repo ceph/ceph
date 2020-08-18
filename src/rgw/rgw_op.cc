@@ -2408,9 +2408,8 @@ void RGWGetUsage::execute()
   RGWUsageIter usage_iter;
   
   while (is_truncated) {
-    op_ret = store->getRados()->read_usage(s->user->get_id(), s->bucket_name, start_epoch, end_epoch, max_entries,
-                                &is_truncated, usage_iter, usage);
-
+    op_ret = s->bucket->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+				   usage_iter, usage);
     if (op_ret == -ENOENT) {
       op_ret = 0;
       is_truncated = false;
@@ -5754,13 +5753,13 @@ void RGWSetRequestPayment::execute()
     return;
 
   s->bucket->get_info().requester_pays = requester_pays;
-  op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
-					   &s->bucket_attrs);
+  op_ret = s->bucket->put_instance_info(false, real_time());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
 		     << " returned err=" << op_ret << dendl;
     return;
   }
+  s->bucket_attrs = s->bucket->get_attrs();
 }
 
 int RGWInitMultipart::verify_permission()
@@ -7355,12 +7354,13 @@ void RGWConfigBucketMetaSearch::execute()
 
   s->bucket->get_info().mdsearch_config = mdsearch_config;
 
-  op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(), &s->bucket_attrs);
+  op_ret = s->bucket->put_instance_info(false, real_time());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
         << " returned err=" << op_ret << dendl;
     return;
   }
+  s->bucket_attrs = s->bucket->get_attrs();
 }
 
 int RGWGetBucketMetaSearch::verify_permission()
@@ -7395,12 +7395,13 @@ void RGWDelBucketMetaSearch::execute()
 {
   s->bucket->get_info().mdsearch_config.clear();
 
-  op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(), &s->bucket_attrs);
+  op_ret = s->bucket->put_instance_info(false, real_time());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
         << " returned err=" << op_ret << dendl;
     return;
   }
+  s->bucket_attrs = s->bucket->get_attrs();
 }
 
 
