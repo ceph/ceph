@@ -197,6 +197,10 @@ public:
       buffer.claim_append(bl);
     }
 
+    void append_zero(size_t len) {
+      buffer_appender.append_zero(len);
+    }
+
     uint64_t get_effective_write_pos() {
       buffer_appender.flush();
       return pos + buffer.length();
