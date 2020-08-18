@@ -593,6 +593,10 @@ if(WITH_SYSTEM_BOOST)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
   find_package(Boost 1.67 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  if(NOT ENABLE_SHARED)
+    set_property(TARGET Boost::iostreams APPEND PROPERTY
+      INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
+  endif()
 else()
   set(BOOST_J 1 CACHE STRING
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
