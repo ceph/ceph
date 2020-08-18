@@ -2218,6 +2218,15 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 			      buffer_meta);
 
 
+void ceph::buffer::list::page_aligned_appender::_refill(size_t len) {
+  const size_t alloc = \
+    std::max((size_t)min_alloc, (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK);
+  auto new_back = \
+    ptr_node::create(buffer::create_page_aligned(alloc));
+  new_back->set_length(0);   // unused, so far.
+  bl.push_back(std::move(new_back));
+}
+
 namespace ceph::buffer {
 inline namespace v15_2_0 {
 

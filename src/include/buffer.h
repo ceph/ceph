@@ -844,39 +844,26 @@ struct error_code;
 		  "contiguous_filler should be no costlier than pointer");
 
     class page_aligned_appender {
-      bufferlist *pbl;
+      bufferlist& bl;
       unsigned min_alloc;
-      ptr buffer;
-      char *pos, *end;
 
       page_aligned_appender(list *l, unsigned min_pages)
-	: pbl(l),
-	  min_alloc(min_pages * CEPH_PAGE_SIZE),
-	  pos(nullptr), end(nullptr) {}
+	: bl(*l),
+	  min_alloc(min_pages * CEPH_PAGE_SIZE) {
+      }
+
+      void _refill(size_t len);
 
       template <class Func>
       void _append_common(size_t len, Func&& impl_f) {
-	while (len > 0) {
-	  if (!pos) {
-	    size_t alloc = (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK;
-	    if (alloc < min_alloc) {
-	      alloc = min_alloc;
-	    }
-	    buffer = create_page_aligned(alloc);
-	    pos = buffer.c_str();
-	    end = buffer.end_c_str();
-	  }
-	  size_t l = len;
-	  if (l > (size_t)(end - pos)) {
-	    l = end - pos;
-	  }
-	  impl_f(l, pos);
-	  pos += l;
-	  len -= l;
-	  if (pos == end) {
-	    pbl->append(buffer, 0, buffer.length());
-	    pos = end = nullptr;
-	  }
+	const auto free_in_last = bl.get_append_buffer_unused_tail_length();
+	const auto first_round = std::min(len, free_in_last);
+	if (first_round) {
+	  impl_f(first_round);
+	}
+	if (const auto second_round = len - first_round; second_round) {
+	  _refill(second_round);
+	  impl_f(second_round);
 	}
       }
 
@@ -888,26 +875,25 @@ struct error_code;
       }
 
       void flush() {
-	if (pos && pos != buffer.c_str()) {
-	  size_t len = pos - buffer.c_str();
-	  pbl->append(buffer, 0, len);
-	  buffer.set_length(buffer.length() - len);
-	  buffer.set_offset(buffer.offset() + len);
-	}
+	// nop
+      }
+
+      void append(const bufferlist& l) {
+	bl.append(l);
+	bl.obtain_contiguous_space(0);
       }
 
       void append(const char* buf, size_t entire_len) {
-	 _append_common(entire_len, [buf] (const size_t chunk_len,
-					   char* const dst) mutable {
-	  memcpy(dst, buf, chunk_len);
+	 _append_common(entire_len,
+			[buf, this] (const size_t chunk_len) mutable {
+	  bl.append(buf, chunk_len);
 	  buf += chunk_len;
 	});
       }
 
       void append_zero(size_t entire_len) {
-	_append_common(entire_len, [] (const size_t chunk_len,
-				       char* const dst) {
-	  memset(dst, '\0', chunk_len);
+	_append_common(entire_len, [this] (const size_t chunk_len) {
+	  bl.append_zero(chunk_len);
 	});
       }
 
@@ -935,6 +921,12 @@ struct error_code;
     // it allows to avoid conditionals on hot paths.
     static ptr always_empty_bptr;
     ptr_node& refill_append_space(const unsigned len);
+
+    // for page_aligned_appender; never ever expose this publicly!
+    // carriage / append_buffer is just an implementation's detail.
+    ptr& get_append_buffer() {
+      return *_carriage;
+    }
 
   public:
     // cons/des
@@ -1061,8 +1053,6 @@ struct error_code;
     void push_back(ptr_node&) = delete;
     void push_back(ptr_node&&) = delete;
     void push_back(std::unique_ptr<ptr_node, ptr_node::disposer> bp) {
-      if (bp->length() == 0)
-	return;
       _carriage = bp.get();
       _len += bp->length();
       _num += 1;
