@@ -2017,7 +2017,13 @@ TEST(LibCephFS, ShutdownRace)
 
   for (int i = 0; i < nthreads; ++i)
     threads[i].join();
-  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
+  /*
+   * Let's just ignore restoring the open files limit,
+   * the kernel will defer releasing the file descriptors
+   * and then the process will be possibly reachthe open
+   * files limit. More detail, please see tracer#43039
+   */
+//  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
 
 static void get_current_time_utimbuf(struct utimbuf *utb)
