@@ -362,6 +362,23 @@ class MgrService(CephadmService):
         # if no active mgr found, return empty Daemon Desc
         return DaemonDescription()
 
+    def fail_over(self):
+        mgr_map = self.mgr.get('mgr_map')
+        num = len(mgr_map.get('standbys'))
+        if not num:
+            raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
+                'daemon', 'mgr' + self.mgr.get_mgr_id()))
+
+        self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
+                                   'INFO', 'Failing over to other MGR')
+        logger.info('Failing over to other MGR')
+
+        # fail over
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'mgr fail',
+            'who': self.mgr.get_mgr_id(),
+        })
+
 
 class MdsService(CephadmService):
     TYPE = 'mds'
