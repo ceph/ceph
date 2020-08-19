@@ -348,6 +348,15 @@ def archive(ctx, config):
         )
     )
 
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'init': archive_dir}
+        else:
+            info_yaml['archive']['init'] = archive_dir
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
     try:
         yield
     except Exception:
