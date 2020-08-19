@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 import subprocess
 from abc import ABCMeta, abstractmethod
@@ -26,7 +27,8 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
                  keyring: Optional[str]=None,
                  extra_args: Optional[List[str]]=None,
                  extra_config: Optional[Dict[str, Any]]=None,
-                 daemon_type: Optional[str]=None):
+                 daemon_type: Optional[str]=None,
+                 ports: Optional[List[int]]=None,):
         """
         Used for
         * deploying new daemons. then everything is set
@@ -52,6 +54,9 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         # For run_cephadm. Would be great to have more expressive names.
         self.extra_args: List[str] = extra_args or []
         self.extra_config: Dict[str, Any] = extra_config or {}
+
+        # TCP ports used by the daemon
+        self.ports:  List[int] = ports or []
 
 
     def name(self) -> str:
@@ -322,6 +327,28 @@ class MgrService(CephadmService):
                      'osd', 'allow *',
                      'mds', 'allow *'],
         })
+
+
+        # Retrieve ports used by manager modules
+        # In the case of the dashboard port and with several manager daemons
+        # running in different hosts, it exists the possibility that the
+        # user has decided to use different dashboard ports in each server
+        # If this is the case then the dashboard port opened will be only the used
+        # as default.
+        ports = []
+        config_ports = ''
+        ret, mgr_services, err = self.mgr.check_mon_command({
+                'prefix': 'mgr services',
+        })
+        if mgr_services:
+            mgr_endpoints = json.loads(mgr_services)
+            for end_point in mgr_endpoints.values():
+                port = re.search('\:\d+\/', end_point)
+                if port:
+                    ports.append(int(port[0][1:-1]))
+
+        if ports:
+            daemon_spec.ports = ports
 
         daemon_spec.keyring = keyring
 
