@@ -2772,7 +2772,6 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // preserve in-memory contiguity and not mess with the alignment.
     // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
     buffer_appender.append_zero(padding_len);
-    buffer_appender.flush();
     buffer.splice(buffer.length() - padding_len, padding_len, &bl);
     // Deep copy the tail here. This allows to avoid costlier copy on
     // bufferlist rebuild in e.g. `KernelDevice` and minimizes number
@@ -2781,7 +2780,6 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // padding on a dedicated, 4 KB long memory chunk. This shouldn't
     // trigger the rebuild while still being less expensive.
     buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
-    buffer_appender.flush();
     buffer.splice(buffer.length() - tail, tail, &tail_block);
   } else {
     tail_block.clear();
@@ -2796,8 +2794,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(!h->file->deleted);
   ceph_assert(h->file->num_readers.load() == 0);
-
-  h->buffer_appender.flush();
 
   bool buffered;
   if (h->file->fnode.ino == 1)
@@ -2991,7 +2987,6 @@ int BlueFS::_flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l)
 
 int BlueFS::_flush(FileWriter *h, bool force, bool *flushed)
 {
-  h->buffer_appender.flush();
   uint64_t length = h->get_buffer_length();
   uint64_t offset = h->pos;
   if (flushed) {
@@ -3031,8 +3026,6 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 
   // we never truncate internal log files
   ceph_assert(h->file->fnode.ino > 1);
-
-  h->buffer_appender.flush();
 
   // truncate off unflushed data?
   if (h->pos < offset &&

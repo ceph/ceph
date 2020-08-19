@@ -872,14 +872,6 @@ struct error_code;
       friend class list;
 
     public:
-      ~page_aligned_appender() {
-	flush();
-      }
-
-      void flush() {
-	// nop
-      }
-
       void append(const bufferlist& l) {
 	bl.append(l);
 	bl.obtain_contiguous_space(0);

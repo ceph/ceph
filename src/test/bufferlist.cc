@@ -1609,7 +1609,6 @@ TEST(BufferList, page_aligned_appender) {
   {
     auto a = bl.get_page_aligned_appender(5);
     a.append("asdf", 4);
-    a.flush();
     cout << bl << std::endl;
     ASSERT_EQ(1u, bl.get_num_buffers());
     ASSERT_TRUE(bl.contents_equal("asdf", 4));
@@ -1617,7 +1616,6 @@ TEST(BufferList, page_aligned_appender) {
     for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
       a.append("x", 1);
     }
-    a.flush();
     cout << bl << std::endl;
     ASSERT_EQ(1u, bl.get_num_buffers());
     // verify the beginning
@@ -1629,12 +1627,10 @@ TEST(BufferList, page_aligned_appender) {
     for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
       a.append("y", 1);
     }
-    a.flush();
     cout << bl << std::endl;
     ASSERT_EQ(2u, bl.get_num_buffers());
 
     a.append_zero(42);
-    a.flush();
     // ensure append_zero didn't introduce a fragmentation
     ASSERT_EQ(2u, bl.get_num_buffers());
     // verify the end is actually zeroed
@@ -1660,7 +1656,6 @@ TEST(BufferList, page_aligned_appender) {
       // moreover, the next C string-taking `append()` had to
       // create anoter `ptr_node` instance but...
       a.append("xyz", 3);
-      a.flush();
       ASSERT_EQ(4u, bl.get_num_buffers());
 
       // ... it should point to the same `buffer::raw` instance
@@ -1675,8 +1670,6 @@ TEST(BufferList, page_aligned_appender) {
     }
   }
 
-  // `flush()` should be called by automatically when destructing
-  // the appender.
   {
     cout << bl << std::endl;
     ASSERT_EQ(6u, bl.get_num_buffers());
