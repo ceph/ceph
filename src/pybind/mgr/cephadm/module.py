@@ -482,7 +482,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         The main loop of cephadm.
 
         A command handler will typically change the declarative state
-        of cephadm. This loop will then attempt to apply this new state. 
+        of cephadm. This loop will then attempt to apply this new state.
         """
         self.log.debug("serve starting")
         while self.run:
@@ -1889,6 +1889,10 @@ you may want to run:
             cephadm_config, deps = self.cephadm_services[daemon_spec.daemon_type].generate_config(daemon_spec)
 
             daemon_spec.extra_args.extend(['--config-json', '-'])
+
+            # TCP port to open in the host firewall
+            if daemon_spec.ports:
+                daemon_spec.extra_args.extend(['--tcp-ports', ' '.join(map(str,daemon_spec.ports))])
 
             # osd deployments needs an --osd-uuid arg
             if daemon_spec.daemon_type == 'osd':
