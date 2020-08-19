@@ -3,7 +3,7 @@ import re
 import json
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING
+from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Iterator
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -103,3 +103,18 @@ def get_cluster_health(mgr: 'CephadmOrchestrator') -> str:
         raise OrchestratorError('failed to parse health status')
 
     return j['status']
+
+
+def reduced_powerset(l: List[T]) -> Iterator[List[T]]:
+    """
+    This is a subset of powerset(), aimed at searching
+    a usable subset for ok-to-stop [ids...]
+
+    >>> list(reduced_powerset([0,1,2]))
+    [[0, 1, 2], [0, 1], [0], [1], [2]]
+
+    """
+    for i in reversed(range(len(l) + 1)):
+        if i > 1:
+            yield l[0:i]
+    yield from map(lambda x: [x], l)

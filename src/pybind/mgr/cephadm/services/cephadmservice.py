@@ -3,6 +3,7 @@ import logging
 import subprocess
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
+import errno
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
@@ -339,6 +340,17 @@ class MgrService(CephadmService):
             'prefix': 'mgr fail',
             'who': self.mgr.get_mgr_id(),
         })
+
+    def ok_to_stop(self, daemon_ids: List[str]) -> HandleCommandResult:
+        names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+        out = f'It is presumed safe to stop {names}'
+        err = f'It is NOT safe to stop {names}'
+
+        if self.mgr.get_mgr_id() in daemon_ids:  # This is only true for us. Not in general!
+            reason = 'Need to fail over to other MGR first'
+            return HandleCommandResult(retval=errno.EBUSY, stderr=f'{err}: {reason}')
+
+        return HandleCommandResult(retval=0, stdout=out)
 
 
 class MdsService(CephadmService):

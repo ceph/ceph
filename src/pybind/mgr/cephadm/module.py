@@ -45,7 +45,7 @@ from .schedule import HostAssignment, HostPlacementSpec
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
-from .utils import forall_hosts, CephadmNoImage, cephadmNoImage
+from .utils import forall_hosts, CephadmNoImage, cephadmNoImage, reduced_powerset
 
 try:
     import remoto
@@ -2076,21 +2076,27 @@ you may want to run:
             r = True
 
         # remove any?
-        def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
-            daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
-            r = self.cephadm_services[daemon_type].ok_to_stop(daemon_ids)
-            return not r.retval
-
-        while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
-            # let's find a subset that is ok-to-stop
-            remove_daemon_hosts.pop()
-        for d in remove_daemon_hosts:
+        for d in self.find_ok_to_stop_subset(remove_daemon_hosts):
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
             self._remove_daemon(d.name(), d.hostname)
             r = True
 
+        # WRONG: And now what?? how do we fail the current mgr? And
+        # I think https://github.com/ceph/ceph/pull/36485 is better in general.
+        # Why did we end up here then?
+
         return r
+
+    def find_ok_to_stop_subset(self, daemon_type: str, to_remove: List[orchestrator.DaemonDescription]):
+        for dds in reduced_powerset(to_remove):
+            daemon_ids = [d.daemon_id for d in dds]
+            r = self.cephadm_services[daemon_type].ok_to_stop(daemon_ids)
+            if not r.retval:
+                return dds
+
+        return []
+
 
     def _apply_all_services(self):
         r = False
