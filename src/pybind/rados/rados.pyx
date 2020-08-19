@@ -370,8 +370,6 @@ class Error(Exception):
             return msg
         return '[errno {0}] {1}'.format(self.errno, msg)
 
-    def __reduce__(self):
-        return (self.__class__, (self.message, self.errno))
 
 class InvalidArgumentError(Error):
     def __init__(self, message, errno=None):
