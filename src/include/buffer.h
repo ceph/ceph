@@ -389,6 +389,8 @@ struct error_code;
     static ptr_node* copy_hypercombined(const ptr_node& copy_this);
 
   private:
+    friend list;
+
     template <class... Args>
     ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
     }
@@ -632,7 +634,7 @@ struct error_code;
     // track bufferptr we can modify (especially ::append() to). Not all bptrs
     // bufferlist holds have this trait -- if somebody ::push_back(const ptr&),
     // he expects it won't change.
-    ptr* _carriage;
+    ptr_node* _carriage;
     unsigned _len, _num;
 
     template <bool is_const>
@@ -919,7 +921,7 @@ struct error_code;
     // always_empty_bptr has no underlying raw but its _len is always 0.
     // This is useful for e.g. get_append_buffer_unused_tail_length() as
     // it allows to avoid conditionals on hot paths.
-    static ptr always_empty_bptr;
+    static ptr_node always_empty_bptr;
     ptr_node& refill_append_space(const unsigned len);
 
     // for page_aligned_appender; never ever expose this publicly!
