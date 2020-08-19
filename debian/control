@@ -186,6 +186,7 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          python-bcrypt,
          python-cherrypy3,
+         python-enum34,
          python-jwt,
          python-openssl,
          python-pecan,

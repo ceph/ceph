@@ -481,6 +481,9 @@ Requires:       pyOpenSSL
 %else
 Requires:       python%{_python_buildid}-pyOpenSSL
 %endif
+%if 0%{?rhel} < 8 || 0%{?suse_version}
+Requires:       python-enum34
+%endif
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
 module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
