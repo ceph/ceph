@@ -1875,7 +1875,6 @@ you may want to run:
                        daemon_spec: CephadmDaemonSpec,
                        reconfig=False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
-                       redeploy=False,
                        ) -> str:
 
 
