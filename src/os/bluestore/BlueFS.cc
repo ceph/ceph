@@ -2753,13 +2753,11 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
 {
   ceph::bufferlist bl;
   if (partial) {
-    bl.claim_append_piecewise(tail_block);
+    tail_block.splice(0, tail_block.length(), &bl);
   }
-  if (length == bl.length() + buffer.length()) {
-    /* in case of inital allocation and need to zero, limited flush is unacceptable */
-    bl.claim_append_piecewise(buffer);
-  } else {
-    buffer.splice(0, length, &bl);
+  const auto remaining_len = length - bl.length();
+  buffer.splice(0, remaining_len, &bl);
+  if (buffer.length()) {
     dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
              << " unflushed" << dendl;
   }
