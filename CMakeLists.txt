@@ -430,12 +430,7 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 
 # Please specify 3.[0-7] if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
-if(NOT WITH_PYTHON3)
-  message(FATAL_ERROR "WITH_PYTHON3 should always be enabled")
-elseif(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
-  set(WITH_PYTHON3 "3")
-  message(NOTICE "Please specify a Python3 version instead of a BOOLEAN")
-elseif(NOT WITH_PYTHON3 STREQUAL "3")
+if(NOT WITH_PYTHON3 STREQUAL "3")
   set(find_python3_exact "EXACT")
 endif()
 find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED

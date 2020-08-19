@@ -143,8 +143,9 @@ public:
     return ret;
   }
 
+
   using ref_ertr = LBAManager::ref_ertr;
-  using ref_ret = LBAManager::ref_ret;
+  using ref_ret = ref_ertr::future<unsigned>;
 
   /// Add refcount for ref
   ref_ret inc_ref(

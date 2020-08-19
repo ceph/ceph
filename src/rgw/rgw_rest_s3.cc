@@ -255,7 +255,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     /* JSON encode object metadata */
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
-    encode_json("attrs", attrs, &jf);
+    encode_json("attrs", attrs.attrs, &jf);
     utime_t ut(lastmod);
     encode_json("mtime", ut, &jf);
     jf.close_section();
@@ -270,14 +270,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
     uint64_t pg_ver = 0;
-    int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
+    int r = decode_attr_bl_single_value(attrs.attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     dump_header(s, "Rgwx-Obj-PG-Ver", pg_ver);
 
     uint32_t source_zone_short_id = 0;
-    r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
+    r = decode_attr_bl_single_value(attrs.attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
     if (r < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
@@ -443,7 +443,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
 
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  res = rgw_s3_prepare_decrypt(s, attrs.attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
       auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
@@ -2663,7 +2663,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   if (!multipart_upload_id.empty()) {
     RGWMPObj mp(s->object->get_name(), multipart_upload_id);
     rgw_obj obj;
-    obj.init_ns(s->bucket->get_bi(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
+    obj.init_ns(s->bucket->get_key(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
     obj.set_in_extra_data(true);
     map<string, bufferlist> xattrs;
     res = get_obj_attrs(store, s, obj, xattrs);
@@ -4949,7 +4949,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
     subdir_name.pop_back();
   }
 
-  rgw_obj obj(s->bucket->get_bi(), subdir_name);
+  rgw_obj obj(s->bucket->get_key(), subdir_name);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   obj_ctx.set_atomic(obj);
@@ -5134,9 +5134,13 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   ldpp_dout(s, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
   RGWBWRoutingRule rrule;
-  bool should_redirect =
-    s->bucket->get_info().website_conf.should_redirect(original_object_name,
-                                                http_error_code, &rrule);
+  bool have_bucket = !rgw::sal::RGWBucket::empty(s->bucket.get());
+  bool should_redirect = false;
+  if (have_bucket) {
+    should_redirect =
+      s->bucket->get_info().website_conf.should_redirect(original_object_name,
+							 http_error_code, &rrule);
+  }
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
@@ -5155,7 +5159,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   } else if (err_no == -ERR_WEBSITE_REDIRECT) {
     // Do nothing here, this redirect will be handled in abort_early's ERR_WEBSITE_REDIRECT block
     // Do NOT fire the ErrorDoc handler
-  } else if (!s->bucket->get_info().website_conf.error_doc.empty()) {
+  } else if (have_bucket && !s->bucket->get_info().website_conf.error_doc.empty()) {
     /* This serves an entire page!
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler

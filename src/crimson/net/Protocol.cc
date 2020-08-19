@@ -93,7 +93,9 @@ void Protocol::close(bool dispatch_reset,
       return seastar::now();
     }),
     std::move(reset_dispatched)
-  ).finally(std::move(cleanup));
+  ).then_unpack([] {
+    return seastar::now();
+  }).finally(std::move(cleanup));
 }
 
 seastar::future<> Protocol::send(MessageRef msg)

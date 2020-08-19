@@ -1,13 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/ceph_json.h"
+#include "common/errno.h"
+#include "common/Formatter.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
-#include "common/errno.h"
-#include "common/Formatter.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -17,6 +18,45 @@ namespace status {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+
+namespace {
+
+const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
+
+struct ImageCacheState {
+  bool present;
+  bool clean;
+  int size;
+  std::string host;
+  std::string path;
+};
+
+bool image_cache_parse(const std::string& s, ImageCacheState &cache_state) {
+  JSONParser p;
+  JSONFormattable f;
+  bool success = p.parse(s.c_str(), s.size());
+  if (success) {
+    decode_json_obj(f, &p);
+    if ((success = f.exists("present"))) {
+      cache_state.present = (bool)f["present"];
+    }
+    if (success && (success = f.exists("clean"))) {
+      cache_state.present = (bool)f["clean"];
+    }
+    if (success && (success = f.exists("rwl_size"))) {
+      cache_state.size = (int)f["rwl_size"];
+    }
+    if (success && (success = f.exists("rwl_host"))) {
+      cache_state.host = (std::string)f["rwl_host"];
+    }
+    if (success && (success = f.exists("rwl_path"))) {
+      cache_state.path = (std::string)f["rwl_path"];
+    }
+  }
+  return success;
+}
+
+} // anonymous namespace
 
 static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name,
                           librbd::Image &image, Formatter *f)
@@ -85,6 +125,22 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     }
   }
 
+  ImageCacheState cache_state;
+  if (features & RBD_FEATURE_DIRTY_CACHE) {
+    std::string image_cache_str;
+    r = image.metadata_get(IMAGE_CACHE_STATE, &image_cache_str);
+    if (r < 0) {
+      std::cerr << "rbd: getting image cache status failed: " << cpp_strerror(r)
+                << std::endl;
+    } else {
+      r = image_cache_parse(image_cache_str, cache_state);
+      if (r < 0) {
+        std::cerr << "rbd: image cache metadata is corrupted: " << cpp_strerror(r)
+                  << std::endl;
+      }
+    }
+  }
+
   if (f)
     f->open_object_section("status");
 
@@ -113,6 +169,14 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       f->dump_string("state", migration_state);
       f->dump_string("state_description", migration_status.state_description);
       f->close_section(); // migration
+    }
+    if (cache_state.present) {
+        f->open_object_section("image_cache_state");
+        f->dump_bool("clean", cache_state.clean);
+        f->dump_int("size", cache_state.size);
+        f->dump_string("host", cache_state.host);
+        f->dump_string("path", cache_state.path);
+	f->close_section(); // image_cache_state
     }
   } else {
     if (watchers.size()) {
@@ -147,6 +211,14 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
         std::cout << " (" << migration_status.state_description <<  ")";
       }
       std::cout << std::endl;
+    }
+
+    if (cache_state.present) {
+        std::cout << "image cache state:" << std::endl;
+        std::cout << "\tclean: " << (cache_state.clean ? "true" : "false")
+                  << "  size: " << byte_u_t(cache_state.size)
+                  << "  host: " << cache_state.host
+                  << "  path: "  << cache_state.path << std::endl;
     }
   }
 

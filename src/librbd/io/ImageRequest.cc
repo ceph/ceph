@@ -579,8 +579,8 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
 
   auto req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(bl), snapc, m_op_flags, journal_tid,
-    this->m_trace, on_finish);
+    object_extent.offset, std::move(bl), snapc, m_op_flags, 0, std::nullopt,
+    journal_tid, this->m_trace, on_finish);
   return req;
 }
 
@@ -811,8 +811,8 @@ ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
   }
   req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(bl), snapc, m_op_flags, journal_tid,
-    this->m_trace, on_finish);
+    object_extent.offset, std::move(bl), snapc, m_op_flags, 0, std::nullopt,
+    journal_tid, this->m_trace, on_finish);
   return req;
 }
 

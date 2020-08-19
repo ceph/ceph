@@ -148,13 +148,11 @@ void RGWOp_Bucket_Link::execute()
   op_state.set_bucket_id(bucket_id);
   op_state.set_new_bucket_name(new_bucket_name);
 
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist data;
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  bufferlist data;
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
   http_ret = RGWBucketAdminOp::link(store, op_state);
 }
@@ -188,13 +186,11 @@ void RGWOp_Bucket_Unlink::execute()
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
 
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist data;
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  bufferlist data;
+  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
   http_ret = RGWBucketAdminOp::unlink(store, op_state);
 }
@@ -215,26 +211,25 @@ public:
 
 void RGWOp_Bucket_Remove::execute()
 {
-  std::string bucket;
+  std::string bucket_name;
   bool delete_children;
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
 
-  RGWBucketAdminOpState op_state;
-
-  RESTArgs::get_string(s, "bucket", bucket, &bucket);
+  RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  op_state.set_bucket_name(bucket);
-  op_state.set_delete_children(delete_children);
-
-  if (!store->svc()->zone->is_meta_master()) {
-    bufferlist data;
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  op_ret = store->get_bucket(nullptr, string(), bucket_name, &bucket);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
+    return;
   }
-  http_ret = RGWBucketAdminOp::remove_bucket(store, op_state, s->yield);
+
+  op_ret = bucket->remove_bucket(delete_children, string(), string(), true, &s->info, s->yield);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "remove_bucket returned ret=" << op_ret << dendl;
+    return;
+  }
+  http_ret = op_ret;
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {

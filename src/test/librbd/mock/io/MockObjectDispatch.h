@@ -52,18 +52,20 @@ public:
                            dispatch_result, on_dispatched);
   }
 
-  MOCK_METHOD8(execute_write,
+  MOCK_METHOD10(execute_write,
                bool(uint64_t, uint64_t, const ceph::bufferlist&,
-                    const ::SnapContext &, int*, uint64_t*, DispatchResult*,
-                    Context *));
+                    const ::SnapContext &, int, std::optional<uint64_t>, int*,
+                    uint64_t*, DispatchResult*, Context *));
   bool write(
       uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags,
+      const ::SnapContext &snapc, int op_flags, int write_flags,
+      std::optional<uint64_t> assert_version,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override {
-    return execute_write(object_no, object_off, data, snapc, dispatch_flags,
-                         journal_tid, dispatch_result, on_dispatched);
+    return execute_write(object_no, object_off, data, snapc, write_flags,
+                         assert_version, dispatch_flags, journal_tid,
+                         dispatch_result, on_dispatched);
   }
 
   MOCK_METHOD10(execute_write_same,

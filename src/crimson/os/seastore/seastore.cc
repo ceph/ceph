@@ -163,18 +163,6 @@ seastar::future<struct stat> SeaStore::stat(
   return seastar::make_ready_future<struct stat>(st);
 }
 
-seastar::future<SeaStore::omap_values_t>
-SeaStore::omap_get_values(CollectionRef ch,
-                           const ghobject_t& oid,
-                           const omap_keys_t& keys)
-{
-  auto c = static_cast<SeastoreCollection*>(ch.get());
-  logger().debug("{} {} {}",
-                __func__, c->get_cid(), oid);
-  return seastar::make_ready_future<omap_values_t>();
-}
-
-
 seastar::future<ceph::bufferlist> omap_get_header(
   CollectionRef c,
   const ghobject_t& oid)
@@ -182,12 +170,26 @@ seastar::future<ceph::bufferlist> omap_get_header(
   return seastar::make_ready_future<bufferlist>();
 }
 
-seastar::future<std::tuple<bool, SeaStore::omap_values_t>>
+auto
 SeaStore::omap_get_values(
-    CollectionRef ch,
-    const ghobject_t &oid,
-    const std::optional<string> &start
-  ) {
+  CollectionRef ch,
+  const ghobject_t& oid,
+  const omap_keys_t& keys)
+  -> read_errorator::future<omap_values_t>
+{
+  auto c = static_cast<SeastoreCollection*>(ch.get());
+  logger().debug("{} {} {}",
+                __func__, c->get_cid(), oid);
+  return seastar::make_ready_future<omap_values_t>();
+}
+
+auto
+SeaStore::omap_get_values(
+  CollectionRef ch,
+  const ghobject_t &oid,
+  const std::optional<string> &start)
+  -> read_errorator::future<std::tuple<bool, SeaStore::omap_values_t>>
+{
   auto c = static_cast<SeastoreCollection*>(ch.get());
   logger().debug(
     "{} {} {}",

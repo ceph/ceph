@@ -129,9 +129,9 @@ struct LBANode : CachedExtent {
     crimson::ct_error::input_output_error
     >;
   using mutate_mapping_ret = mutate_mapping_ertr::future<
-    std::optional<lba_map_val_t>>;
+    lba_map_val_t>;
   using mutate_func_t = std::function<
-    std::optional<lba_map_val_t>(const lba_map_val_t &v)
+    lba_map_val_t(const lba_map_val_t &v)
     >;
   virtual mutate_mapping_ret mutate_mapping(
     op_context_t c,

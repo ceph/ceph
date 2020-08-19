@@ -75,7 +75,7 @@ class StrategyRegistry;
 }
 
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-				       rgw::sal::RGWRadosStore *store,
+				       rgw::sal::RGWStore *store,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy);
@@ -274,7 +274,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;
@@ -341,7 +341,7 @@ public:
   void execute() override;
   int parse_range();
   int read_user_manifest_part(
-    rgw_bucket& bucket,
+    rgw::sal::RGWBucket* bucket,
     const rgw_bucket_dir_entry& ent,
     RGWAccessControlPolicy * const bucket_acl,
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
@@ -1310,7 +1310,7 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
-  map<string, buffer::list> attrs;
+  rgw::sal::RGWAttrs attrs;
   set<string> rmattr_names;
   bool has_policy, has_cors;
   uint32_t policy_rw_mask;
@@ -2467,8 +2467,5 @@ static inline int parse_value_and_bound(
 
   return 0;
 }
-
-int forward_request_to_master(struct req_state *s, obj_version *objv, rgw::sal::RGWRadosStore *store,
-                              bufferlist& in_data, JSONParser *jp, req_info *forward_info = nullptr);
 
 #endif /* CEPH_RGW_OP_H */

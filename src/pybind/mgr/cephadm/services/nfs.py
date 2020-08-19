@@ -1,18 +1,16 @@
 import logging
-
-import rados
-from typing import Dict, Optional, Tuple, Any, List, Set, cast
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Any, List, Set, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
+import rados
 
-import orchestrator
-from orchestrator import OrchestratorError
-from orchestrator import DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription
 
-import cephadm
-from .. import utils
+from cephadm import utils
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 
-from .cephadmservice import CephadmService, CephadmDaemonSpec
+if TYPE_CHECKING:
+    from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +25,11 @@ class NFSService(CephadmService):
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
 
-        deps = []  # type: List[str]
+        deps: List[str] = []
 
         # find the matching NFSServiceSpec
         # TODO: find the spec and pass via _create_daemon instead ??
-        dd = orchestrator.DaemonDescription()
+        dd = DaemonDescription()
         dd.daemon_type = daemon_type
         dd.daemon_id = daemon_id
         dd.hostname = host
@@ -120,11 +118,12 @@ class NFSService(CephadmService):
 
 class NFSGanesha(object):
     def __init__(self,
-                 mgr,
-                 daemon_id,
-                 spec):
-        # type: (cephadm.CephadmOrchestrator, str, NFSServiceSpec) -> None
+                 mgr: "CephadmOrchestrator",
+                 daemon_id: str,
+                 spec: NFSServiceSpec) -> None:
         assert spec.service_id and daemon_id.startswith(spec.service_id)
+        mgr._check_pool_exists(spec.pool, spec.service_name())
+
         self.mgr = mgr
         self.daemon_id = daemon_id
         self.spec = spec
@@ -176,12 +175,11 @@ class NFSGanesha(object):
                 % (entity, ret, err))
 
     def create_rados_config_obj(self, clobber: Optional[bool] = False) -> None:
-        obj = self.spec.rados_config_name()
-
         with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
             if self.spec.namespace:
                 ioctx.set_namespace(self.spec.namespace)
 
+            obj = self.spec.rados_config_name()
             exists = True
             try:
                 ioctx.stat(obj)
@@ -205,7 +203,7 @@ class NFSGanesha(object):
         return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
     def get_cephadm_config(self) -> Dict[str, Any]:
-        config = {'pool': self.spec.pool}  # type: Dict
+        config: Dict[str, Any] = {'pool': self.spec.pool}
         if self.spec.namespace:
             config['namespace'] = self.spec.namespace
         config['userid'] = self.get_rados_user()

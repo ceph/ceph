@@ -143,13 +143,13 @@ public:
     uint64_t len);
 
   // OMAP
-  seastar::future<> omap_get_keys(
+  ll_read_errorator::future<> omap_get_keys(
     const ObjectState& os,
     OSDOp& osd_op) const;
-  seastar::future<> omap_get_vals(
+  ll_read_errorator::future<> omap_get_vals(
     const ObjectState& os,
     OSDOp& osd_op) const;
-  seastar::future<> omap_get_vals_by_keys(
+  ll_read_errorator::future<> omap_get_vals_by_keys(
     const ObjectState& os,
     OSDOp& osd_op) const;
   seastar::future<> omap_set_vals(

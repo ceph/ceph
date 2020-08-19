@@ -173,8 +173,7 @@ btree_range_pin_t &BtreeLBAManager::get_pin(CachedExtent &e)
     return static_cast<BtreeLBAPin &>(
       e.cast<LogicalCachedExtent>()->get_pin()).pin;
   } else {
-    assert(0 == "impossible");
-    return *static_cast<btree_range_pin_t*>(nullptr);
+    ceph_abort_msg("impossible");
   }
 }
 
@@ -356,16 +355,9 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
       lba_map_val_t out = in;
       ceph_assert((int)out.refcount + delta >= 0);
       out.refcount += delta;
-      if (out.refcount == 0) {
-	return std::optional<lba_map_val_t>();
-      } else {
-	return std::optional<lba_map_val_t>(out);
-      }
+      return out;
     }).safe_then([](auto result) {
-      if (!result)
-	return 0u;
-      else
-	return result->refcount;
+      return ref_update_result_t{result.refcount, result.paddr};
     });
 }
 

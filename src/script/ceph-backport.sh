@@ -1402,6 +1402,18 @@ fi
 
 
 #
+# is jq available?
+#
+
+if command -v jq >/dev/null ; then
+    debug "jq is available. Good."
+else
+    error "This script needs \"jq\" in order to work, and it is not available"
+    abort_due_to_setup_problem
+fi
+
+
+#
 # process command-line arguments
 #
 

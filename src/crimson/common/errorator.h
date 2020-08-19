@@ -352,6 +352,14 @@ private:
     template <class ErrorVisitor, class Futurator>
     friend class maybe_handle_error_t;
 
+    // any `seastar::futurize` specialization must be able to access the base.
+    // see : `satisfy_with_result_of()` far below.
+    template <typename>
+    friend class seastar::futurize;
+
+    template <typename T1, typename T2, typename... More>
+    friend auto seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, More&&... more);
+
     template <class, class = std::void_t<>>
     struct get_errorator {
       // generic template for non-errorated things (plain types and
@@ -1038,8 +1046,8 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   [[gnu::always_inline]]
   static inline type apply(Func&& func, std::tuple<FuncArgs...>&& args) noexcept {
     try {
-      return ::seastar::apply(std::forward<Func>(func),
-                              std::forward<std::tuple<FuncArgs...>>(args));
+      return std::apply(std::forward<Func>(func),
+                        std::forward<std::tuple<FuncArgs...>>(args));
     } catch (...) {
       return make_exception_future(std::current_exception());
     }
@@ -1059,6 +1067,21 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   static type make_exception_future(Arg&& arg) {
     return errorator_type::template make_exception_future2<Values...>(std::forward<Arg>(arg));
   }
+
+private:
+  template<typename PromiseT, typename Func>
+  static void satisfy_with_result_of(PromiseT&& pr, Func&& func) {
+    // this may use the protected variant of `seastar::future::forward_to()`
+    // because:
+    //   1. `seastar::future` established a friendship with with all
+    //      specializations of `seastar::futurize`, including this
+    //      one (we're in the `seastar` namespace!) WHILE
+    //   2. any errorated future declares now the friendship with any
+    //      `seastar::futurize<...>`.
+    func().forward_to(std::move(pr));
+  }
+  template <typename... U>
+  friend class future;
 };
 
 namespace internal {

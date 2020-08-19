@@ -48,19 +48,22 @@ export class FaviconService implements OnDestroy {
       // Draw Original Favicon as Background
       context.drawImage(img, 0, 0, faviconSize, faviconSize);
 
-      // Cut notification circle area
-      context.save();
-      context.globalCompositeOperation = 'destination-out';
-      context.beginPath();
-      context.arc(canvas.width - radius, radius, radius + 2, 0, 2 * Math.PI);
-      context.fill();
-      context.restore();
+      if (Color[status]) {
+        // Cut notification circle area
+        context.save();
+        context.globalCompositeOperation = 'destination-out';
+        context.beginPath();
+        context.arc(canvas.width - radius, radius, radius + 2, 0, 2 * Math.PI);
+        context.fill();
+        context.restore();
 
-      // Draw Notification Circle
-      context.beginPath();
-      context.arc(canvas.width - radius, radius, radius, 0, 2 * Math.PI);
-      context.fillStyle = Color[status] || 'transparent';
-      context.fill();
+        // Draw Notification Circle
+        context.beginPath();
+        context.arc(canvas.width - radius, radius, radius, 0, 2 * Math.PI);
+
+        context.fillStyle = Color[status];
+        context.fill();
+      }
 
       // Replace favicon
       favicon.setAttribute('href', canvas.toDataURL('image/png'));

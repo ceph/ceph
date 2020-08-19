@@ -2525,7 +2525,7 @@ you may want to run:
         process_removal_queue().
         """
 
-        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_service('osd')
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('osd')
         to_remove_daemons = list()
         for daemon in daemons:
             if daemon.daemon_id in osd_ids:

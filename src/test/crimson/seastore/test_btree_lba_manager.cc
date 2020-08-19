@@ -147,6 +147,12 @@ struct btree_lba_manager_test :
     );
   }
 
+  segment_off_t next_off = 0;
+  paddr_t get_paddr() {
+    next_off += block_size;
+    return make_fake_paddr(next_off);
+  }
+
   auto alloc_mapping(
     test_transaction_t &t,
     laddr_t hint,
@@ -208,7 +214,7 @@ struct btree_lba_manager_test :
 
     auto refcnt = lba_manager->decref_extent(
       *t.t,
-      target->first).unsafe_get0();
+      target->first).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
@@ -222,7 +228,7 @@ struct btree_lba_manager_test :
     target->second.refcount++;
     auto refcnt = lba_manager->incref_extent(
       *t.t,
-      target->first).unsafe_get0();
+      target->first).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
   }
 
@@ -258,13 +264,12 @@ TEST_F(btree_lba_manager_test, basic)
 {
   run_async([this] {
     laddr_t laddr = 0x12345678 * block_size;
-    paddr_t paddr = { 1, static_cast<segment_off_t>(block_size * 10) };
     {
       // write initial mapping
       auto t = create_transaction();
       check_mappings(t);  // check in progress transaction sees mapping
       check_mappings();   // check concurrent does not
-      auto ret = alloc_mapping(t, laddr, block_size, paddr);
+      auto ret = alloc_mapping(t, laddr, block_size, get_paddr());
       submit_test_transaction(std::move(t));
     }
     check_mappings();     // check new transaction post commit sees it
@@ -278,7 +283,7 @@ TEST_F(btree_lba_manager_test, force_split)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size, P_ADDR_MIN);
+	auto ret = alloc_mapping(t, 0, block_size, get_paddr());
 	if ((i % 10 == 0) && (j == 3)) {
 	  check_mappings(t);
 	  check_mappings();
@@ -298,7 +303,7 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size, P_ADDR_MIN);
+	auto ret = alloc_mapping(t, 0, block_size, get_paddr());
 	// just to speed things up a bit
 	if ((i % 100 == 0) && (j == 3)) {
 	  check_mappings(t);

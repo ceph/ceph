@@ -34,6 +34,7 @@ to do the trick.
 
 .. _fork(): http://pubs.opengroup.org/onlinepubs/9699919799/functions/fork.html
 
+.. highlight:: console
 
 logging
 -------
@@ -86,7 +87,8 @@ using ``vstart.sh``,
 
 So, a typical command to start a single-crimson-node cluster is::
 
-  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x --without-dashboard --memstore \
+  $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
+    --without-dashboard --memstore \
     --crimson --nodaemon --redirect-output \
     --osd-args "--memory 4G"
 
@@ -96,7 +98,7 @@ line options.
 
 You could stop the vstart cluster using::
 
-  ../src/stop.sh --crimson
+  $ ../src/stop.sh --crimson
 
 
 CBT Based Testing
@@ -141,8 +143,8 @@ Debugging Crimson
 =================
 
 
-debugging tips
---------------
+debugging in your workspace
+---------------------------
 
 When a seastar application crashes, it leaves us a serial of addresses, like::
 
@@ -203,3 +205,20 @@ the input, so you can also paste the log messages like::
   2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e8b8
   2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  0x0000000000e3e985
   2020-07-22T11:37:04.501 INFO:teuthology.orchestra.run.smithi061.stderr:  /lib64/libpthread.so.0+0x0000000000012dbf
+
+debugging crashes of teuthology based tests
+-------------------------------------------
+
+Unlike classic OSD, crimson does not print a human-readable backtrace when it
+handles fatal signals like `SIGSEGV` or `SIGABRT`. And it is more complicated
+when it comes to a stripped binary. So before planting a signal handler for
+those signals in crimson, we could to use `script/ceph-debug-docker.sh` to parse
+the addresses in the backtrace::
+
+  # assuming you are under the source tree of ceph
+  $ ./src/script/ceph-debug-docker.sh  --flavor crimson master:27e237c137c330ebb82627166927b7681b20d0aa centos:8
+  ....
+  [root@3deb50a8ad51 ~]# wget -q https://raw.githubusercontent.com/scylladb/seastar/master/scripts/seastar-addr2line
+  [root@3deb50a8ad51 ~]# dnf install -q -y file
+  [root@3deb50a8ad51 ~]# python3 seastar-addr2line -e /usr/bin/crimson-osd
+  # paste the backtrace here

@@ -1889,7 +1889,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
 
     std::string prefix, delimiter;
     for (auto it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(true, prefix, delimiter, y);
+      ret = it->second->remove_bucket(true, prefix, delimiter, false, nullptr, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -2041,7 +2041,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       vector<rgw_bucket> bucket_names;
       for (auto iter = m.begin(); iter != m.end(); ++iter) {
 	auto& bucket = iter->second;
-        bucket_names.push_back(bucket->get_bi());
+        bucket_names.push_back(bucket->get_key());
 
         marker = iter->first;
       }

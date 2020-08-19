@@ -313,7 +313,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
 
   ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl), *temp_snapc, 0,
+  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl), *temp_snapc, 0, 0, std::nullopt,
             *temp_trace, temp_op_flags, temp_journal_tid, temp_dispatch_result,
             temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->write_same(0, 0, 0, std::move(buffer_extents),

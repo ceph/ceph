@@ -2161,7 +2161,7 @@ public:
   uint64_t get_size() { return _size; }
   real_time ctime() { return mod_time; } // XXX
   real_time mtime() { return mod_time; }
-  std::map<string, bufferlist>& get_attrs() { return attrs; }
+  std::map<string, bufferlist>& get_attrs() { return attrs.attrs; }
 
   buffer::list* get_attr(const std::string& k) {
     auto iter = attrs.find(k);

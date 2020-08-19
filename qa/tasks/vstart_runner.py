@@ -1200,10 +1200,21 @@ class LocalContext(object):
         if test_path:
             shutil.rmtree(test_path)
 
+
+class LogRotate():
+    def __init__(self):
+        self.conf_file_path = os.path.join(os.getcwd(), 'logrotate.conf')
+        self.state_file_path = os.path.join(os.getcwd(), 'logrotate.state')
+
+    def run_logrotate(self):
+        remote.run(args=['logrotate', '-f', self.conf_file_path, '-s',
+                         self.state_file_path, '--verbose'])
+
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
     remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
     remote.run(args=['rm', '-rf', './dev', './out'])
+
 
 def clear_old_log():
     from os import stat
@@ -1221,6 +1232,7 @@ def clear_old_log():
         init_log()
         log.info('logging in a fresh file now...')
 
+
 def exec_test():
     # Parse arguments
     opt_interactive_on_error = False
@@ -1234,6 +1246,8 @@ def exec_test():
     global opt_use_ns
     opt_use_ns = False
     opt_brxnet= None
+    opt_verbose = True
+    opt_rotate_log = True
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1262,13 +1276,17 @@ def exec_test():
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
                 sys.exit(-1)
             opt_brxnet=f.split('=')[1]
-            try:  
-                IP(opt_brxnet)  
+            try:
+                IP(opt_brxnet)
                 if IP(opt_brxnet).iptype() == 'PUBLIC':
                     raise RuntimeError('is public')
             except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
+        elif '--no-verbose' == f:
+            opt_verbose = False
+        elif f == '--dont-rotate':
+            opt_rotate_log = False
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1311,10 +1329,16 @@ def exec_test():
         vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
-        args = [os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d",
-                    "--nolockdep"]
+        args = [
+            os.path.join(SRC_PREFIX, "vstart.sh"),
+            "-n",
+            "--nolockdep",
+        ]
         if require_memstore:
             args.append("--memstore")
+
+        if opt_verbose:
+            args.append("-d")
 
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
@@ -1372,18 +1396,38 @@ def exec_test():
         def __init__(self):
             self.buffer = ""
 
+        def _del_result_lines(self):
+            """
+            Don't let unittest.TextTestRunner print "Ran X tests in Ys",
+            vstart_runner.py will do it for itself since it runs tests in a
+            testsuite one by one.
+            """
+            self.buffer = re.sub('\n\n'+'-'*70+'\nran [0-9]* test in [0-9.]*s\n\n',
+                                 '', self.buffer, flags=re.I)
+
+            self.buffer = self.buffer.replace('OK\n', '')
+
         def write(self, data):
             self.buffer += data
-            if "\n" in self.buffer:
-                lines = self.buffer.split("\n")
-                for line in lines[:-1]:
-                    pass
-                    # sys.stderr.write(line + "\n")
-                    log.info(line)
-                self.buffer = lines[-1]
+            if self.buffer.count("\n") > 5:
+                self._write()
+
+        def _write(self):
+            self._del_result_lines()
+            if self.buffer == '':
+                return
+
+            lines = self.buffer.split("\n")
+            for line in lines:
+                # sys.stderr.write(line + "\n")
+                log.info(line)
+            self.buffer = ''
 
         def flush(self):
             pass
+
+        def __del__(self):
+            self._write()
 
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
@@ -1473,12 +1517,37 @@ def exec_test():
             else:
                 super(LoggingResult, self).addSkip(test, reason)
 
+
     # Execute!
-    result = unittest.TextTestRunner(
-        stream=LogStream(),
-        resultclass=LoggingResult,
-        verbosity=2,
-        failfast=True).run(overall_suite)
+    overall_suite = load_tests(modules, loader.TestLoader())
+    no_of_tests_execed = 0
+    if opt_rotate_log:
+        logrotate = LogRotate()
+    started_at = datetime.datetime.utcnow()
+    for suite_, case in enumerate_methods(overall_suite):
+        # don't run logrotate beforehand since some ceph daemons might be
+        # down and pre/post-rotate scripts in logrotate.conf might fail.
+        if opt_rotate_log:
+            logrotate.run_logrotate()
+
+        result = unittest.TextTestRunner(stream=LogStream(),
+                                         resultclass=LoggingResult,
+                                         verbosity=2, failfast=True).run(case)
+
+        if not result.wasSuccessful():
+            break
+
+        no_of_tests_execed += 1
+
+    time_elapsed = (datetime.datetime.utcnow() - started_at).total_seconds()
+
+    if result.wasSuccessful():
+        log.info('')
+        log.info('-'*70)
+        log.info('Ran {} tests in {}s'.format(no_of_tests_execed,
+                                              time_elapsed))
+        log.info('')
+        log.info('OK')
 
     CephFSMount.cleanup_stale_netnses_and_bridge(remote)
 
