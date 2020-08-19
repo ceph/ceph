@@ -139,7 +139,6 @@ Things users can do:
     
      [root@mon1 ~]# ssh -F config -i key root@mon1
 
-4. There is a limitation right now: the ssh user is always `root`.
 
 
 
