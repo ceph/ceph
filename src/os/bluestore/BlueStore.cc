@@ -295,47 +295,48 @@ static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
   return key + 1;
 }
 
-static void get_coll_key_range(const coll_t& cid, int bits,
-			       string *temp_start, string *temp_end,
-			       string *start, string *end)
+static void get_coll_range(const coll_t& cid, int bits,
+                           ghobject_t *temp_start, ghobject_t *temp_end,
+                           ghobject_t *start, ghobject_t *end)
 {
-  temp_start->clear();
-  temp_end->clear();
-  start->clear();
-  end->clear();
-
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
-    _key_encode_shard(pgid.shard, start);
+    start->shard_id = pgid.shard;
     *temp_start = *start;
 
-    _key_encode_u64(pgid.pool() + 0x8000000000000000ull, start);
-    _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_start);
+    start->hobj.pool = pgid.pool();
+    temp_start->hobj.pool = -2ll - pgid.pool();
 
     *end = *start;
     *temp_end = *temp_start;
 
     uint32_t reverse_hash = hobject_t::_reverse_bits(pgid.ps());
-    _key_encode_u32(reverse_hash, start);
-    _key_encode_u32(reverse_hash, temp_start);
+    start->hobj.set_bitwise_key_u32(reverse_hash);
+    temp_start->hobj.set_bitwise_key_u32(reverse_hash);
 
     uint64_t end_hash = reverse_hash  + (1ull << (32 - bits));
     if (end_hash > 0xffffffffull)
       end_hash = 0xffffffffull;
 
-    _key_encode_u32(end_hash, end);
-    _key_encode_u32(end_hash, temp_end);
+    end->hobj.set_bitwise_key_u32(end_hash);
+    temp_end->hobj.set_bitwise_key_u32(end_hash);
   } else {
-    _key_encode_shard(shard_id_t::NO_SHARD, start);
-    _key_encode_u64(-1ull + 0x8000000000000000ull, start);
+    start->shard_id = shard_id_t::NO_SHARD;
+    start->hobj.pool = -1ull;
+
     *end = *start;
-    _key_encode_u32(0, start);
-    _key_encode_u32(0xffffffff, end);
+    start->hobj.set_bitwise_key_u32(0);
+    end->hobj.set_bitwise_key_u32(0xffffffff);
 
     // no separate temp section
     *temp_start = *end;
     *temp_end = *end;
   }
+
+  start->generation = 0;
+  end->generation = 0;
+  temp_start->generation = 0;
+  temp_end->generation = 0;
 }
 
 static void get_shared_blob_key(uint64_t sbid, string *key)
@@ -693,9 +694,8 @@ public:
 
   virtual bool valid() const = 0;
   virtual const ghobject_t &oid() const = 0;
-  virtual const std::string &key() const = 0;
-  virtual void lower_bound(const std::string &key) = 0;
-  virtual void upper_bound(const std::string &key) = 0;
+  virtual void lower_bound(const ghobject_t &oid) = 0;
+  virtual void upper_bound(const ghobject_t &oid) = 0;
   virtual void next() = 0;
 
 protected:
@@ -704,8 +704,8 @@ protected:
 
 class SimpleCollectionListIterator : public CollectionListIterator {
 public:
-  SimpleCollectionListIterator(const KeyValueDB::Iterator &it)
-    : CollectionListIterator(it) {
+  SimpleCollectionListIterator(CephContext *cct, const KeyValueDB::Iterator &it)
+    : CollectionListIterator(it), m_cct(cct) {
   }
 
   bool valid() const override {
@@ -718,41 +718,46 @@ public:
     return m_oid;
   }
 
-  virtual const std::string &key() const override {
-    ceph_assert(valid());
+  void lower_bound(const ghobject_t &oid) override {
+    string key;
+    get_object_key(m_cct, oid, &key);
 
-    return m_key;
-  }
-
-  void lower_bound(const std::string &key) override {
     m_it->lower_bound(key);
-    cache_key();
+    get_oid();
   }
 
-  void upper_bound(const std::string &key) override {
+  void upper_bound(const ghobject_t &oid) override {
+    string key;
+    get_object_key(m_cct, oid, &key);
+
     m_it->upper_bound(key);
-    cache_key();
+    get_oid();
   }
 
   void next() override {
     ceph_assert(valid());
 
     m_it->next();
-    cache_key();
+    get_oid();
   }
 
 private:
-  std::string m_key;
+  CephContext *m_cct;
   ghobject_t m_oid;
 
-  void cache_key() {
+  void get_oid() {
     if (!valid()) {
       return;
     }
 
-    m_key = m_it->key();
-    int r = get_key_object(m_key, &m_oid);
-    ceph_assert(r != -1);
+    if (is_extent_shard_key(m_it->key())) {
+      next();
+      return;
+    }
+
+    m_oid = ghobject_t();
+    int r = get_key_object(m_it->key(), &m_oid);
+    ceph_assert(r == 0);
   }
 };
 
@@ -772,21 +777,11 @@ public:
     return m_chunk_iter->first;
   }
 
-  const std::string &key() const override {
-    ceph_assert(valid());
+  void lower_bound(const ghobject_t &oid) override {
+    std::string key;
+    _key_encode_prefix(oid, &key);
 
-    return m_chunk_iter->second;
-  }
-
-  void lower_bound(const std::string &key) override {
-    ghobject_t oid;
-    int r = get_key_object(key, &oid);
-    ceph_assert(r != -1);
-
-    std::string pkey;
-    _key_encode_prefix(oid, &pkey);
-
-    m_it->lower_bound(pkey);
+    m_it->lower_bound(key);
     m_chunk_iter = m_chunk.end();
     if (!get_next_chunk()) {
       return;
@@ -804,10 +799,10 @@ public:
     }
   }
 
-  void upper_bound(const std::string &key) override {
-    lower_bound(key);
+  void upper_bound(const ghobject_t &oid) override {
+    lower_bound(oid);
 
-    if (valid() && this->key() == key) {
+    if (valid() && this->oid() == oid) {
       next();
     }
   }
@@ -826,26 +821,33 @@ private:
   std::map<ghobject_t, std::string>::iterator m_chunk_iter;
 
   bool get_next_chunk() {
+    while (m_it->valid() && is_extent_shard_key(m_it->key())) {
+      m_it->next();
+    }
+
     if (!m_it->valid()) {
       return false;
     }
 
     ghobject_t oid;
     int r = get_key_object(m_it->key(), &oid);
-    ceph_assert(r != -1);
+    ceph_assert(r == 0);
 
     m_chunk.clear();
     while (true) {
       m_chunk.insert({oid, m_it->key()});
 
-      m_it->next();
+      do {
+        m_it->next();
+      } while (m_it->valid() && is_extent_shard_key(m_it->key()));
+
       if (!m_it->valid()) {
         break;
       }
 
       ghobject_t next;
       r = get_key_object(m_it->key(), &next);
-      ceph_assert(r != -1);
+      ceph_assert(r == 0);
       if (next.shard_id != oid.shard_id ||
           next.hobj.pool != oid.hobj.pool ||
           next.hobj.get_bitwise_key_u32() != oid.hobj.get_bitwise_key_u32()) {
@@ -10717,8 +10719,8 @@ int BlueStore::_collection_list(
   int r = 0;
   ghobject_t static_next;
   std::unique_ptr<CollectionListIterator> it;
-  string temp_start_key, temp_end_key;
-  string start_key, end_key;
+  ghobject_t coll_range_temp_start, coll_range_temp_end;
+  ghobject_t coll_range_start, coll_range_end;
   bool set_next = false;
   ghobject_t pend;
   bool temp;
@@ -10729,17 +10731,17 @@ int BlueStore::_collection_list(
   if (start.is_max() || start.hobj.is_max()) {
     goto out;
   }
-  get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
-    &start_key, &end_key);
+  get_coll_range(c->cid, c->cnode.bits, &coll_range_temp_start,
+                 &coll_range_temp_end, &coll_range_start, &coll_range_end);
   dout(20) << __func__
-    << " range " << pretty_binary_string(temp_start_key)
-    << " to " << pretty_binary_string(temp_end_key)
-    << " and " << pretty_binary_string(start_key)
-    << " to " << pretty_binary_string(end_key)
+    << " range " << coll_range_temp_start
+    << " to " << coll_range_temp_end
+    << " and " << coll_range_start
+    << " to " << coll_range_end
     << " start " << start << dendl;
   if (legacy) {
     it = std::make_unique<SimpleCollectionListIterator>(
-      db->get_iterator(PREFIX_OBJ));
+      cct, db->get_iterator(PREFIX_OBJ));
   } else {
     it = std::make_unique<SortedCollectionListIterator>(
       db->get_iterator(PREFIX_OBJ));
@@ -10747,27 +10749,21 @@ int BlueStore::_collection_list(
   if (start == ghobject_t() ||
     start.hobj == hobject_t() ||
     start == c->cid.get_min_hobj()) {
-    it->upper_bound(temp_start_key);
+    it->upper_bound(coll_range_temp_start);
     temp = true;
   } else {
-    string k;
-    get_object_key(cct, start, &k);
     if (start.hobj.is_temp()) {
       temp = true;
-      ceph_assert(k >= temp_start_key && k < temp_end_key);
+      ceph_assert(start >= coll_range_temp_start && start < coll_range_temp_end);
     } else {
       temp = false;
-      ceph_assert(k >= start_key && k < end_key);
+      ceph_assert(start >= coll_range_start && start < coll_range_end);
     }
-    dout(20) << __func__ << " start from " << pretty_binary_string(k)
-      << " temp=" << (int)temp << dendl;
-    it->lower_bound(k);
+    dout(20) << __func__ << " temp=" << (int)temp << dendl;
+    it->lower_bound(start);
   }
   if (end.hobj.is_max()) {
-    if (temp)
-      get_key_object(temp_end_key, &pend);
-    else
-      get_key_object(end_key, &pend);
+    pend = temp ? coll_range_temp_end : coll_range_end;
   } else {
     if (end.hobj.is_temp()) {
       if (temp)
@@ -10775,10 +10771,7 @@ int BlueStore::_collection_list(
       else
         goto out;
     } else {
-      if (temp)
-        get_key_object(temp_end_key, &pend);
-      else
-        pend = end;
+      pend = temp ? coll_range_temp_end : end;
     }
   }
   dout(20) << __func__ << " pend " << pend << dendl;
@@ -10790,7 +10783,7 @@ int BlueStore::_collection_list(
 	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
-          if (it->valid() && it->key() < temp_end_key) {
+          if (it->valid() && it->oid() < coll_range_temp_end) {
             *pnext = it->oid();
             set_next = true;
           }
@@ -10798,34 +10791,28 @@ int BlueStore::_collection_list(
 	}
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
 	temp = false;
-	it->upper_bound(start_key);
+	it->upper_bound(coll_range_start);
         if (end.hobj.is_max())
-          get_key_object(end_key, &pend);
+          pend = coll_range_end;
         else
           pend = end;
 	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
       }
-      if (it->valid() && it->key() < end_key) {
+      if (it->valid() && it->oid() < coll_range_end) {
         *pnext = it->oid();
         set_next = true;
       }
       break;
     }
-    dout(30) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
-    if (is_extent_shard_key(it->key())) {
-      it->next();
-      continue;
-    }
-    ghobject_t oid = it->oid();
-    dout(20) << __func__ << " oid " << oid << " end " << end << dendl;
+    dout(20) << __func__ << " oid " << it->oid() << " end " << end << dendl;
     if (ls->size() >= (unsigned)max) {
       dout(20) << __func__ << " reached max " << max << dendl;
-      *pnext = oid;
+      *pnext = it->oid();
       set_next = true;
       break;
     }
-    ls->push_back(oid);
+    ls->push_back(it->oid());
     it->next();
   }
 out:
