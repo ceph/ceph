@@ -1880,7 +1880,6 @@ To check that the host is reachable:
                        daemon_spec: CephadmDaemonSpec,
                        reconfig=False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
-                       redeploy=False,
                        ) -> str:
 
 
