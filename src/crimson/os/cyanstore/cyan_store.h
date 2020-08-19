@@ -100,23 +100,23 @@ public:
     CollectionRef c,
     const ghobject_t& oid);
 
-  seastar::future<omap_values_t> omap_get_values(
+  read_errorator::future<omap_values_t> omap_get_values(
     CollectionRef c,
     const ghobject_t& oid,
     const omap_keys_t& keys) final;
+
+  /// Retrieves paged set of values > start (if present)
+  read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
+    CollectionRef c,           ///< [in] collection
+    const ghobject_t &oid,     ///< [in] oid
+    const std::optional<std::string> &start ///< [in] start, empty for begin
+    ) final; ///< @return <done, values> values.empty() iff done
 
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) const final;
-
-  /// Retrieves paged set of values > start (if present)
-  seastar::future<std::tuple<bool, omap_values_t>> omap_get_values(
-    CollectionRef c,           ///< [in] collection
-    const ghobject_t &oid,     ///< [in] oid
-    const std::optional<std::string> &start ///< [in] start, empty for begin
-    ) final; ///< @return <done, values> values.empty() iff done
 
   seastar::future<ceph::bufferlist> omap_get_header(
     CollectionRef c,
