@@ -1286,15 +1286,6 @@ static ceph::spinlock debug_lock;
     bl.clear();
   }
 
-  void buffer::list::claim_append_piecewise(list& bl)
-  {
-    // steal the other guy's buffers
-    for (const auto& node : bl.buffers()) {
-      append(node, 0, node.length());
-    }
-    bl.clear();
-  }
-
   void buffer::list::append(char c)
   {
     // put what we can into the existing append_buffer.
