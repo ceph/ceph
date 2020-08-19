@@ -867,6 +867,8 @@ protected:
   // -- metadata cache stuff
 
   // decrease inode ref.  delete if dangling.
+  void _put_inode(Inode *in, int n);
+  void delay_put_inodes(bool wakeup=false);
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
@@ -1413,6 +1415,9 @@ private:
 
   uint64_t cap_hits = 0;
   uint64_t cap_misses = 0;
+
+  ceph::spinlock delay_i_lock;
+  std::map<Inode*,int> delay_i_release;
 };
 
 /**
