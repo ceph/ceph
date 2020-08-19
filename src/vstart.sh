@@ -189,12 +189,9 @@ inc_osd_num=0
 
 msgr="21"
 
-rotate_logs=1
-
 usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
-usage=$usage"\t--dont-rotate: don't rotate the logs\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
@@ -245,9 +242,6 @@ while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug )
         debug=1
-        ;;
-    --dont-rotate)
-        rotate_logs=0
         ;;
     -s | --standby_mds)
         standby=1
@@ -723,40 +717,6 @@ $extra_conf
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 EOF
-}
-
-write_logrotate_conf() {
-    out_dir=$(pwd)"/out/*.log"
-
-    cat << EOF
-$out_dir
-{
-    rotate 5
-    size 1G
-    copytruncate
-    compress
-    notifempty
-    missingok
-    sharedscripts
-    postrotate
-        # NOTE: assuring that the absence of one of the following processes
-        # won't abort the logrotate command.
-        killall -u $USER -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror || echo ""
-    endscript
-}
-EOF
-}
-
-init_logrotate() {
-    logrotate_conf_path=$(pwd)"/logrotate.conf"
-    logrotate_state_path=$(pwd)"/logrotate.state"
-
-    if ! test -a $logrotate_conf_path; then
-        if test -a $logrotate_state_path; then
-            rm -f $logrotate_state_path
-        fi
-        write_logrotate_conf > $logrotate_conf_path
-    fi
 }
 
 start_mon() {
@@ -1596,8 +1556,4 @@ if [ -f "$STRAY_CONF_PATH" -a -n "$conf_fn" -a ! "$conf_fn" -ef "$STRAY_CONF_PAT
     echo ""
     echo "NOTE:"
     echo "    Remember to restart cluster after removing $STRAY_CONF_PATH"
-fi
-
-if [ $rotate_logs -ne 0 ]; then
-    init_logrotate
 fi
