@@ -1283,7 +1283,7 @@ def exec_test():
             except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
-        elif '--no-verbose' == f:
+        elif f == '--no-verbose':
             opt_verbose = False
         elif f == '--dont-rotate':
             opt_rotate_log = False
@@ -1339,6 +1339,9 @@ def exec_test():
 
         if opt_verbose:
             args.append("-d")
+
+        if opt_rotate_log is False:
+            args.append("--dont-rotate")
 
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
