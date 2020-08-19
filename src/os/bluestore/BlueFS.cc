@@ -2775,8 +2775,6 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
     buffer_appender.append_zero(padding_len);
     buffer_appender.flush();
-    // FIXME: `splice` is currently broken at it always thrashes
-    // the `_carriage`. This will be fixed in a separated patch.
     buffer.splice(buffer.length() - padding_len, padding_len, &bl);
     // Deep copy the tail here. This allows to avoid costlier copy on
     // bufferlist rebuild in e.g. `KernelDevice` and minimizes number

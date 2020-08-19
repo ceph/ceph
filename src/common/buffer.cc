@@ -1317,7 +1317,7 @@ static ceph::spinlock debug_lock;
     _len++;
   }
 
-  buffer::ptr buffer::list::always_empty_bptr;
+  buffer::ptr_node buffer::list::always_empty_bptr;
 
   buffer::ptr_node& buffer::list::refill_append_space(const unsigned len)
   {
@@ -1620,8 +1620,6 @@ static ceph::spinlock debug_lock;
       ++curbuf_prev;
     }
     
-    _carriage = &always_empty_bptr;
-
     while (len > 0) {
       // partial or the last (appendable) one?
       if (const auto to_drop = off + len; to_drop < curbuf->length()) {
@@ -1641,8 +1639,16 @@ static ceph::spinlock debug_lock;
       if (claim_by) 
 	claim_by->append(*curbuf, off, howmuch);
       _len -= curbuf->length();
-      _num -= 1;
-      curbuf = _buffers.erase_after_and_dispose(curbuf_prev);
+      if (curbuf == _carriage) {
+        // no need to reallocate, shrinking and relinking is enough.
+        curbuf = _buffers.erase_after(curbuf_prev);
+	_carriage->set_offset(_carriage->offset() + _carriage->length());
+	_carriage->set_length(0);
+	_buffers.push_back(*_carriage);
+      } else {
+	curbuf = _buffers.erase_after_and_dispose(curbuf_prev);
+	_num -= 1;
+      }
       len -= howmuch;
       off = 0;
     }
