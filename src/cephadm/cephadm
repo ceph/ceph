@@ -4724,8 +4724,14 @@ def read_file(path_list, file_name=''):
             file_path = path
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
-                content = f.read().strip()
-            return content
+                try:
+                    content = f.read().strip()
+                except OSError:
+                    # sysfs may populate the file, but for devices like
+                    # virtio reads can fail
+                    return "Unknown"
+                else:
+                    return content
     return "Unknown"
 
 
@@ -4861,28 +4867,39 @@ class HostFacts():
         return capacity
 
     def _dev_list(self, dev_list):
-        # type: (List[str]) -> List[str]
+        # type: (List[str]) -> List[Dict[str, object]]
         """Return a 'pretty' name list for each device in the `dev_list`"""
         disk_list = list()
 
         for dev in dev_list:
             disk_model = read_file(['/sys/block/{}/device/model'.format(dev)]).strip()
+            disk_rev = read_file(['/sys/block/{}/device/rev'.format(dev)]).strip()
+            disk_wwid = read_file(['/sys/block/{}/device/wwid'.format(dev)]).strip()
             vendor = read_file(['/sys/block/{}/device/vendor'.format(dev)]).strip()
             disk_vendor = HostFacts._disk_vendor_workarounds.get(vendor, vendor)
             disk_size_bytes = self._get_capacity(dev)
-            disk_list.append("{} {} ({})".format(disk_vendor, disk_model, bytes_to_human(disk_size_bytes)))
+            disk_list.append({
+                "description": "{} {} ({})".format(disk_vendor, disk_model, bytes_to_human(disk_size_bytes)),
+                "vendor": disk_vendor,
+                "model": disk_model,
+                "rev": disk_rev,
+                "wwid": disk_wwid,
+                "dev_name": dev,
+                "disk_size_bytes": disk_size_bytes,
+                }
+            )
         return disk_list
 
     @property
     def hdd_list(self):
-        # type: () -> List[str]
+        # type: () -> List[Dict[str, object]]
         """Return a list of devices that are HDDs (spinners)"""
         devs = self._get_devs_by_type(rota='1')
         return self._dev_list(devs)
 
     @property
     def flash_list(self):
-        # type: () -> List[str]
+        # type: () -> List[Dict[str, object]]
         """Return a list of devices that are flash based (SSD, NVMe)"""
         devs = self._get_devs_by_type(rota='0')
         return self._dev_list(devs)
