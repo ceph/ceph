@@ -89,10 +89,10 @@ static void append_escaped(const string &in, string *out)
 {
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i <= '#') {
+    if ((unsigned char)*i <= '#') {
       snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
       out->append(hexbyte);
-    } else if (*i >= '~') {
+    } else if ((unsigned char)*i >= '~') {
       snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
       out->append(hexbyte);
     } else {

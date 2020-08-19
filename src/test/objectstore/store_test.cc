@@ -4912,9 +4912,6 @@ TEST_P(StoreTest, HashCollisionTest) {
 }
 
 TEST_P(StoreTest, HashCollisionSorting) {
-  if (string(GetParam()) == "kstore") // TODO: fix kstore
-    return;
-
   char buf121664318_1[] = {18, -119, -121, -111, 0};
   char buf121664318_2[] = {19, 127, -121, 32, 0};
   char buf121664318_3[] = {19, -118, 15, 19, 0};
