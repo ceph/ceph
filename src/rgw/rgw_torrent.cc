@@ -42,7 +42,7 @@ void seed::init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store)
   store = p_store;
 }
 
-int seed::get_torrent_file(RGWRados::Object::Read &read_op,
+int seed::get_torrent_file(rgw::sal::RGWObject* object,
                            uint64_t &total_len,
                            ceph::bufferlist &bl_data,
                            rgw_obj &obj)
@@ -69,7 +69,7 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
 
   const set<string> obj_key{RGW_OBJ_TORRENT};
   map<string, bufferlist> m;
-  const int r = read_op.state.cur_ioctx->omap_get_vals_by_keys(oid, obj_key, &m);
+  const int r = object->omap_get_vals_by_keys(oid, obj_key, &m);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
     return r;
@@ -248,7 +248,7 @@ int seed::save_torrent_file()
 {
   int op_ret = 0;
   string key = RGW_OBJ_TORRENT;
-  rgw_obj obj(s->bucket->get_bi(), s->object->get_name());
+  rgw_obj obj(s->bucket->get_key(), s->object->get_name());
 
   rgw_raw_obj raw_obj;
   store->getRados()->obj_to_raw(s->bucket->get_info().placement_rule, obj, &raw_obj);

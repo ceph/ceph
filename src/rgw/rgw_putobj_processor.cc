@@ -473,7 +473,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   encode(info, bl);
 
   rgw_obj meta_obj;
-  meta_obj.init_ns(bucket->get_bi(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
+  meta_obj.init_ns(bucket->get_key(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
   meta_obj.set_in_extra_data(true);
 
   rgw_raw_obj raw_meta_obj;
