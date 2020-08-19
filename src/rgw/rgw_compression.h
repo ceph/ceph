@@ -42,6 +42,9 @@ class RGWPutObj_Compress : public rgw::putobj::Pipe
   CompressorRef compressor;
   boost::optional<int32_t> compressor_message;
   std::vector<compression_block> blocks;
+  uint64_t compressed_ofs{0};
+  off_t in_len{0};
+  off_t out_len{0};
 public:
   RGWPutObj_Compress(CephContext* cct_, CompressorRef compressor,
                      rgw::putobj::DataProcessor *next)

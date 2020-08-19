@@ -67,7 +67,23 @@ int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
     }
     // end of compression stuff
   }
-  return Pipe::process(std::move(out), logical_offset);
+  // refresh compressed ofs for other pipe processers if have
+  if (out.length()) {
+    in_len = in.length();
+    out_len = out.length();
+    if (in_len >= out_len) {
+      logical_offset = logical_offset >= (in_len - out_len) ? (logical_offset + out_len - in_len) : 0;
+    } else {
+      logical_offset = logical_offset + out_len - in_len;
+    }
+    compressed_ofs = logical_offset;
+  } else {
+    compressed_ofs = logical_offset + out_len - in_len;
+    in_len = 0;
+    out_len = 0;
+  }
+
+  return Pipe::process(std::move(out), compressed_ofs);
 }
 
 //----------------RGWGetObj_Decompress---------------------
@@ -90,7 +106,7 @@ RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_,
 int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   ldout(cct, 10) << "Compression for rgw is enabled, decompress part "
-      << "bl_ofs="<< bl_ofs << bl_len << dendl;
+      << "bl_ofs=" << bl_ofs << " bl_len=" << bl_len << dendl;
 
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return decompressed data?
