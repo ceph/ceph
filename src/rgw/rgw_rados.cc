@@ -4154,7 +4154,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   bool remote_dest;
 
   append_rand_alpha(cct, dest_obj->get_oid(), shadow_oid, 32);
-  shadow_obj.init_ns(dest_obj->get_bucket()->get_bi(), shadow_oid, shadow_ns);
+  shadow_obj.init_ns(dest_obj->get_bucket()->get_key(), shadow_oid, shadow_ns);
 
   auto& zonegroup = svc.zone->get_zonegroup();
 
@@ -4335,7 +4335,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     manifest = *astate->manifest;
     const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
     if (tail_placement.bucket.name.empty()) {
-      manifest.set_tail_placement(tail_placement.placement_rule, src_obj->get_bucket()->get_bi());
+      manifest.set_tail_placement(tail_placement.placement_rule, src_obj->get_bucket()->get_key());
     }
     string ref_tag;
     for (; miter != astate->manifest->obj_end(); ++miter) {
