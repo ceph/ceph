@@ -79,6 +79,7 @@
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
 %endif
+%bcond_with rbd_nvmf_gw
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
@@ -1078,6 +1079,20 @@ Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph’s default alerts for Prometheus.
 
+%if 0%{with rbd_nvmf_gw}
+%package -n rbd-nvmf-gw
+Summary:       Ceph RBD NVMoF gateway
+%if 0%{?suse_version}
+Group:         System/Filesystems
+%endif
+Requires:      librbd1 = %{_epoch_prefix}%{version}-%{release}
+Requires:      librados2 = %{_epoch_prefix}%{version}-%{release}
+%description -n rbd-nvmf-gw
+Package that includes a tool which acts as a gateway and provides access
+to an RBD image through NVMeOF protocol.
+%endif
+
+
 #################################################################################
 # common
 #################################################################################
@@ -1200,6 +1215,9 @@ ${CMAKE} .. \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE=ON \
+%endif
+%if 0%{with rbd_nvmf_gw}
+    -DWITH_SPDK=ON \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON
@@ -2311,5 +2329,52 @@ exit 0
 %endif
 %attr(0755,root,root) %dir %{_sysconfdir}/prometheus/ceph
 %config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
+
+%if 0%{with rbd_nvmf_gw}
+%files -n rbd-nvmf-gw
+%{_bindir}/rbd-nvmf-gw
+%{_unitdir}/rbd-nvmf-gw.service
+
+%post -n rbd-nvmf-gw
+%if 0%{?suse_version}
+if [ $1 -eq 1 ] ; then
+  /usr/bin/systemctl preset rbd-nvmf-gw.service >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post rbd-nvmf-gw.service
+%endif
+if [ $1 -eq 1 ] ; then
+  /usr/bin/systemctl start rbd-nvmf-gw.service >/dev/null 2>&1 || :
+fi
+
+%preun -n rbd-nvmf-gw
+%if 0%{?suse_version}
+%service_del_preun rbd-nvmf-gw.service
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun rbd-nvmf-gw.service
+%endif
+
+%postun -n rbd-nvmf-gw
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun rbd-nvmf-gw.service
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun rbd-nvmf-gw.service
+%endif
+if [ $1 -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart rbd-nvmf-gw.service > /dev/null 2>&1 || :
+  fi
+fi
+%endif
 
 %changelog

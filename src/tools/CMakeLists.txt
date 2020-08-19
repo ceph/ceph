@@ -149,3 +149,7 @@ endif()
 add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)
 add_subdirectory(erasure-code)
+
+if(WITH_SPDK)
+  add_subdirectory(rbd-nvmf-gw)
+endif(WITH_SPDK)

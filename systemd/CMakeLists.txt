@@ -13,7 +13,8 @@ foreach(service
     ceph-radosgw@
     ceph-rbd-mirror@
     ceph-immutable-object-cache@
-    rbdmap)
+    rbdmap
+    rbd-nvmf-gw)
   configure_file(
     ${service}.service.in
     ${service}.service

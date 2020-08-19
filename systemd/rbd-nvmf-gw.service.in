@@ -1,0 +1,18 @@
+[Unit]
+Description=Ceph RBD NVMoF gateway
+
+After=network-online.target
+Before=remote-fs-pre.target
+Wants=network-online.target remote-fs-pre.target
+
+[Service]
+LimitNOFILE=infinity
+RemainAfterExit=yes
+ExecStart=/usr/bin/rbd-nvmf-gw -m 0xff -B
+
+Restart=on-failure
+StartLimitBurst=3
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
