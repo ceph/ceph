@@ -1,4 +1,4 @@
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { FormatterService } from '../../../../shared/services/formatter.service';

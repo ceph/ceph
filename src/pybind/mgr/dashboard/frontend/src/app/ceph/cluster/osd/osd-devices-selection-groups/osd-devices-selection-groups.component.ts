@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { LanguageService } from '../../services/language.service';
 import { SupportedLanguages } from './supported-languages.enum';

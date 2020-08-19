@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { HostService } from '../../../shared/api/host.service';
 import { OsdService } from '../../../shared/api/osd.service';

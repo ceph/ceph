@@ -3,7 +3,7 @@ import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';

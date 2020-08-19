@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';

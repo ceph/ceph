@@ -2,7 +2,7 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';

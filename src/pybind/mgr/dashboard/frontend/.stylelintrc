@@ -2,7 +2,7 @@
   "extends": "stylelint-config-sass-guidelines",
   "plugins": [
     "stylelint-declaration-use-variable"
-  ],  
+  ],
   "rules": {
     "function-parentheses-space-inside": null,
     "indentation": null,
@@ -32,6 +32,12 @@
           ]
         }
       ]
+    ],
+    "property-no-unknown": [
+      true,
+      {
+        "ignoreSelectors": [":export"]
+      }
     ]
-  }  
+  }
 }

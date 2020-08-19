@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { MonitorService } from '../../../shared/api/monitor.service';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
