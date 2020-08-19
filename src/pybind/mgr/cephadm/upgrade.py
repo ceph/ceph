@@ -317,12 +317,12 @@ class CephadmUpgrade:
                 return
 
             if need_upgrade_self:
-                mgr_map = self.mgr.get('mgr_map')
-                num = len(mgr_map.get('standbys'))
-                if not num:
+                try:
+                    self.mgr.mgr_service.fail_over()
+                except OrchestratorError as e:
                     self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
                         'severity': 'warning',
-                        'summary': 'Upgrade: Need standby mgr daemon',
+                        'summary': f'Upgrade: {e}',
                         'count': 1,
                         'detail': [
                             'The upgrade process needs to upgrade the mgr, '
@@ -331,17 +331,7 @@ class CephadmUpgrade:
                     })
                     return
 
-                logger.info('Upgrade: there are %d other already-upgraded '
-                            'standby mgrs, failing over' % num)
-
-                self._update_upgrade_progress(done / len(daemons))
-
-                # fail over
-                ret, out, err = self.mgr.check_mon_command({
-                    'prefix': 'mgr fail',
-                    'who': self.mgr.get_mgr_id(),
-                })
-                return
+                return  # unreachable code, as fail_over never returns
             elif daemon_type == 'mgr':
                 if 'UPGRADE_NO_STANDBY_MGR' in self.mgr.health_checks:
                     del self.mgr.health_checks['UPGRADE_NO_STANDBY_MGR']
