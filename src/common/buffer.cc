@@ -1623,18 +1623,18 @@ static ceph::spinlock debug_lock;
     _carriage = &always_empty_bptr;
 
     while (len > 0) {
-      // partial?
-      if (off + len < curbuf->length()) {
+      // partial or the last (appendable) one?
+      if (const auto to_drop = off + len; to_drop < curbuf->length()) {
 	//cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
 	if (claim_by) 
 	  claim_by->append(*curbuf, off, len);
-	curbuf->set_offset(off+len + curbuf->offset());    // ignore beginning big
-	curbuf->set_length(curbuf->length() - (len+off));
-	_len -= off+len;
+	curbuf->set_offset(to_drop + curbuf->offset());    // ignore beginning big
+	curbuf->set_length(curbuf->length() - to_drop);
+	_len -= to_drop;
 	//cout << " now " << *curbuf << std::endl;
 	break;
       }
-      
+
       // hose though the end
       unsigned howmuch = curbuf->length() - off;
       //cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
@@ -1646,7 +1646,7 @@ static ceph::spinlock debug_lock;
       len -= howmuch;
       off = 0;
     }
-      
+
     // splice in *replace (implement me later?)
   }
 
