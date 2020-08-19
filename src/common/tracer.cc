@@ -9,5 +9,3 @@ Jager_Tracer::~Jager_Tracer()
         this->tracer->Close();
     jager_initialized = false;
 }
-
-

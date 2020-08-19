@@ -193,14 +193,8 @@ if(HAVE_ARMV8_CRC)
     COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
 endif()
 
-if(WITH_JAEGER)
-  target_link_libraries(crc32
-    arch
-    ${Complete_Jaeger_LIBRARIES})
-else()
-  target_link_libraries(crc32
+target_link_libraries(crc32
   arch)
-endif()
 
 add_library(common_utf8 STATIC utf8.c)
 

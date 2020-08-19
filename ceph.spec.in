@@ -136,6 +136,10 @@ BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
 %if 0%{with seastar}
 BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
+%if 0%{?rhel} == 7
+# devtoolset offers newer make and valgrind-devel, but the old ones are good
+# enough.
+BuildRequires:	devtoolset-8-gcc-c++ >= 8.3.1-3.1
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -684,7 +688,6 @@ Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
-Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -1638,7 +1641,6 @@ fi
 %{_datadir}/ceph/mgr/insights
 %{_datadir}/ceph/mgr/iostat
 %{_datadir}/ceph/mgr/localpool
-%{_datadir}/ceph/mgr/mds_autoscaler
 %{_datadir}/ceph/mgr/orchestrator
 %{_datadir}/ceph/mgr/osd_perf_query
 %{_datadir}/ceph/mgr/pg_autoscaler

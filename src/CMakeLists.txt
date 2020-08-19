@@ -275,6 +275,10 @@ if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+if(WITH_JAEGER)
+  include(IncludeJaeger)
+endif()
+
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
@@ -342,8 +346,7 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
-
-  set(libcommon_files
+set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   global/global_context.cc
@@ -400,8 +403,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crush_objs>)
-  
-  set(ceph_common_deps
+set(ceph_common_deps
   json_spirit erasure_code arch crc32
   ${LIB_RESOLV}
   Boost::thread
@@ -420,10 +422,6 @@ set(ceph_common_objs
   ${GSSAPI_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}
   ${CMAKE_DL_LIBS})
-
-if(WITH_JAEGER)
-  list(APPEND ceph_common_deps ${Complete_Jaeger_LIBRARIES})
-endif()
 
 if(HAVE_UDEV)
   list(APPEND ceph_common_deps ${UDEV_LIBRARIES})
@@ -447,6 +445,14 @@ endif()
 
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
+endif()
+
+if(WITH_JAEGER)
+  list(APPEND ceph_common_deps
+  yaml-cpp::yaml-cpp
+  opentracing::libopentracing
+  thrift::libthrift
+  jaegertracing::libjaegertracing)
 endif()
 
 if(WIN32)
@@ -940,4 +946,3 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
-

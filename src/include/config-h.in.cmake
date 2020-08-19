@@ -166,6 +166,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to use Jaeger */
+#cmakedefine WITH_JAEGER 
+
 /* Define if you want to use EVENTTRACE */
 #cmakedefine WITH_EVENTTRACE
 

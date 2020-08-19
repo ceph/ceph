@@ -71,9 +71,14 @@ include_directories(
 
 if(WIN32)
   include_directories(
-    ${PROJECT_SOURCE_DIR}/src/include/win32)
+  ${PROJECT_SOURCE_DIR}/src/include/win32)
   # Boost complains if winsock2.h (or windows.h) is included before asio.hpp.
-  add_compile_options(-include winsock_wrapper.h)
+  add_definitions(-include winsock_wrapper.h)
+endif()
+
+if(OFED_PREFIX)
+  include_directories(SYSTEM ${OFED_PREFIX}/include)
+  link_directories(${OFED_PREFIX}/lib)
 endif()
 
 if(FREEBSD)
@@ -352,17 +357,9 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
-option(WITH_JAEGER "Use jaeger to create tracepoints and display it on Jaeger UI" OFF)
-
+option(WITH_JAEGER "Use jaeger to create tracepoints and display it on JaegerUI" OFF)
 if(WITH_JAEGER)
-  #TODO: handle the case if libraries found locally, why be redundant?
-  #set(Jaeger_DIR "${CMAKE_CURRENT_LIST_DIR}/Jaegertracing/Jaeger-client-cpp")
-  find_package(OpenTracing REQUIRED)
-  find_package(Jaeger REQUIRED)
-  find_package(yaml-cpp REQUIRED)
-  set(Complete_Jaeger_LIBRARIES ${Jaeger_LIBRARIES} ${OpenTracing_LIBRARIES} ${yaml-cpp_LIBRARIES})
-  include_directories(SYSTEM ${Jaeger_INCLUDE_DIRS} ${yaml-cpp_INCLUDE_DIRS} ${OpenTracing_INCLUDE_DIRS})
-  add_definitions(-DWITH_JAEGER)
+  set(HAVE_JAEGER TRUE)
 endif()
 
 option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
@@ -473,6 +470,8 @@ option(WITH_REENTRANT_STRSIGNAL "strsignal is reentrant" OFF)
 if(WITH_REENTRANT_STRSIGNAL)
   set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
 endif()
+
+set(HAVE_LIBROCKSDB 1)
 
 # -lz link into kv
 find_package(ZLIB REQUIRED)
@@ -687,7 +686,7 @@ add_tags(ctags
   SRC_DIR src
   TAG_FILE tags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
-  EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
+  EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
 
 set(VERSION 15.2.0)
