@@ -2,7 +2,7 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
 import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';

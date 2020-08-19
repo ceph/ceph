@@ -1,6 +1,8 @@
-export enum Color {
+import styles from '../../../styles.scss';
+
+export class Color {
   // HEALTH
-  HEALTH_ERR = '#ff0000',
-  HEALTH_WARN = '#ffa500',
-  HEALTH_OK = '#00bb00'
+  static HEALTH_ERR = styles.healthColorError;
+  static HEALTH_WARN = styles.healthColorWarning;
+  static HEALTH_OK = styles.healthColorHealthy;
 }

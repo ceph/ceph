@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';

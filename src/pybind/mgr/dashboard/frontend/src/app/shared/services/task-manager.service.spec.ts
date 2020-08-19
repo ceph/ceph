@@ -1,6 +1,6 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';

@@ -3,7 +3,7 @@ import { FormArray, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';

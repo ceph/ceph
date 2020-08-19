@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 

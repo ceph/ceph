@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 

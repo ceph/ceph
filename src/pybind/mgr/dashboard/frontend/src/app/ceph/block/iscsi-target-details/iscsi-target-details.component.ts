@@ -7,7 +7,7 @@ import {
   TreeNode,
   TREE_ACTIONS
 } from 'angular-tree-component';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { Icons } from '../../../shared/enum/icons.enum';

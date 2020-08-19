@@ -9,8 +9,8 @@ import {
 } from '@angular/core';
 
 import { Mutex } from 'async-mutex';
-import * as _ from 'lodash';
-import * as moment from 'moment';
+import _ from 'lodash';
+import moment from 'moment';
 import { Subscription } from 'rxjs';
 
 import { Icons } from '../../enum/icons.enum';

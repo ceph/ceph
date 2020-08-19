@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { TreeModel, TreeModule } from 'angular-tree-component';
-import * as _ from 'lodash';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';

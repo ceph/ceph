@@ -2,8 +2,8 @@ import { Component } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import * as _ from 'lodash';
-import * as moment from 'moment';
+import _ from 'lodash';
+import moment from 'moment';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import {

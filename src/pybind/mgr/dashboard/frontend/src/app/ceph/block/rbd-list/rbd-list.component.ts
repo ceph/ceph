@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';

@@ -3,7 +3,7 @@ import { FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';

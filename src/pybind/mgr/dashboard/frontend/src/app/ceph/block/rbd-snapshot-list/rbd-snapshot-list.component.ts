@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import * as moment from 'moment';
+import moment from 'moment';
 import { of } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';

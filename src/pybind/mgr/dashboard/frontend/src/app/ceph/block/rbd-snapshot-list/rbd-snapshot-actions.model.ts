@@ -1,5 +1,3 @@
-import * as _ from 'lodash';
-
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';

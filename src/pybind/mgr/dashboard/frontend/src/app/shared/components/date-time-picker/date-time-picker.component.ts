@@ -2,7 +2,7 @@ import { Component, Input, OnInit } from '@angular/core';
 import { FormControl } from '@angular/forms';
 
 import { NgbCalendar, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
-import * as moment from 'moment';
+import moment from 'moment';
 import { Subscription } from 'rxjs';
 
 @Component({
