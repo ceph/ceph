@@ -9000,7 +9000,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
     return 0;
   }
 
-  ldout(cct, 20) << "RGWRados::" << __func__ << " bucket " << bucket.name <<
+  ldout(cct, 1) << "RGWRados::" << __func__ << " bucket " << bucket.name <<
     " needs resharding; current num shards " << bucket_info.layout.current_index.layout.normal.num_shards <<
     "; new num shards " << final_num_shards << " (suggested " <<
     suggested_num_shards << ")" << dendl;
