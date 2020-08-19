@@ -723,7 +723,12 @@ PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
   });
 }
 
-static seastar::future<crimson::os::FuturizedStore::omap_values_t>
+using get_omap_ertr =
+  crimson::os::FuturizedStore::read_errorator::extend<
+    crimson::ct_error::enodata>;
+static
+get_omap_ertr::future<
+  crimson::os::FuturizedStore::omap_values_t>
 maybe_get_omap_vals_by_keys(
   crimson::os::FuturizedStore* store,
   const crimson::os::CollectionRef& coll,
@@ -733,12 +738,13 @@ maybe_get_omap_vals_by_keys(
   if (oi.is_omap()) {
     return store->omap_get_values(coll, ghobject_t{oi.soid}, keys_to_get);
   } else {
-    return seastar::make_ready_future<crimson::os::FuturizedStore::omap_values_t>(
-      crimson::os::FuturizedStore::omap_values_t{});
+    return crimson::ct_error::enodata::make();
   }
 }
 
-static seastar::future<std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>
+static
+get_omap_ertr::future<
+  std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>
 maybe_get_omap_vals(
   crimson::os::FuturizedStore* store,
   const crimson::os::CollectionRef& coll,
@@ -748,8 +754,7 @@ maybe_get_omap_vals(
   if (oi.is_omap()) {
     return store->omap_get_values(coll, ghobject_t{oi.soid}, start_after);
   } else {
-    return seastar::make_ready_future<std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>(
-      std::make_tuple(true, crimson::os::FuturizedStore::omap_values_t{}));
+    return crimson::ct_error::enodata::make();
   }
 }
 
@@ -771,7 +776,8 @@ seastar::future<> PGBackend::omap_get_header(
     });
 }
 
-seastar::future<> PGBackend::omap_get_keys(
+PGBackend::ll_read_errorator::future<>
+PGBackend::omap_get_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
@@ -793,12 +799,12 @@ seastar::future<> PGBackend::omap_get_keys(
     std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
 
   // TODO: truly chunk the reading
-  return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
-    [=, &osd_op] (auto ret) {
+  return maybe_get_omap_vals(store, coll, os.oi, start_after).safe_then(
+    [=, &osd_op](auto ret) {
       ceph::bufferlist result;
       bool truncated = false;
       uint32_t num = 0;
-      for (auto& [key, val] : std::get<1>(ret)) {
+      for (auto &[key, val] : std::get<1>(ret)) {
         if (num >= max_return ||
             result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
           truncated = true;
@@ -811,14 +817,23 @@ seastar::future<> PGBackend::omap_get_keys(
       osd_op.outdata.claim_append(result);
       encode(truncated, osd_op.outdata);
       return seastar::now();
-    });
-
+    }).handle_error(
+      crimson::ct_error::enodata::handle([&osd_op] {
+        uint32_t num = 0;
+	bool truncated = false;
+	encode(num, osd_op.outdata);
+	encode(truncated, osd_op.outdata);
+	return seastar::now();
+      }),
+      ll_read_errorator::pass_further{}
+    );
   // TODO:
   //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   //ctx->delta_stats.num_rd++;
 }
 
-seastar::future<> PGBackend::omap_get_vals(
+PGBackend::ll_read_errorator::future<>
+PGBackend::omap_get_vals(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
@@ -843,7 +858,7 @@ seastar::future<> PGBackend::omap_get_vals(
     std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
 
   // TODO: truly chunk the reading
-  return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
+  return maybe_get_omap_vals(store, coll, os.oi, start_after).safe_then(
     [=, &osd_op] (auto&& ret) {
       auto [done, vals] = std::move(ret);
       assert(done);
@@ -868,14 +883,23 @@ seastar::future<> PGBackend::omap_get_vals(
       encode(num, osd_op.outdata);
       osd_op.outdata.claim_append(result);
       encode(truncated, osd_op.outdata);
-      return seastar::now();
-    });
+      return ll_read_errorator::now();
+    }).handle_error(
+      crimson::ct_error::enodata::handle([&osd_op] {
+        encode(uint32_t{0} /* num */, osd_op.outdata);
+        encode(bool{false} /* truncated */, osd_op.outdata);
+        return ll_read_errorator::now();
+      }),
+      ll_read_errorator::pass_further{}
+    );
 
   // TODO:
   //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   //ctx->delta_stats.num_rd++;
 }
-seastar::future<> PGBackend::omap_get_vals_by_keys(
+
+PGBackend::ll_read_errorator::future<>
+PGBackend::omap_get_vals_by_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
@@ -892,11 +916,18 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
     throw crimson::osd::invalid_argument();
   }
 
-  return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get).then(
-    [&osd_op] (crimson::os::FuturizedStore::omap_values_t vals) {
+  return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get).safe_then(
+    [&osd_op] (crimson::os::FuturizedStore::omap_values_t&& vals) {
       encode(vals, osd_op.outdata);
-      return seastar::now();
-    });
+      return ll_read_errorator::now();
+    }).handle_error(
+      crimson::ct_error::enodata::handle([&osd_op] {
+        uint32_t num = 0;
+        encode(num, osd_op.outdata);
+        return ll_read_errorator::now();
+      }),
+      ll_read_errorator::pass_further{}
+    );
 
   // TODO:
   //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);

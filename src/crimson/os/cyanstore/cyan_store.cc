@@ -253,17 +253,16 @@ CyanStore::get_attrs_ertr::future<CyanStore::attrs_t> CyanStore::get_attrs(
   return get_attrs_ertr::make_ready_future<attrs_t>(o->xattr);
 }
 
-seastar::future<CyanStore::omap_values_t>
-CyanStore::omap_get_values(CollectionRef ch,
-                           const ghobject_t& oid,
-                           const omap_keys_t& keys)
+auto CyanStore::omap_get_values(CollectionRef ch,
+				const ghobject_t& oid,
+				const omap_keys_t& keys)
+  -> read_errorator::future<omap_values_t>
 {
   auto c = static_cast<Collection*>(ch.get());
-  logger().debug("{} {} {}",
-                __func__, c->get_cid(), oid);
+  logger().debug("{} {} {}", __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return crimson::ct_error::enoent::make();
   }
   omap_values_t values;
   for (auto& key : keys) {
@@ -274,19 +273,17 @@ CyanStore::omap_get_values(CollectionRef ch,
   return seastar::make_ready_future<omap_values_t>(std::move(values));
 }
 
-seastar::future<std::tuple<bool, CyanStore::omap_values_t>>
-CyanStore::omap_get_values(
-    CollectionRef ch,
-    const ghobject_t &oid,
-    const std::optional<string> &start
-  ) {
+auto
+CyanStore::omap_get_values(CollectionRef ch,
+			   const ghobject_t &oid,
+			   const std::optional<string> &start)
+  -> read_errorator::future<std::tuple<bool, omap_values_t>>
+{
   auto c = static_cast<Collection*>(ch.get());
-  logger().debug(
-    "{} {} {}",
-    __func__, c->get_cid(), oid);
+  logger().debug("{} {} {}", __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return crimson::ct_error::enoent::make();
   }
   omap_values_t values;
   for (auto i = start ? o->omap.upper_bound(*start) : o->omap.begin();
