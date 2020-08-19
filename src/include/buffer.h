@@ -1091,8 +1091,6 @@ struct error_code;
     void claim_append(list&& bl) {
       claim_append(bl);
     }
-    // only for bl is bufferlist::page_aligned_appender
-    void claim_append_piecewise(list& bl);
 
     // copy with explicit volatile-sharing semantics
     void share(const list& bl)

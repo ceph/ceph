@@ -1973,27 +1973,6 @@ TEST(BufferList, claim_append) {
   EXPECT_EQ((unsigned)0, from.length());
 }
 
-TEST(BufferList, claim_append_piecewise) {
-  bufferlist bl, t, dst;
-  auto a = bl.get_page_aligned_appender(4);
-  for (uint32_t i = 0; i < (CEPH_PAGE_SIZE + CEPH_PAGE_SIZE - 1333); i++)
-    a.append("x", 1);
-  a.flush();
-  const char *p = bl.c_str();
-  t.claim_append(bl);
-
-  for (uint32_t i = 0; i < (CEPH_PAGE_SIZE + 1333); i++)
-    a.append("x", 1);
-  a.flush();
-  t.claim_append(bl);
-
-  EXPECT_FALSE(t.is_aligned_size_and_memory(CEPH_PAGE_SIZE, CEPH_PAGE_SIZE));
-  dst.claim_append_piecewise(t);
-  EXPECT_TRUE(dst.is_aligned_size_and_memory(CEPH_PAGE_SIZE, CEPH_PAGE_SIZE));
-  const char *p1 = dst.c_str();
-  EXPECT_TRUE(p == p1);
-}
-
 TEST(BufferList, begin) {
   bufferlist bl;
   bl.append("ABC");
