@@ -202,7 +202,6 @@ public:
     }
 
     uint64_t get_effective_write_pos() {
-      buffer_appender.flush();
       return pos + buffer.length();
     }
   };
@@ -557,7 +556,6 @@ public:
     ceph_assert(r == 0);
   }
   void try_flush(FileWriter *h) {
-    h->buffer_appender.flush();
     if (h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size) {
       flush(h, true);
     }
