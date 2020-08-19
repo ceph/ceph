@@ -968,7 +968,7 @@ Usage:
         "name=name,type=CephString "
         "name=image,type=CephString,req=false",
         'Redeploy a daemon (with a specifc image)')
-    def _daemon_action_redeploy(self, name, image):
+    def _daemon_action_redeploy(self, name: str, image: Optional[str] = None) -> HandleCommandResult:
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
         completion = self.daemon_action("redeploy", name, image=image)
