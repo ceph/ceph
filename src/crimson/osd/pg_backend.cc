@@ -455,6 +455,34 @@ seastar::future<> PGBackend::write(
   return seastar::now();
 }
 
+seastar::future<> PGBackend::write_same(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  const ceph_osd_op& op = osd_op.op;
+  const uint64_t len = op.writesame.length;
+  if (len == 0) {
+    return seastar::now();
+  }
+  if (op.writesame.data_length == 0 ||
+      len % op.writesame.data_length != 0 ||
+      op.writesame.data_length != osd_op.indata.length()) {
+    throw crimson::osd::invalid_argument();
+  }
+  ceph::bufferlist repeated_indata;
+  for (uint64_t size; size < len; size += op.writesame.data_length) {
+    repeated_indata.append(osd_op.indata);
+  }
+  maybe_create_new_object(os, txn);
+  txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
+	    op.writesame.offset, op.writesame.length,
+	    std::move(repeated_indata), op.flags);
+  osd_op_params.clean_regions.mark_data_region_dirty(op.writesame.offset, len);
+  return seastar::now();
+}
+
 seastar::future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,

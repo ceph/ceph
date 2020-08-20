@@ -93,6 +93,11 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
+  seastar::future<> write_same(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
   seastar::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
