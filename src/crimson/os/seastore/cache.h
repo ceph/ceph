@@ -85,6 +85,17 @@ public:
   Cache(SegmentManager &segment_manager);
   ~Cache();
 
+  /**
+   * drop_from_cache
+   *
+   * Drop extent from cache.  Intended for use when
+   * ref refers to a logically dead extent as during
+   * replay.
+   */
+  void drop_from_cache(CachedExtentRef ref) {
+    remove_extent(ref);
+  }
+
   /// Declare ref retired in t
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     t.add_to_retired_set(ref);
