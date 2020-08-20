@@ -376,6 +376,13 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         r = _create_collection(cid, op->split_bits);
       }
       break;
+      case Transaction::OP_OMAP_CLEAR:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        r = _omap_clear(cid, oid);
+      }
+      break;
       case Transaction::OP_OMAP_SETKEYS:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -502,6 +509,25 @@ int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
     used_bytes += (o->get_size() - old_size);
   }
 
+  return 0;
+}
+
+int CyanStore::_omap_clear(
+  const coll_t& cid,
+  const ghobject_t& oid)
+{
+  logger().debug("{} {} {}", __func__, cid, oid);
+
+  auto c = _get_collection(cid);
+  if (!c) {
+    return -ENOENT;
+  }
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    return -ENOENT;
+  }
+  o->omap.clear();
+  o->omap_header.clear();
   return 0;
 }
 
