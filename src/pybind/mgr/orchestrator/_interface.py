@@ -919,7 +919,10 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_action(self, action: str, service_name: str) -> Completion[List[str]]:
+    def service_action(self,
+                       action: str,
+                       service_name: str
+                       ) -> Completion[List[str]]:
         """
         Perform an action (start/stop/reload) on a service (i.e., all daemons
         providing the logical service).
@@ -932,7 +935,11 @@ class Orchestrator(object):
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def daemon_action(self, action: str, daemon_name: str, image: Optional[str]=None) -> Completion[str]:
+    def daemon_action(self,
+                      action: str,
+                      daemon_name: str,
+                      image: Optional[str] = None
+                      ) -> Completion[str]:
         """
         Perform an action (start/stop/reload) on a daemon.
 
@@ -1201,7 +1208,7 @@ class DaemonDescription(object):
                  osdspec_affinity=None,
                  last_deployed=None,
                  events: Optional[List['OrchestratorEvent']] = None,
-                 is_active: bool=False):
+                 is_active: bool = False):
 
         # Host is at the same granularity as InventoryHost
         self.hostname: str = hostname
@@ -1243,7 +1250,7 @@ class DaemonDescription(object):
         self.osdspec_affinity: Optional[str] = osdspec_affinity
 
         self.events: List[OrchestratorEvent] = events or []
-        
+
         self.is_active = is_active
 
     def name(self):

@@ -95,6 +95,7 @@ def test_spec_octopus(spec_json):
 
     spec = ServiceSpec.from_json(spec_json)
     # just some verification that we can sill read old octopus specs
+
     def convert_to_old_style_json(j):
         j_c = dict(j.copy())
         j_c.pop('service_name', None)
@@ -262,8 +263,7 @@ def test_dd_octopus(dd_json):
     assert dd_json == DaemonDescription.from_json(dd_json).to_json()
 
 
-@pytest.mark.parametrize("spec,dd,valid",
-[
+@pytest.mark.parametrize("spec,dd,valid", [
     # https://tracker.ceph.com/issues/44934
     (
         RGWSpec(

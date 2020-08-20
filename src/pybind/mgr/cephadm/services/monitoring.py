@@ -145,7 +145,8 @@ class AlertmanagerService(CephadmService):
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
-        service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
+        service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname),
+                                            self.DEFAULT_SERVICE_PORT)
         self._set_service_url_on_dashboard(
             'AlertManager',
             'dashboard get-alertmanager-api-host',
