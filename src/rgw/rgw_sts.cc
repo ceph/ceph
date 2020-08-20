@@ -89,6 +89,7 @@ int Credentials::generateCredentials(CephContext* cct,
   token.access_key_id = accessKeyId;
   token.secret_access_key = secretAccessKey;
   token.expiration = expiration;
+  token.issued_at = ceph::to_iso_8601(t);
 
   //Authorization info
   if (policy)
