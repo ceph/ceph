@@ -275,6 +275,8 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
 		pins.pop_front();
 		if (pin->get_paddr() == logn->get_paddr()) {
 		  logn->set_pin(std::move(pin));
+		  pin_set.add_pin(
+		    static_cast<BtreeLBAPin&>(logn->get_pin()).pin);
 		  logger().debug("init_cached_extent: {} initialized", *logn);
 		} else {
 		  // paddr doesn't match, remapped, obsolete
