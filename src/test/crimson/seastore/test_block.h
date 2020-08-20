@@ -126,20 +126,19 @@ struct test_block_mutator_t {
   offset_distribution = std::uniform_int_distribution<uint16_t>(
     0, TestBlock::SIZE - 1);
 
-  std::default_random_engine generator = std::default_random_engine(0);
-
   std::uniform_int_distribution<uint16_t> length_distribution(uint16_t offset) {
     return std::uniform_int_distribution<uint16_t>(
       0, TestBlock::SIZE - offset - 1);
   }
 
 
-  void mutate(TestBlock &block) {
-    auto offset = offset_distribution(generator);
+  template <typename generator_t>
+  void mutate(TestBlock &block, generator_t &gen) {
+    auto offset = offset_distribution(gen);
     block.set_contents(
-      contents_distribution(generator),
+      contents_distribution(gen),
       offset,
-      length_distribution(offset)(generator));
+      length_distribution(offset)(gen));
   }
 };
 
