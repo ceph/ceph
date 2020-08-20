@@ -4,6 +4,7 @@ Copyright (C) 2019 SUSE
 LGPL2.1.  See file COPYING.
 """
 import errno
+import json
 import sqlite3
 from .fs.schedule_client import SnapSchedClient
 from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand
@@ -88,10 +89,13 @@ class Module(MgrModule):
         except CephfsConnectionException as e:
             return e.to_tuple()
         if not scheds:
-            return errno.ENOENT, '', f'SnapSchedule for {path} not found'
+            return -errno.ENOENT, '', f'SnapSchedule for {path} not found'
         if format == 'json':
-            json_list = ','.join([sched.json_list() for sched in scheds])
-            return 0, f'[{json_list}]', ''
+            # json_list = ','.join([sched.json_list() for sched in scheds])
+            schedule_list = [sched.schedule for sched in scheds]
+            retention_list = [sched.retention for sched in scheds]
+            out = {'path': path, 'schedule': schedule_list, 'retention': retention_list}
+            return 0, json.dumps(out), ''
         return 0, '\n'.join([str(sched) for sched in scheds]), ''
 
     @CLIWriteCommand('fs snap-schedule add',
