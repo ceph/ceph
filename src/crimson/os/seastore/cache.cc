@@ -308,18 +308,22 @@ Cache::close_ertr::future<> Cache::close()
 }
 
 Cache::replay_delta_ret
-Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
+Cache::replay_delta(
+  journal_seq_t journal_seq,
+  paddr_t record_base,
+  const delta_info_t &delta)
 {
   if (delta.type == extent_types_t::ROOT) {
     logger().debug("replay_delta: found root delta");
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
+    root->dirty_from = journal_seq;
     return replay_delta_ertr::now();
   } else {
     return get_extent_by_type(
       delta.type,
       delta.paddr,
       delta.laddr,
-      delta.length).safe_then([this, record_base, delta](auto extent) {
+      delta.length).safe_then([=](auto extent) {
 	logger().debug(
 	  "replay_delta: replaying {} on {}",
 	  *extent,

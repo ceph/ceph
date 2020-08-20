@@ -216,7 +216,9 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 		rt.second.journal_segment_seq;
 	    });
 
-	  auto replay_from = segments.rbegin()->second.journal_tail.offset;
+	  auto journal_tail = segments.rbegin()->second.journal_tail;
+	  segment_provider->update_journal_tail_committed(journal_tail);
+	  auto replay_from = journal_tail.offset;
 	  auto from = segments.begin();
 	  if (replay_from != P_ADDR_NULL) {
 	    from = std::find_if(
@@ -228,13 +230,15 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	  } else {
 	    replay_from = paddr_t{from->first, (segment_off_t)block_size};
 	  }
-	  auto ret = std::vector<paddr_t>(segments.end() - from);
+	  auto ret = std::vector<journal_seq_t>(segments.end() - from);
 	  std::transform(
 	    from, segments.end(), ret.begin(),
 	    [this](const auto &p) {
-	      return paddr_t{p.first, (segment_off_t)block_size};
+	      return journal_seq_t{
+		p.second.journal_segment_seq,
+		paddr_t{p.first, (segment_off_t)block_size}};
 	    });
-	  ret[0] = replay_from;
+	  ret[0].offset = replay_from;
 	  return find_replay_segments_fut(
 	    find_replay_segments_ertr::ready_future_marker{},
 	    std::move(ret));
@@ -287,6 +291,7 @@ std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
 {
   auto bliter = bl.cbegin();
   bliter += ceph::encoded_sizeof_bounded<record_header_t>();
+  logger().debug("{}: decoding {} deltas", __func__, header.deltas);
   std::vector<delta_info_t> deltas(header.deltas);
   for (auto &&i : deltas) {
     try {
@@ -300,17 +305,17 @@ std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
 
 Journal::replay_ertr::future<>
 Journal::replay_segment(
-  paddr_t start,
+  journal_seq_t seq,
   delta_handler_t &delta_handler)
 {
-  logger().debug("replay_segment: starting at {}", start);
+  logger().debug("replay_segment: starting at {}", seq);
   return seastar::do_with(
-    std::move(start),
-    [this, &delta_handler](auto &current) {
+    paddr_t(seq.offset),
+    [=, &delta_handler](paddr_t &current) {
       return crimson::do_until(
-	[this, &current, &delta_handler]() -> replay_ertr::future<bool> {
+	[=, &current, &delta_handler]() -> replay_ertr::future<bool> {
 	  return read_record_metadata(current).safe_then
-	    ([this, &current, &delta_handler](auto p)
+	    ([=, &current, &delta_handler](auto p)
 	     -> replay_ertr::future<bool> {
 	      if (!p.has_value()) {
 		return replay_ertr::make_ready_future<bool>(true);
@@ -336,11 +341,14 @@ Journal::replay_segment(
 
 	      return seastar::do_with(
 		std::move(*deltas),
-		[this, &delta_handler, record_start](auto &deltas) {
+		[=, &delta_handler](auto &deltas) {
 		  return crimson::do_for_each(
 		    deltas,
-		    [this, &delta_handler, record_start](auto &info) {
+		    [=, &delta_handler](auto &info) {
 		      return delta_handler(
+			journal_seq_t{
+			  seq.segment_seq,
+			  record_start},
 			record_start.add_offset(block_size),
 			info);
 		    });
@@ -355,7 +363,7 @@ Journal::replay_segment(
 Journal::replay_ret Journal::replay(delta_handler_t &&delta_handler)
 {
   return seastar::do_with(
-    std::move(delta_handler), std::vector<paddr_t>(),
+    std::move(delta_handler), std::vector<journal_seq_t>(),
     [this](auto&& handler, auto&& segments) mutable -> replay_ret {
       return find_replay_segments().safe_then(
         [this, &handler, &segments](auto replay_segs) {
