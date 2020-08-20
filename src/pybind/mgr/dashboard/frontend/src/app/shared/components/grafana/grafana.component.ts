@@ -85,10 +85,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
         value: 'from=now-1d%2Fd&to=now-1d%2Fd'
       },
       {
-        name: this.i18n('Today'),
-        value: 'from=now%2Fd&to=now%2Fd'
-      },
-      {
         name: this.i18n('Today so far'),
         value: 'from=now%2Fd&to=now'
       },
@@ -109,10 +105,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
         value: 'from=now-1w%2Fw&to=now-1w%2Fw'
       },
       {
-        name: this.i18n('This week'),
-        value: 'from=now%2Fw&to=now%2Fw'
-      },
-      {
         name: this.i18n('This week so far'),
         value: 'from=now%2Fw&to=now'
       },
@@ -123,10 +115,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
       {
         name: this.i18n('Previous month'),
         value: 'from=now-1M%2FM&to=now-1M%2FM'
-      },
-      {
-        name: this.i18n('This month'),
-        value: 'from=now%2FM&to=now%2FM'
       },
       {
         name: this.i18n('This month so far'),
@@ -151,10 +139,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
       {
         name: this.i18n('Previous year'),
         value: 'from=now-1y%2Fy&to=now-1y%2Fy'
-      },
-      {
-        name: this.i18n('This year'),
-        value: 'from=now%2Fy&to=now%2Fy'
       },
       {
         name: this.i18n('This year so far'),
