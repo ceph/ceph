@@ -295,8 +295,8 @@ int md_config_t::set_mon_vals(CephContext *cct,
     std::string err;
     int r = _set_val(values, tracker, i.second, *o, CONF_MON, &err);
     if (r < 0) {
-      lderr(cct) << __func__ << " failed to set " << i.first << " = "
-		 << i.second << ": " << err << dendl;
+      ldout(cct, 4) << __func__ << " failed to set " << i.first << " = "
+		    << i.second << ": " << err << dendl;
       ignored_mon_values.emplace(i);
     } else if (r == ConfigValues::SET_NO_CHANGE ||
 	       r == ConfigValues::SET_NO_EFFECT) {
