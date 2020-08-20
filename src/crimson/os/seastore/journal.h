@@ -160,7 +160,9 @@ public:
   using replay_ertr = SegmentManager::read_ertr;
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
-    replay_ret(paddr_t record_start, const delta_info_t&)>;
+    replay_ret(journal_seq_t seq,
+	       paddr_t record_block_base,
+	       const delta_info_t&)>;
   replay_ret replay(delta_handler_t &&delta_handler);
 
 private:
@@ -229,8 +231,8 @@ private:
   using find_replay_segments_ertr = crimson::errorator<
     crimson::ct_error::input_output_error
     >;
-  using find_replay_segments_fut =
-    find_replay_segments_ertr::future<std::vector<paddr_t>>;
+  using find_replay_segments_fut = find_replay_segments_ertr::future<
+    std::vector<journal_seq_t>>;
   find_replay_segments_fut find_replay_segments();
 
   /// read record metadata for record starting at start
@@ -249,7 +251,7 @@ private:
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
-    paddr_t start,                 ///< [in] starting addr
+    journal_seq_t start,           ///< [in] starting addr, seq
     delta_handler_t &delta_handler ///< [in] processes deltas in order
   );
 };
