@@ -365,7 +365,13 @@ private:
   SegmentManager &segment_manager; ///< ref to segment_manager
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
-  CachedExtent::list dirty;        ///< holds refs to dirty extents
+
+  /**
+   * dirty
+   *
+   * holds refs to dirty extents.  Ordered by CachedExtent::dirty_from.
+   */
+  CachedExtent::list dirty;
 
   /// alloc buffer for cached extent
   bufferptr alloc_cache_buf(size_t size) {
