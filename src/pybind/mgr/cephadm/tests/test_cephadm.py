@@ -114,7 +114,8 @@ class TestCephadm(object):
                         'daemon_type': 'mds',
                         'hostname': 'test',
                         'status': 1,
-                        'status_desc': 'starting'}
+                        'status_desc': 'starting',
+                        'is_active': False}
                 ]
 
                 with with_service(cephadm_module, ServiceSpec('rgw', 'r.z'), CephadmOrchestrator.apply_rgw, 'test'):

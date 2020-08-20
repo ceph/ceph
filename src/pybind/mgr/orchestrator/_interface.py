@@ -1200,7 +1200,8 @@ class DaemonDescription(object):
                  last_configured=None,
                  osdspec_affinity=None,
                  last_deployed=None,
-                 events: Optional[List['OrchestratorEvent']] = None):
+                 events: Optional[List['OrchestratorEvent']] = None,
+                 is_active: bool=False):
 
         # Host is at the same granularity as InventoryHost
         self.hostname: str = hostname
@@ -1242,6 +1243,8 @@ class DaemonDescription(object):
         self.osdspec_affinity: Optional[str] = osdspec_affinity
 
         self.events: List[OrchestratorEvent] = events or []
+        
+        self.is_active = is_active
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -1318,6 +1321,7 @@ class DaemonDescription(object):
         out['status_desc'] = self.status_desc
         if self.daemon_type == 'osd':
             out['osdspec_affinity'] = self.osdspec_affinity
+        out['is_active'] = self.is_active
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
