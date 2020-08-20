@@ -25,6 +25,7 @@ set(rbd_srcs
   action/Flatten.cc
   action/Ggate.cc
   action/Group.cc
+  action/ImageCache.cc
   action/ImageMeta.cc
   action/Import.cc
   action/Info.cc
