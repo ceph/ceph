@@ -1052,6 +1052,30 @@ seastar::future<> PGBackend::omap_remove_range(
   return seastar::now();
 }
 
+PGBackend::omap_clear_ertr::future<>
+PGBackend::omap_clear(
+  ObjectState& os,
+  OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  if (!os.oi.is_omap()) {
+    return omap_clear_ertr::now();
+  }
+  txn.omap_clear(coll->get_cid(), ghobject_t{os.oi.soid});
+  osd_op_params.clean_regions.mark_omap_dirty();
+  os.oi.clear_omap_digest();
+  os.oi.clear_flag(object_info_t::FLAG_OMAP);
+  return omap_clear_ertr::now();
+}
+
 seastar::future<struct stat> PGBackend::stat(
   CollectionRef c,
   const ghobject_t& oid) const
