@@ -455,6 +455,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.checksum(os, osd_op);
     });
+  case CEPH_OSD_OP_CMPEXT:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.cmp_ext(os, osd_op);
+    });
   case CEPH_OSD_OP_GETXATTR:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.getxattr(os, osd_op);

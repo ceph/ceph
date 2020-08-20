@@ -342,6 +342,52 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
   });
 }
 
+PGBackend::cmp_ext_errorator::future<>
+PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
+{
+  const ceph_osd_op& op = osd_op.op;
+  // return the index of the first unmatched byte in the payload, hence the
+  // strange limit and check
+  if (op.extent.length > MAX_ERRNO) {
+    return crimson::ct_error::invarg::make();
+  }
+  uint64_t obj_size = os.oi.size;
+  if (os.oi.truncate_seq < op.extent.truncate_seq &&
+      op.extent.offset + op.extent.length > op.extent.truncate_size) {
+    obj_size = op.extent.truncate_size;
+  }
+  uint64_t ext_len;
+  if (op.extent.offset >= obj_size) {
+    ext_len = 0;
+  } else if (op.extent.offset + op.extent.length > obj_size) {
+    ext_len = obj_size - op.extent.offset;
+  } else {
+    ext_len = op.extent.length;
+  }
+  auto read_ext = ll_read_errorator::make_ready_future<ceph::bufferlist>();
+  if (ext_len == 0) {
+    logger().debug("{}: zero length extent", __func__);
+  } else if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+  } else {
+    read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
+  }
+  return read_ext.safe_then([&osd_op](auto&& read_bl) {
+    int32_t retcode = 0;
+    for (unsigned index = 0; index < osd_op.indata.length(); index++) {
+      char byte_in_op = osd_op.indata[index];
+      char byte_from_disk = (index < read_bl.length() ? read_bl[index] : 0);
+      if (byte_in_op != byte_from_disk) {
+        logger().debug("cmp_ext: mismatch at {}", index);
+        retcode = -MAX_ERRNO - index;
+	break;
+      }
+    }
+    logger().debug("cmp_ext: {}", retcode);
+    osd_op.rval = retcode;
+  });
+}
+
 PGBackend::stat_errorator::future<> PGBackend::stat(
   const ObjectState& os,
   OSDOp& osd_op)
