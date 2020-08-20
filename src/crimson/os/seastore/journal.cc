@@ -25,8 +25,8 @@ Journal::Journal(SegmentManager &segment_manager)
     segment_manager(segment_manager) {}
 
 
-Journal::initialize_segment_ertr::future<> Journal::initialize_segment(
-  Segment &segment)
+Journal::initialize_segment_ertr::future<segment_seq_t>
+Journal::initialize_segment(Segment &segment)
 {
   auto new_tail = segment_provider->get_journal_tail_target();
   logger().debug(
@@ -36,8 +36,9 @@ Journal::initialize_segment_ertr::future<> Journal::initialize_segment(
   // write out header
   ceph_assert(segment.get_write_ptr() == 0);
   bufferlist bl;
+  segment_seq_t seq = current_journal_segment_seq++;
   auto header = segment_header_t{
-    current_journal_segment_seq++,
+    seq,
     segment.get_segment_id(),
     segment_provider->get_journal_tail_target()};
   ::encode(header, bl);
@@ -46,8 +47,9 @@ Journal::initialize_segment_ertr::future<> Journal::initialize_segment(
   return segment.write(0, bl).safe_then(
     [=] {
       segment_provider->update_journal_tail_committed(new_tail);
+      return seq;
     },
-    init_ertr::pass_further{},
+    initialize_segment_ertr::pass_further{},
     crimson::ct_error::assert_all{ "TODO" });
 }
 
@@ -128,7 +130,7 @@ bool Journal::needs_roll(segment_off_t length) const
     current_journal_segment->get_write_capacity();
 }
 
-Journal::roll_journal_segment_ertr::future<>
+Journal::roll_journal_segment_ertr::future<segment_seq_t>
 Journal::roll_journal_segment()
 {
   auto old_segment_id = current_journal_segment ?
@@ -159,9 +161,18 @@ Journal::roll_journal_segment()
     );
 }
 
-Journal::init_ertr::future<> Journal::open_for_write()
+Journal::open_for_write_ret Journal::open_for_write()
 {
-  return roll_journal_segment();
+  return roll_journal_segment().safe_then([this](auto seq) {
+    return open_for_write_ret(
+      open_for_write_ertr::ready_future_marker{},
+      journal_seq_t{
+	seq,
+	paddr_t{
+	  current_journal_segment->get_segment_id(),
+	  static_cast<segment_off_t>(block_size)}
+      });
+  });
 }
 
 Journal::find_replay_segments_fut Journal::find_replay_segments()
