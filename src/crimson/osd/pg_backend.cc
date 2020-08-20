@@ -511,6 +511,28 @@ seastar::future<> PGBackend::writefull(
   return seastar::now();
 }
 
+PGBackend::append_errorator::future<> PGBackend::append(
+  ObjectState& os,
+  OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  const ceph_osd_op& op = osd_op.op;
+  if (op.extent.length != osd_op.indata.length()) {
+    return crimson::ct_error::invarg::make();
+  }
+  maybe_create_new_object(os, txn);
+  if (op.extent.length) {
+    txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
+              os.oi.size /* offset */, op.extent.length,
+              std::move(osd_op.indata), op.flags);
+    os.oi.size += op.extent.length;
+    osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+                                                       op.extent.length);
+  }
+  return seastar::now();
+}
+
 PGBackend::write_ertr::future<> PGBackend::truncate(
   ObjectState& os,
   const OSDOp& osd_op,

@@ -479,6 +479,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.writefull(os, osd_op, txn, *osd_op_params);
     }, true);
+  case CEPH_OSD_OP_APPEND:
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.append(os, osd_op, txn, *osd_op_params);
+    }, true);
   case CEPH_OSD_OP_TRUNCATE:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       // FIXME: rework needed. Move this out to do_write_op(), introduce
