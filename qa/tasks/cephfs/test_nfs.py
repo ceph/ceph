@@ -299,6 +299,7 @@ class TestNFS(MgrTestCase):
                                                              self.pseudo_path])
         self._test_idempotency(self._delete_export, ['nfs', 'export', 'delete', self.cluster_id,
                                                      self.pseudo_path])
+        self._test_delete_cluster()
 
     def test_create_multiple_exports(self):
         '''
@@ -333,6 +334,7 @@ class TestNFS(MgrTestCase):
         # Checks if created export is listed
         self._test_list_export()
         self._delete_export()
+        self._test_delete_cluster()
 
     def test_export_create_with_non_existing_fsname(self):
         '''
