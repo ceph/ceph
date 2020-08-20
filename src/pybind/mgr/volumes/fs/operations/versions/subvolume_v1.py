@@ -77,7 +77,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
-            self.set_attrs(subvol_path, size, isolate_nspace, pool, uid, gid)
+            attrs = {
+                'uid': uid,
+                'gid': gid,
+                'data_pool': pool,
+                'pool_namespace': self.namespace if isolate_nspace else None,
+                'quota': size
+            }
+            self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
@@ -120,9 +127,18 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
+            # source snapshot attrs are used to create clone subvolume.
+            # attributes of subvolume's content though, are synced during the cloning process.
+            attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
+
+            # override snapshot pool setting, if one is provided for the clone
+            if pool is not None:
+                attrs["data_pool"] = pool
+                attrs["pool_namespace"] = None
+
             # create directory and set attributes
-            self.fs.mkdirs(subvol_path, source_subvolume.mode)
-            self.set_attrs(subvol_path, None, None, pool, source_subvolume.uid, source_subvolume.gid)
+            self.fs.mkdirs(subvol_path, attrs.get("mode"))
+            self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
