@@ -4617,11 +4617,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
 
 int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, const Span& parent_span)
 {
-   
-    
   Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
-  
-
   constexpr uint NUM_ENTRIES = 1000u;
 
   rgw_obj_index_key marker;
@@ -4666,11 +4662,7 @@ int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, c
  */
 int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty, const Span& parent_span)
 {
-   
-    
   Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
-  
-
   const rgw_bucket& bucket = bucket_info.bucket;
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -4679,7 +4671,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     return r;
   
   if (check_empty) {
-    r = check_bucket_empty(bucket_info, y);
+    r = check_bucket_empty(bucket_info, y, span_1);
     if (r < 0) {
       return r;
     }

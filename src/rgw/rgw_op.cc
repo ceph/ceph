@@ -629,7 +629,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
     s->bucket_attrs = s->bucket->get_attrs().attrs;
     ret = read_bucket_policy(store, s, s->bucket->get_info(),
 			     s->bucket->get_attrs().attrs,
-			     s->bucket_acl.get(), s->bucket->get_bi(), span);
+			     s->bucket_acl.get(), s->bucket->get_key(), span);
     acct_acl_user = {
       s->bucket->get_info().owner,
       s->bucket_acl->get_owner().get_display_name(),
@@ -775,7 +775,7 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
       s->object->set_prefetch_data(s->obj_ctx);
     }
     ret = read_obj_policy(store, s, s->bucket->get_info(), s->bucket_attrs,
-			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket->get_bi(),
+			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket->get_key(),
                           s->object->get_key(), span);
   }
 
@@ -924,8 +924,7 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
 // general, they should just return op_ret.
 namespace {
 template<typename F>
-int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f, const Span& parent_span = nullptr) {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f, const Span& parent_span = nullptr) {
   auto r = f();
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
     r = b->try_refresh_info(nullptr);
@@ -1216,10 +1215,10 @@ void RGWPutBucketTags::execute(const Span& parent_span) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
-    map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
+    rgw::sal::RGWAttrs attrs = s->bucket_attrs;
     attrs[RGW_ATTR_TAGS] = tags_bl;
-    return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker, s->yield, span);
+    return s->bucket->set_instance_attrs(attrs, s->yield, span);
   });
 
 }
@@ -1244,17 +1243,17 @@ void RGWDeleteBucketTags::execute(const Span& parent_span)
 
   if (!store->svc()->zone->is_meta_master()) {
     bufferlist in_data;
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
-    map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
+    rgw::sal::RGWAttrs attrs = s->bucket_attrs;
     attrs.erase(RGW_ATTR_TAGS);
-    op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker, s->yield, span);
+    op_ret = s->bucket->set_instance_attrs(attrs, s->yield, span);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
 			 << s->bucket->get_name()
@@ -1309,7 +1308,7 @@ void RGWPutBucketReplication::execute(const Span& parent_span) {
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
@@ -1318,8 +1317,7 @@ void RGWPutBucketReplication::execute(const Span& parent_span) {
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
-                                                          &s->bucket_attrs, span);
+    int ret = s->bucket->put_instance_info(false, real_time());
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -1347,14 +1345,14 @@ void RGWDeleteBucketReplication::execute(const Span& parent_span)
 
   if (!store->svc()->zone->is_meta_master()) {
     bufferlist in_data;
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
     if (!s->bucket->get_info().sync_policy) {
       return 0;
     }
@@ -1365,8 +1363,7 @@ void RGWDeleteBucketReplication::execute(const Span& parent_span)
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false, real_time(),
-                                                          &s->bucket_attrs, span);
+    int ret = s->bucket->put_instance_info(false, real_time());
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -1637,7 +1634,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
     read_op->params.if_match = ent.meta.etag.c_str();
   }
 
-  op_ret = read_op.prepare(s->yield, span);
+  op_ret = read_op->prepare(s->yield, span);
   if (op_ret < 0)
     return op_ret;
   op_ret = part->range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
@@ -1645,7 +1642,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
     return op_ret;
   bool need_decompress;
   Span span_1 = child_span("rgw_compression.cc : rgw_compression_info_from_attrset", span);
-  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(part->get_attrs().attrs, need_decompress, cs_info);
   finish_trace(span_1);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info" << dendl;
@@ -2059,9 +2056,9 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, const Span& parent_span)
 
 	std::unique_ptr<rgw::sal::RGWBucket> tmp_bucket;
         auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-        int r = store->getRados()->get_bucket_info(store->svc(), s->user->get_tenant(),
-                                       bucket_name, bucket_info, nullptr,
-                                       s->yield, &bucket_attrs, span);
+        Span span_x = child_span("rgw_sal.cc : RGWRadosStore::get_bucket", span);
+        int r = store->get_bucket(s->user, s->user->get_tenant(), bucket_name, &tmp_bucket);
+        finish_trace(span_x);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -2069,8 +2066,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, const Span& parent_span)
         }
         bucket = tmp_bucket.get();
         bucket_acl = &_bucket_acl;
-        r = read_bucket_policy(store, s, bucket_info, bucket_attrs, bucket_acl,
-                               bucket, span);
+        r = read_bucket_policy(store, s, tmp_bucket->get_info(), tmp_bucket->get_attrs().attrs, bucket_acl,
+                               tmp_bucket->get_key(), span);
         if (r < 0) {
           ldpp_dout(this, 0) << "failed to read bucket ACL for bucket "
                            << bucket << dendl;
@@ -2231,7 +2228,7 @@ void RGWGetObj::execute(const Span& parent_span)
   read_op->params.if_nomatch = if_nomatch;
   read_op->params.lastmod = &lastmod;
 
-  op_ret = read_op.prepare(s->yield, span);
+  op_ret = read_op->prepare(s->yield, span);
   if (op_ret < 0)
     goto done_err;
   version_id = s->object->get_instance();
@@ -2259,7 +2256,7 @@ void RGWGetObj::execute(const Span& parent_span)
     Span span_1 = child_span("started torrent", span);
     torrent.init(s, store);
     rgw_obj obj = s->object->get_obj();
-    op_ret = torrent.get_torrent_file(read_op, total_len, bl, obj);
+    op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
     finish_trace(span_1);
     if (op_ret < 0)
     {
@@ -2356,7 +2353,7 @@ void RGWGetObj::execute(const Span& parent_span)
   ofs_x = ofs;
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
-  op_ret = read_op.iterate(ofs_x, end_x, filter, s->yield, span);
+  op_ret = read_op->iterate(ofs_x, end_x, filter, s->yield, span);
 
   if (op_ret >= 0)
     op_ret = filter->flush();
@@ -2813,11 +2810,10 @@ void RGWSetBucketWebsite::execute(const Span& parent_span)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
       s->bucket->get_info().has_website = true;
       s->bucket->get_info().website_conf = website_conf;
-      op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false,
-					       real_time(), &s->bucket_attrs, span);
+      op_ret = s->bucket->put_instance_info(false, real_time());
       return op_ret;
     });
 
@@ -2842,6 +2838,7 @@ void RGWDeleteBucketWebsite::pre_exec(const Span& parent_span)
 
 void RGWDeleteBucketWebsite::execute(const Span& parent_span)
 {
+  bufferlist in_data;
   Span span = child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = store->forward_request_to_master(s->user, nullptr, in_data, nullptr, s->info);
@@ -2850,7 +2847,7 @@ void RGWDeleteBucketWebsite::execute(const Span& parent_span)
       << "returned err=" << op_ret << dendl;
     return;
   }
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
       s->bucket->get_info().has_website = false;
       s->bucket->get_info().website_conf = RGWBucketWebsiteConf();
       op_ret = store->getRados()->put_bucket_instance_info(s->bucket->get_info(), false,
@@ -2972,7 +2969,7 @@ void RGWListBucket::execute(const Span& parent_span)
 
   rgw::sal::RGWBucket::ListResults results;
 
-  op_ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, s->yield, span);
+  op_ret = s->bucket->list(params, max, results, s->yield, span);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
@@ -3387,12 +3384,12 @@ void RGWCreateBucket::execute(const Span& parent_span)
     }
   }
 
-  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_bi(),
+  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_key(),
                                           s->bucket->get_creation_time(), s->yield, false, nullptr, span);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
     Span span_4 = child_span("rgw_bucket.cc : RGWBucketCtl::unlink_bucket", span);
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_bi(), s->yield);
+    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_key(), s->yield);
     finish_trace(span_4);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
@@ -3547,7 +3544,7 @@ void RGWDeleteBucket::execute(const Span& parent_span)
     }
   }
 
-  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, s->yield, span);
+  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, false, nullptr, s->yield, span);
 
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
@@ -3875,7 +3872,7 @@ void RGWPutObj::execute(const Span& parent_span)
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
     Span span_3 = child_span("rgw_rados.cc : RGWRados::check_quota", span);
-    op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
+    op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_key(),
 				user_quota, bucket_quota, s->content_length);
     finish_trace(span_3);
     if (op_ret < 0) {
@@ -4086,7 +4083,7 @@ void RGWPutObj::execute(const Span& parent_span)
   }
 
   Span span_7 = child_span("rgw_rados.cc : RGWRados::check_quota", span);
-  op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_bi(),
+  op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_key(),
                               user_quota, bucket_quota, s->obj_size);
   finish_trace(span_7);  
   if (op_ret < 0) {
@@ -4945,13 +4942,8 @@ void RGWDeleteObj::execute(const Span& parent_span)
 	return;
       }
 
-      del_op.params.bucket_owner = s->bucket_owner.get_id();
-      del_op.params.versioning_status = s->bucket->get_info().versioning_status();
-      del_op.params.obj_owner = s->owner;
-      del_op.params.unmod_since = unmod_since;
-      del_op.params.high_precision_time = s->system_request; /* system request uses high precision time */
-
-      op_ret = del_op.delete_obj(s->yield, span);
+      op_ret = s->object->delete_object(obj_ctx, s->owner, s->bucket_owner, unmod_since,
+					s->system_request, epoch, version_id, s->yield, span);
       if (op_ret >= 0) {
 	delete_marker = s->object->get_delete_marker();
       }
@@ -5080,7 +5072,7 @@ int RGWCopyObj::verify_permission(const Span& parent_span)
 
     /* check source object permissions */
     op_ret = read_obj_policy(store, s, src_bucket->get_info(), src_bucket->get_attrs().attrs, &src_acl, &src_placement.storage_class,
-			     src_policy, src_bucket->get_bi(), src_object->get_key(), span);
+			     src_policy, src_bucket->get_key(), src_object->get_key(), span);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -5148,7 +5140,7 @@ int RGWCopyObj::verify_permission(const Span& parent_span)
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(store, s, dest_bucket->get_info(),
 			      dest_bucket->get_attrs().attrs,
-                              &dest_bucket_policy, dest_bucket->get_bi(), span);
+                              &dest_bucket_policy, dest_bucket->get_key(), span);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -5750,12 +5742,10 @@ void RGWPutCORS::execute(const Span& parent_span)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
-      map<string, bufferlist> attrs = s->bucket_attrs;
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
+      rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_CORS] = cors_bl;
-      return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							  &s->bucket->get_info().objv_tracker,
-							  s->yield, span);
+      return s->bucket->set_instance_attrs(attrs, s->yield, span);
     });
 }
 
@@ -5772,14 +5762,14 @@ void RGWDeleteCORS::execute(const Span& parent_span)
 
   if (!store->svc()->zone->is_meta_master()) {
     bufferlist data;
-    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
 
-  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &span] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, &span] {
       op_ret = read_bucket_cors(span);
       if (op_ret < 0)
 	return op_ret;
@@ -5792,9 +5782,7 @@ void RGWDeleteCORS::execute(const Span& parent_span)
 
       rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_CORS);
-      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							    &s->bucket->get_info().objv_tracker,
-							    s->yield, span);
+      op_ret = s->bucket->set_instance_attrs(attrs, s->yield, span);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket->get_name()
 			 << " returned err=" << op_ret << dendl;

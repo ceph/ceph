@@ -88,38 +88,25 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
   return nullptr;
 }
 
-int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, optional_yield y, const Span& parent_span)
+int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y, const Span& parent_span)
 {
-   
-   
   Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
-  
-
-  int ret;
-
   Span span_2 = child_span("RGWRadosBucket::get_bucket_info", span_1);
-  ret = get_bucket_info(y);
+  int ret = get_bucket_info(y);
   finish_trace(span_2);
   if (ret < 0)
     return ret;
 
-  Span span_3 = child_span("RGWRadosBucket::get_bucket_stats", span_1);
-  ret = get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats);
-  finish_trace(span_3);
-  if (ret < 0)
-    return ret;
-
-  RGWRados::Bucket target(store->getRados(), info);
-  RGWRados::Bucket::List list_op(&target);
-  int max = 1000;
+  ListParams params;
+  params.list_versions = true;
+  params.allow_unordered = true;
 
   ListResults results;
 
   bool is_truncated = false;
   do {
     results.objs.clear();
-
-    ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, null_yield, span_1);
+    ret = list(params, 1000, results, y, span_1);
     if (ret < 0)
       return ret;
 
@@ -155,7 +142,7 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
 
   // if we deleted children above we will force delete, as any that
   // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, objv_tracker, null_yield, !delete_children, span_1);
+  ret = store->getRados()->delete_bucket(info, ot, null_yield, !delete_children, span_1);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
@@ -321,10 +308,10 @@ int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_q
 					  user_quota, bucket_quota, obj_size, check_size_only);
 }
 
-int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y)
+int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y, const Span& parent_span)
 {
     return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				attrs.attrs, &get_info().objv_tracker, y);
+				attrs.attrs, &get_info().objv_tracker, y, parent_span);
 }
 
 int RGWRadosBucket::try_refresh_info(ceph::real_time *pmtime)
@@ -347,7 +334,7 @@ std::unique_ptr<RGWObject> RGWRadosBucket::get_object(const rgw_obj_key& k)
   return std::unique_ptr<RGWObject>(new RGWRadosObject(this->store, k, this));
 }
 
-int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, optional_yield y)
+int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, optional_yield y, const Span& parent_span)
 {
   RGWRados::Bucket target(store->getRados(), get_info());
   if (params.shard_id >= 0) {
@@ -362,7 +349,7 @@ int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, opti
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
-  int ret = list_op.list_objects(max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
+  int ret = list_op.list_objects(max, &results.objs, &results.common_prefixes, &results.is_truncated, y, parent_span);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
   }
@@ -427,6 +414,22 @@ int RGWRadosObject::read_attrs(RGWRados::Object::Read &read_op, optional_yield y
   read_op.params.lastmod = &mtime;
 
   return read_op.prepare(y,parent_span);
+}
+
+int RGWRadosObject::set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj)
+{
+  map<string, bufferlist> empty;
+  rgw_obj target = get_obj();
+
+  if (!target_obj)
+    target_obj = &target;
+
+  return store->getRados()->set_attrs(rctx,
+			bucket->get_info(),
+			*target_obj,
+			setattrs ? setattrs->attrs : empty,
+			delattrs ? &delattrs->attrs : nullptr,
+			y);
 }
 
 int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj, const Span& parent_span)
@@ -564,7 +567,7 @@ RGWRadosObject::RadosReadOp::RadosReadOp(RGWRadosObject *_source, RGWObjectCtx *
 	parent_op(&op_target)
 { }
 
-int RGWRadosObject::RadosReadOp::prepare(optional_yield y)
+int RGWRadosObject::RadosReadOp::prepare(optional_yield y, const Span& parent_span)
 {
   uint64_t obj_size;
 
@@ -580,7 +583,7 @@ int RGWRadosObject::RadosReadOp::prepare(optional_yield y)
   parent_op.params.obj_size = &obj_size;
   parent_op.params.attrs = &source->get_attrs().attrs;
 
-  int ret = parent_op.prepare(y);
+  int ret = parent_op.prepare(y, parent_span);
   if (ret < 0)
     return ret;
 
@@ -602,7 +605,7 @@ int RGWRadosObject::RadosReadOp::get_manifest(RGWObjManifest **pmanifest,
   return op_target.get_manifest(pmanifest, y);
 }
 
-int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACLOwner bucket_owner, ceph::real_time unmod_since, bool high_precision_time, uint64_t epoch, string& version_id, optional_yield y)
+int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACLOwner bucket_owner, ceph::real_time unmod_since, bool high_precision_time, uint64_t epoch, string& version_id, optional_yield y, const Span& parent_span)
 {
   int ret = 0;
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *obj_ctx, get_obj());
@@ -616,7 +619,7 @@ int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACL
   del_op.params.unmod_since = unmod_since;
   del_op.params.high_precision_time = high_precision_time;
 
-  ret = del_op.delete_obj(y);
+  ret = del_op.delete_obj(y, parent_span);
   if (ret >= 0) {
     delete_marker = del_op.result.delete_marker;
     version_id = del_op.result.version_id;
@@ -626,9 +629,9 @@ int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACL
 }
 
 
-int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y)
+int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y, const Span& parent_span)
 {
-  return parent_op.iterate(ofs, end, cb, y);
+  return parent_op.iterate(ofs, end, cb, y, parent_span);
 }
 
 int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket)
