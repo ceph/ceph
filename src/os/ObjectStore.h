@@ -1925,6 +1925,13 @@ public:
     return collection_list(c->get_cid(), start, end, max, ls, next);
   }
 
+  virtual int collection_list_legacy(const coll_t& c,
+                                     const ghobject_t& start,
+                                     const ghobject_t& end, int max,
+                                     vector<ghobject_t> *ls,
+                                     ghobject_t *next) {
+    return collection_list(c, start, end, max, ls, next);
+  }
   virtual int collection_list_legacy(CollectionHandle &c,
                                      const ghobject_t& start,
                                      const ghobject_t& end, int max,

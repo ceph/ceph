@@ -7902,6 +7902,16 @@ int BlueStore::collection_list(
 }
 
 int BlueStore::collection_list_legacy(
+  const coll_t& cid, const ghobject_t& start, const ghobject_t& end, int max,
+  vector<ghobject_t> *ls, ghobject_t *pnext)
+{
+  CollectionHandle c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  return collection_list_legacy(c, start, end, max, ls, pnext);
+}
+
+int BlueStore::collection_list_legacy(
   CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {

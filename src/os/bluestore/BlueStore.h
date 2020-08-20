@@ -2446,6 +2446,12 @@ public:
 		      int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
+  int collection_list_legacy(const coll_t& cid,
+                             const ghobject_t& start,
+                             const ghobject_t& end,
+                             int max,
+                             vector<ghobject_t> *ls,
+                             ghobject_t *next) override;
   int collection_list_legacy(CollectionHandle &c,
                              const ghobject_t& start,
                              const ghobject_t& end,
