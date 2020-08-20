@@ -472,13 +472,14 @@ seastar::future<> PGBackend::write_same(
     throw crimson::osd::invalid_argument();
   }
   ceph::bufferlist repeated_indata;
-  for (uint64_t size; size < len; size += op.writesame.data_length) {
+  for (uint64_t size = 0; size < len; size += op.writesame.data_length) {
     repeated_indata.append(osd_op.indata);
   }
   maybe_create_new_object(os, txn);
   txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
-	    op.writesame.offset, op.writesame.length,
-	    std::move(repeated_indata), op.flags);
+            op.writesame.offset, len,
+            std::move(repeated_indata), op.flags);
+  os.oi.size = len;
   osd_op_params.clean_regions.mark_data_region_dirty(op.writesame.offset, len);
   return seastar::now();
 }
