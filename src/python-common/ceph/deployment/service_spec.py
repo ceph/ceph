@@ -632,6 +632,7 @@ class RGWSpec(ServiceSpec):
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  rgw_realm: Optional[str] = None,
+                 rgw_zonegroup: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  subcluster: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
@@ -661,6 +662,7 @@ class RGWSpec(ServiceSpec):
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
+        self.rgw_zonegroup = rgw_zonegroup
         self.subcluster = subcluster
         self.rgw_frontend_port = rgw_frontend_port
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate

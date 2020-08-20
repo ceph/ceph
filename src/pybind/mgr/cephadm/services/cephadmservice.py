@@ -623,11 +623,15 @@ class MdsService(CephService):
 class RgwService(CephService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
+    def config(self, spec: RGWSpec, daemon_id: str) -> None:
         assert self.TYPE == spec.service_type
 
         # create realm, zonegroup, and zone if needed
-        self.create_realm_zonegroup_zone(spec, rgw_id)
+        self.create_realm_zonegroup_zone(spec)
+
+        # create user for dashboard if needed
+        if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+            self.create_dashboard_user(spec)
 
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
@@ -706,19 +710,18 @@ class RgwService(CephService):
         })
         return keyring
 
-    def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str) -> None:
-        if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
-            raise OrchestratorError('Health not ok, will try again when health ok')
+    def get_client_keyring(self) -> str:
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-key',
+            'entity': "client.admin",
+        })
+        return keyring
 
-        # get keyring needed to run rados commands and strip out just the keyring
-        keyring = self.get_keyring(rgw_id).split('key = ', 1)[1].rstrip()
-
-        # We can call radosgw-admin within the container, cause cephadm gives the MGR the required keyring permissions
-
+    def create_realm_zonegroup_zone(self, spec: RGWSpec) -> None:
+        # functions
         def get_realms() -> List[str]:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
                    'realm', 'list',
                    '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -731,23 +734,25 @@ class RgwService(CephService):
             except Exception:
                 raise OrchestratorError('failed to parse realm info')
 
-        def create_realm() -> None:
+        def get_period() -> dict:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
-                   'realm', 'create',
+                   'period', 'get',
                    '--rgw-realm=%s' % spec.rgw_realm,
-                   '--default']
+                   '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode:
-                err = 'failed to create RGW realm "%s": %r' % (spec.rgw_realm, result.stderr)
-                raise OrchestratorError(err)
-            self.mgr.log.info('created realm: %s' % spec.rgw_realm)
+            out = result.stdout
+            if not out:
+                return {}
+            try:
+                period = json.loads(out)
+                return period
+            except Exception as e:
+                raise OrchestratorError('failed to parse radosgw period info')
 
         def get_zonegroups() -> List[str]:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
                    'zonegroup', 'list',
                    '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -781,7 +786,6 @@ class RgwService(CephService):
         def get_zones() -> List[str]:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
                    'zone', 'list',
                    '--format=json']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -791,48 +795,210 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('zones', [])
-            except Exception:
-                raise OrchestratorError('failed to parse zone info')
+            except Exception as e:
+                raise OrchestratorError('failed to parse radosgw zone info')
+
+        def create_realm() -> None:
+            cmd = ['radosgw-admin',
+                   '--key=%s' % keyring,
+                   'realm', 'create',
+                   '--rgw-realm=%s' % spec.rgw_realm,
+                   ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW realm "%s": %r' % (spec.rgw_realm, result.stderr)
+                raise OrchestratorError(err)
+            self.mgr.log.info('created radosgw realm: %s' % spec.rgw_realm)
+
+        def create_zonegroup() -> None:
+            cmd = ['radosgw-admin',
+                   '--key=%s' % keyring,
+                   'zonegroup', 'create',
+                   '--rgw-zonegroup=%s' % spec.rgw_zonegroup,
+                   '--rgw-realm=%s' % spec.rgw_realm]
+            if not master_zonegroup:
+                cmd.append('--master')
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.mgr.log.info('created radosgw zonegroup: %s' % spec.rgw_zonegroup)
 
         def create_zone() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
                    'zone', 'create',
-                   '--rgw-zonegroup=default',
                    '--rgw-zone=%s' % spec.rgw_zone,
-                   '--master', '--default']
+                   '--rgw-zonegroup=%s' % spec.rgw_zonegroup,
+                   '--rgw-realm=%s' % spec.rgw_realm]
+            if not master_zone:
+                cmd.append('--master')
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode:
                 err = 'failed to create RGW zone "%s": %r' % (spec.rgw_zone, result.stderr)
                 raise OrchestratorError(err)
-            self.mgr.log.info('created zone: %s' % spec.rgw_zone)
+            self.mgr.log.info('created radosgw zone: %s' % spec.rgw_zone)
 
+        # make sure the cluster is healthy before doing anything rados commands can hang if not
+        if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
+            raise OrchestratorError('Health not ok, will try again when health ok')
+
+        # get keyring needed to run rados commands
+        keyring = self.get_client_keyring()
+
+        # do we need to update period
         changes = False
-        realms = get_realms()
-        if spec.rgw_realm not in realms:
-            create_realm()
-            changes = True
 
-        zones = get_zones()
-        if spec.rgw_zone not in zones:
-            create_zonegroup_if_required()
+        # all zonegroups and zones in all realms
+        all_zonegroups = []
+        all_zones = []
+
+        # just in the realm
+        zonegroups = []
+        zones = []
+
+        # masters for the realm
+        master_zonegroup = ''
+        master_zone = ''
+
+        realms = get_realms()
+
+        if spec.rgw_realm not in realms:
+            # realm doesnt exist
+            # we are going to have to create a zonegroup check if user passed one in
+            if not spec.rgw_zonegroup:
+                raise OrchestratorError('need to create a zonegroup but no zonegroup was specifed')
+            # get all_zonegroups
+            all_zonegroups = get_zonegroups()
+            # make sure zonegroup doesnt exist in another realm if it does error
+            if spec.rgw_zonegroup in all_zonegroups:
+                raise OrchestratorError(
+                    'zonegroup:%s exists already, can not create zonegroup' % spec.rgw_zonegroup)
+            # get all_zones
+            all_zones = get_zones()
+            # make sure zone doesnt exist in another realm if it does error
+            if spec.rgw_zone in all_zones:
+                raise OrchestratorError(
+                    'zone:%s exist already, can not create zone' % spec.rgw_zone)
+            # create realm
+            create_realm()
+            # create zonegroup
+            create_zonegroup()
+            # create zone
             create_zone()
+            # period needs to be updated
             changes = True
+        else:
+            # realm already exists
+            # get period -> zonegroups, zones, masters
+            period = get_period()
+            zonegroups = [x.get('name') for x in period.get('period_map', {}).get('zonegroups', [])]
+            for zg in period.get('period_map', {}).get('zonegroups', []):
+                for z in zg.get('zones'):
+                    zones.append(z.get('name'))
+            master_zonegroup = period.get('master_zonegroup', '')
+            master_zone = period.get('master_zone', '')
+
+            if spec.rgw_zone not in zones:
+                # if zone doesnt exist already in realm
+                # we are going to have to create a zonegroup check if user passed one in
+                if not spec.rgw_zonegroup:
+                    raise OrchestratorError(
+                        'need to create a zonegroup but no zonegroup was specifed')
+                # get all_zones
+                all_zones = get_zones()
+                # make sure zone doesnt exist in another realm if it does error
+                if spec.rgw_zone in all_zones:
+                    raise OrchestratorError('zone:%s exist already, not in realm:%s' %
+                                            (spec.rgw_zone, spec.rgw_realm))
+
+                if spec.rgw_zonegroup not in zonegroups:
+                    # get all_zonegroups
+                    all_zonegroups = get_zonegroups()
+                    # make sure zonegroup doesnt exist in another realm if it does error
+                    if spec.rgw_zonegroup in all_zonegroups:
+                        raise OrchestratorError(
+                            'zonegroup:%s exists already, can not create zonegroup' % spec.rgw_zonegroup)
+                    # create zonegroup
+                    create_zonegroup()
+
+                # create zone
+                create_zone()
+                # period needs to be updated
+                changes = True
 
         # update period if changes were made
         if changes:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
-                   '--user', 'rgw.%s' % rgw_id,
                    'period', 'update',
+                   '--rgw-zonegroup=%s' % spec.rgw_zonegroup,
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--commit']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode:
                 err = 'failed to update RGW period: %r' % (result.stderr)
                 raise OrchestratorError(err)
-            self.mgr.log.info('updated period')
+            self.mgr.log.info('updated radosgw period')
+
+    def create_dashboard_user(self, spec: RGWSpec) -> None:
+        # functions
+        def create_user() -> None:
+            cmd = ['radosgw-admin',
+                   '--key=%s' % keyring,
+                   'user', 'create',
+                   '--uid=dashboard',
+                   '--display-name=Dashboard',
+                   '--system',
+                   '--rgw-realm=%s' % spec.rgw_realm]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.mgr.log.info('created radosgw user: dashboard')
+            out = result.stdout
+
+            try:
+                j = json.loads(out)
+                keys = j.get('keys', None)
+                access_key = keys[0].get('access_key', None)
+                secret_key = keys[0].get('secret_key', None)
+
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'dashboard set-rgw-api-access-key'},
+                    access_key
+                )
+
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'dashboard set-rgw-api-secret-key'},
+                    secret_key
+                )
+
+                self.mgr.log.info('set dashboard rgw-api access-key and secret-key')
+
+            except Exception as e:
+                raise OrchestratorError('failed to create dashboard user')
+
+        # get keyring needed to run rados commands and strip out just the keyring
+        keyring = self.get_client_keyring()
+        # get current rgw-api keys
+        ret, access_key, err = self.mgr.check_mon_command({
+            'prefix': 'dashboard get-rgw-api-access-key',
+        })
+        ret, secret_key, err = self.mgr.check_mon_command({
+            'prefix': 'dashboard get-rgw-api-secret-key',
+        })
+
+        if not access_key or not secret_key:
+            # keys are not set check if user exists in realm
+            cmd = ['radosgw-admin',
+                   '--key=%s' % keyring,
+                   'user', 'list',
+                   '--format=json',
+                   '--rgw-realm=%s' % spec.rgw_realm]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out = result.stdout
+            try:
+                users = json.loads(out)
+                if 'dashboard' not in users:
+                    # no user exists create one and set keys
+                    create_user()
+            except Exception as e:
+                raise OrchestratorError('failed to parse radosgw user list')
 
 
 class RbdMirrorService(CephService):

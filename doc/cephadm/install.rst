@@ -497,9 +497,9 @@ For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-
 
    ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
 
-Cephadm will wait for a healthy cluster and automatically create the supplied realm and zone if they do not exist before deploying the rgw daemon(s)
+Cephadm will wait for a healthy cluster before deploying any daemons. 
 
-Alternatively, the realm, zonegroup, and zone can be manually created using ``radosgw-admin`` commands:
+The realm, zonegroup, and zone can be manually created using ``radosgw-admin`` commands before the ``ceph orch apply rgw`` command is used :
 
 .. prompt:: bash #
 
@@ -515,7 +515,11 @@ Alternatively, the realm, zonegroup, and zone can be manually created using ``ra
 
 .. prompt:: bash #
 
-  radosgw-admin period update --rgw-realm=<realm-name> --commit
+  # radosgw-admin period update --rgw-realm=<realm-name> --commit
+
+Alternatively Cephadm will attempt to create these for you, the --zonegroup-name flag needs to be used to supply a zonegroup-name to be created with the realm-name and zone-name
+
+Cephadm will also automatically create a radosgw user ``dashboard`` if the dashboard is enabled and set the dashboard rgw api keys 
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement
 specification.

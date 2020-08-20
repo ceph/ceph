@@ -1113,6 +1113,7 @@ Usage:
     def _apply_rgw(self,
                    realm_name: str,
                    zone_name: str,
+                   zonegroup_name: Optional[str] = None,
                    subcluster: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
@@ -1128,6 +1129,7 @@ Usage:
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
+            rgw_zonegroup=zonegroup_name,
             subcluster=subcluster,
             rgw_frontend_port=port,
             ssl=ssl,
