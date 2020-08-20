@@ -183,6 +183,12 @@ public:
     ObjectState& os,
     OSDOp& osd_op,
     ceph::os::Transaction& trans);
+  using omap_clear_ertr = crimson::errorator<crimson::ct_error::enoent>;
+  omap_clear_ertr::future<> omap_clear(
+    ObjectState& os,
+    OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;

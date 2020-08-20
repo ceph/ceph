@@ -560,6 +560,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_range(os, osd_op, txn);
     }, true);
+  case CEPH_OSD_OP_OMAPCLEAR:
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_clear(os, osd_op, txn, *osd_op_params);
+    }, true);
 
   // watch/notify
   case CEPH_OSD_OP_WATCH:
