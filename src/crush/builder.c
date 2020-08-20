@@ -209,6 +209,10 @@ crush_make_uniform_bucket(int hash, int type, int size,
 
 	bucket->h.weight = size * item_weight;
 	bucket->item_weight = item_weight;
+
+	if (size == 0) {
+		return bucket;
+	}
 	bucket->h.items = malloc(sizeof(__s32)*size);
 
         if (!bucket->h.items)
@@ -244,6 +248,10 @@ crush_make_list_bucket(int hash, int type, int size,
 	bucket->h.hash = hash;
 	bucket->h.type = type;
 	bucket->h.size = size;
+
+	if (size == 0) {
+		return bucket;
+	}
 
 	bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
@@ -605,6 +613,10 @@ crush_make_straw2_bucket(struct crush_map *map,
 	bucket->h.hash = hash;
 	bucket->h.type = type;
 	bucket->h.size = size;
+
+	if (size == 0) {
+		return bucket;
+	}
 
         bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
