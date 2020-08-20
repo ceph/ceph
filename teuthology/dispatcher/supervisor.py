@@ -22,6 +22,8 @@ from teuthology.kill import kill_job
 from teuthology.misc import pull_directory
 from teuthology.task.internal import add_remotes
 from teuthology.orchestra import run
+from teuthology.misc import decanonicalize_hostname as shortname
+from teuthology.lock import query
 
 log = logging.getLogger(__name__)
 
@@ -152,7 +154,6 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
 
     if p.returncode != 0:
         log.error('Child exited with code %d', p.returncode)
-        return
     else:
         log.info('Success!')
     if 'targets' in job_config:
@@ -175,12 +176,18 @@ def reimage_machines(job_config):
 def unlock_targets(job_config):
     serializer = report.ResultsSerializer(teuth_config.archive_base)
     job_info = serializer.job_info(job_config['name'], job_config['job_id'])
+    machine_status = query.get_statuses(job_info['targets'].keys())
+    # only unlock/nuke targets if locked in the first place
+    locked = [shortname(_['name'])
+              for _ in machine_status if _['locked']]
+    if not locked:
+        return
     job_status = get_status(job_info)
     if job_status == 'pass' or \
             (job_config.get('unlock_on_failure', False) and not job_config.get('nuke-on-error', False)):
         log.info('Unlocking machines...')
         fake_ctx = create_fake_context(job_config)
-        for machine in job_info['targets'].keys():
+        for machine in locked:
             teuthology.lock.ops.unlock_one(fake_ctx, machine, job_info['owner'],
                                            job_info['archive_path'])
     if job_status != 'pass' and job_config.get('nuke-on-error', False):
