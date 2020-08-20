@@ -98,7 +98,8 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
-    }).handle_error(
+    }).safe_then(
+      [](auto){},
       crimson::ct_error::all_same_way([] {
 	ASSERT_FALSE("Unable to mount");
       }));
@@ -134,7 +135,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (auto base, const auto &di) mutable {
+      (auto seq, auto base, const auto &di) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}

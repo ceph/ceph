@@ -79,7 +79,7 @@ struct btree_lba_manager_test :
     return segment_manager->init(
     ).safe_then([this] {
       return journal.open_for_write();
-    }).safe_then([this] {
+    }).safe_then([this](auto addr) {
       return seastar::do_with(
 	make_transaction(),
 	[this](auto &transaction) {

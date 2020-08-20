@@ -105,10 +105,11 @@ public:
    * to submit_record.  Should be called after replay if not a new
    * Journal.
    */
-  using init_ertr = crimson::errorator<
+  using open_for_write_ertr = crimson::errorator<
     crimson::ct_error::input_output_error
     >;
-  init_ertr::future<> open_for_write();
+  using open_for_write_ret = open_for_write_ertr::future<journal_seq_t>;
+  open_for_write_ret open_for_write();
 
   /**
    * close journal
@@ -138,7 +139,7 @@ public:
       return crimson::ct_error::erange::make();
     }
     auto roll = needs_roll(total)
-      ? roll_journal_segment()
+      ? roll_journal_segment().safe_then([](auto){})
       : roll_journal_segment_ertr::now();
     return roll.safe_then(
       [this, rsize, record=std::move(record)]() mutable {
@@ -186,7 +187,7 @@ private:
   /// prepare segment for writes, writes out segment header
   using initialize_segment_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  initialize_segment_ertr::future<> initialize_segment(
+  initialize_segment_ertr::future<segment_seq_t> initialize_segment(
     Segment &segment);
 
   struct record_size_t {
@@ -222,7 +223,7 @@ private:
   /// close current segment and initialize next one
   using roll_journal_segment_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  roll_journal_segment_ertr::future<> roll_journal_segment();
+  roll_journal_segment_ertr::future<segment_seq_t> roll_journal_segment();
 
   /// returns true iff current segment has insufficient space
   bool needs_roll(segment_off_t length) const;

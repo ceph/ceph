@@ -33,7 +33,7 @@ TransactionManager::TransactionManager(
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
-  return journal.open_for_write().safe_then([this] {
+  return journal.open_for_write().safe_then([this](auto addr) {
     logger().debug("TransactionManager::mkfs: about to do_with");
     return seastar::do_with(
       create_transaction(),
