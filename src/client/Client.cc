@@ -5828,6 +5828,8 @@ int Client::authenticate()
 
 int Client::fetch_fsmap(bool user)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   // Retrieve FSMap to enable looking up daemon addresses.  We need FSMap
   // rather than MDSMap because no one MDSMap contains all the daemons, and
   // a `tell` can address any daemon.
@@ -9432,6 +9434,8 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 
 int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   int want, have = 0;
   bool movepos = false;
   std::unique_ptr<C_SaferCond> onuninline;
@@ -9588,6 +9592,8 @@ void Client::C_Readahead::finish(int r) {
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
 
@@ -9644,6 +9650,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   Inode *in = f->inode.get();
   uint64_t pos = off;
   int left = len;
@@ -9800,6 +9808,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 	                const struct iovec *iov, int iovcnt)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   uint64_t fpos = 0;
 
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
@@ -10112,6 +10122,8 @@ int Client::fsync(int fd, bool syncdataonly)
 
 int Client::_fsync(Inode *in, bool syncdataonly)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   int r = 0;
   std::unique_ptr<C_SaferCond> object_cacher_completion = nullptr;
   ceph_tid_t flush_tid = 0;
@@ -10804,6 +10816,8 @@ int Client::test_dentry_handling(bool can_invalidate)
 
 int Client::_sync_fs()
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   ldout(cct, 10) << __func__ << dendl;
 
   // flush file data
@@ -13884,6 +13898,8 @@ int Client::ll_sync_inode(Inode *in, bool syncdataonly)
 
 int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   if (offset < 0 || length <= 0)
     return -EINVAL;
 
@@ -14595,6 +14611,8 @@ enum {
 
 int Client::check_pool_perm(Inode *in, int need)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   if (!cct->_conf->client_check_pool_perm)
     return 0;
 
