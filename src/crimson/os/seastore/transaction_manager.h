@@ -136,10 +136,25 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
+    auto &logger = crimson::get_logger(ceph_subsys_filestore);
     auto ret = cache.duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    ret->set_pin(ref->get_pin().duplicate());
+    if (!ret->has_pin()) {
+      logger.debug(
+	"{}: duplicating {} for write: {}",
+	__func__,
+	*ref,
+	*ret);
+      ret->set_pin(ref->get_pin().duplicate());
+    } else {
+      logger.debug(
+	"{}: {} already pending",
+	__func__,
+	*ref);
+      assert(ref->is_pending());
+      assert(&*ref == &*ret);
+    }
     return ret;
   }
 
