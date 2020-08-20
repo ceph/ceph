@@ -8416,7 +8416,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  std::scoped_lock lock(client_lock);
+  std::unique_lock cl(client_lock);
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
 
@@ -8453,9 +8453,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       _ll_get(inode);
     }
 
-    client_lock.unlock();
+    cl.unlock();
     r = cb(p, &de, &stx, next_off, inode);
-    client_lock.lock();
+    cl.lock();
     if (r < 0)
       return r;
 
@@ -8486,9 +8486,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       _ll_get(inode);
     }
 
-    client_lock.unlock();
+    cl.unlock();
     r = cb(p, &de, &stx, next_off, inode);
-    client_lock.lock();
+    cl.lock();
     if (r < 0)
       return r;
 
@@ -8553,9 +8553,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 	_ll_get(inode);
       }
 
-      client_lock.unlock();
+      cl.unlock();
       r = cb(p, &de, &stx, next_off, inode);  // _next_ offset
-      client_lock.lock();
+      cl.lock();
 
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
 		     << " = " << r << dendl;
