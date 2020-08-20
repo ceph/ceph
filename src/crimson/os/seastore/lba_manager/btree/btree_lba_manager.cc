@@ -259,7 +259,7 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
 	  } else {
 	    // e is obsolete
 	    logger().debug("init_cached_extent: {} obsolete", *e);
-	    cache.retire_extent(t, e);
+	    cache.drop_from_cache(e);
 	  }
 	  return init_cached_extent_ertr::now();
 	});
@@ -279,12 +279,12 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
 		} else {
 		  // paddr doesn't match, remapped, obsolete
 		  logger().debug("init_cached_extent: {} obsolete", *logn);
-		  cache.retire_extent(t, logn);
+		  cache.drop_from_cache(logn);
 		}
 	      } else {
 		// set of extents changed, obsolete
 		logger().debug("init_cached_extent: {} obsolete", *logn);
-		cache.retire_extent(t, logn);
+		cache.drop_from_cache(logn);
 	      }
 	      return init_cached_extent_ertr::now();
 	    });
