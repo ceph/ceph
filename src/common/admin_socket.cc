@@ -694,6 +694,19 @@ bool AdminSocket::init(const std::string& path)
 {
   ldout(m_cct, 5) << "init " << path << dendl;
 
+  #ifdef _WIN32
+  OSVERSIONINFOEXW ver = {0};
+  ver.dwOSVersionInfoSize = sizeof(ver);
+  get_windows_version(&ver);
+
+  if (std::tie(ver.dwMajorVersion, ver.dwMinorVersion, ver.dwBuildNumber) <
+      std::make_tuple(10, 0, 17063)) {
+    ldout(m_cct, 5) << "Unix sockets require Windows 10.0.17063 or later. "
+                    << "The admin socket will not be available." << dendl;
+    return false;
+  }
+  #endif
+
   /* Set up things for the new thread */
   std::string err;
   int pipe_rd = -1, pipe_wr = -1;
