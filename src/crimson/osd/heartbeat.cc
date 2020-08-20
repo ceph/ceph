@@ -649,6 +649,7 @@ bool Heartbeat::FailingPeers::add_pending(
   failure_pending.emplace(peer, failure_info_t{failed_since,
                                                osdmap->get_addrs(peer)});
   futures.push_back(heartbeat.monc.send_message(failure_report));
+  logger().info("{}: osd.{} failed for {}", __func__, peer, failed_for);
   return true;
 }
 
@@ -674,5 +675,6 @@ Heartbeat::FailingPeers::send_still_alive(
     0,
     heartbeat.service.get_osdmap_service().get_map()->get_epoch(),
     MOSDFailure::FLAG_ALIVE);
+  logger().info("{}: osd.{}", __func__, osd);
   return heartbeat.monc.send_message(still_alive);
 }

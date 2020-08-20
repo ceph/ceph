@@ -471,6 +471,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.write(os, osd_op, txn, *osd_op_params);
     }, true);
+  case CEPH_OSD_OP_WRITESAME:
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.write_same(os, osd_op, txn, *osd_op_params);
+    }, true);
   case CEPH_OSD_OP_WRITEFULL:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.writefull(os, osd_op, txn, *osd_op_params);
