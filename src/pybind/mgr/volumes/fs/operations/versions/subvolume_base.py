@@ -1,7 +1,10 @@
 import os
+import stat
+import uuid
 import errno
 import logging
 from hashlib import md5
+from typing import Dict, Union
 
 import cephfs
 
@@ -117,33 +120,65 @@ class SubvolumeBase(object):
         else:
             self.metadata_mgr = MetadataManager(self.fs, self.config_path, 0o640)
 
-    def set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
+    def get_attrs(self, pathname):
+        # get subvolume attributes
+        attrs = {} # type: Dict[str, Union[int, str, None]]
+        stx = self.fs.statx(pathname,
+                            cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID | cephfs.CEPH_STATX_MODE,
+                            cephfs.AT_SYMLINK_NOFOLLOW)
+
+        attrs["uid"] = int(stx["uid"])
+        attrs["gid"] = int(stx["gid"])
+        attrs["mode"] = int(int(stx["mode"]) & ~stat.S_IFMT(stx["mode"]))
+
+        try:
+            attrs["data_pool"] = self.fs.getxattr(pathname, 'ceph.dir.layout.pool').decode('utf-8')
+        except cephfs.NoData:
+            attrs["data_pool"] = None
+
+        try:
+            attrs["pool_namespace"] = self.fs.getxattr(pathname, 'ceph.dir.layout.pool_namespace').decode('utf-8')
+        except cephfs.NoData:
+            attrs["pool_namespace"] = None
+
+        try:
+            attrs["quota"] = int(self.fs.getxattr(pathname, 'ceph.quota.max_bytes').decode('utf-8'))
+        except cephfs.NoData:
+            attrs["quota"] = None
+
+        return attrs
+
+    def set_attrs(self, path, attrs):
+        # set subvolume attributes
         # set size
-        if size is not None:
+        quota = attrs.get("quota")
+        if quota is not None:
             try:
-                self.fs.setxattr(path, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+                self.fs.setxattr(path, 'ceph.quota.max_bytes', str(quota).encode('utf-8'), 0)
             except cephfs.InvalidValue as e:
-                raise VolumeException(-errno.EINVAL, "invalid size specified: '{0}'".format(size))
+                raise VolumeException(-errno.EINVAL, "invalid size specified: '{0}'".format(quota))
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
 
         # set pool layout
-        if pool:
+        data_pool = attrs.get("data_pool")
+        if data_pool is not None:
             try:
-                self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+                self.fs.setxattr(path, 'ceph.dir.layout.pool', data_pool.encode('utf-8'), 0)
             except cephfs.InvalidValue:
                 raise VolumeException(-errno.EINVAL,
-                                      "invalid pool layout '{0}' -- need a valid data pool".format(pool))
+                                      "invalid pool layout '{0}' -- need a valid data pool".format(data_pool))
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
 
         # isolate namespace
         xattr_key = xattr_val = None
-        if isolate_namespace:
+        pool_namespace = attrs.get("pool_namespace")
+        if pool_namespace is not None:
             # enforce security isolation, use separate namespace for this subvolume
             xattr_key = 'ceph.dir.layout.pool_namespace'
-            xattr_val = self.namespace
-        elif not pool:
+            xattr_val = pool_namespace
+        elif not data_pool:
             # If subvolume's namespace layout is not set, then the subvolume's pool
             # layout remains unset and will undesirably change with ancestor's
             # pool layout changes.
@@ -160,24 +195,26 @@ class SubvolumeBase(object):
                 raise VolumeException(-e.args[0], e.args[1])
 
         # set uid/gid
+        uid = attrs.get("uid")
         if uid is None:
             uid = self.group.uid
         else:
             try:
-                uid = int(uid)
                 if uid < 0:
                     raise ValueError
             except ValueError:
                 raise VolumeException(-errno.EINVAL, "invalid UID")
+
+        gid = attrs.get("gid")
         if gid is None:
             gid = self.group.gid
         else:
             try:
-                gid = int(gid)
                 if gid < 0:
                     raise ValueError
             except ValueError:
                 raise VolumeException(-errno.EINVAL, "invalid GID")
+
         if uid is not None and gid is not None:
             self.fs.chown(path, uid, gid)
 
