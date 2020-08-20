@@ -53,10 +53,10 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   extents.insert(*ref);
 
-  ceph_assert(!ref->primary_ref_list_hook.is_linked());
   if (ref->is_dirty()) {
-    intrusive_ptr_add_ref(&*ref);
-    dirty.push_back(*ref);
+    add_to_dirty(ref);
+  } else {
+    ceph_assert(!ref->primary_ref_list_hook.is_linked());
   }
   logger().debug("add_extent: {}", *ref);
 }
@@ -79,7 +79,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   assert(ref->is_valid());
   assert(!ref->primary_ref_list_hook.is_linked());
   intrusive_ptr_add_ref(&*ref);
-  dirty.push_front(*ref);
+  dirty.push_back(*ref);
 }
 
 void Cache::remove_extent(CachedExtentRef ref)
@@ -105,10 +105,13 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
 
   if (prev->is_dirty()) {
     ceph_assert(prev->primary_ref_list_hook.is_linked());
-    dirty.insert(dirty.iterator_to(*prev), *next);
-    dirty.erase(dirty.iterator_to(*prev));
+    auto prev_it = dirty.iterator_to(*prev);
+    dirty.insert(prev_it, *next);
+    dirty.erase(prev_it);
     intrusive_ptr_release(&*prev);
     intrusive_ptr_add_ref(&*next);
+  } else {
+    add_to_dirty(next);
   }
 }
 
@@ -265,7 +268,7 @@ void Cache::complete_commit(
     }
     i->state = CachedExtent::extent_state_t::DIRTY;
     if (i->version == 1) {
-      add_to_dirty(i);
+      i->dirty_from = seq;
     }
   }
 
@@ -328,6 +331,9 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	assert(extent->last_committed_crc == delta.final_crc);
 
+	if (extent->version == 0) {
+	  extent->dirty_from = journal_seq;
+	}
 	extent->version++;
 	mark_dirty(extent);
       });
