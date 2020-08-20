@@ -75,7 +75,7 @@ class TestNFS(MgrTestCase):
         self._sys_cmd(['systemctl', 'disable', 'nfs-server', '--now'])
 
     def _check_nfs_status(self):
-        return self._orch_cmd('ls', 'nfs')
+        return self._orch_cmd('ps', '--daemon_type=nfs')
 
     def _check_auth_ls(self, export_id=1, check_in=False):
         '''
@@ -112,7 +112,7 @@ class TestNFS(MgrTestCase):
         # Wait for few seconds as ganesha daemon take few seconds to be deployed
         time.sleep(8)
         orch_output = self._check_nfs_status()
-        expected_status = '1/1'
+        expected_status = 'running'
         # Check for expected status and daemon name (nfs.ganesha-<cluster_id>)
         if self.expected_name not in orch_output or expected_status not in orch_output:
             self.fail("NFS Ganesha cluster could not be deployed")
@@ -122,7 +122,7 @@ class TestNFS(MgrTestCase):
         Test deletion of a single nfs cluster.
         '''
         self._nfs_cmd('cluster', 'delete', self.cluster_id)
-        expected_output = "No services reported\n"
+        expected_output = "No daemons reported\n"
         # Wait for few seconds as ganesha daemon takes few seconds to be deleted
         wait_time = 10
         while wait_time <= 60:
