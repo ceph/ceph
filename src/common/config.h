@@ -343,6 +343,9 @@ public:
   unsigned get_osd_pool_default_min_size(const ConfigValues& values,
                                          uint8_t size) const {
     uint8_t min_size = get_val<uint64_t>(values, "osd_pool_default_min_size");
+    // Special case because 3 - 3/2 == 1
+    if (min_size == 0 && size == 3)
+      return 2;
     return min_size ? std::min(min_size, size) : (size - size / 2);
   }
 

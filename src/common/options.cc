@@ -2599,7 +2599,7 @@ std::vector<Option> get_global_options() {
     .set_min_max(0, 255)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("the minimal number of copies allowed to write to a degraded pool for new replicated pools")
-    .set_long_description("0 means no specific default; ceph will use size-size/2")
+    .set_long_description("0 means no specific default; ceph will use size-size/2, except that size 3 will get min_size 2")
     .add_see_also("osd_pool_default_size")
     .add_service("mon"),
 
