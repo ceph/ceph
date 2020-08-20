@@ -38,32 +38,16 @@ class NFSService(CephadmService):
             daemon_id, host, spec))
         return self.mgr._create_daemon(daemon_spec)
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
 
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
+        spec = daemon_spec.spec
 
         deps: List[str] = []
-
-        # find the matching NFSServiceSpec
-        # TODO: find the spec and pass via _create_daemon instead ??
-        dd = DaemonDescription()
-        dd.daemon_type = daemon_type
-        dd.daemon_id = daemon_id
-        dd.hostname = host
-
-        service_name = dd.service_name()
-        specs = self.mgr.spec_store.find(service_name)
-
-        if not specs:
-            raise OrchestratorError('Cannot find service spec %s' % (service_name))
-        elif len(specs) > 1:
-            raise OrchestratorError('Found multiple service specs for %s' % (service_name))
-        else:
-            # cast to keep mypy happy
-            spec = cast(NFSServiceSpec, specs[0])
 
         nfs = NFSGanesha(self.mgr, daemon_id, spec)
 
