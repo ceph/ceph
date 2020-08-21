@@ -350,6 +350,15 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         r = _write(cid, oid, off, len, bl, fadvise_flags);
       }
       break;
+      case Transaction::OP_ZERO:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        uint64_t off = op->off;
+        uint64_t len = op->len;
+        r = _zero(cid, oid, off, len);
+      }
+      break;
       case Transaction::OP_TRUNCATE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -510,6 +519,17 @@ int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
   }
 
   return 0;
+}
+
+int CyanStore::_zero(const coll_t& cid, const ghobject_t& oid,
+                     uint64_t offset, size_t len)
+{
+  logger().debug("{} {} {} {} ~ {}",
+                __func__, cid, oid, offset, len);
+
+  ceph::buffer::list bl;
+  bl.append_zero(len);
+  return _write(cid, oid, offset, len, bl, 0);
 }
 
 int CyanStore::_omap_clear(
