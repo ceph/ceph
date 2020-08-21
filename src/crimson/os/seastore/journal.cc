@@ -232,6 +232,9 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	  auto journal_tail = segments.rbegin()->second.journal_tail;
 	  segment_provider->update_journal_tail_committed(journal_tail);
 	  auto replay_from = journal_tail.offset;
+	  logger().debug(
+	    "Journal::find_replay_segments: journal_tail={}",
+	    journal_tail);
 	  auto from = segments.begin();
 	  if (replay_from != P_ADDR_NULL) {
 	    from = std::find_if(
@@ -247,9 +250,13 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	  std::transform(
 	    from, segments.end(), ret.begin(),
 	    [this](const auto &p) {
-	      return journal_seq_t{
+	      auto ret = journal_seq_t{
 		p.second.journal_segment_seq,
 		paddr_t{p.first, (segment_off_t)block_size}};
+	      logger().debug(
+		"Journal::find_replay_segments: replaying from  {}",
+		ret);
+	      return ret;
 	    });
 	  ret[0].offset = replay_from;
 	  return find_replay_segments_fut(
