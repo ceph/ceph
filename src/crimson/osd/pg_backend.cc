@@ -471,13 +471,13 @@ seastar::future<> PGBackend::write(
       if (op.extent.truncate_size != os.oi.size) {
         os.oi.size = length;
         // TODO: truncate_update_size_and_usage()
-	if (op.extent.truncate_size > os.oi.size) {
-	  osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
-	      op.extent.truncate_size - os.oi.size);
-	} else {
-	  osd_op_params.clean_regions.mark_data_region_dirty(op.extent.truncate_size,
-	      os.oi.size - op.extent.truncate_size);
-	}
+        if (op.extent.truncate_size > os.oi.size) {
+          osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+              op.extent.truncate_size - os.oi.size);
+        } else {
+          osd_op_params.clean_regions.mark_data_region_dirty(op.extent.truncate_size,
+              os.oi.size - op.extent.truncate_size);
+        }
       }
     }
     os.oi.truncate_seq = op.extent.truncate_seq;
@@ -607,21 +607,27 @@ PGBackend::write_ertr::future<> PGBackend::truncate(
     }
   }
   maybe_create_new_object(os, txn);
-  txn.truncate(coll->get_cid(),
-               ghobject_t{os.oi.soid}, op.extent.offset);
-  if (os.oi.size > op.extent.offset) {
-    // TODO: modified_ranges.union_of(trim);
-    osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
-        os.oi.size - op.extent.offset);
-  } else if (os.oi.size < op.extent.offset) {
-    osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+  if (os.oi.size != op.extent.offset) {
+    txn.truncate(coll->get_cid(),
+                 ghobject_t{os.oi.soid}, op.extent.offset);
+    if (os.oi.size > op.extent.offset) {
+      // TODO: modified_ranges.union_of(trim);
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        op.extent.offset,
+	os.oi.size - op.extent.offset);
+    } else {
+      // os.oi.size < op.extent.offset
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        os.oi.size,
         op.extent.offset - os.oi.size);
+    }
+    os.oi.size = op.extent.offset;
+    os.oi.clear_data_digest();
   }
   // TODO: truncate_update_size_and_usage()
   // TODO: ctx->delta_stats.num_wr++;
   // ----
   // do no set exists, or we will break above DELETE -> TRUNCATE munging.
-  os.oi.clear_data_digest();
   return write_ertr::now();
 }
 
