@@ -281,6 +281,12 @@ class SubvolumeBase(object):
             trashcan.dump(path)
             log.info("subvolume path '{0}' moved to trashcan".format(path))
 
+    def _link_dir(self, path, bname):
+        create_trashcan(self.fs, self.vol_spec)
+        with open_trashcan(self.fs, self.vol_spec) as trashcan:
+            trashcan.link(path, bname)
+            log.info("subvolume path '{0}' linked in trashcan bname {1}".format(path, bname))
+
     def trash_base_dir(self):
         if self.legacy_mode:
             self.fs.unlink(self.legacy_config_path)
