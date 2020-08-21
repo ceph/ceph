@@ -181,39 +181,40 @@ static inline bool _read_verify_data(
   return true;
 }
 
-PGBackend::read_errorator::future<ceph::bufferlist>
-PGBackend::read(const object_info_t& oi,
-                const size_t offset,
-                size_t length,
-                const size_t truncate_size,
-                const uint32_t truncate_seq,
-                const uint32_t flags)
+PGBackend::read_errorator::future<>
+PGBackend::read(const ObjectState& os, OSDOp& osd_op)
 {
+  const auto& oi = os.oi;
+  const ceph_osd_op& op = osd_op.op;
+  const uint64_t offset = op.extent.offset;
+  uint64_t length = op.extent.length;
   logger().trace("read: {} {}~{}", oi.soid, offset, length);
+
   // are we beyond truncate_size?
   size_t size = oi.size;
-  if ((truncate_seq > oi.truncate_seq) &&
-      (truncate_size < offset + length) &&
-      (truncate_size < size)) {
-    size = truncate_size;
+  if ((op.extent.truncate_seq > oi.truncate_seq) &&
+      (op.extent.truncate_size < offset + length) &&
+      (op.extent.truncate_size < size)) {
+    size = op.extent.truncate_size;
+  }
+  if (offset >= size) {
+    // read size was trimmed to zero and it is expected to do nothing,
+    return read_errorator::now();
   }
   if (!length) {
     // read the whole object if length is 0
     length = size;
   }
-  if (offset >= size) {
-    // read size was trimmed to zero and it is expected to do nothing,
-    return read_errorator::make_ready_future<bufferlist>();
-  }
-  return _read(oi.soid, offset, length, flags).safe_then(
-    [&oi](auto&& bl) -> read_errorator::future<ceph::bufferlist> {
-      if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
-	logger().debug("read: data length: {}", bl.length());
-        return read_errorator::make_ready_future<bufferlist>(std::move(bl));
-      } else {
-        return crimson::ct_error::object_corrupted::make();
-      }
-    });
+  return _read(oi.soid, offset, length, op.flags).safe_then(
+    [&oi, &osd_op](auto&& bl) -> read_errorator::future<> {
+    if (!_read_verify_data(oi, bl)) {
+      return crimson::ct_error::object_corrupted::make();
+    }
+    logger().debug("read: data length: {}", bl.length());
+    osd_op.rval = bl.length();
+    osd_op.outdata = std::move(bl);
+    return read_errorator::now();
+  });
 }
 
 PGBackend::read_errorator::future<>
