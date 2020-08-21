@@ -5390,7 +5390,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd getcrushmap" ||
 	   prefix == "osd ls-tree" ||
 	   prefix == "osd info") {
-    string val;
 
     epoch_t epoch = 0;
     int64_t epochnum;
