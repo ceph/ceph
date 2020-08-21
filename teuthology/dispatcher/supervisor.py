@@ -167,7 +167,14 @@ def reimage_machines(job_config):
     # change the status during the reimaging process
     report.try_push_job_info(ctx.config, dict(status='waiting'))
     targets = job_config['targets']
-    reimaged = reimage_many(ctx, targets, job_config['machine_type'])
+    try:
+        reimaged = reimage_many(ctx, targets, job_config['machine_type'])
+    except Exception:
+        log.info('Reimaging error. Nuking machines...')
+        # Reimage failures should map to the 'dead' status instead of 'fail'
+        report.try_push_job_info(ctx.config, dict(status='dead'))
+        nuke(ctx, True)
+        raise
     ctx.config['targets'] = reimaged
     # change the status to running after the reimaging process
     report.try_push_job_info(ctx.config, dict(status='running'))
