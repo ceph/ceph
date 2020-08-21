@@ -409,7 +409,18 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
     return crimson::ct_error::enoent::make();
   }
 
-  auto mutated = f(mutation_pt.get_val());
+  auto cur = mutation_pt.get_val();
+  auto mutated = f(cur);
+
+  mutated.paddr = maybe_generate_relative(mutated.paddr);
+
+  logger().debug(
+    "{}: mutate addr {}: {} -> {}",
+    __func__,
+    laddr,
+    cur.paddr,
+    mutated.paddr);
+
   if (mutated.refcount > 0) {
     journal_update(mutation_pt, mutated, maybe_get_delta_buffer());
     return mutate_mapping_ret(
