@@ -831,6 +831,26 @@ PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
   });
 }
 
+PGBackend::rm_xattr_ertr::future<> PGBackend::rm_xattr(
+  ObjectState& os,
+  OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  auto bp = osd_op.indata.cbegin();
+  string attr_name{"_"};
+  bp.copy(osd_op.op.xattr.name_len, attr_name);
+  osd_op.indata.splice(0, bp.get_off());
+  txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
+  return rm_xattr_ertr::now();
+}
+
 using get_omap_ertr =
   crimson::os::FuturizedStore::read_errorator::extend<
     crimson::ct_error::enodata>;
