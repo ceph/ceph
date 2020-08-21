@@ -67,7 +67,7 @@ Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
     addr.offset,
     get_offset(addr),
     bl.length(),
-    bl.crc32c(0));
+    bl.crc32c(1));
   if (!ignore_check && segment_state[addr.segment] != segment_state_t::OPEN)
     return crimson::ct_error::invarg::make();
 
@@ -164,7 +164,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
     addr.offset,
     get_offset(addr),
     len,
-    bl.begin().crc32c(config.block_size, 0));
+    bl.begin().crc32c(len, 1));
 
   return read_ertr::now();
 }

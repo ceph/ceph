@@ -74,15 +74,8 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
     set_contents(c, 0, get_length());
   }
 
-  int checksum() {
-    return ceph_crc32c(
-      1,
-      (const unsigned char *)get_bptr().c_str(),
-      get_length());
-  }
-
   test_extent_desc_t get_desc() {
-    return { get_length(), get_crc32c(1) };
+    return { get_length(), get_crc32c() };
   }
 
   void apply_delta(const ceph::bufferlist &bl) final;
@@ -118,8 +111,6 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
   }
 
   ceph::bufferlist get_delta() final { return ceph::bufferlist(); }
-
-  int checksum() { return 0; }
 
   void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final {}
 };
