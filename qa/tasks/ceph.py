@@ -539,13 +539,15 @@ def create_simple_monmap(ctx, remote, conf, mons,
     return fsid
 
 
-def maybe_redirect_stderr(args, config, cluster, type_, id_):
+def maybe_redirect_stderr(config, type_, args, log_path):
     if type_ == 'osd' and \
        config.get('flavor', 'default') == 'crimson':
-        log_path = f'/var/log/ceph/{cluster}-{type_}.{id_}.log'
-        return args + [run.Raw('2>>'), log_path]
+        # teuthworker uses ubuntu:ubuntu to access the test nodes
+        create_log_cmd = \
+            f'sudo install -b -o ubuntu -g ubuntu /dev/null {log_path}'
+        return create_log_cmd, args + [run.Raw('2>>'), log_path]
     else:
-        return args
+        return None, args
 
 
 @contextlib.contextmanager
@@ -923,9 +925,12 @@ def cluster(ctx, config):
                         '--mkkey',
                         '-i', id_,
                         '--monmap', monmap_path]
-                remote.run(
-                    args=maybe_redirect_stderr(args, config,
-                                               cluster_name, 'osd', id_))
+                log_path = f'/var/log/ceph/{cluster_name}-osd.{id_}.log'
+                create_log_cmd, args = \
+                    maybe_redirect_stderr(config, 'osd', args, log_path)
+                if create_log_cmd:
+                    remote.sh(create_log_cmd)
+                remote.run(args=args)
             except run.CommandFailedError:
                 # try without --no-mon-config.. this may be an upgrade test
                 remote.run(
@@ -1377,10 +1382,11 @@ def run_daemon(ctx, config, type_):
                                                        valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
-            run_cmd = maybe_redirect_stderr(run_cmd,
-                                            config,
-                                            cluster_name, type_, id_)
-
+            log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
+            create_log_cmd, run_cmd = \
+                maybe_redirect_stderr(config, type_, run_cmd, log_path)
+            if create_log_cmd:
+                remote.sh(create_log_cmd)
             # always register mgr; don't necessarily start
             ctx.daemons.register_daemon(
                 remote, type_, id_,
