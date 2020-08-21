@@ -319,28 +319,49 @@ Cache::replay_delta(
     root->dirty_from = journal_seq;
     return replay_delta_ertr::now();
   } else {
-    return get_extent_by_type(
-      delta.type,
-      delta.paddr,
-      delta.laddr,
-      delta.length).safe_then([=](auto extent) {
+    auto get_extent_if_cached = [this](paddr_t addr)
+      -> replay_delta_ertr::future<CachedExtentRef> {
+      auto retiter = extents.find_offset(addr);
+      if (retiter != extents.end()) {
+	return replay_delta_ertr::make_ready_future<CachedExtentRef>(&*retiter);
+      } else {
+	return replay_delta_ertr::make_ready_future<CachedExtentRef>();
+      }
+    };
+    auto extent_fut = delta.pversion == 0 ?
+      get_extent_by_type(
+	delta.type,
+	delta.paddr,
+	delta.laddr,
+	delta.length) :
+      get_extent_if_cached(
+	delta.paddr);
+    return extent_fut.safe_then([=, &delta](auto extent) {
+      if (!extent) {
+	assert(delta.pversion > 0);
 	logger().debug(
-	  "replay_delta: replaying {} on {}",
-	  *extent,
+	  "replay_delta: replaying {}, extent not present so delta is obsolete",
 	  delta);
+	return;
+      }
 
-	assert(extent->version == delta.pversion);
+      logger().debug(
+	"replay_delta: replaying {} on {}",
+	  *extent,
+	delta);
 
-	assert(extent->last_committed_crc == delta.prev_crc);
-	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
-	assert(extent->last_committed_crc == delta.final_crc);
+      assert(extent->version == delta.pversion);
 
-	if (extent->version == 0) {
-	  extent->dirty_from = journal_seq;
-	}
-	extent->version++;
-	mark_dirty(extent);
-      });
+      assert(extent->last_committed_crc == delta.prev_crc);
+      extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+      assert(extent->last_committed_crc == delta.final_crc);
+
+      if (extent->version == 0) {
+	extent->dirty_from = journal_seq;
+      }
+      extent->version++;
+      mark_dirty(extent);
+    });
   }
 }
 
