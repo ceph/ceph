@@ -1345,3 +1345,18 @@ def sh(command, log_limit=1024, cwd=None, env=None):
             output=output
         )
     return output
+
+
+def add_remote_path(ctx, local_dir, remote_dir):
+    """
+    Add key/value pair (local_dir: remote_dir) to job's info.yaml.
+    These key/value pairs are read to archive them in case of job timeout.
+    """
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {local_dir: remote_dir}
+        else:
+            info_yaml['archive'][local_dir] = remote_dir
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
