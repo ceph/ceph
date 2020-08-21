@@ -435,17 +435,7 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     [[fallthrough]];
   case CEPH_OSD_OP_READ:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
-      return backend.read(os.oi,
-                          osd_op.op.extent.offset,
-                          osd_op.op.extent.length,
-                          osd_op.op.extent.truncate_size,
-                          osd_op.op.extent.truncate_seq,
-                          osd_op.op.flags).safe_then(
-        [&osd_op](ceph::bufferlist&& bl) {
-          osd_op.rval = bl.length();
-          osd_op.outdata = std::move(bl);
-          return osd_op_errorator::now();
-        });
+      return backend.read(os, osd_op);
     });
   case CEPH_OSD_OP_SPARSE_READ:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
