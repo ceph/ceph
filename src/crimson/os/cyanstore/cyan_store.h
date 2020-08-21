@@ -151,6 +151,8 @@ private:
   int _write(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, const ceph::bufferlist& bl,
 	     uint32_t fadvise_flags);
+  int _zero(const coll_t& cid, const ghobject_t& oid,
+	    uint64_t offset, size_t len);
   int _omap_clear(
     const coll_t& cid,
     const ghobject_t& oid);
