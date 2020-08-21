@@ -1415,6 +1415,13 @@ options:
   level: advanced
   default: ib
   with_legacy: true
+- name: ms_async_rdma_support_hash_irqs
+  type: bool
+  level: advanced
+  default: true
+  flags:
+  - startup
+  desc: hash CQ interrupts to different queues
 - name: ms_dpdk_port_id
   type: int
   level: advanced
