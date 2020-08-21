@@ -22,7 +22,7 @@ import {
   SortPropDir,
   TableColumnProp
 } from '@swimlane/ngx-datatable';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
 import { TableStatus } from '../../../shared/classes/table-status';

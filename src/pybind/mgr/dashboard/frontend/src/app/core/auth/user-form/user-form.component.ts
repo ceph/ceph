@@ -3,8 +3,8 @@ import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
-import * as moment from 'moment';
+import _ from 'lodash';
+import moment from 'moment';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { AuthService } from '../../../shared/api/auth.service';
@@ -174,9 +174,6 @@ export class UserFormComponent extends CdForm implements OnInit {
     );
     const expirationDate = response['pwdExpirationDate'];
     if (expirationDate) {
-      const mom = moment(expirationDate * 1000);
-      console.log(this.pwdExpirationFormat, mom.format(this.pwdExpirationFormat));
-
       this.userForm
         .get('pwdExpirationDate')
         .setValue(moment(expirationDate * 1000).format(this.pwdExpirationFormat));

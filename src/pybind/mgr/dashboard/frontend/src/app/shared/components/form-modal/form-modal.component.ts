@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CdFormBuilder } from '../../forms/cd-form-builder';
 import { CdFormGroup } from '../../forms/cd-form-group';

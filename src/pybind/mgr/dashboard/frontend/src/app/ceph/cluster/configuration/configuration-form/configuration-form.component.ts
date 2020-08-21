@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ValidatorFn } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { ConfigFormModel } from '../../../../shared/components/config-option/config-option.model';

@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
+import styles from '../../../../styles.scss';
 import { HealthService } from '../../../shared/api/health.service';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { Permissions } from '../../../shared/models/permissions';
@@ -31,7 +32,7 @@ export class HealthComponent implements OnInit, OnDestroy {
   clientStatsConfig = {
     colors: [
       {
-        backgroundColor: ['--color-cyan', '--color-purple']
+        backgroundColor: [styles.chartHealthColorCyan, styles.chartHealthColorPurple]
       }
     ]
   };
@@ -39,7 +40,7 @@ export class HealthComponent implements OnInit, OnDestroy {
   rawCapacityChartConfig = {
     colors: [
       {
-        backgroundColor: ['--color-blue', '--color-gray']
+        backgroundColor: [styles.chartHealthColorBlue, styles.chartHealthColorGray]
       }
     ]
   };

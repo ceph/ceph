@@ -1,7 +1,7 @@
 import { Directive, HostListener } from '@angular/core';
 import { NgControl } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 @Directive({
   selector: '[cdTrim]'

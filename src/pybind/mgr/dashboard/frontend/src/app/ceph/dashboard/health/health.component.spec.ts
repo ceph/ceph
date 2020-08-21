@@ -3,7 +3,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';

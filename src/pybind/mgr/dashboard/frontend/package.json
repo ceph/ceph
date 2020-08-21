@@ -42,6 +42,9 @@
   },
   "private": true,
   "jest": {
+    "moduleNameMapper": {
+      "\\.scss$": "identity-obj-proxy"
+    },
     "preset": "jest-preset-angular",
     "setupFilesAfterEnv": [
       "<rootDir>/src/setupJest.ts"
@@ -117,6 +120,7 @@
     "cypress": "4.12.1",
     "html-linter": "1.1.1",
     "htmllint-cli": "0.0.7",
+    "identity-obj-proxy": "3.0.0",
     "jest": "26.3.0",
     "jest-canvas-mock": "2.2.0",
     "jest-preset-angular": "8.2.1",
