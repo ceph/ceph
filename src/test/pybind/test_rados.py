@@ -507,22 +507,27 @@ class TestIoctx(object):
             write_op.new(0)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'')
+
             write_op.write_full(b'1')
             write_op.append(b'2')
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'12')
+
             write_op.write_full(b'12345')
             write_op.write(b'x', 2)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'12x45')
+
             write_op.write_full(b'12345')
             write_op.zero(2, 2)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'12\x00\x005')
+
             write_op.write_full(b'12345')
             write_op.truncate(2)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'12')
+
             write_op.remove()
             self.ioctx.operate_write_op(write_op, "write_ops")
             with assert_raises(ObjectNotFound):
@@ -595,20 +600,24 @@ class TestIoctx(object):
             write_op.new(LIBRADOS_CREATE_EXCLUSIVE)
             for key, value in xattrs.items():
                 write_op.set_xattr(key, value)
-                self.ioctx.operate_write_op(write_op, "abc")
+                self.ioctx.operate_write_op(write_op, 'abc')
                 eq(self.ioctx.get_xattr('abc', key), value)
+
             stored_xattrs_1 = {}
             for key, value in self.ioctx.get_xattrs('abc'):
                 stored_xattrs_1[key] = value
             eq(stored_xattrs_1, xattrs)
+
             for key in xattrs.keys():
                 write_op.rm_xattr(key)
-                self.ioctx.operate_write_op(write_op, "abc")
+                self.ioctx.operate_write_op(write_op, 'abc')
             stored_xattrs_2 = {}
             for key, value in self.ioctx.get_xattrs('abc'):
                 stored_xattrs_2[key] = value
             eq(stored_xattrs_2, {})
+
             write_op.remove()
+            self.ioctx.operate_write_op(write_op, 'abc')
 
     def test_locator(self):
         self.ioctx.set_locator_key("bar")
