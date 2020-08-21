@@ -231,9 +231,9 @@ public:
   }
 
   /// Returns crc32c of buffer
-  uint32_t get_crc32c(uint32_t crc=1) {
+  uint32_t get_crc32c() {
     return ceph_crc32c(
-      crc,
+      1,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
       get_length());
   }
