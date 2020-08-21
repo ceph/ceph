@@ -48,6 +48,19 @@ class SubvolumeV2(SubvolumeV1):
                 SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value,
                 SubvolumeFeatures.FEATURE_SNAPSHOT_RETENTION.value]
 
+    @property
+    def retained(self):
+        try:
+            self.metadata_mgr.refresh()
+            if self.state == SubvolumeStates.STATE_RETAINED:
+                return True
+            else:
+                raise VolumeException(-errno.EINVAL, "invalid state for subvolume '{0}' during create".format(self.subvolname))
+        except MetadataMgrException as me:
+            if me.errno != -errno.ENOENT:
+                raise VolumeException(me.errno, "internal error while processing subvolume '{0}'".format(self.subvolname))
+        return False
+
     @staticmethod
     def is_valid_uuid(uuid_str):
         try:
@@ -83,18 +96,6 @@ class SubvolumeV2(SubvolumeV1):
 
         return os.path.join(snap_base_path, uuid_str)
 
-    def _is_retained(self):
-        try:
-            self.metadata_mgr.refresh()
-            if self.state == SubvolumeStates.STATE_RETAINED:
-                return True
-            else:
-                raise VolumeException(-errno.EINVAL, "invalid state for subvolume '{0}' during create".format(self.subvolname))
-        except MetadataMgrException as me:
-            if me.errno != -errno.ENOENT:
-                raise VolumeException(me.errno, "internal error while processing subvolume '{0}'".format(self.subvolname))
-        return False
-
     def _remove_on_failure(self, subvol_path, retained):
         if retained:
             log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
@@ -115,7 +116,7 @@ class SubvolumeV2(SubvolumeV1):
         except OpSmException as oe:
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
-        retained = self._is_retained()
+        retained = self.retained
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             self.fs.mkdirs(subvol_path, mode)
@@ -155,7 +156,7 @@ class SubvolumeV2(SubvolumeV1):
         except OpSmException as oe:
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
-        retained = self._is_retained()
+        retained = self.retained
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             # source snapshot attrs are used to create clone subvolume
