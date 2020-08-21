@@ -2313,7 +2313,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_client_directed_command_retry", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(2)
-    .set_description("Number of times to try sending a comamnd directed at a specific monitor"),
+    .set_description("Number of times to try sending a command directed at a specific monitor"),
 
     Option("mon_max_pool_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(65536)
