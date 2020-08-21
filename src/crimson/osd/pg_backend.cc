@@ -757,13 +757,11 @@ seastar::future<> PGBackend::setxattr(
 
   maybe_create_new_object(os, txn);
 
-  std::string name;
+  std::string name{"_"};
   ceph::bufferlist val;
   {
     auto bp = osd_op.indata.cbegin();
-    std::string aname;
-    bp.copy(osd_op.op.xattr.name_len, aname);
-    name = "_" + aname;
+    bp.copy(osd_op.op.xattr.name_len, name);
     bp.copy(osd_op.op.xattr.value_len, val);
     osd_op.indata.splice(0, bp.get_off());
   }
