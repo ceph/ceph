@@ -161,6 +161,8 @@ public:
    * - t if modified by t
    * - extent_set if already in cache
    * - disk
+   *
+   * t *must not* have retired offset
    */
   template <typename T>
   get_extent_ertr::future<TCachedExtentRef<T>> get_extent(
@@ -168,14 +170,18 @@ public:
     paddr_t offset,       ///< [in] starting addr
     segment_off_t length  ///< [in] length
   ) {
-    if (auto i = t.get_extent(offset)) {
+    CachedExtentRef ret;
+    auto result = t.get_extent(offset, &ret);
+    if (result != Transaction::get_extent_ret::ABSENT) {
+      assert(result != Transaction::get_extent_ret::RETIRED);
       return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
-	TCachedExtentRef<T>(static_cast<T*>(&*i)));
+	ret->cast<T>());
     } else {
       return get_extent<T>(offset, length).safe_then(
 	[&t](auto ref) mutable {
 	  t.add_to_read_set(ref);
-	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(std::move(ref));
+	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+	    std::move(ref));
 	});
     }
   }
