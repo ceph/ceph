@@ -68,12 +68,6 @@ def main(args):
 def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     safe_archive = safepath.munge(job_config['name'])
     if job_config.get('first_in_suite') or job_config.get('last_in_suite'):
-        if teuth_config.results_server:
-            try:
-                report.try_delete_jobs(job_config['name'], job_config['job_id'])
-            except Exception as e:
-                log.warning("Unable to delete job %s, exception occurred: %s",
-                            job_config['job_id'], e)
         suite_archive_dir = os.path.join(archive_dir, safe_archive)
         args = [
             os.path.join(teuth_bin_path, 'teuthology-results'),
@@ -99,6 +93,7 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
         result_proc = subprocess.Popen(args=args, preexec_fn=os.setpgrp)
         log.info("teuthology-results PID: %s", result_proc.pid)
         # Remove unnecessary logs for first and last jobs in run
+        log.info('Deleting job\'s archive dir %s', job_config['archive_path'])
         for f in os.listdir(job_config['archive_path']):
             os.remove(os.path.join(job_config['archive_path'], f))
         os.rmdir(job_config['archive_path'])
