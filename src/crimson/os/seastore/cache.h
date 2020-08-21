@@ -135,14 +135,14 @@ public:
       ref->set_paddr(offset);
       ref->state = CachedExtent::extent_state_t::CLEAN;
 
-      /* TODO: crc should be checked against LBA manager */
-      ref->last_committed_crc = ref->get_crc32c();
-
       return segment_manager.read(
 	offset,
 	length,
 	ref->get_bptr()).safe_then(
 	  [this, ref=std::move(ref)]() mutable {
+	    /* TODO: crc should be checked against LBA manager */
+	    ref->last_committed_crc = ref->get_crc32c();
+
 	    ref->on_clean_read();
 	    ref->complete_io();
 	    add_extent(ref);

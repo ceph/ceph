@@ -120,6 +120,7 @@ public:
 	<< ", version=" << version
 	<< ", paddr=" << get_paddr()
 	<< ", state=" << state
+	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count();
     print_detail(out);
     return out << ")";
