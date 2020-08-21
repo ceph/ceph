@@ -228,8 +228,6 @@ void bluefs_transaction_t::generate_test_instances(
   ls.push_back(new bluefs_transaction_t);
   ls.push_back(new bluefs_transaction_t);
   ls.back()->op_init();
-  ls.back()->op_alloc_add(0, 0, 123123211);
-  ls.back()->op_alloc_rm(1, 0, 123);
   ls.back()->op_dir_create("dir");
   ls.back()->op_dir_create("dir2");
   bluefs_fnode_t fnode;
