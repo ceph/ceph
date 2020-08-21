@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';

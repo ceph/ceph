@@ -12,7 +12,7 @@ import {
   NgbModalRef,
   NgbNavModule
 } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';

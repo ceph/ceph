@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { ValidatorFn, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { MgrModuleService } from '../../../shared/api/mgr-module.service';

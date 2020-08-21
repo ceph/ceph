@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 @Component({
   selector: 'cd-configuration-details',

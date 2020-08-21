@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { Icons } from '../../../shared/enum/icons.enum';

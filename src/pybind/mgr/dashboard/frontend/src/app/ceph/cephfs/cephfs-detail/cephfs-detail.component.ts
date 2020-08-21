@@ -1,7 +1,5 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import * as _ from 'lodash';
-
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';

@@ -2,7 +2,7 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';

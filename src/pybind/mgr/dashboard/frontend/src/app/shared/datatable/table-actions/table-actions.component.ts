@@ -1,6 +1,6 @@
 import { Component, Input, OnInit } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../models/cd-table-action';

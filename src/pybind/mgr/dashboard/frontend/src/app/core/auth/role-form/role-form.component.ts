@@ -2,7 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';

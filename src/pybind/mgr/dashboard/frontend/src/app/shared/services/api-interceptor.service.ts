@@ -8,7 +8,7 @@ import {
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Observable, throwError as observableThrowError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 

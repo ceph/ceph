@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { Permission } from '../../../../shared/models/permissions';

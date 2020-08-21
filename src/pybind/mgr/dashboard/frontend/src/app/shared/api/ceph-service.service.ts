@@ -1,7 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
 import { Observable } from 'rxjs';
 
 import { Daemon } from '../models/daemon.interface';

@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
 import { FormControl, ValidatorFn } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../forms/cd-form-group';

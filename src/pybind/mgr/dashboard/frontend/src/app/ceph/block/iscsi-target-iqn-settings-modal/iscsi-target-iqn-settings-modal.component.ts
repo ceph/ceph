@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';

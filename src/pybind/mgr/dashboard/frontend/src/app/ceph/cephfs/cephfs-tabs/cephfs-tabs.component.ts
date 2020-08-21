@@ -1,6 +1,6 @@
 import { Component, Input, NgZone, OnChanges, OnDestroy } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Subscription, timer } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
