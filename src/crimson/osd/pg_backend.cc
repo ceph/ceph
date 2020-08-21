@@ -190,6 +190,10 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op)
   uint64_t length = op.extent.length;
   logger().trace("read: {} {}~{}", oi.soid, offset, length);
 
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   // are we beyond truncate_size?
   size_t size = oi.size;
   if ((op.extent.truncate_seq > oi.truncate_seq) &&
@@ -888,7 +892,10 @@ PGBackend::omap_get_keys(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   std::string start_after;
   uint64_t max_return;
   try {
@@ -1010,6 +1017,10 @@ PGBackend::omap_get_vals_by_keys(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
 
   std::set<std::string> keys_to_get;
   try {
@@ -1019,7 +1030,6 @@ PGBackend::omap_get_vals_by_keys(
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument();
   }
-
   return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get).safe_then(
     [&osd_op] (crimson::os::FuturizedStore::omap_values_t&& vals) {
       encode(vals, osd_op.outdata);
