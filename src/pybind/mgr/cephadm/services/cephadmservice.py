@@ -355,17 +355,14 @@ class MgrService(CephadmService):
         return self.mgr._create_daemon(daemon_spec)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
-        active_mgr_str = self.mgr.get('mgr_map')['active_name']
         for daemon in daemon_descrs:
-            if daemon.daemon_id == active_mgr_str:
+            if self.mgr.daemon_is_self(daemon.daemon_type, daemon.daemon_id):
                 return daemon
         # if no active mgr found, return empty Daemon Desc
         return DaemonDescription()
 
     def fail_over(self):
-        mgr_map = self.mgr.get('mgr_map')
-        num = len(mgr_map.get('standbys'))
-        if not num:
+        if not self.mgr_map_has_standby():
             raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
                 'daemon', 'mgr' + self.mgr.get_mgr_id()))
 
@@ -378,6 +375,15 @@ class MgrService(CephadmService):
             'prefix': 'mgr fail',
             'who': self.mgr.get_mgr_id(),
         })
+
+    def mgr_map_has_standby(self) -> bool:
+        """
+        This is a bit safer than asking our inventory. If the mgr joined the mgr map,
+        we know it joined the cluster
+        """
+        mgr_map = self.mgr.get('mgr_map')
+        num = len(mgr_map.get('standbys'))
+        return bool(num)
 
 
 class MdsService(CephadmService):
