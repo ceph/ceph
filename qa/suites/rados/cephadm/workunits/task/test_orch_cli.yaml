@@ -11,7 +11,7 @@ tasks:
 - cephadm:
 - cephadm.shell:
     host.a:
-      - ceph orch apply mds 1
+      - ceph orch apply mds a
 - cephfs_test_runner:
     modules:
       - tasks.cephfs.test_nfs
