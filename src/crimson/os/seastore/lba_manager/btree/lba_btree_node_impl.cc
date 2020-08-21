@@ -145,9 +145,9 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
     bounds.first,
     bounds.second,
     L_ADDR_NULL,
-    [this, c, len](auto &i, auto &e, auto &ret) {
+    [=](auto &i, auto &e, auto &ret) {
       return crimson::do_until(
-	[this, c, &i, &e, &ret, len] {
+	[=, &i, &e, &ret] {
 	  if (i == e) {
 	    return find_hole_ertr::make_ready_future<std::optional<laddr_t>>(
 	      std::make_optional<laddr_t>(L_ADDR_NULL));
@@ -157,16 +157,18 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
 	    get_meta().depth - 1,
 	    i->get_val(),
 	    get_paddr()
-	  ).safe_then([c, &i, len](auto extent) mutable {
+	  ).safe_then([=, &i](auto extent) mutable {
+	    auto lb = std::max(min, i->get_key());
+	    auto ub = i->get_next_key_or_max();
 	    logger().debug(
 	      "LBAInternalNode::find_hole extent {} lb {} ub {}",
 	      *extent,
-	      i->get_key(),
-	      i->get_next_key_or_max());
+	      lb,
+	      ub);
 	    return extent->find_hole(
 	      c,
-	      i->get_key(),
-	      i->get_next_key_or_max(),
+	      lb,
+	      ub,
 	      len);
 	  }).safe_then([&i, &ret](auto addr) mutable {
 	    i++;
@@ -430,7 +432,8 @@ LBALeafNode::find_hole_ret LBALeafNode::find_hole(
   logger().debug(
     "LBALeafNode::find_hole min={} max={}, len={}, *this={}",
     min, max, len, *this);
-  for (auto i = begin(); i != end(); ++i) {
+  auto [liter, uiter] = bound(min, max);
+  for (auto i = liter; i != uiter; ++i) {
     auto ub = i->get_key();
     if (min + len <= ub) {
       return find_hole_ret(
