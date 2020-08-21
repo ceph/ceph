@@ -7,7 +7,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm.module import CEPH_DATEFMT
 
 try:
-    from typing import Any
+    from typing import Any, Iterator, List
 except ImportError:
     pass
 import pytest
@@ -127,7 +127,7 @@ def assert_rm_service(cephadm, srv_name):
 
 
 @contextmanager
-def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str):
+def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str) -> Iterator[List[str]]:
     if spec.placement.is_empty():
         spec.placement = PlacementSpec(hosts=[host], count=1)
     c = meth(cephadm_module, spec)
@@ -138,9 +138,9 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, h
     cephadm_module._apply_all_services()
 
     dds = wait(cephadm_module, cephadm_module.list_daemons())
-    names = {dd.service_name() for dd in dds}
-    assert spec.service_name() in names, dds
+    own_dds = [dd for dd in dds if dd.service_name() == spec.service_name()]
+    assert own_dds
 
-    yield
+    yield [dd.name() for dd in own_dds]
 
     assert_rm_service(cephadm_module, spec.service_name())
