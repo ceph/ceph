@@ -261,8 +261,7 @@ class CephadmUpgrade:
                     daemon_type, d.daemon_id,
                     d.container_image_name, d.container_image_id, d.version))
 
-                if daemon_type == 'mgr' and \
-                   d.daemon_id == self.mgr.get_mgr_id():
+                if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                 self.mgr.get_mgr_id())
                     need_upgrade_self = True
