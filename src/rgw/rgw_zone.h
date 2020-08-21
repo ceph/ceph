@@ -570,19 +570,24 @@ WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWDataProvider {
   struct SIPConfig {
-    std::optional<std::string> access_key; /* access key to use for connection if not default */
+    std::optional<std::list<std::string> > endpoints; /* optional sip endpoint */
+    std::optional<rgw_user> uid; /* access uid to use for connection if not default (will try to read key off backend) */
+    std::optional<string> access_key; /* access key to use (should not be used with uid) */
+    std::optional<string> secret; /* secret to use, if not specified will try to use secret off backend */
     std::optional<std::string> path_prefix; /* url path prefix for sip operations */
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
-      encode(access_key, bl);
+      encode(endpoints, bl);
+      encode(uid, bl);
       encode(path_prefix, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(7, bl);
-      decode(access_key, bl);
+      DECODE_START(1, bl);
+      decode(endpoints, bl);
+      decode(uid, bl);
       decode(path_prefix, bl);
       DECODE_FINISH(bl);
     }

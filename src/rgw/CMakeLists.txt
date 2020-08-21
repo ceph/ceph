@@ -112,6 +112,7 @@ set(librgw_common_srcs
   rgw_trim_mdlog.cc
   rgw_period_history.cc
   rgw_period_puller.cc
+  rgw_remote.cc
   rgw_reshard.cc
   rgw_coroutine.cc
   rgw_cr_rados.cc
