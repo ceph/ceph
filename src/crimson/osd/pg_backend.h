@@ -144,6 +144,11 @@ public:
   get_attr_errorator::future<> get_xattrs(
     const ObjectState& os,
     OSDOp& osd_op) const;
+  using rm_xattr_ertr = crimson::errorator<crimson::ct_error::enoent>;
+  rm_xattr_ertr::future<> rm_xattr(
+    ObjectState& os,
+    OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   seastar::future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
