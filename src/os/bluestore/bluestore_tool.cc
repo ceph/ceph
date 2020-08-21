@@ -161,7 +161,7 @@ void add_devices(
       cout << " -> " << target_path;
     }
     cout << std::endl;
-    int r = fs->add_block_device(e.second, e.first, false);
+    int r = fs->add_block_device(e.second, e.first, false, 0); // 'reserved' is fake
     if (r < 0) {
       cerr << "unable to open " << e.first << ": " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -169,13 +169,15 @@ void add_devices(
   }
 }
 
-BlueFS *open_bluefs(
+BlueFS *open_bluefs_readonly(
   CephContext *cct,
   const string& path,
   const vector<string>& devs)
 {
   validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
+  // We provide no shared allocator which prevents bluefs to operate in R/W mode.
+  // Read-only mode isn't strictly enforced though
+  BlueFS *fs = new BlueFS(cct, nullptr);
 
   add_devices(fs, cct, devs);
 
@@ -194,7 +196,9 @@ void log_dump(
   const vector<string>& devs)
 {
   validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
+  // We provide no shared allocator which prevents bluefs to operate in R/W mode.
+  // Read-only mode isn't strictly enforced though
+  BlueFS *fs = new BlueFS(cct, nullptr);
 
   add_devices(fs, cct, devs);
   int r = fs->log_dump();
@@ -595,7 +599,7 @@ int main(int argc, char **argv)
     }
   }
   else if (action == "bluefs-export") {
-    BlueFS *fs = open_bluefs(cct.get(), path, devs);
+    BlueFS *fs = open_bluefs_readonly(cct.get(), path, devs);
 
     vector<string> dirs;
     int r = fs->readdir("", &dirs);

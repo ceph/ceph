@@ -2051,7 +2051,9 @@ private:
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
-  Allocator *alloc = nullptr;
+
+  bluefs_shared_alloc_context_t shared_alloc;
+
   uuid_d fsid;
   int path_fd = -1;  ///< open handle to $path
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
@@ -2353,7 +2355,7 @@ private:
 
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
-  int _open_bluefs(bool create);
+  int _open_bluefs(bool create, bool read_only);
   void _close_bluefs(bool cold_close);
 
   // Limited (u)mount intended for BlueFS operations only
