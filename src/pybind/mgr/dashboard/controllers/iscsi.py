@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-branches
+# pylint: disable=too-many-lines
 from __future__ import absolute_import
 
 from copy import deepcopy
@@ -329,6 +330,8 @@ class IscsiTarget(RESTController):
         deleted_portal_names = list(old_portal_names - new_portal_names)
         validate_rest_api(deleted_portal_names)
         IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups, settings)
+        IscsiTarget._validate_delete(gateway, target_iqn, config, new_target_iqn, target_controls,
+                                     disks, clients, groups)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
         IscsiTarget._create(new_target_iqn, target_controls, acl_enabled, auth, portals, disks,
@@ -369,13 +372,21 @@ class IscsiTarget(RESTController):
                                                                              group_id)
             TaskManager.current_task().inc_progress(task_progress_inc)
         deleted_clients = []
-        for client_iqn in list(target_config['clients'].keys()):
+        deleted_client_luns = []
+        for client_iqn, client_config in target_config['clients'].items():
             if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
                                                      new_clients, client_iqn,
-                                                     new_groups, deleted_groups):
+                                                     deleted_groups):
                 deleted_clients.append(client_iqn)
                 IscsiClient.instance(gateway_name=gateway_name).delete_client(target_iqn,
                                                                               client_iqn)
+            else:
+                for image_id in list(client_config.get('luns', {}).keys()):
+                    if IscsiTarget._client_lun_deletion_required(target, client_iqn, image_id,
+                                                                 new_clients):
+                        deleted_client_luns.append((client_iqn, image_id))
+                        IscsiClient.instance(gateway_name=gateway_name).delete_client_lun(
+                            target_iqn, client_iqn, image_id)
             TaskManager.current_task().inc_progress(task_progress_inc)
         for image_id in target_config['disks']:
             if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
@@ -386,7 +397,8 @@ class IscsiTarget(RESTController):
                 for client_iqn in not_deleted_clients:
                     client_image_ids = target_config['clients'][client_iqn]['luns'].keys()
                     for client_image_id in client_image_ids:
-                        if image_id == client_image_id:
+                        if image_id == client_image_id and \
+                                (client_iqn, client_image_id) not in deleted_client_luns:
                             IscsiClient.instance(gateway_name=gateway_name).delete_client_lun(
                                 target_iqn, client_iqn, client_image_id)
                 IscsiClient.instance(gateway_name=gateway_name).delete_target_lun(target_iqn,
@@ -429,7 +441,7 @@ class IscsiTarget(RESTController):
         for client_iqn in new_group['members']:
             if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
                                                      new_clients, client_iqn,
-                                                     new_groups, []):
+                                                     []):
                 return True
         # Check if any disk inside this group has changed
         for disk in new_group['disks']:
@@ -449,24 +461,31 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _client_deletion_required(target, new_target_iqn, new_target_controls,
-                                  new_clients, client_iqn, new_groups, deleted_groups):
+                                  new_clients, client_iqn, deleted_groups):
         if IscsiTarget._target_deletion_required(target, new_target_iqn, new_target_controls):
             return True
-        new_client = deepcopy(IscsiTarget._get_client(new_clients, client_iqn))
+        new_client = IscsiTarget._get_client(new_clients, client_iqn)
         if not new_client:
-            return True
-        # Disks inherited from groups must be considered
-        for group in new_groups:
-            if client_iqn in group['members']:
-                new_client['luns'] += group['disks']
-        old_client = IscsiTarget._get_client(target['clients'], client_iqn)
-        if new_client != old_client:
             return True
         # Check if client belongs to a groups that has been deleted
         for group in target['groups']:
             if group['group_id'] in deleted_groups and client_iqn in group['members']:
                 return True
         return False
+
+    @staticmethod
+    def _client_lun_deletion_required(target, client_iqn, image_id, new_clients):
+        new_client = IscsiTarget._get_client(new_clients, client_iqn)
+        if not new_client:
+            return True
+        new_lun = IscsiTarget._get_disk(new_client.get('luns', []), image_id)
+        if not new_lun:
+            return True
+        old_client = IscsiTarget._get_client(target['clients'], client_iqn)
+        if not old_client:
+            return False
+        old_lun = IscsiTarget._get_disk(old_client.get('luns', []), image_id)
+        return new_lun != old_lun
 
     @staticmethod
     def _get_disk(disks, image_id):
@@ -626,6 +645,33 @@ class IscsiTarget(RESTController):
                                      component='iscsi')
 
     @staticmethod
+    def _validate_delete(gateway, target_iqn, config, new_target_iqn=None, new_target_controls=None,
+                         new_disks=None, new_clients=None, new_groups=None):
+        new_target_controls = new_target_controls or {}
+        new_disks = new_disks or []
+        new_clients = new_clients or []
+        new_groups = new_groups or []
+
+        target_config = config['targets'][target_iqn]
+        target = IscsiTarget._config_to_target(target_iqn, config)
+        deleted_groups = []
+        for group_id in list(target_config['groups'].keys()):
+            if IscsiTarget._group_deletion_required(target, new_target_iqn, new_target_controls,
+                                                    new_groups, group_id, new_clients,
+                                                    new_disks):
+                deleted_groups.append(group_id)
+        for client_iqn in list(target_config['clients'].keys()):
+            if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
+                                                     new_clients, client_iqn, deleted_groups):
+                client_info = IscsiClient.instance(gateway_name=gateway).get_clientinfo(target_iqn,
+                                                                                        client_iqn)
+                if client_info.get('state', {}).get('LOGGED_IN', []):
+                    raise DashboardException(msg="Client '{}' cannot be deleted until it's logged "
+                                             "out".format(client_iqn),
+                                             code='client_logged_in',
+                                             component='iscsi')
+
+    @staticmethod
     def _update_targetauth(config, target_iqn, auth, gateway_name):
         # Target level authentication was introduced in ceph-iscsi config v11
         if config['version'] > 10:
@@ -647,11 +693,11 @@ class IscsiTarget(RESTController):
                                                                              targetauth_action)
 
     @staticmethod
-    def _is_auth_equal(target_auth, auth):
-        return auth['user'] == target_auth['username'] and \
-               auth['password'] == target_auth['password'] and \
-               auth['mutual_user'] == target_auth['mutual_username'] and \
-               auth['mutual_password'] == target_auth['mutual_password']
+    def _is_auth_equal(auth_config, auth):
+        return auth['user'] == auth_config['username'] and \
+            auth['password'] == auth_config['password'] and \
+            auth['mutual_user'] == auth_config['mutual_username'] and \
+            auth['mutual_password'] == auth_config['mutual_password']
 
     @staticmethod
     def _create(target_iqn, target_controls, acl_enabled,
@@ -729,6 +775,9 @@ class IscsiTarget(RESTController):
                 if not target_config or client_iqn not in target_config['clients']:
                     IscsiClient.instance(gateway_name=gateway_name).create_client(target_iqn,
                                                                                   client_iqn)
+                if not target_config or client_iqn not in target_config['clients'] or \
+                        not IscsiTarget._is_auth_equal(target_config['clients'][client_iqn]['auth'],
+                                                       client['auth']):
                     user = client['auth']['user']
                     password = client['auth']['password']
                     m_user = client['auth']['mutual_user']
