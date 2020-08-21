@@ -379,6 +379,14 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         r = _setattrs(cid, oid, to_set);
       }
       break;
+      case Transaction::OP_RMATTR:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        std::string name = i.decode_string();
+        r = _rm_attr(cid, oid, name);	
+      }
+      break;
       case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -664,6 +672,26 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   for (std::map<std::string, bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p)
     o->xattr[p->first] = p->second;
+  return 0;
+}
+
+int CyanStore::_rm_attr(const coll_t& cid, const ghobject_t& oid,
+			std::string_view name)
+{
+  logger().debug("{} cid={} oid={} name={}", __func__, cid, oid, name);
+  auto c = _get_collection(cid);
+  if (!c) {
+    return -ENOENT;
+  }
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    return -ENOENT;
+  }
+  auto i = o->xattr.find(name);
+  if (i == o->xattr.end()) {
+    return -ENODATA;
+  }
+  o->xattr.erase(i);
   return 0;
 }
 
