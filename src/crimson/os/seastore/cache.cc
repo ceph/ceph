@@ -198,9 +198,12 @@ void Cache::complete_commit(
   paddr_t final_block_start)
 {
   if (t.root) {
+    remove_extent(root);
     root = t.root;
-    root->on_delta_write(final_block_start);
     root->state = CachedExtent::extent_state_t::DIRTY;
+    root->on_delta_write(final_block_start);
+    root->dirty_from = seq;
+    add_extent(root);
     logger().debug("complete_commit: new root {}", *t.root);
   }
 
@@ -242,8 +245,14 @@ void Cache::complete_commit(
 }
 
 void Cache::init() {
+  if (root) {
+    // initial creation will do mkfs followed by mount each of which calls init
+    remove_extent(root);
+    root = nullptr;
+  }
   root = new RootBlock();
   root->state = CachedExtent::extent_state_t::DIRTY;
+  add_extent(root);
 }
 
 Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
