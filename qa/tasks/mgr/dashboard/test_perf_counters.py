@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj
+from .helper import DashboardTestCase, JObj
 
 
 class PerfCountersControllerTest(DashboardTestCase):

@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 import json
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JList, JObj
-from tasks.mgr.dashboard.test_orchestrator import test_data
+from .helper import DashboardTestCase, JList, JObj
+from .test_orchestrator import test_data
 
 
 class HostControllerTest(DashboardTestCase):
@@ -89,6 +89,25 @@ class HostControllerTest(DashboardTestCase):
                 'path': str
             }))
         })))
+
+    def test_host_daemons(self):
+        hosts = self._get('{}'.format(self.URL_HOST))
+        hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
+        assert hosts[0]
+        data = self._get('{}/daemons'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
+        self.assertStatus(200)
+        self.assertSchema(data, JList(JObj({
+            'hostname': str,
+            'daemon_id': str,
+            'daemon_type': str
+        })))
+
+    def test_host_smart(self):
+        hosts = self._get('{}'.format(self.URL_HOST))
+        hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
+        assert hosts[0]
+        self._get('{}/smart'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
+        self.assertStatus(200)
 
 
 class HostControllerNoOrchestratorTest(DashboardTestCase):

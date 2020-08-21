@@ -5,7 +5,7 @@ from __future__ import absolute_import
 
 import time
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JLeaf, JList
+from .helper import DashboardTestCase, JObj, JLeaf, JList
 
 
 class RbdTest(DashboardTestCase):
