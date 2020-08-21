@@ -49,29 +49,48 @@ class NFSService(CephadmService):
 
         deps: List[str] = []
 
-        nfs = NFSGanesha(self.mgr, daemon_id, spec)
-
         # create the keyring
-        entity = nfs.get_keyring_entity()
-        keyring = nfs.get_or_create_keyring(entity=entity)
+        user = f'{daemon_type}.{daemon_id}'
+        entity = utils.name_to_config_section(user)
+        keyring = self.get_or_create_keyring(entity)
 
         # update the caps after get-or-create, the keyring might already exist!
-        nfs.update_keyring_caps(entity=entity)
+        self.update_keyring_caps(entity, spec)
 
         # create the rados config object
-        nfs.create_rados_config_obj()
+        self.create_rados_config_obj(spec)
 
-        # generate the cephadm config
-        cephadm_config = nfs.get_cephadm_config()
-        cephadm_config.update(
-            self.mgr._get_config_and_keyring(
-                daemon_type, daemon_id,
-                keyring=keyring,
-                host=host
+        # generate the ganesha config
+        def get_ganesha_conf() -> str:
+            context = dict(user=user,
+                           nodeid=daemon_spec.name(),
+                           pool=spec.pool,
+                           namespace=spec.namespace if spec.namespace else '',
+                           url=spec.rados_config_location())
+            return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
+
+        # generate the cephadm config json
+        def get_cephadm_config() -> Dict[str, Any]:
+            config: Dict[str, Any] = {}
+            config['pool'] = spec.pool
+            if spec.namespace:
+                config['namespace'] = spec.namespace
+            config['userid'] = user
+            config['extra_args'] = ['-N', 'NIV_EVENT']
+            config['files'] = {
+                'ganesha.conf': get_ganesha_conf(),
+            }
+            config.update(
+                self.mgr._get_config_and_keyring(
+                    daemon_type, daemon_id,
+                    keyring=keyring,
+                    host=host
+                )
             )
-        )
+            logger.debug('Generated cephadm config-json: %s' % config)
+            return config
 
-        return cephadm_config, deps
+        return get_cephadm_config(), deps
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
 
@@ -99,32 +118,7 @@ class NFSService(CephadmService):
             get_set_cmd_dicts=get_set_cmd_dicts
         )
 
-
-class NFSGanesha(object):
-    def __init__(self,
-                 mgr: "CephadmOrchestrator",
-                 daemon_id: str,
-                 spec: NFSServiceSpec) -> None:
-        assert spec.service_id and daemon_id.startswith(spec.service_id)
-        mgr._check_pool_exists(spec.pool, spec.service_name())
-
-        self.mgr = mgr
-        self.daemon_id = daemon_id
-        self.spec = spec
-
-    def get_daemon_name(self) -> str:
-        return '%s.%s' % (self.spec.service_type, self.daemon_id)
-
-    def get_rados_user(self) -> str:
-        return '%s.%s' % (self.spec.service_type, self.daemon_id)
-
-    def get_keyring_entity(self) -> str:
-        return utils.name_to_config_section(self.get_rados_user())
-
-    def get_or_create_keyring(self, entity: Optional[str] = None) -> str:
-        if not entity:
-            entity = self.get_keyring_entity()
-
+    def get_or_create_keyring(self, entity: str) -> str:
         logger.info('Create keyring: %s' % entity)
         ret, keyring, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
@@ -137,13 +131,10 @@ class NFSGanesha(object):
                 % (entity, ret, err))
         return keyring
 
-    def update_keyring_caps(self, entity: Optional[str] = None) -> None:
-        if not entity:
-            entity = self.get_keyring_entity()
-
-        osd_caps = 'allow rw pool=%s' % (self.spec.pool)
-        if self.spec.namespace:
-            osd_caps = '%s namespace=%s' % (osd_caps, self.spec.namespace)
+    def update_keyring_caps(self, entity: str, spec: NFSServiceSpec) -> None:
+        osd_caps = 'allow rw pool=%s' % (spec.pool)
+        if spec.namespace:
+            osd_caps = '%s namespace=%s' % (osd_caps, spec.namespace)
 
         logger.info('Updating keyring caps: %s' % entity)
         ret, out, err = self.mgr.mon_command({
@@ -158,12 +149,14 @@ class NFSGanesha(object):
                 'Unable to update keyring caps %s: %s %s'
                 % (entity, ret, err))
 
-    def create_rados_config_obj(self, clobber: Optional[bool] = False) -> None:
-        with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
-            if self.spec.namespace:
-                ioctx.set_namespace(self.spec.namespace)
+    def create_rados_config_obj(self,
+                                spec: NFSServiceSpec,
+                                clobber: bool = False) -> None:
+        with self.mgr.rados.open_ioctx(spec.pool) as ioctx:
+            if spec.namespace:
+                ioctx.set_namespace(spec.namespace)
 
-            obj = self.spec.rados_config_name()
+            obj = spec.rados_config_name()
             exists = True
             try:
                 ioctx.stat(obj)
@@ -177,23 +170,3 @@ class NFSGanesha(object):
                 # Create an empty config object
                 logger.info('Creating rados config object: %s' % obj)
                 ioctx.write_full(obj, ''.encode('utf-8'))
-
-    def get_ganesha_conf(self) -> str:
-        context = dict(user=self.get_rados_user(),
-                       nodeid=self.get_daemon_name(),
-                       pool=self.spec.pool,
-                       namespace=self.spec.namespace if self.spec.namespace else '',
-                       url=self.spec.rados_config_location())
-        return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
-
-    def get_cephadm_config(self) -> Dict[str, Any]:
-        config: Dict[str, Any] = {'pool': self.spec.pool}
-        if self.spec.namespace:
-            config['namespace'] = self.spec.namespace
-        config['userid'] = self.get_rados_user()
-        config['extra_args'] = ['-N', 'NIV_EVENT']
-        config['files'] = {
-            'ganesha.conf': self.get_ganesha_conf(),
-        }
-        logger.debug('Generated cephadm config-json: %s' % config)
-        return config
