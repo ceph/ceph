@@ -225,6 +225,31 @@ class TestCephadm(object):
 
                     assert 'myerror' in ''.join(evs)
 
+    @pytest.mark.parametrize(
+        "action",
+        [
+            'start',
+            'stop',
+            'restart',
+            'reconfig',
+            'redeploy'
+        ]
+    )
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_daemon_check(self, cephadm_module: CephadmOrchestrator, action):
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._schedule_daemon_action(daemon_name, action)
+
+                assert cephadm_module.cache.get_scheduled_daemon_action(
+                    'test', daemon_name) == action
+
+                cephadm_module._check_daemons()
+
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
+
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
