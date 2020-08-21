@@ -4965,7 +4965,7 @@ std::vector<Option> get_global_options() {
     .set_description("log collection list operation if it's slower than this age (seconds)"),
 
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("rocksdb_original")
+    .set_default("use_some_extra")
     .set_enum_allowed({ "rocksdb_original", "use_some_extra" })
     .set_description("Determines bluefs volume selection policy")
     .set_long_description("Determines bluefs volume selection policy. 'use_some_extra' policy allows to override RocksDB level granularity and put high level's data to faster device even when the level doesn't completely fit there"),
