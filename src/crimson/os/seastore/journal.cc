@@ -226,6 +226,8 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	      return lt.second.journal_segment_seq <
 		rt.second.journal_segment_seq;
 	    });
+	  current_journal_segment_seq =
+	    segments.rbegin()->second.journal_segment_seq + 1;
 
 	  auto journal_tail = segments.rbegin()->second.journal_tail;
 	  segment_provider->update_journal_tail_committed(journal_tail);
