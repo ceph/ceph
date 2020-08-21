@@ -32,16 +32,27 @@ class Transaction {
   pextent_set_t retired_set; ///< list of extents mutated by this transaction
 
 public:
-  CachedExtentRef get_extent(paddr_t addr) {
-    if (auto iter = write_set.find_offset(addr);
+  enum class get_extent_ret {
+    PRESENT,
+    ABSENT,
+    RETIRED
+  };
+  get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
+    if (retired_set.count(addr)) {
+      return get_extent_ret::RETIRED;
+    } else if (auto iter = write_set.find_offset(addr);
 	iter != write_set.end()) {
-      return CachedExtentRef(&*iter);
+      if (out)
+	*out = CachedExtentRef(&*iter);
+      return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
-      return *iter;
+      if (out)
+	*out = CachedExtentRef(*iter);
+      return get_extent_ret::PRESENT;
     } else {
-      return CachedExtentRef();
+      return get_extent_ret::ABSENT;
     }
   }
 
