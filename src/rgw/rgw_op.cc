@@ -3201,7 +3201,7 @@ void RGWCreateBucket::execute()
 				info.swift_ver_location,
 				pquota_info, attrs, info, ep_objv,
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
-				&s->bucket);
+				&s->bucket, &policy);
 
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */

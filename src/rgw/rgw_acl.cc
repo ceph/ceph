@@ -201,3 +201,32 @@ bool RGWAccessControlPolicy::is_public() const
                          );
 
 }
+
+bool operator==(const RGWAccessControlPolicy& lhs,
+                                        const RGWAccessControlPolicy& rhs) {
+  auto lhs_acl_map = lhs.get_acl().get_grant_map();
+  auto rhs_acl_map = rhs.get_acl().get_grant_map();
+
+  if (lhs_acl_map.size() != rhs_acl_map.size()) {
+    return false;
+  }
+
+  std::map<string, ACLGrant>::iterator lhs_it = lhs_acl_map.begin();
+  while (lhs_it != lhs_acl_map.end()) {
+    std::map<string, ACLGrant>::iterator rhs_it =
+        rhs_acl_map.find(lhs_it->first);
+    if (rhs_it != rhs_acl_map.end()) {
+      bufferlist bl_lhs;
+      bufferlist bl_rhs;
+      rhs_it->second.encode(bl_rhs);
+      lhs_it->second.encode(bl_lhs);
+      if (bl_rhs.to_str() != bl_lhs.to_str()) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    lhs_it++;
+  }
+  return true;
+}

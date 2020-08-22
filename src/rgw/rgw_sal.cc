@@ -745,7 +745,8 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out)
+				 std::unique_ptr<RGWBucket>* bucket_out,
+				 RGWAccessControlPolicy* policy)
 {
   int ret;
   bufferlist in_data;
@@ -777,6 +778,14 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 	return ret;
       }
     }
+
+    if (policy) {
+      if (!(old_policy == *policy)) {
+        ret = -EEXIST;
+        return ret;
+      }
+    }
+
   } else {
     bucket = std::unique_ptr<RGWBucket>(new RGWRadosBucket(this, b, &u));
     *existed = false;
