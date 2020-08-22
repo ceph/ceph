@@ -1717,8 +1717,6 @@ void MDSRank::replay_start()
   if (is_standby_replay())
     standby_replaying = true;
 
-  calc_recovery_set();
-
   // Check if we need to wait for a newer OSD map before starting
   bool const ready = objecter->with_osdmap(
     [this](const OSDMap& o) {
@@ -1893,6 +1891,8 @@ void MDSRank::resolve_start()
   dout(1) << "resolve_start" << dendl;
 
   reopen_log();
+
+  calc_recovery_set();
 
   mdcache->resolve_start(new C_MDS_VoidFn(this, &MDSRank::resolve_done));
   finish_contexts(g_ceph_context, waiting_for_resolve);
