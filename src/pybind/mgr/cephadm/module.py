@@ -482,7 +482,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         The main loop of cephadm.
 
         A command handler will typically change the declarative state
-        of cephadm. This loop will then attempt to apply this new state. 
+        of cephadm. This loop will then attempt to apply this new state.
         """
         self.log.debug("serve starting")
         while self.run:
@@ -1890,6 +1890,10 @@ you may want to run:
 
             daemon_spec.extra_args.extend(['--config-json', '-'])
 
+            # TCP port to open in the host firewall
+            if daemon_spec.ports:
+                daemon_spec.extra_args.extend(['--tcp-ports', ' '.join(map(str,daemon_spec.ports))])
+
             # osd deployments needs an --osd-uuid arg
             if daemon_spec.daemon_type == 'osd':
                 if not osd_uuid_map:
@@ -2135,6 +2139,12 @@ you may want to run:
             # These daemon types require additional configs after creation
             if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
                 daemons_post[dd.daemon_type].append(dd)
+            
+            if self.cephadm_services[dd.daemon_type].get_active_daemon(
+               self.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
+                dd.is_active = True
+            else:
+                dd.is_active = False
 
             deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
             last_deps, last_config = self.cache.get_daemon_last_config_deps(

@@ -84,6 +84,7 @@
 #include "include/lru.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "include/random.h"
 
 #include "Client.h"
 #include "Inode.h"
@@ -128,6 +129,8 @@
 
 #define DEBUG_GETATTR_CAPS (CEPH_CAP_XATTR_SHARED)
 
+using namespace TOPNSPC::common;
+
 namespace bs = boost::system;
 namespace ca = ceph::async;
 
@@ -157,9 +160,11 @@ int Client::CommandHook::call(
     std::scoped_lock l{m_client->client_lock};
     if (command == "mds_requests")
       m_client->dump_mds_requests(f);
-    else if (command == "mds_sessions")
-      m_client->dump_mds_sessions(f);
-    else if (command == "dump_cache")
+    else if (command == "mds_sessions") {
+      bool cap_dump = false;
+      cmd_getval(cmdmap, "cap_dump", cap_dump);
+      m_client->dump_mds_sessions(f, cap_dump);
+    } else if (command == "dump_cache")
       m_client->dump_cache(f);
     else if (command == "kick_stale_sessions")
       m_client->_kick_stale_sessions();
@@ -531,7 +536,8 @@ void Client::_finish_init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
-  ret = admin_socket->register_command("mds_sessions",
+  ret = admin_socket->register_command("mds_sessions "
+		                       "name=cap_dump,type=CephBool,req=false",
 				       &m_command_hook,
 				       "show mds session state");
   if (ret < 0) {
@@ -1073,7 +1079,11 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   }
 
   // replicated
-  in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
+  in->dir_replicated = !dst->dist.empty();
+  if (!dst->dist.empty())
+    in->frag_repmap[dst->frag].assign(dst->dist.begin(), dst->dist.end()) ;
+  else
+    in->frag_repmap.erase(dst->frag);
 }
 
 void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
@@ -1498,9 +1508,16 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
     ldout(cct, 20) << __func__ << " " << *in << " is_hash=" << is_hash
              << " hash=" << hash << dendl;
   
-    if (is_hash && S_ISDIR(in->mode) && !in->fragmap.empty()) {
+    if (is_hash && S_ISDIR(in->mode) && (!in->fragmap.empty() || !in->frag_repmap.empty())) {
       frag_t fg = in->dirfragtree[hash];
-      if (in->fragmap.count(fg)) {
+      if (!req->auth_is_best()) {
+        auto repmapit = in->frag_repmap.find(fg);
+        if (repmapit != in->frag_repmap.end()) {
+          auto& repmap = repmapit->second;
+          auto r = ceph::util::generate_random_number<uint64_t>(0, repmap.size()-1);
+          mds = repmap.at(r);
+        }
+      } else if (in->fragmap.count(fg)) {
 	mds = in->fragmap[fg];
 	if (phash_diri)
 	  *phash_diri = in;
@@ -1554,7 +1571,7 @@ void Client::connect_mds_targets(mds_rank_t mds)
   }
 }
 
-void Client::dump_mds_sessions(Formatter *f)
+void Client::dump_mds_sessions(Formatter *f, bool cap_dump)
 {
   f->dump_int("id", get_nodeid().v);
   entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr_legacy());
@@ -1564,7 +1581,7 @@ void Client::dump_mds_sessions(Formatter *f)
   f->open_array_section("sessions");
   for (const auto &p : mds_sessions) {
     f->open_object_section("session");
-    p.second.dump(f);
+    p.second.dump(f, cap_dump);
     f->close_section();
   }
   f->close_section();
@@ -1876,7 +1893,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 			 int unless, int force)
 {
   ldout(cct, 20) << __func__ << " enter(in:" << *in << ", req:" << req
-	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
+	   << " mds:" << mds << ", drop:" << ccap_string(drop) << ", unless:" << ccap_string(unless)
 	   << ", force:" << force << ")" << dendl;
   int released = 0;
   auto it = in->caps.find(mds);

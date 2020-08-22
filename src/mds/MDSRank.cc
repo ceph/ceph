@@ -1717,8 +1717,6 @@ void MDSRank::replay_start()
   if (is_standby_replay())
     standby_replaying = true;
 
-  calc_recovery_set();
-
   // Check if we need to wait for a newer OSD map before starting
   bool const ready = objecter->with_osdmap(
     [this](const OSDMap& o) {
@@ -1893,6 +1891,8 @@ void MDSRank::resolve_start()
   dout(1) << "resolve_start" << dendl;
 
   reopen_log();
+
+  calc_recovery_set();
 
   mdcache->resolve_start(new C_MDS_VoidFn(this, &MDSRank::resolve_done));
   finish_contexts(g_ceph_context, waiting_for_resolve);
@@ -2553,14 +2553,17 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "session ls" ||
 	     command == "client ls") {
     std::lock_guard l(mds_lock);
+    bool cap_dump = false;
     std::vector<std::string> filter_args;
+    cmd_getval(cmdmap, "cap_dump", cap_dump);
     cmd_getval(cmdmap, "filters", filter_args);
+
     SessionFilter filter;
     r = filter.parse(filter_args, &ss);
     if (r != 0) {
       goto out;
     }
-    dump_sessions(filter, f);
+    dump_sessions(filter, f, cap_dump);
   } else if (command == "session evict" ||
 	     command == "client evict") {
     std::lock_guard l(mds_lock);
@@ -2819,7 +2822,7 @@ void MDSRankDispatcher::evict_clients(
   gather.activate();
 }
 
-void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f) const
+void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f, bool cap_dump) const
 {
   // Dump sessions, decorated with recovery/replay status
   f->open_array_section("sessions");
@@ -2832,7 +2835,9 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
       continue;
     }
 
-    f->dump_object("session", *s);
+    f->open_object_section("session");
+    s->dump(f, cap_dump);
+    f->close_section();
   }
   f->close_section(); // sessions
 }
@@ -3621,7 +3626,6 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",
     "mds_session_cache_liveness_decay_rate",
-    "mds_replay_unsafe_with_closed_session",
     "mds_heartbeat_grace",
     NULL
   };

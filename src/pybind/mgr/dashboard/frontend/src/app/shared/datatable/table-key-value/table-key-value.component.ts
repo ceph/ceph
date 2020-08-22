@@ -8,7 +8,7 @@ import {
   ViewChild
 } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';

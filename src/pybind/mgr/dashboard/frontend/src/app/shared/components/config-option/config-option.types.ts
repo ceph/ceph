@@ -1,6 +1,6 @@
 import { Validators } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CdValidators } from '../../forms/cd-validators';
 import { ConfigFormModel } from './config-option.model';

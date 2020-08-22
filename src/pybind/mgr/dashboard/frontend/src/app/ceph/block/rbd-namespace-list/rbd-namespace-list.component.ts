@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
 import { forkJoin, Observable } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';

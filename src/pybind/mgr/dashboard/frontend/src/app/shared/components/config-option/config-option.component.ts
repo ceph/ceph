@@ -1,7 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { FormControl, NgForm } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { ConfigurationService } from '../../api/configuration.service';

@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { UserService } from '../../../shared/api/user.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';

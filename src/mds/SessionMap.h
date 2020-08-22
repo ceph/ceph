@@ -113,7 +113,7 @@ public:
     }
   }
 
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, bool cap_dump=false) const;
   void push_pv(version_t pv)
   {
     ceph_assert(projected.empty() || projected.back() != pv);

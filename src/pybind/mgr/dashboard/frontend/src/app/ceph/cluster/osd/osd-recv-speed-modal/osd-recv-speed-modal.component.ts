@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { OsdService } from '../../../../shared/api/osd.service';

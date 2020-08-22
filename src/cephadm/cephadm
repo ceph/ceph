@@ -221,14 +221,6 @@ class NFSGanesha(object):
         return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
 
     @staticmethod
-    def port_in_use():
-        # type () -> None
-        for (srv, port) in NFSGanesha.port_map.items():
-            if port_in_use(port):
-                msg = 'TCP port {} required for {} is already in use'.format(port, srv)
-                raise Error(msg)
-
-    @staticmethod
     def get_container_mounts(data_dir):
         # type: (str) -> Dict[str, str]
         mounts = dict()
@@ -1552,6 +1544,8 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ["--cluster.peer={}".format(peer)]
+            # some alertmanager, by default, look elsewhere for a config
+            r += ["--config.file=/etc/alertmanager/alertmanager.yml"]
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
@@ -1848,25 +1842,41 @@ def get_container(fsid, daemon_type, daemon_id,
 
 
 def extract_uid_gid(img='', file_path='/var/lib/ceph'):
-    # type: (str, str) -> Tuple[int, int]
+    # type: (str, Union[str, List[str]]) -> Tuple[int, int]
 
     if not img:
         img = args.image
 
-    out = CephContainer(
-        image=img,
-        entrypoint='stat',
-        args=['-c', '%u %g', file_path]
-    ).run()
-    (uid, gid) = out.split(' ')
-    return int(uid), int(gid)
+    if isinstance(file_path, str):
+        paths = [file_path]
+    else:
+        paths = file_path
+
+    for fp in paths:
+        try:
+            out = CephContainer(
+                image=img,
+                entrypoint='stat',
+                args=['-c', '%u %g', fp]
+            ).run()
+            uid, gid = out.split(' ')
+            return int(uid), int(gid)
+        except RuntimeError:
+            pass
+    raise RuntimeError('uid/gid not found')
 
 
 def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
                   config=None, keyring=None,
                   osd_fsid=None,
-                  reconfig=False):
-    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str], Optional[str], Optional[bool]) -> None
+                  reconfig=False,
+                  ports=None):
+    # type: (str, str, Union[int, str], CephContainer, int, int, Optional[str], Optional[str], Optional[str], Optional[bool], Optional[List[int]]) -> None
+
+    ports = ports or []
+    if any([port_in_use(port) for port in ports]):
+        raise Error("TCP Port(s) '{}' required for {} already in use".format(",".join(map(str, ports)), daemon_type))
+
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
     if reconfig and not os.path.exists(data_dir):
         raise Error('cannot reconfig, data path %s does not exist' % data_dir)
@@ -1928,6 +1938,12 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         os.fchown(f.fileno(), uid, gid)
 
     update_firewalld(daemon_type)
+
+    # Open ports explicitly required for the daemon
+    if ports:
+        fw = Firewalld()
+        fw.open_ports(ports)
+        fw.apply_rules()
 
     if reconfig and daemon_type not in Ceph.daemons:
         # ceph daemons do not need a restart; others (presumably) do to pick
@@ -2149,11 +2165,7 @@ def update_firewalld(daemon_type):
 
     fw_ports = []
 
-    if daemon_type == 'mgr':
-        fw_ports.append(8080)  # dashboard
-        fw_ports.append(8443)  # dashboard
-        fw_ports.append(9283)  # mgr/prometheus exporter
-    elif daemon_type in Monitoring.port_map.keys():
+    if daemon_type in Monitoring.port_map.keys():
         fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
 
     firewall.open_ports(fw_ports)
@@ -2787,8 +2799,9 @@ def command_bootstrap():
     logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(fsid, 'mgr', mgr_id)
+    # Note:the default port used by the Prometheus node exporter is opened in fw
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid,
-                  config=config, keyring=mgr_keyring)
+                  config=config, keyring=mgr_keyring, ports=[9283])
 
     # output files
     with open(args.output_keyring, 'w') as f:
@@ -2924,6 +2937,11 @@ def command_bootstrap():
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password, '--force'])
 
     if not args.skip_dashboard:
+        # Configure SSL port (cephadm only allows to configure dashboard SSL port)
+        # if the user does not want to use SSL he can change this setting once the cluster is up
+        cli(["config", "set",  "mgr", "mgr/dashboard/ssl_server_port" , str(args.ssl_dashboard_port)])
+
+        # configuring dashboard parameters
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
         wait_for_mgr_restart()
@@ -2950,6 +2968,11 @@ def command_bootstrap():
         logger.info('Fetching dashboard port number...')
         out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
         port = int(out)
+
+        # Open dashboard port
+        fw = Firewalld()
+        fw.open_ports([port])
+        fw.apply_rules()
 
         logger.info('Ceph Dashboard is now available at:\n\n'
                     '\t     URL: https://%s:%s/\n'
@@ -3044,7 +3067,7 @@ def extract_uid_gid_monitoring(daemon_type):
     elif daemon_type == 'grafana':
         uid, gid = extract_uid_gid(file_path='/var/lib/grafana')
     elif daemon_type == 'alertmanager':
-        uid, gid = extract_uid_gid(file_path='/etc/alertmanager')
+        uid, gid = extract_uid_gid(file_path=['/etc/alertmanager', '/etc/prometheus'])
     else:
         raise Error("{} not implemented yet".format(daemon_type))
     return uid, gid
@@ -3074,24 +3097,29 @@ def command_deploy():
     else:
         logger.info('%s daemon %s ...' % ('Deploy', args.name))
 
+    # Get and check ports explicitly required to be opened
+    daemon_ports = [] # type: List[int]
+    if args.tcp_ports:
+        daemon_ports = list(map(int, args.tcp_ports.split()))
+
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring()
         uid, gid = extract_uid_gid()
         make_var_run(args.fsid, uid, gid)
+
         c = get_container(args.fsid, daemon_type, daemon_id,
                           ptrace=args.allow_ptrace)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=args.osd_fsid,
-                      reconfig=args.reconfig)
+                      reconfig=args.reconfig,
+                      ports=daemon_ports)
 
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
         if not args.reconfig and not redeploy:
-            daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
-            if any([port_in_use(port) for port in daemon_ports]):
-                raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
+            daemon_ports.extend(Monitoring.port_map[daemon_type])
 
         # make sure provided config-json is sufficient
         config = get_parm(args.config_json) # type: ignore
@@ -3109,18 +3137,21 @@ def command_deploy():
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
-                      reconfig=args.reconfig)
+                      reconfig=args.reconfig,
+                      ports=daemon_ports)
 
     elif daemon_type == NFSGanesha.daemon_type:
         if not args.reconfig and not redeploy:
-            NFSGanesha.port_in_use()
+            daemon_ports.extend(NFSGanesha.port_map.values())
+
         config, keyring = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
         uid, gid = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
-                      reconfig=args.reconfig)
+                      reconfig=args.reconfig,
+                      ports=daemon_ports)
 
     elif daemon_type == CephIscsi.daemon_type:
         config, keyring = get_config_and_keyring()
@@ -3128,7 +3159,8 @@ def command_deploy():
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
-                      reconfig=args.reconfig)
+                      reconfig=args.reconfig,
+                      ports=daemon_ports)
     else:
         raise Error("{} not implemented in command_deploy function".format(daemon_type))
 
@@ -4903,7 +4935,11 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--initial-dashboard-password',
         help='Initial password for the initial dashboard user')
-
+    parser_bootstrap.add_argument(
+        '--ssl-dashboard-port',
+        type=int,
+        default = 8443,
+        help='Port number used to connect with dashboard using SSL')
     parser_bootstrap.add_argument(
         '--dashboard-key',
         type=argparse.FileType('r'),
@@ -5031,6 +5067,9 @@ def _get_parser():
         '--skip-firewalld',
         action='store_true',
         help='Do not configure firewalld')
+    parser_deploy.add_argument(
+        '--tcp-ports',
+        help='List of tcp ports to open in the host firewall')
     parser_deploy.add_argument(
         '--reconfig',
         action='store_true',

@@ -3,7 +3,7 @@ import { AbstractControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
 

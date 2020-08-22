@@ -58,10 +58,6 @@ class TestModuleSelftest(MgrTestCase):
             self.skipTest(f'{python_version} not compatible with diskprediction_local')
         self._selftest_plugin("diskprediction_local")
 
-    # Not included in qa/packages/packages.yaml
-    #def test_diskprediction_cloud(self):
-    #    self._selftest_plugin("diskprediction_cloud")
-
     def test_telegraf(self):
         self._selftest_plugin("telegraf")
 

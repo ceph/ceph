@@ -2313,7 +2313,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_client_directed_command_retry", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(2)
-    .set_description("Number of times to try sending a comamnd directed at a specific monitor"),
+    .set_description("Number of times to try sending a command directed at a specific monitor"),
 
     Option("mon_max_pool_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(65536)
@@ -7957,7 +7957,7 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_replay_unsafe_with_closed_session", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_flag(Option::FLAG_RUNTIME)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("complete all the replay request when mds is restarted, no matter the session is closed or not"),
 
     Option("mds_default_dir_hash", Option::TYPE_INT, Option::LEVEL_ADVANCED)

@@ -49,7 +49,7 @@ std::list<std::string> get_str_list(const std::string& str,
                                     const char *delims = ";,= \t");
 
 /**
- * Split **str** into a list of strings, using the ";,= \t" delimiters and output the result in **str_vec**.
+ * Split **str** into a vector of strings, using the ";,= \t" delimiters and output the result in **str_vec**.
  * 
  * @param [in] str String to split and save as Vector
  * @param [out] str_vec Vector modified containing str after it has been split
@@ -58,7 +58,7 @@ extern void get_str_vec(const std::string& str,
 			 std::vector<std::string>& str_vec);
 
 /**
- * Split **str** into a list of strings, using the **delims** delimiters and output the result in **str_vec**.
+ * Split **str** into a vector of strings, using the **delims** delimiters and output the result in **str_vec**.
  * 
  * @param [in] str String to split and save as Vector
  * @param [in] delims characters used to split **str**
@@ -70,37 +70,6 @@ extern void get_str_vec(const std::string& str,
 
 std::vector<std::string> get_str_vec(const std::string& str,
                                      const char *delims = ";,= \t");
-/**
- * Split **str** into a list of strings, using the ";,= \t" delimiters and output the result in **str_list**.
- * 
- * @param [in] str String to split and save as Set
- * @param [out] str_list Set modified containing str after it has been split
-**/
-extern void get_str_set(const std::string& str,
-			std::set<std::string>& str_list);
-
-/**
- * Split **str** into a list of strings, using the **delims** delimiters and output the result in **str_list**.
- * 
- * @param [in] str String to split and save as Set
- * @param [in] delims characters used to split **str**
- * @param [out] str_list Set modified containing str after it has been split
-**/
-template<class Compare = std::less<std::string> >
-void get_str_set(const std::string& str,
-                 const char *delims,
-                 std::set<std::string, Compare>& str_list)
-{
-  str_list.clear();
-  for_each_substr(str, delims, [&str_list] (auto token) {
-                  str_list.emplace(token.begin(), token.end());
-                  });
-}
-
-std::set<std::string> get_str_set(const std::string& str,
-                                  const char *delims = ";,= \t");
-
-
 
 /**
  * Return a String containing the vector **v** joined with **sep**
@@ -117,9 +86,9 @@ inline std::string str_join(const std::vector<std::string>& v, const std::string
 {
   if (v.empty())
     return std::string();
-  std::vector<std::string>::const_iterator i = v.begin();
+  auto i = v.cbegin();
   std::string r = *i;
-  for (++i; i != v.end(); ++i) {
+  for (++i; i != v.cend(); ++i) {
     r += sep;
     r += *i;
   }

@@ -11,7 +11,7 @@ import {
   ViewChildren
 } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 
 import { CephServiceService } from '../../../../shared/api/ceph-service.service';

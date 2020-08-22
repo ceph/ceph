@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
