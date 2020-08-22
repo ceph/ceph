@@ -8,6 +8,7 @@ from datetime import datetime
 
 from teuthology import setup_log_file, install_except_hook
 from teuthology import beanstalk
+from teuthology import report
 from teuthology.config import config as teuth_config
 from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
 from teuthology.lock.ops import block_and_lock_machines
@@ -158,6 +159,7 @@ def main(args):
 
 
 def lock_machines(job_config):
+    report.try_push_job_info(job_config, dict(status='running'))
     fake_ctx = supervisor.create_fake_context(job_config, block=True)
     block_and_lock_machines(fake_ctx, len(job_config['roles']),
                             job_config['machine_type'], reimage=False)
