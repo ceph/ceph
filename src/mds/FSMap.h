@@ -36,6 +36,136 @@
 
 class health_check_map_t;
 
+struct ClusterInfo {
+  ClusterInfo() = default;
+  ClusterInfo(std::string_view client_name, std::string_view cluster_name,
+              std::string_view fs_name)
+    : client_name(client_name),
+      cluster_name(cluster_name),
+      fs_name(fs_name) {
+  }
+
+  std::string client_name;
+  std::string cluster_name;
+  std::string fs_name;
+
+  bool operator==(const ClusterInfo &cluster_info) const {
+    return client_name == cluster_info.client_name &&
+           cluster_name == cluster_info.cluster_name &&
+           fs_name == cluster_info.fs_name;
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream& out) const;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &iter);
+};
+
+inline std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info) {
+  out << "{client_name=" << cluster_info.client_name << ", cluster_name="
+      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name << "}";
+  return out;
+}
+
+struct Peer {
+  Peer() = default;
+  Peer(std::string_view uuid)
+    : uuid(uuid) {
+  }
+  Peer(std::string_view uuid,
+       const ClusterInfo &remote)
+    : uuid(uuid),
+      remote(remote) {
+  }
+
+  std::string uuid;
+  ClusterInfo remote;
+
+  bool operator==(const Peer &rhs) const {
+    return uuid == rhs.uuid;
+  }
+
+  bool operator<(const Peer &rhs) const {
+    return uuid < rhs.uuid;
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream& out) const;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &iter);
+};
+
+typedef std::set<Peer> Peers;
+inline std::ostream& operator<<(std::ostream& out, const Peer &peer) {
+  out << "{uuid=" << peer.uuid << ", remote_cluster=" << peer.remote << "}";
+  return out;
+}
+
+struct MirrorInfo {
+  MirrorInfo() = default;
+
+  bool is_mirrored() const {
+    return mirrored;
+  }
+  void enable_mirroring() {
+    mirrored = true;
+  }
+  void disable_mirroring() {
+    peers.clear();
+    mirrored = false;
+  }
+
+  // uuid variant check
+  bool has_peer(std::string_view uuid) const {
+    return peers.find(Peer(uuid)) != peers.end();
+  }
+  // client_name/cluster_name/fs_name variant check
+  bool has_peer(std::string_view client_name,
+                std::string_view cluster_name,
+                std::string_view fs_name) const {
+    ClusterInfo cluster_info(client_name, cluster_name, fs_name);
+    for (auto &peer : peers) {
+      if (peer.remote == cluster_info) {
+        return true;
+      }
+    }
+    return false;
+  }
+  bool has_peers() const {
+    return !peers.empty();
+  }
+
+  void peer_add(std::string_view uuid,
+                std::string_view client_name,
+                std::string_view cluster_name,
+                std::string_view fs_name) {
+    peers.emplace(Peer(uuid, ClusterInfo(client_name, cluster_name, fs_name)));
+  }
+  void peer_remove(std::string_view uuid) {
+    peers.erase(uuid);
+  }
+
+  bool mirrored = false;
+  Peers peers;
+
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream& out) const;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &iter);
+};
+
+inline std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info) {
+  out << "{peers=" << mirror_info.peers << "}";
+  return out;
+}
+
+WRITE_CLASS_ENCODER(ClusterInfo)
+WRITE_CLASS_ENCODER(Peer)
+WRITE_CLASS_ENCODER(MirrorInfo)
+
 /**
  * The MDSMap and any additional fields describing a particular
  * filesystem (a unique fs_cluster_id_t).
@@ -79,6 +209,7 @@ public:
 
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   MDSMap mds_map;
+  MirrorInfo mirror_info;
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
