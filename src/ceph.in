@@ -87,8 +87,8 @@ def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
         if "CEPH_DEV" not in os.environ:
             print(DEVMODEMSG, file=sys.stderr)
         os.execvp(execv_cmd[0], execv_cmd)
-    sys.path.insert(0, os.path.join(MYDIR, pybind_path))
-    sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
+    sys.path.insert(0, pybind_path)
+    sys.path.insert(0, pythonlib_path)
 
 
 def get_pythonlib_dir():
