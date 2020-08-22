@@ -3161,7 +3161,7 @@ void RGWCreateBucket::execute()
   op_ret = store->create_bucket(*s->user, tmp_bucket, zonegroup_id,
 				placement_rule,
 				info.swift_ver_location,
-				pquota_info, attrs, info, ep_objv,
+				pquota_info, policy, attrs, info, ep_objv,
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
 				&s->bucket);
 
@@ -6892,7 +6892,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   op_ret = store->create_bucket(*s->user, new_bucket,
                                 store->get_zonegroup().get_id(),
                                 placement_rule, swift_ver_location,
-                                pquota_info, attrs,
+                                pquota_info, policy, attrs,
                                 out_info, ep_objv,
                                 true, false, &bucket_exists,
 				info, &bucket);
