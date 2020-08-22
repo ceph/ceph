@@ -5,6 +5,7 @@
 #include "messages/MClientCapRelease.h"
 
 #include "MetaSession.h"
+#include "Inode.h"
 
 #include "common/Formatter.h"
 
@@ -21,7 +22,7 @@ const char *MetaSession::get_state_name() const
   }
 }
 
-void MetaSession::dump(Formatter *f) const
+void MetaSession::dump(Formatter *f, bool cap_dump) const
 {
   f->dump_int("mds", mds_num);
   f->dump_object("addrs", addrs);
@@ -31,6 +32,13 @@ void MetaSession::dump(Formatter *f) const
   f->dump_stream("last_cap_renew_request") << last_cap_renew_request;
   f->dump_unsigned("cap_renew_seq", cap_renew_seq);
   f->dump_int("num_caps", caps.size());
+  if (cap_dump) {
+    f->open_array_section("caps");
+    for (const auto& cap : caps) {
+      f->dump_object("cap", *cap);
+    }
+    f->close_section();
+  }
   f->dump_string("state", get_state_name());
 }
 
