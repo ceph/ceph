@@ -17,6 +17,7 @@
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
 #include "rgw_sync_policy.h"
+#include "rgw_remote.h"
 
 #include "rgw_bucket_sync.h"
 
@@ -303,7 +304,6 @@ struct rgw_bucket_entry_owner {
 };
 
 class RGWSyncErrorLogger;
-class RGWRESTConn;
 class RGWServices;
 
 struct RGWDataSyncEnv {
@@ -352,13 +352,13 @@ struct RGWDataSyncCtx {
   CephContext *cct{nullptr};
   RGWDataSyncEnv *env{nullptr};
 
-  RGWRESTConn *conn{nullptr};
+  RGWRemoteCtl::Conns conns;
   rgw_zone_id source_zone;
 
   RGWDataSyncInfoCRHandlerPair dsi;
 
   void init(RGWDataSyncEnv *_env,
-            RGWRESTConn *_conn,
+            const RGWRemoteCtl::Conns& _conns,
             const rgw_zone_id& _source_zone);
 };
 
@@ -386,7 +386,7 @@ public:
   RGWRemoteDataLog(const DoutPrefixProvider *dpp,
                    rgw::sal::RadosStore* _store,
                    RGWAsyncRadosProcessor *async_rados);
-  int init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
+  int init(const rgw_zone_id& _source_zone, const RGWRemoteCtl::Conns& _conns, RGWSyncErrorLogger *_error_logger,
            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module,
            PerfCounters* _counters);
   void finish();
@@ -407,7 +407,7 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
   rgw::sal::RadosStore* store;
 
   rgw_zone_id source_zone;
-  RGWRESTConn *conn;
+  RGWRemoteCtl::Conns conns;
   RGWSyncErrorLogger *error_logger;
   RGWSyncModuleInstanceRef sync_module;
   PerfCounters* counters;
@@ -424,13 +424,13 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
 public:
   RGWDataSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters)
-    : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
+    : store(_store), source_zone(_source_zone), error_logger(NULL),
       sync_module(nullptr), counters(counters),
       source_log(this, store, async_rados), num_shards(0) {}
   RGWDataSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados,
                            const rgw_zone_id& _source_zone, PerfCounters* counters,
                            const RGWSyncModuleInstanceRef& _sync_module)
-    : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
+    : store(_store), source_zone(_source_zone), error_logger(NULL),
       sync_module(_sync_module), counters(counters),
       source_log(this, store, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
@@ -635,7 +635,7 @@ class RGWRemoteBucketManager {
 
   RGWDataSyncEnv *sync_env;
 
-  RGWRESTConn *conn{nullptr};
+  RGWRemoteCtl::Conns conns;
   rgw_zone_id source_zone;
 
   std::vector<rgw_bucket_sync_pair_info> sync_pairs;
@@ -662,14 +662,11 @@ class RGWRemoteBucketManager {
 public:
   RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                      RGWDataSyncEnv *_sync_env,
-                     const rgw_zone_id& _source_zone, RGWRESTConn *_conn,
+                     const rgw_zone_id& _source_zone,
+                     const RGWRemoteCtl::Conns& _conns,
                      const RGWBucketInfo& source_bucket_info,
                      const rgw_bucket& dest_bucket);
   ~RGWRemoteBucketManager();
-
-  void init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn,
-            const rgw_bucket& source_bucket, int shard_id,
-            const rgw_bucket& dest_bucket);
 
   RGWCoroutine *read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status);
   RGWCoroutine *init_sync_status_cr(int num);
@@ -702,7 +699,6 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   std::optional<rgw_zone_id> source_zone;
   std::optional<rgw_bucket> source_bucket;
 
-  RGWRESTConn *conn;
   RGWSyncErrorLogger *error_logger;
   RGWSyncModuleInstanceRef sync_module;
 

@@ -226,7 +226,7 @@ public:
 
         string p = "/admin/log/";
 
-        http_op = new RGWRESTReadResource(sc->conn, p, pairs, NULL, sync_env->http_manager);
+        http_op = new RGWRESTReadResource(sc->conns.data, p, pairs, NULL, sync_env->http_manager);
 
         init_new_io(http_op);
 
@@ -308,7 +308,7 @@ public:
 
         string p = "/admin/log/";
 
-        http_op = new RGWRESTReadResource(sc->conn, p, pairs, NULL, sync_env->http_manager);
+        http_op = new RGWRESTReadResource(sc->conns.data, p, pairs, NULL, sync_env->http_manager);
 
         init_new_io(http_op);
 
@@ -393,7 +393,7 @@ public:
       shard_id(_shard_id), marker(_marker), max_entries(_max_entries), result(_result) {}
 
   int send_request(const DoutPrefixProvider *dpp) override {
-    RGWRESTConn *conn = sc->conn;
+    RGWRESTConn *conn = sc->conns.data;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", shard_id);
@@ -601,11 +601,6 @@ public:
 
       /* fetch current position in logs */
       yield {
-        RGWRESTConn *conn = sync_env->svc->zone->get_zone_conn(sc->source_zone);
-        if (!conn) {
-          tn->log(0, SSTR("ERROR: connection to zone " << sc->source_zone << " does not exist!"));
-          return set_cr_error(-EIO);
-        }
         shards_info.resize(num_shards);
         for (uint32_t i = 0; i < num_shards; i++) {
           spawn(dsi.inc->get_pos_cr(i, &shards_info[i]), true);
@@ -673,7 +668,7 @@ int RGWRemoteDataLog::read_log_info(const DoutPrefixProvider *dpp, rgw_datalog_i
   rgw_http_param_pair pairs[] = { { "type", "data" },
                                   { NULL, NULL } };
 
-  int ret = sc.conn->get_json_resource(dpp, "/admin/log", pairs, null_yield, *log_info);
+  int ret = sc.conn.data->get_json_resource(dpp, "/admin/log", pairs, null_yield, *log_info);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch datalog info" << dendl;
     return ret;
@@ -700,14 +695,14 @@ int RGWRemoteDataLog::read_source_log_shards_next(const DoutPrefixProvider *dpp,
   return run(dpp, new RGWListRemoteDataLogCR(&sc, shard_markers, 1, result));
 }
 
-int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
+int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, const RGWRemoteCtl::Conns& _conns, RGWSyncErrorLogger *_error_logger,
                            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module,
                            PerfCounters* counters)
 {
   sync_env.init(dpp, cct, store, store->svc(), async_rados, &http_manager, _error_logger,
                 _sync_tracer, _sync_module, counters);
 
-  sc.init(&sync_env, _conn, _source_zone);
+  sc.init(&sync_env, _conns, _source_zone);
 
   if (initialized) {
     return 0;
@@ -877,7 +872,7 @@ class RGWDataFullSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
           rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
                                          {"marker", marker.c_str()},
                                          {NULL, NULL}};
-          call(new RGWReadRESTResourceCR<read_metadata_list>(sc->env->cct, sc->conn,
+          call(new RGWReadRESTResourceCR<read_metadata_list>(sc->env->cct, sc->conns.data,
                                                              sc->env->http_manager,
                                                              entrypoint, pairs, &list_result));
         }
@@ -915,7 +910,8 @@ class RGWDataFullSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
     rgw_http_param_pair pairs[] = {{"key", key.c_str()},
                                    {NULL, NULL}};
 
-    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, result);
+    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conns.data,
+                                                                sync_env->http_manager, path, pairs, result);
   }
 
 public:
@@ -1261,7 +1257,7 @@ public:
                                                                RGWDataSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
     sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
-                                                    _sc->conn,
+                                                    _sc->conns.sip,
                                                     _sc->env->http_manager,
                                                     _sip_name,
                                                     type_provider.get(),
@@ -1398,12 +1394,12 @@ public:
                 true);
         }
       } else {
-        yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data.init", "",
+        yield call(sync_env->error_logger->log_error_cr(dpp, sc->conns.data->get_remote_id(), "data.init", "",
                                                         EIO, string("failed to build bucket instances map")));
       }
       while (collect(&ret, NULL)) {
         if (ret < 0) {
-          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data.init", "",
+          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conns.data->get_remote_id(), "data.init", "",
                                                           -ret, string("failed to store sync status: ") + cpp_strerror(-ret)));
           req_ret = ret;
         }
@@ -1932,7 +1928,7 @@ public:
       if (sync_status < 0) {
         // write actual sync failures for 'radosgw-admin sync error list'
         if (sync_status != -EBUSY && sync_status != -EAGAIN) {
-          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data", complete->key,
+          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conns.data->get_remote_id(), "data", complete->key,
                                                           -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
           if (retcode < 0) {
             tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
@@ -1972,11 +1968,11 @@ public:
 };
 
 void RGWDataSyncCtx::init(RGWDataSyncEnv *_env,
-                          RGWRESTConn *_conn,
+                          const RGWRemoteCtl::Conns& _conns,
                           const rgw_zone_id& _source_zone) {
   cct = _env->cct;
   env = _env;
-  conn = _conn;
+  conns = _conns;
   source_zone = _source_zone;
 
   dsi.full.reset(new RGWDataFullSyncInfoCRHandler_SIP(this));
@@ -3253,15 +3249,16 @@ int RGWDataSyncStatusManager::init(const DoutPrefixProvider *dpp)
     sync_module = store->get_sync_module();
   }
 
-  conn = store->svc()->zone->get_zone_conn(source_zone);
-  if (!conn) {
+  auto opt_conns = store->ctl()->remote->zone_conns(source_zone);
+  if (!opt_conns) {
     ldpp_dout(this, 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
     return -EINVAL;
   }
+  conns = *opt_conns;
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  int r = source_log.init(source_zone, conn, error_logger, store->getRados()->get_sync_tracer(),
+  int r = source_log.init(source_zone, conns, error_logger, store->getRados()->get_sync_tracer(),
                           sync_module, counters);
   if (r < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to init remote log, r=" << r << dendl;
@@ -3343,7 +3340,7 @@ public:
 	                                { NULL, NULL } };
 
         string p = "/admin/log/";
-        call(new RGWReadRESTResourceCR<rgw_bilog_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, &bilog_info));
+        call(new RGWReadRESTResourceCR<rgw_bilog_marker_info>(sync_env->cct, sc->conns.data, sync_env->http_manager, p, pairs, &bilog_info));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -3451,7 +3448,7 @@ public:
                                                                RGWBucketPipeSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >();
     sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
-                                                    _sc->conn,
+                                                    _sc->conns.sip,
                                                     _sc->env->http_manager,
                                                     _sip_name,
                                                     type_provider.get(),
@@ -3861,11 +3858,10 @@ public:
 RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                RGWDataSyncEnv *_sync_env,
                                                const rgw_zone_id& _source_zone,
-                                               RGWRESTConn *_conn,
+                                               const RGWRemoteCtl::Conns& _conns,
                                                const RGWBucketInfo& source_bucket_info,
-                                               const rgw_bucket& dest_bucket) : dpp(_dpp), sync_env(_sync_env)
+                                               const rgw_bucket& dest_bucket) : dpp(_dpp), sync_env(_sync_env), conns(_conns)
 {
-  conn = _conn;
   source_zone = _source_zone;
 
   int num_shards = (source_bucket_info.layout.current_index.layout.normal.num_shards <= 0 ? 
@@ -3893,7 +3889,7 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
   auto& sc = _ctxs.sc;
   auto& bh = _ctxs.handlers;
 
-  sc.init(sync_env, conn, source_zone);
+  sc.init(sync_env, conns, source_zone);
 
   bh.resize(num_shards);
   bscs.resize(num_shards);
@@ -4172,7 +4168,7 @@ RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RadosSt
                                                                                    cr_mgr(_store->ctx(), _store->getRados()->get_cr_registry()),
                                                                                    http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                    source_zone(_source_zone), source_bucket(_source_bucket),
-                                                                                   conn(NULL), error_logger(NULL),
+                                                                                   error_logger(NULL),
                                                                                    dest_bucket(_dest_bucket),
                                                                                    num_shards(0)
 {
@@ -4307,7 +4303,7 @@ public:
 					{ "version-id-marker" , marker_key.instance.c_str() },
 	                                { NULL, NULL } };
         // don't include tenant in the url, it's already part of instance_key
-        call(new RGWReadRESTResourceCR<bucket_list_result>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, &list_result));
+        call(new RGWReadRESTResourceCR<bucket_list_result>(sync_env->cct, sc->conns.data, sync_env->http_manager, path, pairs, &list_result));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -4386,7 +4382,7 @@ public:
 					{ "type", "bucket-index" },
 	                                { NULL, NULL } };
 
-        call(new RGWReadRESTResourceCR<list<rgw_bi_log_entry> >(sync_env->cct, sc->conn, sync_env->http_manager, "/admin/log", pairs, &list_result));
+        call(new RGWReadRESTResourceCR<list<rgw_bi_log_entry> >(sync_env->cct, sc->conns.data, sync_env->http_manager, "/admin/log", pairs, &list_result));
       }
       timer.reset();
       if (retcode < 0) {
@@ -4738,7 +4734,7 @@ public:
         }
       }
       if (!error_ss.str().empty()) {
-        yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
+        yield call(sync_env->error_logger->log_error_cr(dpp, sc->conns.data->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
       }
 done:
       if (sync_status == 0) {
@@ -5981,21 +5977,23 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
   }
 
   rgw_zone_id last_zone;
+  RGWRemoteCtl::Conns conns;
 
   for (auto& pipe : pipes) {
     auto& szone = pipe.source.zone;
 
     if (last_zone != szone) {
-      conn = store->svc()->zone->get_zone_conn(szone);
-      if (!conn) {
+      auto opt_conns = store->ctl()->remote->zone_conns(szone);
+      if (!opt_conns) {
         ldpp_dout(this, 0) << "connection object to zone " << szone << " does not exist" << dendl;
         return -EINVAL;
       }
+      conns = *opt_conns;
       last_zone = szone;
     }
 
     source_mgrs.push_back(new RGWRemoteBucketManager(this, &sync_env,
-                                                     szone, conn,
+                                                     szone, conns,
                                                      pipe.source.get_bucket_info(),
                                                      pipe.target.get_bucket()));
   }
@@ -6232,7 +6230,8 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
            nullptr, nullptr, nullptr, module, nullptr);
 
   RGWDataSyncCtx sc;
-  sc.init(&env, nullptr, *pipe.source.zone);
+  RGWRemoteCtl::Conns no_conns;
+  sc.init(&env, no_conns, *pipe.source.zone);
 
   RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
   return crs.run(dpp, new RGWCollectBucketSyncStatusCR(store, &sc,
