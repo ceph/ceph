@@ -114,6 +114,11 @@ class SubvolumeBase(object):
     def subvol_type(self):
         return SubvolumeTypes.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE))
 
+    @property
+    def purgeable(self):
+        """ Boolean declaring if subvolume can be purged """
+        raise NotImplementedError
+
     def load_config(self):
         if self.legacy_mode:
             self.metadata_mgr = MetadataManager(self.fs, self.legacy_config_path, 0o640)

@@ -55,16 +55,17 @@ class SubvolumeV2(SubvolumeV1):
             self.metadata_mgr.refresh()
             if self.state == SubvolumeStates.STATE_RETAINED:
                 return True
-            else:
-                raise VolumeException(-errno.EINVAL, "invalid state for subvolume '{0}' during create".format(self.subvolname))
+            return False
         except MetadataMgrException as me:
             if me.errno != -errno.ENOENT:
                 raise VolumeException(me.errno, "internal error while processing subvolume '{0}'".format(self.subvolname))
         return False
 
     @property
-    def is_in_use(self):
-        return not self.path == b''
+    def purgeable(self):
+        if not self.retained or self.list_snapshots() or self.has_pending_purges:
+            return False
+        return True
 
     @property
     def has_pending_purges(self):
@@ -86,7 +87,6 @@ class SubvolumeV2(SubvolumeV1):
         except cephfs.Error as e:
             if e.args[0] == errno.ENOENT:
                 try:
-                    log.debug("creating trash can: {0}".format(self.trash_dir))
                     self.fs.mkdir(self.trash_dir, 0o700)
                 except cephfs.Error as ce:
                     raise VolumeException(-ce.args[0], ce.args[1])
@@ -131,7 +131,10 @@ class SubvolumeV2(SubvolumeV1):
     def _remove_on_failure(self, subvol_path, retained):
         if retained:
             log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
-            self._trash_dir(subvol_path)
+            try:
+                self.fs.rmdir(subvol_path)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
         else:
             log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
             self.remove()
@@ -290,7 +293,6 @@ class SubvolumeV2(SubvolumeV1):
                 self.uid = int(st.st_uid)
                 self.gid = int(st.st_gid)
                 self.mode = int(st.st_mode & ~stat.S_IFMT(st.st_mode))
-            self.create_trashcan()
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT:
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
@@ -303,6 +305,7 @@ class SubvolumeV2(SubvolumeV1):
 
     def trash_incarnation_dir(self):
         """rename subvolume (uuid component) to trash"""
+        self.create_trashcan()
         try:
             bname = os.path.basename(self.path)
             tpath = os.path.join(self.trash_dir, bname)
@@ -316,6 +319,10 @@ class SubvolumeV2(SubvolumeV1):
         if self.list_snapshots():
             if not retainsnaps:
                 raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(self.subvolname))
+        else:
+            if not self.has_pending_purges:
+                self.trash_base_dir()
+                return
         if self.state != SubvolumeStates.STATE_RETAINED:
             self.trash_incarnation_dir()
             self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
@@ -330,9 +337,8 @@ class SubvolumeV2(SubvolumeV1):
 
     def remove_snapshot(self, snapname):
         super(SubvolumeV2, self).remove_snapshot(snapname)
-        if self.state == SubvolumeStates.STATE_RETAINED and not self.list_snapshots():
-            # fake a trash entry for purge threads to find a job
-            bname = str(uuid.uuid4()).encode('utf-8')
-            self._link_dir(os.path.join(self.trash_dir, bname), bname)
+        if self.purgeable:
+            self.trash_base_dir()
             # tickle the volume purge job to purge this entry, using ESTALE
             raise VolumeException(-errno.ESTALE, "subvolume '{0}' has been removed as the last retained snapshot is removed".format(self.subvolname))
+        # if not purgeable, subvol is not retained, or has snapshots, or already has purge jobs that will garbage collect this subvol
