@@ -256,6 +256,9 @@
   - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
   - ``ceph <tell|daemon> osd.<NNN> dump_blacklist`` is now ``ceph <tell|daemon> osd.<NNN> dump_blocklist``
 
+* CephFS: libcephfs now supports async dir operations. When certain conditions are met,
+  dir operations can return before receiving request reply from mds.
+
 * The following config options have changed:
 
   - ``mon osd blacklist default expire`` is now ``mon osd blocklist default expire``
