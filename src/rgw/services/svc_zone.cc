@@ -357,10 +357,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
       ldpp_dout(dpp, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
       continue;
     }
-    ldpp_dout(dpp, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints, zonegroup->api_name);
-    zone_conn_map[id] = conn;
-
     bool zone_is_source = source_zones.find(z.id) != source_zones.end();
     bool zone_is_target = target_zones.find(z.id) != target_zones.end();
 
@@ -369,7 +365,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
         data_sync_source_zones.push_back(&z);
       }
       if (zone_is_target) {
-        zone_data_notify_to_map[id] = conn;
+        zone_data_notify_set.insert(id);
       }
     } else {
       ldpp_dout(dpp, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
@@ -385,11 +381,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 void RGWSI_Zone::shutdown()
 {
   delete rest_master_conn;
-
-  for (auto& item : zone_conn_map) {
-    auto conn = item.second;
-    delete conn;
-  }
 
   for (auto& item : zonegroup_conn_map) {
     auto conn = item.second;
@@ -1020,24 +1011,6 @@ bool RGWSI_Zone::find_zone(const rgw_zone_id& id, RGWZone **zone)
   return true;
 }
 
-RGWRESTConn *RGWSI_Zone::get_zone_conn(const rgw_zone_id& zone_id) {
-  auto citer = zone_conn_map.find(zone_id.id);
-  if (citer == zone_conn_map.end()) {
-    return NULL;
-  }
-
-  return citer->second;
-}
-
-RGWRESTConn *RGWSI_Zone::get_zone_conn_by_name(const string& name) {
-  auto i = zone_id_by_name.find(name);
-  if (i == zone_id_by_name.end()) {
-    return NULL;
-  }
-
-  return get_zone_conn(i->second);
-}
-
 bool RGWSI_Zone::find_zone_id_by_name(const string& name, rgw_zone_id *id) {
   auto i = zone_id_by_name.find(name);
   if (i == zone_id_by_name.end()) {
@@ -1397,27 +1370,3 @@ int RGWSI_Zone::list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>&
 
   return names.size();
 }
-
-bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
-{
-  if (zone_public_config->redirect_zone.empty()) {
-    return false;
-  }
-
-  auto iter = zone_conn_map.find(zone_public_config->redirect_zone);
-  if (iter == zone_conn_map.end()) {
-    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config->redirect_zone << dendl;
-    return false;
-  }
-
-  RGWRESTConn *conn = iter->second;
-
-  int ret = conn->get_url(*endpoint);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
-    return false;
-  }
-
-  return true;
-}
-

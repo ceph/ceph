@@ -112,7 +112,7 @@ class DataLogTrimCR : public RGWCoroutine {
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards),
       zone_id(store->svc()->zone->get_zone().id),
-      peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
+      peer_status(store->ctl()->remote->get_zone_data_notify_to_map().size()),
       min_shard_markers(num_shards,
 			std::string(store->svc()->datalog_rados->max_marker())),
       last_trim(last_trim)
@@ -136,7 +136,7 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
       };
 
       auto p = peer_status.begin();
-      for (auto& c : store->svc()->zone->get_zone_data_notify_to_map()) {
+      for (auto& c : store->ctl()->remote->get_zone_data_notify_to_map()) {
         ldpp_dout(dpp, 20) << "query sync status from " << c.first << dendl;
         using StatusCR = RGWReadRESTResourceCR<rgw_data_sync_status>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),

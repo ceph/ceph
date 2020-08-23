@@ -29,6 +29,8 @@ private:
   } ctl;
 
   std::map<rgw_zone_id, Conns> conns_map;
+  map<rgw_zone_id, RGWRESTConn *> zone_meta_notify_to_map;
+  map<rgw_zone_id, RGWRESTConn *> zone_data_notify_to_map;
 
   bool get_access_key(const string& dest_id,
                       std::optional<rgw_user> uid,
@@ -40,8 +42,17 @@ private:
 public:
   RGWRemoteCtl(RGWSI_Zone *_zone_svc,
                RGWUserCtl *_user_ctl);
+  ~RGWRemoteCtl();
 
   void init();
+
+  map<rgw_zone_id, RGWRESTConn *>& get_zone_meta_notify_to_map() {
+    return zone_meta_notify_to_map;
+  }
+
+  map<rgw_zone_id, RGWRESTConn *>& get_zone_data_notify_to_map() {
+    return zone_data_notify_to_map;
+  }
 
   std::optional<Conns> zone_conns(const rgw_zone_id& zone_id);
   std::optional<Conns> zone_conns(const string& name);
@@ -50,5 +61,7 @@ public:
                            const list<string>& endpoint,
                            const RGWAccessKey& key,
                            std::optional<string> api_name);
+
+  bool get_redirect_zone_endpoint(string *endpoint);
 };
 

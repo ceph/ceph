@@ -47,9 +47,8 @@ class RGWSI_Zone : public RGWServiceInstance
   std::map<rgw_zone_id, std::shared_ptr<RGWBucketSyncPolicyHandler> > sync_policy_handlers;
 
   RGWRESTConn *rest_master_conn{nullptr};
-  std::map<rgw_zone_id, RGWRESTConn *> zone_conn_map;
   std::vector<const RGWZone*> data_sync_source_zones;
-  std::map<rgw_zone_id, RGWRESTConn *> zone_data_notify_to_map;
+  std::set<rgw_zone_id> zone_data_notify_set;
   std::map<std::string, RGWRESTConn *> zonegroup_conn_map;
 
   std::map<std::string, rgw_zone_id> zone_id_by_name;
@@ -105,7 +104,6 @@ public:
 
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
-  bool get_redirect_zone_endpoint(std::string *endpoint);
   bool sync_module_supports_writes() const { return writeable_zone; }
   bool sync_module_exports_data() const { return exports_data; }
 
@@ -117,22 +115,16 @@ public:
     return zonegroup_conn_map;
   }
 
-  std::map<rgw_zone_id, RGWRESTConn *>& get_zone_conn_map() {
-    return zone_conn_map;
-  }
-
   std::vector<const RGWZone*>& get_data_sync_source_zones() {
     return data_sync_source_zones;
   }
 
-  std::map<rgw_zone_id, RGWRESTConn *>& get_zone_data_notify_to_map() {
-    return zone_data_notify_to_map;
+  std::set<rgw_zone_id>& get_zone_data_notify_set() {
+    return zone_data_notify_set;
   }
 
   bool find_zone(const rgw_zone_id& id, RGWZone **zone);
 
-  RGWRESTConn *get_zone_conn(const rgw_zone_id& zone_id);
-  RGWRESTConn *get_zone_conn_by_name(const std::string& name);
   bool find_zone_id_by_name(const std::string& name, rgw_zone_id *id);
 
   int select_bucket_placement(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const std::string& zonegroup_id,

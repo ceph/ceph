@@ -445,7 +445,7 @@ int RGWMetaNotifier::process(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 20) << __func__ << "(): notifying mdlog change, shard_id=" << *iter << dendl;
   }
 
-  notify_mgr.notify_all(dpp, store->svc.zone->get_zone_conn_map(), shards);
+  notify_mgr.notify_all(dpp, store->ctl.remote->get_zone_meta_notify_to_map(), shards);
 
   return 0;
 }
@@ -483,7 +483,7 @@ int RGWDataNotifier::process(const DoutPrefixProvider *dpp)
 		   << shard_id << ": " << keys << dendl;
   }
 
-  notify_mgr.notify_all(dpp, store->svc.zone->get_zone_data_notify_to_map(), shards);
+  notify_mgr.notify_all(dpp, store->ctl.remote->get_zone_data_notify_to_map(), shards);
 
   return 0;
 }
@@ -1335,7 +1335,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
   }
   ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
 
-  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
+  bool need_tombstone_cache = !ctl.remote->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
 
   if (need_tombstone_cache) {
     obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
@@ -3816,13 +3816,12 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
       conn = iter->second;
     }
   } else {
-    auto& zone_conn_map = svc.zone->get_zone_conn_map();
-    auto iter = zone_conn_map.find(source_zone);
-    if (iter == zone_conn_map.end()) {
+    auto opt_conns = ctl.remote->zone_conns(source_zone);
+    if (!opt_conns) {
       ldpp_dout(dpp, 0) << "could not find zone connection to zone: " << source_zone << dendl;
       return -ENOENT;
     }
-    conn = iter->second;
+    conn = opt_conns->data;
   }
 
   RGWGetExtraDataCB cb;
@@ -3921,7 +3920,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                                const FetchRemoteObjParams& params)
 {
   RGWRESTConn *conn;
-  auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
   if (source_zone.empty()) {
     if (!src_bucket || src_bucket->get_info().zonegroup.empty()) {
@@ -3936,12 +3934,12 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
       conn = iter->second;
     }
   } else {
-    auto iter = zone_conn_map.find(source_zone);
-    if (iter == zone_conn_map.end()) {
+    auto opt_conns = ctl.remote->zone_conns(source_zone);
+    if (!opt_conns) {
       ldpp_dout(dpp, 0) << "could not find zone connection to zone: " << source_zone << dendl;
       return -ENOENT;
     }
-    conn = iter->second;
+    conn = opt_conns->data;
   }
 
   return fetch_remote_obj(obj_ctx, conn, !source_zone.empty(),

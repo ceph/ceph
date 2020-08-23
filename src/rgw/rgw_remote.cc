@@ -17,6 +17,15 @@ RGWRemoteCtl::RGWRemoteCtl(RGWSI_Zone *_zone_svc,
   ctl.user = _user_ctl;
 }
 
+RGWRemoteCtl::~RGWRemoteCtl()
+{
+  for (auto& item : conns_map) {
+    auto& conns = item.second;
+    delete conns.data;
+    delete conns.sip;
+  }
+}
+
 bool RGWRemoteCtl::get_access_key(const string& dest_id,
                                   std::optional<rgw_user> uid,
                                   std::optional<string> access_key,
@@ -62,7 +71,7 @@ bool RGWRemoteCtl::get_access_key(const string& dest_id,
 
 void RGWRemoteCtl::init()
 {
-  auto& zone_conn_map = svc.zone->get_zone_conn_map();
+  auto& zone_data_notify_set = svc.zone->get_zone_data_notify_set();
 
   const auto& zonegroup = svc.zone->get_zonegroup();
 
@@ -79,13 +88,8 @@ void RGWRemoteCtl::init()
       continue;
     }
     auto& conns = conns_map[id];
-    auto citer = zone_conn_map.find(id);
-    if (citer == zone_conn_map.end()) {
-      ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-      conns.data = new RGWRESTConn(cct, svc.zone, z.id, z.endpoints);
-    } else {
-      conns.data = citer->second;
-    }
+    ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
+    conns.data = new RGWRESTConn(cct, svc.zone, z.id, z.endpoints);
 
     if (z.sip_config) {
       auto endpoints = z.sip_config->endpoints.value_or(z.endpoints);
@@ -105,6 +109,12 @@ void RGWRemoteCtl::init()
       conns.sip = new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, access_key);
     } else {
       conns.sip = conns.data;
+    }
+
+    zone_meta_notify_to_map[z.id] = conns.data;
+
+    if (zone_data_notify_set.find(z.id) != zone_data_notify_set.end()) {
+      zone_data_notify_to_map[z.id] = conns.data;
     }
   }
 }
@@ -137,3 +147,29 @@ RGWRESTConn *RGWRemoteCtl::create_conn(const string& remote_id,
 {
   return new RGWRESTConn(cct, svc.zone, remote_id, endpoints, key, api_name);
 }
+
+bool RGWRemoteCtl::get_redirect_zone_endpoint(string *endpoint)
+{
+  const auto& zone_public_config = svc.zone->get_zone();
+
+  if (zone_public_config.redirect_zone.empty()) {
+    return false;
+  }
+
+  auto iter = conns_map.find(zone_public_config.redirect_zone);
+  if (iter == conns_map.end()) {
+    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config.redirect_zone << dendl;
+    return false;
+  }
+
+  RGWRESTConn *conn = iter->second.data;
+
+  int ret = conn->get_url(*endpoint);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
+    return false;
+  }
+
+  return true;
+}
+

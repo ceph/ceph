@@ -499,8 +499,6 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
       peer_status.resize(zids.size());
 
-      auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
-
       auto p = peer_status.begin();
       for (auto& zid : zids) {
         // query data sync status from each sync peer
@@ -514,13 +512,13 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
           { nullptr, nullptr }
         };
 
-        auto ziter = zone_conn_map.find(zid);
-        if (ziter == zone_conn_map.end()) {
+        auto opt_conns = store->ctl()->remote->zone_conns(zid);
+        if (!opt_conns) {
           ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket << dendl;
           return set_cr_error(-ECANCELED);
         }
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
-        spawn(new StatusCR(cct, ziter->second, http, "/admin/log/", params, &*p),
+        spawn(new StatusCR(cct, opt_conns->data, http, "/admin/log/", params, &*p),
               false);
         ++p;
       }
