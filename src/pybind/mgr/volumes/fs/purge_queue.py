@@ -42,12 +42,8 @@ def subvolume_purge(volume_client, volname, trashcan, subvolume_trash_entry, sho
         with open_volume(volume_client, volname) as fs_handle:
             with open_group(fs_handle, volume_client.volspec, groupname) as group:
                 with open_subvol(fs_handle, volume_client.volspec, group, subvolname, SubvolumeOpType.REMOVE) as subvolume:
-                    log.debug("subvolume.path={0}".format(subvolume.path))
-                    log.debug("subvolume.is_in_use={0}".format(subvolume.is_in_use))
-                    log.debug("subvolume.has_pending_purges={0}".format(subvolume.has_pending_purges))
-                    log.debug("subvolume.list_snapshots={0}".format(subvolume.list_snapshots()))
-                    if subvolume.is_in_use or subvolume.has_pending_purges or subvolume.list_snapshots():
-                        log.debug("not purging subvolume -- bailing out.")
+                    log.debug("subvolume.path={0}, purgeable={1}".format(subvolume.path, subvolume.purgeable))
+                    if not subvolume.purgeable:
                         return
                     # this is fine under the global lock -- there are just a handful
                     # of entries in the subvolume to purge. moreover, the purge needs
@@ -72,10 +68,9 @@ def purge_trash_entry_for_volume(volume_client, volname, purge_entry, should_can
                     if stat.S_ISLNK(stx['mode']):
                         tgt = fs_handle.readlink(pth, 4096)
                         tgt = tgt[:stx['size']]
-                        log.debug("entry points to subvolume trash: {0}".format(tgt))
+                        log.debug("purging entry pointing to subvolume trash: {0}".format(tgt))
                         delink = True
                         try:
-                            log.debug("purging subvolume trash: {0}".format(tgt))
                             trashcan.purge(tgt, should_cancel)
                         except VolumeException as ve:
                             if not ve.errno == -errno.ENOENT:
@@ -87,8 +82,8 @@ def purge_trash_entry_for_volume(volume_client, volname, purge_entry, should_can
                                 log.debug("purging trash link: {0}".format(purge_entry))
                                 trashcan.delink(purge_entry)
                     else:
-                        log.debug("entry points to trash: {0}".format(pth))
-                        trashcan.purge(pth)
+                        log.debug("purging entry pointing to trash: {0}".format(pth))
+                        trashcan.purge(pth, should_cancel)
                 except cephfs.Error as e:
                     log.warn("failed to remove trash entry: {0}".format(e))
     except VolumeException as ve:
