@@ -1625,7 +1625,7 @@ public:
                               << " zone_short_id=" << src_zone_short_id << " pg_ver=" << src_pg_ver
                               << dendl;
 
-      source_conn = sync_env->svc->zone->get_zone_conn(sc->source_zone);
+      source_conn = sc->conn;
       if (!source_conn) {
         ldpp_dout(dpp, 0) << "ERROR: cannot find http connection to zone " << sc->source_zone << dendl;
         return set_cr_error(-EINVAL);
