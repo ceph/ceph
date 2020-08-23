@@ -61,6 +61,7 @@ extern "C" {
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
 #include "rgw_sync_info.h"
+#include "rgw_remote.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -3444,7 +3445,8 @@ public:
   }
 };
 
-RGWRESTConn *get_source_conn(RGWSI_Zone *zone_svc,
+RGWRESTConn *get_source_conn(CephContext *cct,
+                             RGWRemoteCtl *remote_ctl,
                              std::optional<rgw_zone_id> source_zone,
                              std::optional<string> endpoint,
                              std::optional<string> opt_region,
@@ -3452,12 +3454,12 @@ RGWRESTConn *get_source_conn(RGWSI_Zone *zone_svc,
                              const string& secret)
 {
   if (source_zone) {
-    auto conn = zone_svc->get_zone_conn(*source_zone);
+    auto conn = remote_ctl->zone_conns(*source_zone);
     if (!conn) {
       cerr << "ERROR: could not find zone connection for source zone (" << *source_zone << ")" << std::endl;
       return nullptr;
     }
-    return conn;
+    return conn->data;
   }
 
   if (!endpoint) {
@@ -3469,9 +3471,8 @@ RGWRESTConn *get_source_conn(RGWSI_Zone *zone_svc,
   RGWAccessKey k(access_key, secret);
 
   auto remote_id = *endpoint;
-  auto cct = zone_svc->ctx();
 
-  return new RGWRESTConn(cct, zone_svc, remote_id, endpoints, k);
+  return remote_ctl->create_conn(remote_id, endpoints, k);
 }
 
 int main(int argc, const char **argv)
@@ -7993,7 +7994,8 @@ next:
     rgw_obj source_object(source_bucket, *opt_source_object);
     rgw_obj dest_object(dest_bucket, *opt_dest_object);
 
-    auto conn  = get_source_conn(store->svc()->zone,
+    auto conn  = get_source_conn(store->ctx(),
+                                 store->ctl()->remote,
                                  opt_source_zone_id,
                                  opt_endpoint,
                                  opt_region,

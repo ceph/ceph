@@ -10,6 +10,13 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+RGWRemoteCtl::RGWRemoteCtl(RGWSI_Zone *_zone_svc,
+                           RGWUserCtl *_user_ctl) : cct(_zone_svc->ctx())
+{
+  svc.zone = _zone_svc;
+  ctl.user = _user_ctl;
+}
+
 bool RGWRemoteCtl::get_access_key(const string& dest_id,
                                   std::optional<rgw_user> uid,
                                   std::optional<string> access_key,
@@ -121,4 +128,12 @@ std::optional<RGWRemoteCtl::Conns> RGWRemoteCtl::zone_conns(const string& name)
   }
 
   return zone_conns(id);
+}
+
+RGWRESTConn *RGWRemoteCtl::create_conn(const string& remote_id,
+                                       const list<string>& endpoints,
+                                       const RGWAccessKey& key,
+                                       std::optional<string> api_name)
+{
+  return new RGWRESTConn(cct, svc.zone, remote_id, endpoints, key, api_name);
 }

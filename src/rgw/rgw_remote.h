@@ -39,14 +39,16 @@ private:
 
 public:
   RGWRemoteCtl(RGWSI_Zone *_zone_svc,
-               RGWUserCtl *_user_ctl) {
-    svc.zone = _zone_svc;
-    ctl.user = _user_ctl;
-  }
+               RGWUserCtl *_user_ctl);
 
   void init();
 
   std::optional<Conns> zone_conns(const rgw_zone_id& zone_id);
   std::optional<Conns> zone_conns(const string& name);
+
+  RGWRESTConn *create_conn(const string& remote_id,
+                           const list<string>& endpoint,
+                           const RGWAccessKey& key,
+                           std::optional<string> api_name);
 };
 
