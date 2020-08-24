@@ -3761,7 +3761,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--sip-uid", (char*)NULL)) {
       rgw_user sip_uid;
       sip_uid.from_str(val);
-      sip_conf.uid = sip_uid;
+      sip_conf.rest_conf.uid = sip_uid;
     } else if (ceph_argparse_witharg(args, i, &val, "--new-uid", (char*)NULL)) {
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -3773,14 +3773,14 @@ int main(int argc, const char **argv)
       access_key = val;
       opt_access_key = access_key;
     } else if (ceph_argparse_witharg(args, i, &val, "--sip-access-key", (char*)NULL)) {
-      sip_conf.access_key = val;
+      sip_conf.rest_conf.access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
       opt_secret = secret_key;
     } else if (ceph_argparse_witharg(args, i, &val, "--sip-secret", "--sip-secret-key", (char*)NULL)) {
-      sip_conf.secret = val;
+      sip_conf.rest_conf.secret = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
@@ -4094,7 +4094,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--sip-endpoints", (char*)NULL)) {
       list<string> sip_endpoints;
       get_str_list(val, sip_endpoints);
-      sip_conf.endpoints = sip_endpoints;
+      sip_conf.rest_conf.endpoints = sip_endpoints;
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
       get_str_list(val, sync_from);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
@@ -6256,6 +6256,12 @@ int main(int argc, const char **argv)
           }
         }
 
+        RGWDataProvider::RESTConfig data_access_conf;
+        data_access_conf.endpoints = opt_endpoints;
+        data_access_conf.uid = opt_uid;
+        data_access_conf.access_key = opt_access_key;
+        data_access_conf.secret = opt_secret;
+
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
 	if (ret < 0) {
@@ -6264,9 +6270,11 @@ int main(int argc, const char **argv)
 	}
         if (opt_cmd == OPT::FOREIGN_ZONE_CREATE ||
             opt_cmd == OPT::FOREIGN_ZONE_MODIFY) {
-          ret = zonegroup.modify_foreign_zone(opt_foreign_zone_name.value_or(string()),
+          ret = zonegroup.modify_foreign_zone(dpp(),
+                                              opt_foreign_zone_name.value_or(string()),
                                               opt_foreign_zone_id.value_or(string()),
                                               endpoints,
+                                              data_access_conf,
                                               sip_conf,
                                               opt_cmd == OPT::FOREIGN_ZONE_MODIFY);
           if (ret < 0) {
@@ -6274,7 +6282,8 @@ int main(int argc, const char **argv)
             return -ret;
           }
         } else  if (opt_cmd == OPT::FOREIGN_ZONE_DELETE) {
-          ret = zonegroup.remove_foreign_zone(opt_foreign_zone_name.value_or(string()),
+          ret = zonegroup.remove_foreign_zone(dpp(),
+                                              opt_foreign_zone_name.value_or(string()),
                                               opt_foreign_zone_id.value_or(string()));
           if (ret < 0) {
             cerr << "failed to remove foreign zone: " << cpp_strerror(-ret) << std::endl;

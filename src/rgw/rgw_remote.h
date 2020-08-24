@@ -64,6 +64,12 @@ public:
   std::optional<Conns> zone_conns(const rgw_zone_id& zone_id);
   std::optional<Conns> zone_conns(const string& name);
 
+  RGWRESTConn *create_conn(const string& zone_name,
+                           const rgw_zone_id& zone_id,
+                           const std::list<string>& def_endpoints,
+                           const RGWDataProvider::RESTConfig& conf,
+                           std::optional<string> api_name);
+
   RGWRESTConn *create_conn(const string& remote_id,
                            const list<string>& endpoint,
                            const RGWAccessKey& key,

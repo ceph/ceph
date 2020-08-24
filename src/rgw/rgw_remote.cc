@@ -67,6 +67,7 @@ bool RGWRemoteCtl::get_access_key(const string& dest_id,
   return true;
 }
 
+
 void RGWRemoteCtl::init()
 {
   auto& zone_data_notify_set = svc.zone->get_zone_data_notify_set();
@@ -88,24 +89,14 @@ void RGWRemoteCtl::init()
 
     auto& conns = conns_map[id];
     ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints));
+    if (z.data_access_conf) {
+      conns.data = add_conn(create_conn(z.name, z.id, z.endpoints, *z.data_access_conf));
+    } else {
+      conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints));
+    }
 
-    if (z.sip_config) {
-      auto endpoints = z.sip_config->endpoints.value_or(z.endpoints);
-      RGWAccessKey access_key;
-
-      if (!get_access_key(z.name,
-                          z.sip_config->uid,
-                          z.sip_config->access_key,
-                          z.sip_config->secret,
-                          &access_key,
-                          null_yield)) {
-        ldout(cct, 0) << "NOTICE: using default access key for sip connection to zone " << z.name << dendl;
-        access_key = svc.zone->get_zone_params().system_key;
-      }
-
-      ldout(cct, 20) << __func__ << "(): remote sip connection for zone=" << z.name << ": using access_key=" <<  access_key.id << dendl;
-      conns.sip = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, access_key));
+    if (z.sip_conf) {
+      conns.sip = add_conn(create_conn(z.name, z.id, z.endpoints, z.sip_conf->rest_conf));
     } else {
       conns.sip = conns.data;
     }
@@ -137,6 +128,29 @@ std::optional<RGWRemoteCtl::Conns> RGWRemoteCtl::zone_conns(const string& name)
   }
 
   return zone_conns(id);
+}
+
+RGWRESTConn *RGWRemoteCtl::create_conn(const string& zone_name,
+                                       const rgw_zone_id& zone_id,
+                                       const std::list<string>& def_endpoints,
+                                       const RGWDataProvider::RESTConfig& conf,
+                                       std::optional<string> api_name)
+{
+  auto endpoints = conf.endpoints.value_or(def_endpoints);
+  RGWAccessKey access_key;
+
+  if (!get_access_key(zone_name,
+                      conf.uid,
+                      conf.access_key,
+                      conf.secret,
+                      &access_key,
+                      null_yield)) {
+    ldout(cct, 0) << "NOTICE: using default access key for connection to zone " << zone_name << dendl;
+    access_key = svc.zone->get_zone_params().system_key;
+  }
+
+  ldout(cct, 20) << __func__ << "(): remote sip connection for zone=" << zone_name << ": using access_key=" <<  access_key.id << dendl;
+  return new RGWRESTConn(cct, svc.zone, zone_id.id, def_endpoints, access_key);
 }
 
 RGWRESTConn *RGWRemoteCtl::create_conn(const string& remote_id,

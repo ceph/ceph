@@ -569,20 +569,24 @@ struct RGWZoneParams : RGWSystemMetaObj {
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWDataProvider {
-  struct SIPConfig {
-    std::optional<std::list<std::string> > endpoints; /* optional sip endpoint */
+  struct RESTConfig {
+    std::optional<std::list<std::string> > endpoints; /* optional endpoint */
     std::optional<rgw_user> uid; /* access uid to use for connection if not default (will try to read key off backend) */
     std::optional<string> access_key; /* access key to use (should not be used with uid) */
     std::optional<string> secret; /* secret to use, if not specified will try to use secret off backend */
-    std::optional<std::string> path_prefix; /* url path prefix for sip operations */
 
-    void apply(const SIPConfig& sc);
+    bool empty() const {
+      return !(endpoints || uid || access_key || secret);
+    }
+
+    void apply(const RESTConfig& rc);
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
       encode(endpoints, bl);
       encode(uid, bl);
-      encode(path_prefix, bl);
+      encode(access_key, bl);
+      encode(secret, bl);
       ENCODE_FINISH(bl);
     }
 
@@ -590,6 +594,31 @@ struct RGWDataProvider {
       DECODE_START(1, bl);
       decode(endpoints, bl);
       decode(uid, bl);
+      decode(access_key, bl);
+      decode(secret, bl);
+      DECODE_FINISH(bl);
+    }
+
+    void dump(Formatter *f) const;
+    void decode_json(JSONObj *obj);
+  };
+
+  struct SIPConfig {
+    RESTConfig rest_conf;
+    std::optional<std::string> path_prefix; /* url path prefix for sip operations */
+
+    void apply(const SIPConfig& sc);
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      rest_conf.encode(bl);
+      encode(path_prefix, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      rest_conf.decode(bl);
       decode(path_prefix, bl);
       DECODE_FINISH(bl);
     }
@@ -605,8 +634,8 @@ struct RGWDataProvider {
   list<std::string> endpoints;
 
   /* extra */
-
-  std::optional<SIPConfig> sip_config;
+  std::optional<RESTConfig> data_access_conf;
+  std::optional<SIPConfig> sip_conf;
 
   virtual ~RGWDataProvider() {}
 
@@ -624,19 +653,22 @@ struct RGWDataProvider {
 
   void encode_dp_extra(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(sip_config, bl);
+    encode(data_access_conf, bl);
+    encode(sip_conf, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode_dp_extra(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(sip_config, bl);
+    decode(data_access_conf, bl);
+    decode(sip_conf, bl);
     DECODE_FINISH(bl);
   }
 
   void dump_dp_extra(Formatter *f) const;
   void decode_json_dp_extra(JSONObj *obj);
 };
+WRITE_CLASS_ENCODER(RGWDataProvider::RESTConfig)
 WRITE_CLASS_ENCODER(RGWDataProvider::SIPConfig)
 
 struct RGWZone : public RGWDataProvider {
@@ -1082,13 +1114,16 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
-  int modify_foreign_zone(string zone_name,
+  int modify_foreign_zone(const DoutPrefixProvider *dpp,
+                          string zone_name,
                           rgw_zone_id zone_id,
                           const list<std::string>& endpoints,
+                          const RGWDataProvider::RESTConfig& data_access_config,
                           const RGWDataProvider::SIPConfig& sip_config,
                           bool add);
 
-  int remove_foreign_zone(string zone_name,
+  int remove_foreign_zone(const DoutPrefixProvider *dpp,
+                          string zone_name,
                           rgw_zone_id zone_id);
 
   void dump(Formatter *f) const;
