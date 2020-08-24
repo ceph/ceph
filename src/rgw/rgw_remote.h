@@ -11,6 +11,13 @@ class RGWUserCtl;
 
 class RGWRemoteCtl
 {
+  std::vector<RGWRESTConn *> alloc_conns;
+
+  RGWRESTConn *add_conn(RGWRESTConn *conn) {
+    alloc_conns.push_back(conn);
+    return conn;
+  }
+
 public:
   struct Conns {
     RGWRESTConn *data{nullptr};

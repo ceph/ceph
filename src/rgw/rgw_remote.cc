@@ -19,10 +19,8 @@ RGWRemoteCtl::RGWRemoteCtl(RGWSI_Zone *_zone_svc,
 
 RGWRemoteCtl::~RGWRemoteCtl()
 {
-  for (auto& item : conns_map) {
-    auto& conns = item.second;
-    delete conns.data;
-    delete conns.sip;
+  for (auto& conn : alloc_conns) {
+    delete conn;
   }
 }
 
@@ -87,9 +85,10 @@ void RGWRemoteCtl::init()
       ldout(cct, 0) << "WARNING: can't generate connection for zone " << id << " id " << z.name << ": no endpoints defined" << dendl;
       continue;
     }
+
     auto& conns = conns_map[id];
     ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    conns.data = new RGWRESTConn(cct, svc.zone, z.id, z.endpoints);
+    conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints));
 
     if (z.sip_config) {
       auto endpoints = z.sip_config->endpoints.value_or(z.endpoints);
@@ -106,7 +105,7 @@ void RGWRemoteCtl::init()
       }
 
       ldout(cct, 20) << __func__ << "(): remote sip connection for zone=" << z.name << ": using access_key=" <<  access_key.id << dendl;
-      conns.sip = new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, access_key);
+      conns.sip = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, access_key));
     } else {
       conns.sip = conns.data;
     }
