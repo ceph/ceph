@@ -525,6 +525,12 @@ class TestVolumes(CephFSTestCase):
         size = int(self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes"))
         self.assertEqual(size, nsize)
 
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_shrink(self):
         """
         That a subvolume can be shrinked in size and its quota matches the expected size.
@@ -547,6 +553,12 @@ class TestVolumes(CephFSTestCase):
         size = int(self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes"))
         self.assertEqual(size, nsize)
 
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_resize_fail_invalid_size(self):
         """
         That a subvolume cannot be resized to an invalid size and the quota did not change
@@ -566,14 +578,19 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
         except CommandFailedError as ce:
-            if ce.exitstatus != errno.EINVAL:
-                raise
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on resize of subvolume with invalid size")
         else:
-            raise RuntimeError("expected the 'fs subvolume resize' command to fail")
+            self.fail("expected the 'fs subvolume resize' command to fail")
 
         # verify the quota did not change
         size = int(self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes"))
         self.assertEqual(size, osize)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_resize_fail_zero_size(self):
         """
@@ -594,14 +611,19 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
         except CommandFailedError as ce:
-            if ce.exitstatus != errno.EINVAL:
-                raise
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on resize of subvolume with invalid size")
         else:
-            raise RuntimeError("expected the 'fs subvolume resize' command to fail")
+            self.fail("expected the 'fs subvolume resize' command to fail")
 
         # verify the quota did not change
         size = int(self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes"))
         self.assertEqual(size, osize)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_resize_quota_lt_used_size(self):
         """
@@ -636,11 +658,17 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
         except CommandFailedError:
-            raise RuntimeError("expected the 'fs subvolume resize' command to succeed")
+            self.fail("expected the 'fs subvolume resize' command to succeed")
 
         # verify the quota
         size = int(self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes"))
         self.assertEqual(size, nsize)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
 
     def test_subvolume_resize_fail_quota_lt_used_size_no_shrink(self):
@@ -676,14 +704,19 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize), "--no_shrink")
         except CommandFailedError as ce:
-            if ce.exitstatus != errno.EINVAL:
-                raise
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on resize of subvolume with invalid size")
         else:
-            raise RuntimeError("expected the 'fs subvolume resize' command to fail")
+            self.fail("expected the 'fs subvolume resize' command to fail")
 
         # verify the quota did not change
         size = int(self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes"))
         self.assertEqual(size, osize)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_resize_expand_on_full_subvolume(self):
         """
@@ -722,11 +755,17 @@ class TestVolumes(CephFSTestCase):
             try:
                 self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
             except CommandFailedError:
-                raise RuntimeError("expected filling subvolume {0} with {1} file of size {2}MB"
+                self.fail("expected filling subvolume {0} with {1} file of size {2}MB"
                                    "to succeed".format(subvolname, number_of_files, file_size))
         else:
-            raise RuntimeError("expected filling subvolume {0} with {1} file of size {2}MB"
+            self.fail("expected filling subvolume {0} with {1} file of size {2}MB"
                                "to fail".format(subvolname, number_of_files, file_size))
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_create_idempotence(self):
         # create subvolume
@@ -787,18 +826,20 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "create", self.volname, subvolume, "--pool_layout", data_pool)
         except CommandFailedError as ce:
-            if ce.exitstatus != errno.EINVAL:
-                raise
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on create of subvolume with invalid pool layout")
         else:
-            raise RuntimeError("expected the 'fs subvolume create' command to fail")
+            self.fail("expected the 'fs subvolume create' command to fail")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_rm_force(self):
         # test removing non-existing subvolume with --force
         subvolume = self._generate_random_subvolume_name()
         try:
             self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--force")
-        except CommandFailedError as ce:
-            raise RuntimeError("expected the 'fs subvolume rm --force' command to succeed")
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm --force' command to succeed")
 
     def test_subvolume_create_with_auto_cleanup_on_fail(self):
         subvolume = self._generate_random_subvolume_name()
@@ -811,10 +852,12 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
         except CommandFailedError as ce:
-            if ce.exitstatus != errno.ENOENT:
-                raise
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on getpath of non-existent subvolume")
         else:
-            raise RuntimeError("expected the 'fs subvolume getpath' command to fail")
+            self.fail("expected the 'fs subvolume getpath' command to fail")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_create_with_invalid_size(self):
         # create subvolume with an invalid size -1
@@ -822,10 +865,12 @@ class TestVolumes(CephFSTestCase):
         try:
             self._fs_cmd("subvolume", "create", self.volname, subvolume, "--size", "-1")
         except CommandFailedError as ce:
-            if ce.exitstatus != errno.EINVAL:
-                raise
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on create of subvolume with invalid size")
         else:
-            raise RuntimeError("expected the 'fs subvolume create' command to fail")
+            self.fail("expected the 'fs subvolume create' command to fail")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_nonexistent_subvolume_rm(self):
         # remove non-existing subvolume
@@ -870,6 +915,9 @@ class TestVolumes(CephFSTestCase):
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_ls(self):
         # tests the 'fs subvolume ls' command
 
@@ -883,11 +931,18 @@ class TestVolumes(CephFSTestCase):
         # list subvolumes
         subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
         if len(subvolumels) == 0:
-            raise RuntimeError("Expected the 'fs subvolume ls' command to list the created subvolumes.")
+            self.fail("Expected the 'fs subvolume ls' command to list the created subvolumes.")
         else:
             subvolnames = [subvolume['name'] for subvolume in subvolumels]
             if collections.Counter(subvolnames) != collections.Counter(subvolumes):
-                raise RuntimeError("Error creating or listing subvolumes")
+                self.fail("Error creating or listing subvolumes")
+
+        # remove subvolume
+        for subvolume in subvolumes:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_ls_for_notexistent_default_group(self):
         # tests the 'fs subvolume ls' command when the default group '_nogroup' doesn't exist
@@ -919,6 +974,12 @@ class TestVolumes(CephFSTestCase):
         # verify that the quota is None
         size = self.mount_a.getfattr(subvolpath, "ceph.quota.max_bytes")
         self.assertEqual(size, None)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_resize_infinite_size_future_writes(self):
         """
@@ -952,8 +1013,14 @@ class TestVolumes(CephFSTestCase):
         try:
             self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
         except CommandFailedError:
-            raise RuntimeError("expected filling subvolume {0} with {1} file of size {2}MB "
+            self.fail("expected filling subvolume {0} with {1} file of size {2}MB "
                                "to succeed".format(subvolname, number_of_files, file_size))
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_info(self):
         # tests the 'fs subvolume info' command
@@ -1164,6 +1231,9 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_group_create_with_desired_mode(self):
         group1, group2 = self._generate_random_group_name(2)
         # default mode
@@ -1247,6 +1317,9 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "rm", self.volname, subvol3, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_create_with_desired_uid_gid(self):
         """
         That the subvolume can be created with the desired uid and gid and its uid and gid matches the
@@ -1271,6 +1344,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_nonexistent_subvolume_group_rm(self):
         group = "non_existent_group"
@@ -1494,11 +1570,21 @@ class TestVolumes(CephFSTestCase):
 
         subvolsnapshotls = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume))
         if len(subvolsnapshotls) == 0:
-            raise RuntimeError("Expected the 'fs subvolume snapshot ls' command to list the created subvolume snapshots")
+            self.fail("Expected the 'fs subvolume snapshot ls' command to list the created subvolume snapshots")
         else:
             snapshotnames = [snapshot['name'] for snapshot in subvolsnapshotls]
             if collections.Counter(snapshotnames) != collections.Counter(snapshots):
-                raise RuntimeError("Error creating or listing subvolume snapshots")
+                self.fail("Error creating or listing subvolume snapshots")
+
+        # remove snapshot
+        for snapshot in snapshots:
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_group_snapshot_create_and_rm(self):
         subvolume = self._generate_random_subvolume_name()
@@ -2031,6 +2117,50 @@ class TestVolumes(CephFSTestCase):
         # verify list subvolumes returns an empty list
         subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
         self.assertEqual(len(subvolumels), 0)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_retain_snapshot_invalid_recreate(self):
+        """
+        ensure retained subvolume recreate does not leave any incarnations in the subvolume and trash
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # recreate subvolume with an invalid pool
+        data_pool = "invalid_pool"
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--pool_layout", data_pool)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on recreate of subvolume with invalid poolname")
+        else:
+            self.fail("expected recreate of subvolume with invalid poolname to fail")
+
+        # fetch info
+        subvol_info = json.loads(self._fs_cmd("subvolume", "info", self.volname, subvolume))
+        self.assertEqual(subvol_info["state"], "snapshot-retained",
+                         msg="expected state to be 'snapshot-retained', found '{0}".format(subvol_info["state"]))
+
+        # getpath
+        try:
+            self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on getpath of subvolume with retained snapshots")
+        else:
+            self.fail("expected getpath of subvolume with retained snapshots to fail")
+
+        # remove snapshot (should remove volume)
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
