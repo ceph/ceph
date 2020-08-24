@@ -11,7 +11,7 @@ from datetime import datetime
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
-    DeletePermission, CreatePermission
+    DeletePermission, CreatePermission, EndpointDoc, ControllerDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -23,6 +23,18 @@ from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
 
 logger = logging.getLogger(__name__)
+
+RBD_SCHEMA = ([{
+    "status": (int, 'Status of the image'),
+    "value": ([str], ''),
+    "pool_name": (str, 'pool name')
+}])
+
+RBD_TRASH_SCHEMA = [{
+    "status": (int, ''),
+    "value": ([str], ''),
+    "pool_name": (str, 'pool name')
+}]
 
 
 # pylint: disable=not-callable
@@ -55,6 +67,7 @@ def _sort_features(features, enable=True):
 
 
 @ApiController('/block/image', Scope.RBD_IMAGE)
+@ControllerDoc("RBD Management API", "Rbd")
 class Rbd(RESTController):
 
     # set of image features that can be enable on existing images
@@ -82,6 +95,11 @@ class Rbd(RESTController):
 
     @handle_rbd_error()
     @handle_rados_error('pool')
+    @EndpointDoc("Display Rbd Images",
+                 parameters={
+                     'pool_name': (str, 'Pool Name'),
+                 },
+                 responses={200: RBD_SCHEMA})
     def list(self, pool_name=None):
         return self._rbd_list(pool_name)
 
@@ -229,6 +247,7 @@ class Rbd(RESTController):
 
 
 @ApiController('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)
+@ControllerDoc("RBD Snapshot Management API", "RbdSnapshot")
 class RbdSnapshot(RESTController):
 
     RESOURCE_ID = "snapshot_name"
@@ -317,6 +336,7 @@ class RbdSnapshot(RESTController):
 
 
 @ApiController('/block/image/trash', Scope.RBD_IMAGE)
+@ControllerDoc("RBD Trash Management API", "RbdTrash")
 class RbdTrash(RESTController):
     RESOURCE_ID = "image_id_spec"
     rbd_inst = rbd.RBD()
@@ -355,6 +375,11 @@ class RbdTrash(RESTController):
 
     @handle_rbd_error()
     @handle_rados_error('pool')
+    @EndpointDoc("Get RBD Trash Details by pool name",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                 },
+                 responses={200: RBD_TRASH_SCHEMA})
     def list(self, pool_name=None):
         """List all entries from trash."""
         return self._trash_list(pool_name)
@@ -398,6 +423,7 @@ class RbdTrash(RESTController):
 
 
 @ApiController('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
+@ControllerDoc("RBD Namespace Management API", "RbdNamespace")
 class RbdNamespace(RESTController):
     rbd_inst = rbd.RBD()
 

@@ -10,7 +10,7 @@ import cherrypy
 from mgr_util import merge_dicts
 from orchestrator import HostSpec
 from . import ApiController, RESTController, Task, Endpoint, ReadPermission, \
-    UiApiController, BaseController
+    UiApiController, BaseController, EndpointDoc, ControllerDoc
 from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
 from ..exceptions import DashboardException
@@ -18,6 +18,23 @@ from ..security import Scope
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
+
+LIST_HOST_SCHEMA = {
+    "hostname": (str, "Hostname"),
+    "services": ([{
+        "type": (str, "type of service"),
+        "id": (str, "Service Id"),
+    }], "Services related to the host"),
+    "ceph_version": (str, "Ceph version"),
+    "addr": (str, "Host address"),
+    "labels": ([str], "Labels related to the host"),
+    "service_type": (str, ""),
+    "sources": ({
+        "ceph": (bool, ""),
+        "orchestrator": (bool, "")
+    }, "Host Sources"),
+    "status": (str, "")
+}
 
 
 def host_task(name, metadata, wait_for=10.0):
@@ -105,7 +122,13 @@ def get_host(hostname: str) -> Dict:
 
 
 @ApiController('/host', Scope.HOSTS)
+@ControllerDoc("Get Host Details", "Host")
 class Host(RESTController):
+    @EndpointDoc("List Host Specifications",
+                 parameters={
+                     'sources': (str, 'Host Sources'),
+                 },
+                 responses={200: LIST_HOST_SCHEMA})
     def list(self, sources=None):
         if sources is None:
             return get_hosts()
