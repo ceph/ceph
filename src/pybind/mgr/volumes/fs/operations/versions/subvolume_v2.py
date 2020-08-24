@@ -93,6 +93,19 @@ class SubvolumeV2(SubvolumeV1):
             else:
                 raise VolumeException(-e.args[0], e.args[1])
 
+    def mark_subvolume(self):
+        # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
+        # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
+        xattr_val = 1
+        try:
+            self.fs.setxattr(self.base_path, 'ceph.dir.subvolume', str(xattr_val).encode('utf-8'), os.XATTR_CREATE)
+        except cephfs.ObjectExists:
+            return
+        except cephfs.InvalidValue as e:
+            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume: '{0}'".format(xattr_val))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
     @staticmethod
     def is_valid_uuid(uuid_str):
         try:
@@ -155,6 +168,7 @@ class SubvolumeV2(SubvolumeV1):
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             self.fs.mkdirs(subvol_path, mode)
+            self.mark_subvolume()
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -205,6 +219,7 @@ class SubvolumeV2(SubvolumeV1):
 
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
+            self.mark_subvolume()
             self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
@@ -270,6 +285,8 @@ class SubvolumeV2(SubvolumeV1):
                                   op_type.value, self.subvolname))
         try:
             self.metadata_mgr.refresh()
+            # unconditionally mark as subvolume, to handle pre-existing subvolumes without the mark
+            self.mark_subvolume()
 
             etype = self.subvol_type
             if op_type not in self.allowed_ops_by_type(etype):
