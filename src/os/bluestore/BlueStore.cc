@@ -5457,98 +5457,16 @@ int BlueStore::_is_bluefs(bool create, bool* ret)
 * opens both DB and dependant super_meta, FreelistManager and allocator
 * in the proper order
 */
-int BlueStore::_open_db_and_around(bool read_only)
+int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 {
-  int r;
-  bool do_bluefs = false;
-  _is_bluefs(false, &do_bluefs); // ignore err code
-  if (do_bluefs) {
-    // open in read-only first to read FM list and init allocator
-    // as they might be needed for some BlueFS procedures
-
-    r = _open_db(false, false, true);
-    if (r < 0)
-      return r;
-
-    r = _open_super_meta();
-    if (r < 0) {
-      goto out_db;
-    }
-
-    r = _open_fm(nullptr, true);
-    if (r < 0)
-      goto out_db;
-
-    r = _open_alloc();
-    if (r < 0)
-      goto out_fm;
-
-    // Re-open in the proper mode.
-    // Can't simply bypass second open for read-only mode as we need to
-    // load allocated extents from bluefs into allocator.
-    // And now it's time to do that
-    //
-    _close_db(true);
-
-    r = _open_db(false, false, read_only);
-    if (r < 0) {
-      _close_alloc();
-      _close_fm();
-      return r;
-    }
-  } else {
-    r = _open_db(false, false);
-    if (r < 0) {
-      return r;
-    }
-    r = _open_super_meta();
-    if (r < 0) {
-      goto out_db;
-    }
-
-    r = _open_fm(nullptr, false);
-    if (r < 0)
-      goto out_db;
-
-    r = _open_alloc();
-    if (r < 0)
-      goto out_fm;
-  }
-  return 0;
-
- out_fm:
-  _close_fm();
- out_db:
-  _close_db(read_only);
-  return r;
-}
-
-void BlueStore::_close_db_and_around(bool read_only)
-{
-  if (bluefs) {
-    _close_db(read_only);
-    if (!_kv_only) {
-      _close_alloc();
-      _close_fm();
-    }
-  } else {
-    _close_alloc();
-    _close_fm();
-    _close_db(read_only);
-  }
-}
-
-int BlueStore::open_db_environment(KeyValueDB **pdb)
-{
-  string kv_dir_fn;
-  string kv_backend;
-  _kv_only = true;
+  dout(0) << __func__ << " read-only:" << read_only
+          << " repair:" << to_repair << dendl;
   {
     string type;
     int r = read_meta("type", &type);
     if (r < 0) {
       derr << __func__ << " failed to load os-type: " << cpp_strerror(r)
-	   << dendl;
+        << dendl;
       return r;
     }
 
@@ -5557,6 +5475,7 @@ int BlueStore::open_db_environment(KeyValueDB **pdb)
       return -EIO;
     }
   }
+
   int r = _open_path();
   if (r < 0)
     return r;
@@ -5576,29 +5495,78 @@ int BlueStore::open_db_environment(KeyValueDB **pdb)
   if (r < 0)
     goto out_fsid;
 
-  r = _prepare_db_environment(false, false, &kv_dir_fn, &kv_backend);
+  // open in read-only first to read FM list and init allocator
+  // as they might be needed for some BlueFS procedures
+
+  r = _open_db(false, false, true);
   if (r < 0)
     goto out_bdev;
 
-  *pdb = db;
+  r = _open_super_meta();
+  if (r < 0) {
+    goto out_db;
+  }
+
+  r = _open_fm(nullptr, true);
+  if (r < 0)
+    goto out_db;
+
+  r = _open_alloc();
+  if (r < 0)
+    goto out_fm;
+
+  // Re-open in the proper mode(s).
+
+  // Can't simply bypass second open for read-only mode as we need to
+  // load allocated extents from bluefs into allocator.
+  // And now it's time to do that
+  //
+  _close_db(true);
+
+  r = _open_db(false, to_repair, read_only);
+  if (r < 0) {
+    goto out_fm;
+  }
   return 0;
 
+ out_fm:
+  _close_fm();
+ out_db:
+  _close_db(read_only);
  out_bdev:
   _close_bdev();
  out_fsid:
   _close_fsid();
  out_path:
   _close_path();
+  return r;
+}
 
+void BlueStore::_close_db_and_around(bool read_only)
+{
+  _close_db(read_only);
+  _close_alloc();
+  _close_fm();
+  _close_bdev();
+  _close_fsid();
+  _close_path();
+}
+
+int BlueStore::open_db_environment(KeyValueDB **pdb, bool to_repair)
+{
+  _kv_only = true;
+  int r = _open_db_and_around(false, to_repair);
+  if (r == 0) {
+    *pdb = db;
+  } else {
+    *pdb = nullptr;
+  }
   return r;
 }
 
 int BlueStore::close_db_environment()
 {
   _close_db_and_around(false);
-  _close_bdev();
-  _close_fsid();
-  _close_path();
   return 0;
 }
 
@@ -6254,34 +6222,6 @@ int BlueStore::mkfs()
   return r;
 }
 
-int BlueStore::_mount_for_bluefs()
-{
-  int r = _open_path();
-  ceph_assert(r == 0);
-  r = _open_fsid(false);
-  ceph_assert(r == 0);
-  r = _read_fsid(&fsid);
-  ceph_assert(r == 0);
-  r = _lock_fsid();
-  ceph_assert(r == 0);
-
-  r = _open_bdev(false);
-  ceph_assert(r == 0);
-
-  r = _open_db_and_around(true);
-  ceph_assert(r == 0);
-
-  return r;
-}
-
-void BlueStore::_umount_for_bluefs()
-{
-  _close_db_and_around(true);
-  _close_bdev();
-  _close_fsid();
-  _close_path();
-}
-
 int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 {
   dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
@@ -6295,7 +6235,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     return -EIO;
   }
 
-  r = _mount_for_bluefs();
+  r = _open_db_and_around(true);
 
   if (id == BlueFS::BDEV_NEWWAL) {
     string p = path + "/block.wal";
@@ -6355,7 +6295,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     dout(0) << __func__ << " success" << dendl;
   }
 
-  _umount_for_bluefs();
+  _close_db_and_around(true);
   return r;
 }
 
@@ -6372,7 +6312,7 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
     return -EIO;
   }
 
-  int r = _mount_for_bluefs();
+  int r = _open_db_and_around(true);
 
   uint64_t used_space = 0;
   for(auto src_id : devs_source) {
@@ -6410,7 +6350,7 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
   }
 
 shutdown:
-  _umount_for_bluefs();
+  _close_db_and_around(true);
   return r;
 }
 
@@ -6429,7 +6369,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     return -EIO;
   }
 
-  r = _mount_for_bluefs();
+  r = _open_db_and_around(true);
 
   string link_db;
   string link_wal;
@@ -6512,7 +6452,8 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   dout(0) << __func__ << " success" << dendl;
 
 shutdown:
-  _umount_for_bluefs();
+  _close_db_and_around(true);
+
   return r;
 }
 
@@ -6559,7 +6500,7 @@ int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  int r = cold_open();
+  int r = _open_db_and_around(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
@@ -6604,24 +6545,24 @@ int BlueStore::expand_devices(ostream& out)
           << std::endl;
       }
     }
-    cold_close();
+    _close_db_and_around(true);
 
     // mount in read/write to sync expansion changes
-    r = _mount(false);
+    r = _mount();
     ceph_assert(r == 0);
     umount();
   } else {
-    cold_close();
+    _close_db_and_around(true);
   }
   return r;
 }
 
 int BlueStore::dump_bluefs_sizes(ostream& out)
 {
-  int r = cold_open();
+  int r = _open_db_and_around(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
-  cold_close();
+  _close_db_and_around(true);
   return r;
 }
 
@@ -6645,27 +6586,11 @@ void BlueStore::set_cache_shards(unsigned num)
   }
 }
 
-int BlueStore::_mount(bool kv_only, bool open_db)
+int BlueStore::_mount()
 {
   dout(1) << __func__ << " path " << path << dendl;
 
-  _kv_only = kv_only;
-
-  {
-    string type;
-    int r = read_meta("type", &type);
-    if (r < 0) {
-      derr << __func__ << " failed to load os-type: " << cpp_strerror(r)
-	   << dendl;
-      return r;
-    }
-
-    if (type != "bluestore") {
-      derr << __func__ << " expected bluestore, but type is " << type << dendl;
-      return -EIO;
-    }
-  }
-
+  _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
     if (rc < 0)
@@ -6683,38 +6608,10 @@ int BlueStore::_mount(bool kv_only, bool open_db)
     return -EINVAL;
   }
 
-  int r = _open_path();
-  if (r < 0)
-    return r;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
-
-  r = _read_fsid(&fsid);
-  if (r < 0)
-    goto out_fsid;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
-
-  r = _open_bdev(false);
-  if (r < 0)
-    goto out_fsid;
-
-  if (open_db) {
-    r = _open_db_and_around(false);
-  } else {
-    // we can bypass db open exclusively in case of kv_only mode
-    ceph_assert(kv_only);
-    r = _open_db(false, true);
-  }
+  int r = _open_db_and_around(false);
   if (r < 0) {
-    goto out_bdev;
+    return r;
   }
-
-  if (kv_only)
-    return 0;
 
   r = _upgrade_super();
   if (r < 0) {
@@ -6765,12 +6662,6 @@ int BlueStore::_mount(bool kv_only, bool open_db)
   _shutdown_cache();
  out_db:
   _close_db_and_around(false);
- out_bdev:
-  _close_bdev();
- out_fsid:
-  _close_fsid();
- out_path:
-  _close_path();
   return r;
 }
 
@@ -6791,9 +6682,6 @@ int BlueStore::umount()
 
   }
   _close_db_and_around(false);
-  _close_bdev();
-  _close_fsid();
-  _close_path();
 
   if (cct->_conf->bluestore_fsck_on_umount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_umount_deep);
@@ -6809,43 +6697,12 @@ int BlueStore::umount()
 
 int BlueStore::cold_open()
 {
-  int r = _open_path();
-  if (r < 0)
-    return r;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
-
-  r = _read_fsid(&fsid);
-  if (r < 0)
-    goto out_fsid;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
-
-  r = _open_bdev(false);
-  if (r < 0)
-    goto out_fsid;
-  r = _open_db_and_around(true);
-  if (r < 0) {
-    goto out_bdev;
-  }
-  return 0;
- out_bdev:
-  _close_bdev();
- out_fsid:
-  _close_fsid();
- out_path:
-  _close_path();
-  return r;
+  return _open_db_and_around(true);
 }
+
 int BlueStore::cold_close()
 {
   _close_db_and_around(true);
-  _close_bdev();
-  _close_fsid();
-  _close_path();
   return 0;
 }
 
@@ -7856,28 +7713,9 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   // in deep mode we need R/W write access to be able to replay deferred ops
   bool read_only = !(repair || depth == FSCK_DEEP);
 
-  int r = _open_path();
+  int r = _open_db_and_around(read_only);
   if (r < 0)
     return r;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
-
-  r = _read_fsid(&fsid);
-  if (r < 0)
-    goto out_fsid;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
-
-  r = _open_bdev(false);
-  if (r < 0)
-    goto out_fsid;
-
-  r = _open_db_and_around(read_only);
-  if (r < 0)
-    goto out_bdev;
 
   if (!read_only) {
     r = _upgrade_super();
@@ -7909,12 +7747,6 @@ out_scan:
   _shutdown_cache();
 out_db:
   _close_db_and_around(false);
-out_bdev:
-  _close_bdev();
-out_fsid:
-  _close_fsid();
-out_path:
-  _close_path();
 
   return r;
 }
