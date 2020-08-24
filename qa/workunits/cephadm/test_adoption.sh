@@ -21,7 +21,6 @@ if [ -z "$PYTHON_KLUDGE" ]; then
     # see which pythons we should test with
     PYTHONS=""
     which python3 && PYTHONS="$PYTHONS python3"
-    which python2 && PYTHONS="$PYTHONS python2"
     echo "PYTHONS $PYTHONS"
     if [ -z "$PYTHONS" ]; then
 	echo "No PYTHONS found!"
