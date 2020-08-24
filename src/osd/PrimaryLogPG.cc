@@ -479,19 +479,6 @@ void PrimaryLogPG::on_global_recover(
   auto i = recovering.find(soid);
   ceph_assert(i != recovering.end());
 
-  if (i->second && i->second->rwstate.recovery_read_marker) {
-    // recover missing won't have had an obc, but it gets filled in
-    // during on_local_recover
-    ceph_assert(i->second);
-    list<OpRequestRef> requeue_list;
-    i->second->drop_recovery_read(&requeue_list);
-    requeue_ops(requeue_list);
-  }
-
-  backfills_in_flight.erase(soid);
-
-  recovering.erase(i);
-  finish_recovery_op(soid);
   release_backoffs(soid);
   auto degraded_object_entry = waiting_for_degraded_object.find(soid);
   if (degraded_object_entry != waiting_for_degraded_object.end()) {
@@ -506,6 +493,19 @@ void PrimaryLogPG::on_global_recover(
     waiting_for_unreadable_object.erase(unreadable_object_entry);
   }
   finish_degraded_object(soid);
+  // release obj rwlock after release degraded and unreadable_object, in some case will casuse out-of-order issue.
+  if (i->second && i->second->rwstate.recovery_read_marker) {
+    // recover missing won't have had an obc, but it gets filled in
+    // during on_local_recover
+    ceph_assert(i->second);
+    list<OpRequestRef> requeue_list;
+    i->second->drop_recovery_read(&requeue_list);
+    requeue_ops(requeue_list);
+  }
+
+  backfills_in_flight.erase(soid);
+  recovering.erase(i);
+  finish_recovery_op(soid);
 }
 
 void PrimaryLogPG::schedule_recovery_work(
