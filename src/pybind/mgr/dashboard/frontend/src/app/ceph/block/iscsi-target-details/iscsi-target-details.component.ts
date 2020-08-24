@@ -6,7 +6,7 @@ import {
   TreeModel,
   TreeNode,
   TREE_ACTIONS
-} from 'angular-tree-component';
+} from '@circlon/angular-tree-component';
 import _ from 'lodash';
 
 import { TableComponent } from '../../../shared/datatable/table/table.component';

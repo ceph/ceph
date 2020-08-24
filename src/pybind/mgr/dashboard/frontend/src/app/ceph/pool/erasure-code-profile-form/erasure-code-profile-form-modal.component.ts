@@ -19,7 +19,8 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   templateUrl: './erasure-code-profile-form-modal.component.html',
   styleUrls: ['./erasure-code-profile-form-modal.component.scss']
 })
-export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClass
+export class ErasureCodeProfileFormModalComponent
+  extends CrushNodeSelectionClass
   implements OnInit {
   @Output()
   submitAction = new EventEmitter();

@@ -1,14 +1,14 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Validators } from '@angular/forms';
 
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import {
   ITreeOptions,
   TreeComponent,
   TreeModel,
   TreeNode,
   TREE_ACTIONS
-} from 'angular-tree-component';
+} from '@circlon/angular-tree-component';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import moment from 'moment';
 
