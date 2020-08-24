@@ -1,18 +1,16 @@
 # type: ignore
 import argparse
 import mock
+from mock import patch
 import os
 import sys
 import unittest
 
 import pytest
 
-if sys.version_info >= (3, 3):
+with patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
-else:
-    import imp
-    cd = imp.load_source('cephadm', 'cephadm')
 
 class TestCephAdm(object):
     def test_is_fsid(self):
