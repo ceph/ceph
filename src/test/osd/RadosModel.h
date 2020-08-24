@@ -799,11 +799,11 @@ public:
       uint64_t prev_length = found && old_value.has_contents() ?
 	old_value.most_recent_gen()->get_length(old_value.most_recent()) :
 	0;
-      bool requires;
-      int r = context->io_ctx.pool_requires_alignment2(&requires);
+      bool requires_alignment;
+      int r = context->io_ctx.pool_requires_alignment2(&requires_alignment);
       ceph_assert(r == 0);
       uint64_t alignment = 0;
-      if (requires) {
+      if (requires_alignment) {
         r = context->io_ctx.pool_required_alignment2(&alignment);
         ceph_assert(r == 0);
         ceph_assert(alignment != 0);
