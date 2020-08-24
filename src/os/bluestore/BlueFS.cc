@@ -574,7 +574,7 @@ void BlueFS::_init_alloc()
 				    alloc_size[id], name);
       alloc[id]->init_add_free(
         block_reserved[id],
-        _get_total(id) - block_reserved[id]);
+        _get_total(id));
     }
   }
 }
