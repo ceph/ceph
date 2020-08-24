@@ -1799,8 +1799,7 @@ int CrushWrapper::populate_classes(
   set<int> roots;
   find_nonshadow_roots(&roots);
   for (auto &r : roots) {
-    if (r >= 0)
-      continue;
+    assert(r < 0);
     for (auto &c : class_name) {
       int clone;
       int res = device_class_clone(r, c.first, old_class_bucket, used_ids,
