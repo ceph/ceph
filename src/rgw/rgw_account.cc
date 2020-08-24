@@ -37,3 +37,20 @@ int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
                                           y);
                           });
 }
+
+void AccountQuota::dump(Formatter * const f) const
+{
+  f->open_object_section("AccountQuota");
+  f->dump_unsigned("max_users", max_users);
+  f->dump_unsigned("max_roles", max_roles);
+  f->close_section();
+}
+
+void RGWAccountInfo::dump(Formatter * const f) const
+{
+  f->open_object_section("RGWAccountInfo");
+  encode_json("id", id, f);
+  encode_json("tenant", tenant, f);
+  account_quota.dump(f);
+  f->close_section();
+}
