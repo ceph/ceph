@@ -104,16 +104,15 @@ public:
 
 class TestOp {
 public:
-  int num;
+  const int num;
   RadosTestContext *context;
   TestOpStat *stat;
-  bool done;
+  bool done = false;
   TestOp(int n, RadosTestContext *context,
 	 TestOpStat *stat = 0)
     : num(n),
       context(context),
-      stat(stat),
-      done(false)
+      stat(stat)
   {}
 
   virtual ~TestOp() {};
@@ -752,19 +751,19 @@ public:
 
 class WriteOp : public TestOp {
 public:
-  string oid;
+  const string oid;
   ContDesc cont;
   set<librados::AioCompletion *> waiting;
-  librados::AioCompletion *rcompletion;
-  uint64_t waiting_on;
-  uint64_t last_acked_tid;
+  librados::AioCompletion *rcompletion = nullptr;
+  uint64_t waiting_on = 0;
+  uint64_t last_acked_tid = 0;
 
   librados::ObjectReadOperation read_op;
   librados::ObjectWriteOperation write_op;
   bufferlist rbuffer;
 
-  bool do_append;
-  bool do_excl;
+  const bool do_append;
+  const bool do_excl;
 
   WriteOp(int n,
 	  RadosTestContext *context,
@@ -773,8 +772,8 @@ public:
 	  bool do_excl,
 	  TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(oid), rcompletion(NULL), waiting_on(0), 
-      last_acked_tid(0), do_append(do_append),
+      oid(oid),
+      do_append(do_append),
       do_excl(do_excl)
   {}
 		
