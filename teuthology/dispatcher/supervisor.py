@@ -65,10 +65,10 @@ def main(args):
 def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     safe_archive = safepath.munge(job_config['name'])
     if job_config.get('first_in_suite') or job_config.get('last_in_suite'):
-        suite_archive_dir = os.path.join(archive_dir, safe_archive)
+        job_archive = os.path.join(archive_dir, safe_archive)
         args = [
             os.path.join(teuth_bin_path, 'teuthology-results'),
-            '--archive-dir', suite_archive_dir,
+            '--archive-dir', job_archive,
             '--name', job_config['name'],
         ]
         if job_config.get('first_in_suite'):
