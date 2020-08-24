@@ -42,6 +42,7 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
+import { CephLogo } from './ceph-logo/ceph-logo.component';
 
 @NgModule({
   imports: [
@@ -87,7 +88,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     DateTimePickerComponent,
-    DocComponent
+    DocComponent,
+    CephLogo
   ],
   providers: [],
   exports: [
@@ -110,7 +112,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     DateTimePickerComponent,
-    DocComponent
+    DocComponent,
+    CephLogo
   ]
 })
 export class ComponentsModule {}

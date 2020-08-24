@@ -31,10 +31,11 @@
   padding-right: 80px;
 }
 
-.ceph-logo {
-  margin-bottom: 30px;
-  object-position: -20px 0;
-  width: 25%;
+::ng-deep #ceph-logo {
+  width: 100%;
+  .ceph-text {
+    fill: bd.$white;
+  }
 }
 
 .modal-footer {
