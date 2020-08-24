@@ -827,7 +827,8 @@ public:
 
     waiting_on = ranges.size();
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
-    uint64_t tid = 1;
+    // assure that tid is greater than last_acked_tid
+    uint64_t tid = last_acked_tid + 1;
     for (auto [offset, len] : ranges) {
       gen_pos.seek(offset);
       bufferlist to_write = gen_pos.gen_bl_advance(len);
@@ -838,7 +839,7 @@ public:
 		<< " to " << len + offset << " tid " << tid << std::endl;
       auto cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
-						 new TestOp::CallbackInfo(tid));
+						 new TestOp::CallbackInfo(tid++));
       librados::AioCompletion *completion =
 	context->rados.aio_create_completion((void*) cb_arg, &write_callback);
       waiting.insert(completion);
@@ -848,12 +849,11 @@ public:
       } else {
 	op.write(offset, to_write);
       }
-      if (do_excl && tid == 1)
+      if (do_excl && cb_arg->second->id == last_acked_tid + 1)
 	op.assert_exists();
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
 	&op);
-      ++tid;
     }
 
     bufferlist contbl;
@@ -861,7 +861,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     librados::AioCompletion *completion = context->rados.aio_create_completion(
       (void*) cb_arg, &write_callback);
     waiting.insert(completion);
@@ -876,7 +876,7 @@ public:
     cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     rcompletion = context->rados.aio_create_completion(
          (void*) cb_arg, &write_callback);
     waiting_on++;
@@ -1006,7 +1006,8 @@ public:
 
     waiting_on = ranges.size();
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
-    uint64_t tid = 1;
+    // assure that tid is greater than last_acked_tid
+    uint64_t tid = last_acked_tid + 1;
     for (auto [offset, len] : ranges) {
       gen_pos.seek(offset);
       bufferlist to_write = gen_pos.gen_bl_advance(len);
@@ -1017,7 +1018,7 @@ public:
 		<< " to " << offset + len << " tid " << tid << std::endl;
       auto cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
-						 new TestOp::CallbackInfo(tid));
+						 new TestOp::CallbackInfo(tid++));
       librados::AioCompletion *completion =
 	context->rados.aio_create_completion((void*) cb_arg,
 					     &write_callback);
@@ -1029,7 +1030,6 @@ public:
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
 	&op);
-      ++tid;
     }
 
     bufferlist contbl;
@@ -1037,7 +1037,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     librados::AioCompletion *completion = context->rados.aio_create_completion(
       (void*) cb_arg, &write_callback);
     waiting.insert(completion);
@@ -1050,7 +1050,7 @@ public:
     cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     rcompletion = context->rados.aio_create_completion(
          (void*) cb_arg, &write_callback);
     waiting_on++;
