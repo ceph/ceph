@@ -360,6 +360,13 @@ class HostCache():
                 r.append(dd)
         return r
 
+    def get_daemon(self, daemon_name: str) -> orchestrator.DaemonDescription:
+        for _, dm in self.daemons.items():
+            for _, dd in dm.items():
+                if dd.name() == daemon_name:
+                    return dd
+        raise orchestrator.OrchestratorError(f'Unable to find {daemon_name} daemon(s)')
+
     def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
         def alter(host, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
             dd = copy(dd_orig)
@@ -378,6 +385,15 @@ class HostCache():
         for host, dm in self.daemons.items():
             for name, d in dm.items():
                 if d.service_name() == service_name:
+                    result.append(d)
+        return result
+
+    def get_daemons_by_type(self, service_type):
+        # type: (str) -> List[orchestrator.DaemonDescription]
+        result = []   # type: List[orchestrator.DaemonDescription]
+        for host, dm in self.daemons.items():
+            for name, d in dm.items():
+                if d.daemon_type == service_type:
                     result.append(d)
         return result
 
@@ -516,9 +532,27 @@ class EventStore():
         e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', spec.service_name(), level, message)
         self.add(e)
 
+    def from_orch_error(self, e: OrchestratorError):
+        if e.event_subject is not None:
+            self.add(OrchestratorEvent(
+                datetime.datetime.utcnow(),
+                e.event_subject[0],
+                e.event_subject[1],
+                "ERROR",
+                str(e)
+            ))
+
+
     def for_daemon(self, daemon_name, level, message):
         e = OrchestratorEvent(datetime.datetime.utcnow(), 'daemon', daemon_name, level, message)
         self.add(e)
+
+    def for_daemon_from_exception(self, daemon_name, e: Exception):
+        self.for_daemon(
+            daemon_name,
+            "ERROR",
+            str(e)
+        )
 
     def cleanup(self) -> None:
         # Needs to be properly done, in case events are persistently stored.
@@ -538,8 +572,8 @@ class EventStore():
         for k_s in unknowns:
             del self.events[k_s]
 
-    def get_for_service(self, name):
+    def get_for_service(self, name) -> List[OrchestratorEvent]:
         return self.events.get('service:' + name, [])
 
-    def get_for_daemon(self, name):
+    def get_for_daemon(self, name) -> List[OrchestratorEvent]:
         return self.events.get('daemon:' + name, [])

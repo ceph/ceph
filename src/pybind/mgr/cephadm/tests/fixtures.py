@@ -3,6 +3,7 @@ import time
 import fnmatch
 from contextlib import contextmanager
 
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm.module import CEPH_DATEFMT
 
 try:
@@ -33,9 +34,6 @@ def match_glob(val, pat):
         assert pat in val
 
 
-def mon_command(*args, **kwargs):
-    return 0, '', ''
-
 @contextmanager
 def with_cephadm_module(module_options=None, store=None):
     """
@@ -43,11 +41,10 @@ def with_cephadm_module(module_options=None, store=None):
     :param store: Set the store before module.__init__ is called
     """
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
-             mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
-             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
-             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
-             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
-             mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command):
+            mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
+            mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
+            mock.patch("cephadm.services.osd.OSDService.get_osdspec_affinity", return_value='test_spec'), \
+            mock.patch("cephadm.module.CephadmOrchestrator.remote"):
 
         m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
         if module_options is not None:
@@ -56,10 +53,10 @@ def with_cephadm_module(module_options=None, store=None):
         if store is None:
             store = {}
         if '_ceph_get/mon_map' not in store:
-            store['_ceph_get/mon_map'] = {
+            m.mock_store_set('_ceph_get', 'mon_map', {
                 'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
                 'fsid': 'foobar',
-            }
+            })
         for k, v in store.items():
             m._ceph_set_store(k, v)
 
@@ -122,3 +119,28 @@ def with_host(m:CephadmOrchestrator, name):
     wait(m, m.add_host(HostSpec(hostname=name)))
     yield
     wait(m, m.remove_host(name))
+
+
+def assert_rm_service(cephadm, srv_name):
+    assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
+    cephadm._apply_all_services()
+
+
+@contextmanager
+def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str):
+    if spec.placement.is_empty():
+        spec.placement = PlacementSpec(hosts=[host], count=1)
+    c = meth(cephadm_module, spec)
+    assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
+    assert spec in specs
+
+    cephadm_module._apply_all_services()
+
+    dds = wait(cephadm_module, cephadm_module.list_daemons())
+    names = {dd.service_name() for dd in dds}
+    assert spec.service_name() in names, dds
+
+    yield
+
+    assert_rm_service(cephadm_module, spec.service_name())

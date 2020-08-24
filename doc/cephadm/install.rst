@@ -138,9 +138,9 @@ command.  There are several ways to do this:
 
     # cephadm shell
 
-* It may be helpful to create an alias::
+* To execute ``ceph`` commands, you can also run commands like so::
 
-    # alias ceph='cephadm shell -- ceph'
+    # cephadm shell -- ceph -s
 
 * You can install the ``ceph-common`` package, which contains all of the
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
@@ -400,6 +400,8 @@ Alternatively, the realm, zonegroup, and zone can be manually created using ``ra
   # radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
 
   # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
+
+  # radosgw-admin period update --rgw-realm=<realm-name> --commit
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 

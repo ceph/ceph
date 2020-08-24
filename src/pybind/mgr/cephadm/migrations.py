@@ -46,7 +46,8 @@ class Migrations:
     def verify_no_migration(self):
         if self.is_migration_ongoing():
             # this is raised in module.serve()
-            raise OrchestratorError("cephadm migration still ongoing. Please wait, until the migration is complete.")
+            raise OrchestratorError(
+                "cephadm migration still ongoing. Please wait, until the migration is complete.")
 
     def migrate(self):
         if self.mgr.migration_current == 0:
@@ -102,7 +103,8 @@ class Migrations:
 
             old_hosts = {h.hostname: h for h in spec.placement.hosts}
             new_hosts = [
-                old_hosts[d.hostname] if d.hostname in old_hosts else HostPlacementSpec(hostname=d.hostname, network='', name='')
+                old_hosts[d.hostname] if d.hostname in old_hosts else HostPlacementSpec(
+                    hostname=d.hostname, network='', name='')
                 for d in existing_daemons
             ]
 

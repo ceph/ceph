@@ -60,6 +60,7 @@ Synopsis
 |                           [--skip-ssh]
 |                           [--initial-dashboard-user INITIAL_DASHBOARD_USER]
 |                           [--initial-dashboard-password INITIAL_DASHBOARD_PASSWORD]
+|                           [--ssl-dashboard-port SSL_DASHBOARD_PORT]
 |                           [--dashboard-key DASHBOARD_KEY]
 |                           [--dashboard-crt DASHBOARD_CRT]
 |                           [--ssh-config SSH_CONFIG]
@@ -82,7 +83,7 @@ Synopsis
 | **cephadm** **deploy** [-h] --name NAME --fsid FSID [--config CONFIG]
 |                        [--config-json CONFIG_JSON] [--keyring KEYRING]
 |                        [--key KEY] [--osd-fsid OSD_FSID] [--skip-firewalld]
-|                        [--reconfig] [--allow-ptrace]
+|                        [--tcp-ports TCP_PORTS] [--reconfig] [--allow-ptrace]
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
@@ -210,6 +211,7 @@ Arguments:
 * [--skip-ssh                     skip setup of ssh key on local host
 * [--initial-dashboard-user INITIAL_DASHBOARD_USER] Initial user for the dashboard
 * [--initial-dashboard-password INITIAL_DASHBOARD_PASSWORD] Initial password for the initial dashboard user
+* [--ssl-dashboard-port SSL_DASHBOARD_PORT] Port number used to connect with dashboard using SSL
 * [--dashboard-key DASHBOARD_KEY] Dashboard key
 * [--dashboard-crt DASHBOARD_CRT] Dashboard certificate
 * [--ssh-config SSH_CONFIG] SSH config
@@ -279,6 +281,7 @@ Arguments:
 * [--key KEY]                 key for new daemon
 * [--osd-fsid OSD_FSID]       OSD uuid, if creating an OSD container
 * [--skip-firewalld]          Do not configure firewalld
+* [--tcp-ports                List of tcp ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
 * [--allow-ptrace]            Allow SYS_PTRACE on daemon container
 
