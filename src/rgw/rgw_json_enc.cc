@@ -16,6 +16,7 @@
 #include "rgw_orphan.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_tools.h"
+#include "rgw_account.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -2095,4 +2096,21 @@ void objexp_hint_entry::dump(Formatter *f) const
 void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
+}
+
+void AccountQuota::dump(Formatter * const f) const
+{
+  f->open_object_section("AccountQuota");
+  f->dump_unsigned("max_users", max_users);
+  f->dump_unsigned("max_roles", max_roles);
+  f->close_section();
+}
+
+void RGWAccountInfo::dump(Formatter * const f) const
+{
+  f->open_object_section("RGWAccountInfo");
+  encode_json("id", id, f);
+  encode_json("tenant", tenant, f);
+  account_quota.dump(f);
+  f->close_section();
 }

@@ -44,6 +44,9 @@ struct AccountQuota {
     decode(max_roles, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter * const f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(AccountQuota)
 
@@ -88,6 +91,9 @@ public:
 
   const std::string& get_id() const { return id; }
   const std::string& get_tenant() { return tenant; }
+
+  void dump(Formatter * const f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
