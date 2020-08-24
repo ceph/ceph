@@ -827,17 +827,15 @@ public:
     waiting_on = ranges.size();
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
     uint64_t tid = 1;
-    for (map<uint64_t, uint64_t>::iterator i = ranges.begin(); 
-	 i != ranges.end();
-	 ++i, ++tid) {
-      gen_pos.seek(i->first);
-      bufferlist to_write = gen_pos.gen_bl_advance(i->second);
-      ceph_assert(to_write.length() == i->second);
+    for (auto [offset, len] : ranges) {
+      gen_pos.seek(offset);
+      bufferlist to_write = gen_pos.gen_bl_advance(len);
+      ceph_assert(to_write.length() == len);
       ceph_assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
-		<< " from " << i->first
-		<< " to " << i->first + i->second << " tid " << tid << std::endl;
-      pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+		<< " from " << offset
+		<< " to " << len + offset << " tid " << tid << std::endl;
+      auto cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
       librados::AioCompletion *completion =
@@ -847,13 +845,14 @@ public:
       if (do_append) {
 	op.append(to_write);
       } else {
-	op.write(i->first, to_write);
+	op.write(offset, to_write);
       }
       if (do_excl && tid == 1)
 	op.assert_exists();
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
 	&op);
+      ++tid;
     }
 
     bufferlist contbl;
@@ -1007,17 +1006,15 @@ public:
     waiting_on = ranges.size();
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
     uint64_t tid = 1;
-    for (map<uint64_t, uint64_t>::iterator i = ranges.begin();
-	 i != ranges.end();
-	 ++i, ++tid) {
-      gen_pos.seek(i->first);
-      bufferlist to_write = gen_pos.gen_bl_advance(i->second);
-      ceph_assert(to_write.length() == i->second);
+    for (auto [offset, len] : ranges) {
+      gen_pos.seek(offset);
+      bufferlist to_write = gen_pos.gen_bl_advance(len);
+      ceph_assert(to_write.length() == len);
       ceph_assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
-		<< " from " << i->first
-		<< " to " << i->first + i->second << " tid " << tid << std::endl;
-      pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+		<< " from " << offset
+		<< " to " << offset + len << " tid " << tid << std::endl;
+      auto cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
       librados::AioCompletion *completion =
@@ -1026,11 +1023,12 @@ public:
       waiting.insert(completion);
       librados::ObjectWriteOperation op;
       /* no writesame multiplication factor for now */
-      op.writesame(i->first, to_write.length(), to_write);
+      op.writesame(offset, to_write.length(), to_write);
 
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
 	&op);
+      ++tid;
     }
 
     bufferlist contbl;
