@@ -151,6 +151,11 @@ private:
   int _write(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, const ceph::bufferlist& bl,
 	     uint32_t fadvise_flags);
+  int _zero(const coll_t& cid, const ghobject_t& oid,
+	    uint64_t offset, size_t len);
+  int _omap_clear(
+    const coll_t& cid,
+    const ghobject_t& oid);
   int _omap_set_values(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -171,6 +176,8 @@ private:
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferptr>& aset);
+  int _rm_attr(const coll_t& cid, const ghobject_t& oid,
+	       string_view name);
   int _create_collection(const coll_t& cid, int bits);
   boost::intrusive_ptr<Collection> _get_collection(const coll_t& cid);
 };
