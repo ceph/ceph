@@ -162,6 +162,7 @@ class RadosTestContext {
 public:
   ceph::mutex state_lock = ceph::make_mutex("Context Lock");
   ceph::condition_variable wait_cond;
+  // snap => {oid => desc}
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
@@ -560,14 +561,15 @@ public:
     ObjectDesc contents;
     find_object(oid, &contents, snap);
     contents.dirty = true;
-    pool_obj_cont.rbegin()->second.erase(oid);
-    pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
   }
 };
 
 void read_callback(librados::completion_t comp, void *arg);
 void write_callback(librados::completion_t comp, void *arg);
 
+/// remove random xattrs from given object, and optionally remove omap
+/// entries if @c no_omap is not specified in context
 class RemoveAttrsOp : public TestOp {
 public:
   string oid;
@@ -660,6 +662,8 @@ public:
   }
 };
 
+/// add random xattrs to given object, and optionally add omap
+/// entries if @c no_omap is not specified in context
 class SetAttrsOp : public TestOp {
 public:
   string oid;
