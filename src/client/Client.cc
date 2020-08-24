@@ -304,7 +304,11 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   // file handles
   free_fd_set.insert(10, 1<<30);
 
-  mdsmap.reset(new MDSMap);
+  if (monclient->monmap.get_required_features().contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
+    mdsmap.reset(new MDSMapV2);
+  } else {
+    mdsmap.reset(new MDSMapV1);
+  }
 
   // osd interfaces
   writeback_handler.reset(new ObjecterWriteback(objecter, &objecter_finisher,
@@ -2786,7 +2790,12 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 
   cl.unlock();
   ldout(cct, 1) << __func__ << " epoch " << m->get_epoch() << dendl;
-  std::unique_ptr<MDSMap> _mdsmap(new MDSMap);
+  std::unique_ptr<MDSMap> _mdsmap;
+  if (monclient->monmap.get_required_features().contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
+    _mdsmap = std::make_unique<MDSMapV2>();
+  } else {
+    _mdsmap = std::make_unique<MDSMapV1>();
+  }
   _mdsmap->decode(m->get_encoded());
   cancel_commands(*_mdsmap.get());
   cl.lock();

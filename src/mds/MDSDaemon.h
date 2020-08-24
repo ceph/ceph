@@ -32,7 +32,7 @@
 #include "msg/Dispatcher.h"
 
 #include "Beacon.h"
-#include "MDSMap.h"
+#include "MDSMapV2.h"
 #include "MDSRank.h"
 
 #define CEPH_MDS_PROTOCOL    35 /* cluster internal */

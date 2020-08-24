@@ -182,13 +182,13 @@ void FSMap::generate_test_instances(std::list<FSMap*>& ls)
   FSMap *m = new FSMap();
 
   std::list<MDSMap*> mds_map_instances;
-  MDSMap::generate_test_instances(mds_map_instances);
+  MDSMapV2::generate_test_instances(mds_map_instances);
 
   int k = 20;
   for (auto i : mds_map_instances) {
     auto fs = Filesystem::create();
     fs->fscid = k++;
-    fs->mds_map = *i;
+    fs->mds_map = *static_cast<MDSMapV2*>(i);
     delete i;
     m->filesystems[fs->fscid] = fs;
   }

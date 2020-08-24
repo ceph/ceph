@@ -26,7 +26,7 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
-#include "mds/MDSMap.h"
+#include "mds/MDSMapV2.h"
 
 #include "include/CompatSet.h"
 #include "include/ceph_features.h"
@@ -208,7 +208,7 @@ public:
   }
 
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
-  MDSMap mds_map;
+  MDSMapV2 mds_map;
   MirrorInfo mirror_info;
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)

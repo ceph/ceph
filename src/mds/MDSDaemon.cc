@@ -36,8 +36,6 @@
 
 #include "osdc/Objecter.h"
 
-#include "MDSMap.h"
-
 #include "MDSDaemon.h"
 #include "Server.h"
 #include "Locker.h"
@@ -60,7 +58,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
 using TOPNSPC::common::cmd_getval;
-// cons/des
+
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
 		     boost::asio::io_context& ioctx) :
   Dispatcher(m->cct),
@@ -95,7 +93,11 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
     ceph_assert(set_result == 0);
   }
 
-  mdsmap.reset(new MDSMap);
+  if (monc->monmap.get_required_features().contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
+    mdsmap.reset(new MDSMapV2);
+  } else {
+    mdsmap.reset(new MDSMapV1);
+  }
 }
 
 MDSDaemon::~MDSDaemon() {
@@ -658,7 +660,12 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
   oldmap.swap(mdsmap);
 
   // decode and process
-  mdsmap.reset(new MDSMap);
+  if (monc->monmap.get_required_features().contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
+    mdsmap.reset(new MDSMapV2);
+  } else {
+    mdsmap.reset(new MDSMapV1);
+  }
+
   mdsmap->decode(m->get_encoded());
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());

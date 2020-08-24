@@ -103,6 +103,8 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mds/FSMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/FSMapUser.cc
   ${PROJECT_SOURCE_DIR}/src/mds/MDSMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mds/MDSMapV1.cc
+  ${PROJECT_SOURCE_DIR}/src/mds/MDSMapV2.cc
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc

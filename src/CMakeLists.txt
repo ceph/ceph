@@ -288,6 +288,8 @@ configure_file(
 set(mds_files)
 list(APPEND mds_files
   mds/MDSMap.cc
+  mds/MDSMapV1.cc
+  mds/MDSMapV2.cc
   mds/FSMap.cc
   mds/FSMapUser.cc
   mds/inode_backtrace.cc

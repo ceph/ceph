@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_MDSMAP_H
@@ -52,6 +52,7 @@
 
 class health_check_map_t;
 
+//The MDSMap base class
 class MDSMap {
 public:
   /* These states are the union of the set of possible states of an MDS daemon,
@@ -198,7 +199,7 @@ public:
   const auto& get_required_client_features() const {
     return required_client_features;
   }
-  
+
   int get_flags() const { return flags; }
   bool test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
@@ -249,6 +250,8 @@ public:
   void set_max_mds(mds_rank_t m) { max_mds = m; }
   void set_old_max_mds() { old_max_mds = max_mds; }
   mds_rank_t get_old_max_mds() const { return old_max_mds; }
+  void set_metadata_pool(int64_t mp) { metadata_pool = mp; }
+  void set_cas_pool(int64_t cp) { cas_pool = cp; }
 
   mds_rank_t get_standby_count_wanted(mds_rank_t standby_daemon_count) const {
     ceph_assert(standby_daemon_count >= 0);
@@ -483,7 +486,7 @@ public:
   }
   bool is_rejoining() const {
     // nodes are rejoining cache state
-    return 
+    return
       get_num_mds(STATE_REJOIN) > 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_RECONNECT) == 0 &&
@@ -535,8 +538,8 @@ public:
       return mds_info_entry->second.inc;
     return -1;
   }
-  void encode(ceph::buffer::list& bl, uint64_t features) const;
-  void decode(ceph::buffer::list::const_iterator& p);
+  virtual void encode(ceph::buffer::list& bl, uint64_t features, bool encode_ev=true) const = 0;
+  virtual void decode(ceph::buffer::list::const_iterator& p) = 0;
   void decode(const ceph::buffer::list& bl) {
     auto p = bl.cbegin();
     decode(p);
@@ -547,11 +550,12 @@ public:
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<MDSMap*>& ls);
 
   static bool state_transition_valid(DaemonState prev, DaemonState next);
 
   CompatSet compat;
+
+  virtual ~MDSMap();
 protected:
   // base map
   epoch_t epoch = 0;

@@ -35,9 +35,11 @@ TYPE(inode_backpointer_t)
 TYPE_FEATUREFUL(InodeStore)
 TYPE_FEATUREFUL(InodeStoreBare)
 
-#include "mds/MDSMap.h"
-TYPE_FEATUREFUL(MDSMap)
-TYPE_FEATUREFUL(MDSMap::mds_info_t)
+//TODO: Fix the version check
+//TODO: Fix MDSMap instantiation error in denc_registry.h
+//#include "mds/MDSMapV2.h"
+//TYPE_FEATUREFUL(MDSMapV2)
+//TYPE_FEATUREFUL(MDSMapV2::mds_info_t)
 
 #include "mds/FSMap.h"
 //TYPE_FEATUREFUL(Filesystem)
