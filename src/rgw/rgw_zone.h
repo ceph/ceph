@@ -627,7 +627,7 @@ struct RGWDataProvider {
   }
 
   void decode_dp_extra(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(1, bl);
     decode(sip_config, bl);
     DECODE_FINISH(bl);
   }
@@ -747,6 +747,7 @@ struct RGWForeignZone : public RGWDataProvider {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
+WRITE_CLASS_ENCODER(RGWForeignZone)
 
 struct RGWDefaultZoneGroupInfo {
   std::string default_zonegroup;
@@ -966,6 +967,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   rgw_zone_id master_zone;
   std::map<rgw_zone_id, RGWZone> zones;
 
+  map<rgw_zone_id, RGWForeignZone> foreign_zones;
+
   std::map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
   rgw_placement_rule default_placement;
 
@@ -1008,7 +1011,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -1022,11 +1025,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
     encode(sync_policy, bl);
+    encode(foreign_zones, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -1049,6 +1053,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     }
     if (struct_v >= 5) {
       decode(sync_policy, bl);
+    }
+    if (struct_v >= 6) {
+      decode(foreign_zones, bl);
     }
     DECODE_FINISH(bl);
   }

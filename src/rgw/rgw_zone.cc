@@ -2379,6 +2379,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
+  encode_json("foreign_zones", foreign_zones, f);
 }
 
 static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
@@ -2422,6 +2423,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
+  JSONDecoder::decode_json("foreign_zones", foreign_zones, obj);
 }
 
 void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
@@ -2720,6 +2722,25 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("sync_from_all", sync_from_all, true, obj);
   JSONDecoder::decode_json("sync_from", sync_from, obj);
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
+}
+
+void RGWForeignZone::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("name", name, f);
+  encode_json("endpoints", endpoints, f);
+  dump_dp_extra(f);
+}
+
+void RGWForeignZone::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
+  if (id.empty()) {
+    id = name;
+  }
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  decode_json_dp_extra(obj);
 }
 
 void RGWTierACLMapping::dump(Formatter *f) const
