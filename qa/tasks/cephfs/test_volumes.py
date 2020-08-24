@@ -3284,3 +3284,21 @@ class TestVolumes(CephFSTestCase):
                 self.assertEqual(ce.exitstatus, errno.ENOENT)
             else:
                 self.fail("expected the 'fs subvolumegroup snapshot {0}' command to fail".format(op))
+
+    def test_names_can_only_be_goodchars(self):
+        """
+        Test the creating vols, subvols subvolgroups fails when their names uses
+        characters beyond [a-zA-Z0-9 -_.].
+        """
+        volname, badname = 'testvol', 'abcd@#'
+
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd('volume', 'create', badname)
+        self._fs_cmd('volume', 'create', volname)
+
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd('subvolumegroup', 'create', volname, badname)
+
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd('subvolume', 'create', volname, badname)
+        self._fs_cmd('volume', 'rm', volname, '--yes-i-really-mean-it')
