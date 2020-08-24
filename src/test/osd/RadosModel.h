@@ -389,8 +389,7 @@ public:
       new_obj.attrs.erase(*i);
     }
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void remove_object_header(const string &oid)
@@ -398,8 +397,7 @@ public:
     ObjectDesc new_obj = get_most_recent(oid);
     new_obj.header = bufferlist();
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
 
@@ -409,8 +407,7 @@ public:
     new_obj.header = bl;
     new_obj.exists = true;
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object_attrs(const string &oid, const map<string, ContDesc> &attrs)
@@ -423,8 +420,7 @@ public:
     }
     new_obj.exists = true;
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object(ContentsGenerator *cont_gen,
@@ -435,14 +431,12 @@ public:
     new_obj.dirty = true;
     new_obj.update(cont_gen,
 		   contents);
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object_full(const string &oid, const ObjectDesc &contents)
   {
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont[current_snap].insert_or_assign(oid, contents);
     pool_obj_cont[current_snap][oid].dirty = true;
   }
 
@@ -450,8 +444,7 @@ public:
   {
     ObjectDesc new_obj = get_most_recent(oid);
     new_obj.dirty = false;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object_version(const string &oid, uint64_t version,
@@ -481,8 +474,7 @@ public:
   {
     ceph_assert(!get_watch_context(oid));
     ObjectDesc new_obj;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   bool find_object(const string &oid, ObjectDesc *contents, int snap = -1) const
