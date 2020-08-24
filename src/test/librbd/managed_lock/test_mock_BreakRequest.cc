@@ -56,11 +56,6 @@ GetLockerRequest<librbd::MockTestImageCtx> *GetLockerRequest<librbd::MockTestIma
 // template definitions
 #include "librbd/managed_lock/BreakRequest.cc"
 
-MATCHER(IsBlocklistCommand, "") {
-  return (arg.size() == 1 &&
-          arg[0].find("\"blocklistop\": \"add\"") != std::string::npos);
-}
-
 namespace librbd {
 namespace managed_lock {
 
@@ -113,8 +108,7 @@ public:
   void expect_blocklist_add(MockTestImageCtx &mock_image_ctx, int r) {
     auto& mock_rados_client = librados::get_mock_rados_client(
       mock_image_ctx.rados_api);
-    EXPECT_CALL(mock_rados_client, mon_command(IsBlocklistCommand(), _, _, _))
-      .WillOnce(Return(r));
+    EXPECT_CALL(mock_rados_client, blocklist_add(_, _)).WillOnce(Return(r));
   }
 
   void expect_wait_for_latest_osd_map(MockTestImageCtx &mock_image_ctx, int r) {

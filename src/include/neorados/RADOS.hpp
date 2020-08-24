@@ -943,6 +943,17 @@ public:
   }
 
   template<typename CompletionToken>
+  auto blocklist_add(std::string_view client_address,
+                     std::optional<std::chrono::seconds> expire,
+                     CompletionToken&& token) {
+    boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
+    blocklist_add(client_address, expire,
+                  SimpleOpComp::create(get_executor(),
+                                       std::move(init.completion_handler)));
+    return init.result.get();
+  }
+
+  template<typename CompletionToken>
   auto wait_for_latest_osd_map(CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
     wait_for_latest_osd_map(
@@ -1081,6 +1092,10 @@ private:
 
   void enable_application(std::string_view pool, std::string_view app_name,
 			  bool force, std::unique_ptr<SimpleOpComp> c);
+
+  void blocklist_add(std::string_view client_address,
+                     std::optional<std::chrono::seconds> expire,
+                     std::unique_ptr<SimpleOpComp> c);
 
   void wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c);
 

@@ -159,19 +159,12 @@ void BreakRequest<I>::send_blocklist() {
     return;
   }
 
-  std::stringstream cmd;
-  cmd << "{"
-      << "\"prefix\": \"osd blocklist\", "
-      << "\"blocklistop\": \"add\", "
-      << "\"addr\": \"" << locker_addr << "\"";
+  std::optional<std::chrono::seconds> expire;
   if (m_blocklist_expire_seconds != 0) {
-    cmd << ", \"expire\": " << m_blocklist_expire_seconds << ".0";
+    expire = std::chrono::seconds(m_blocklist_expire_seconds);
   }
-  cmd << "}";
-
-  bufferlist in_bl;
-  m_asio_engine.get_rados_api().mon_command(
-    {cmd.str()}, in_bl, nullptr, nullptr,
+  m_asio_engine.get_rados_api().blocklist_add(
+    m_locker.address, expire,
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_blocklist(r); }));
 }

@@ -1558,6 +1558,39 @@ void RADOS::enable_application(std::string_view pool, std::string_view app_name,
   }
 }
 
+void RADOS::blocklist_add(std::string_view client_address,
+                          std::optional<std::chrono::seconds> expire,
+                          std::unique_ptr<SimpleOpComp> c) {
+  auto expire_arg = (expire ?
+    fmt::format(", \"expire\": \"{}.0\"", expire->count()) : std::string{});
+  impl->monclient.start_mon_command(
+    { fmt::format("{{"
+                  "\"prefix\": \"osd blocklist\", "
+                  "\"blocklistop\": \"add\", "
+                  "\"addr\": \"{}\"{}}}",
+                  client_address, expire_arg) },
+    {},
+    [this, client_address = std::string(client_address), expire_arg,
+     c = std::move(c)](bs::error_code ec, std::string, cb::list) mutable {
+      if (ec != bs::errc::invalid_argument) {
+        ca::post(std::move(c), ec);
+        return;
+      }
+
+      // retry using the legacy command
+      impl->monclient.start_mon_command(
+        { fmt::format("{{"
+                      "\"prefix\": \"osd blacklist\", "
+                      "\"blacklistop\": \"add\", "
+                      "\"addr\": \"{}\"{}}}",
+                      client_address, expire_arg) },
+        {},
+        [c = std::move(c)](bs::error_code ec, std::string, cb::list) mutable {
+          ca::post(std::move(c), ec);
+        });
+    });
+}
+
 void RADOS::wait_for_latest_osd_map(std::unique_ptr<SimpleOpComp> c) {
   impl->objecter->wait_for_latest_osdmap(std::move(c));
 }
