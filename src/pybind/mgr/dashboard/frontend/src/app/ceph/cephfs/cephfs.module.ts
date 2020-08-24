@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { TreeModule } from 'angular-tree-component';
 import { ChartsModule } from 'ng2-charts';
 
 import { AppRoutingModule } from '../../app-routing.module';
@@ -15,14 +15,7 @@ import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
 import { CephfsTabsComponent } from './cephfs-tabs/cephfs-tabs.component';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    AppRoutingModule,
-    ChartsModule,
-    TreeModule.forRoot(),
-    NgbNavModule
-  ],
+  imports: [CommonModule, SharedModule, AppRoutingModule, ChartsModule, TreeModule, NgbNavModule],
   declarations: [
     CephfsDetailComponent,
     CephfsClientsComponent,

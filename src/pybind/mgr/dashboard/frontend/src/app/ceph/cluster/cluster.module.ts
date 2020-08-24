@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { TreeModule } from '@circlon/angular-tree-component';
 import {
   NgbDatepickerModule,
   NgbNavModule,
@@ -11,7 +12,6 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -65,7 +65,7 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     MgrModulesModule,
     NgbTypeaheadModule,
     NgbTimepickerModule,
-    TreeModule.forRoot(),
+    TreeModule,
     NgBootstrapFormValidationModule,
     CephSharedModule,
     NgbDatepickerModule,

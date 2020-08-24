@@ -17,6 +17,6 @@ export class LoginPageHelper extends PageHelper {
     cy.get('cd-identity a').click();
     cy.contains('cd-identity span', 'Sign out').click();
     cy.get('cd-login').should('exist');
-    cy.location('hash').should('be', '#login');
+    cy.location('hash').should('eq', '#/login');
   }
 }

@@ -107,7 +107,7 @@ case "$DEVICE" in
             --env CYPRESS_LOGIN_PWD \
             --name=e2e \
             --network=host \
-            cypress/included:4.4.0 || failed=1
+            cypress/included:5.1.0 || failed=1
         stop $failed
         ;;
     *)
