@@ -755,6 +755,7 @@ public:
   ContDesc cont;
   set<librados::AioCompletion *> waiting;
   librados::AioCompletion *rcompletion = nullptr;
+  // numbers of async ops submitted
   uint64_t waiting_on = 0;
   uint64_t last_acked_tid = 0;
 
@@ -1095,12 +1096,15 @@ public:
       }
 
       context->update_object_version(oid, version);
+      ceph_assert(rcompletion->is_complete());
+      ceph_assert(rcompletion->get_return_value() == 1);
       if (rcompletion->get_version64() != version) {
 	cerr << "Error: racing read on " << oid << " returned version "
 	     << rcompletion->get_version64() << " rather than version "
 	     << version << std::endl;
 	ceph_abort_msg("racing read got wrong version");
       }
+      rcompletion->release();
 
       {
 	ObjectDesc old_value;
@@ -1112,7 +1116,6 @@ public:
 		    << old_value.most_recent() << std::endl;
       }
 
-      rcompletion->release();
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
