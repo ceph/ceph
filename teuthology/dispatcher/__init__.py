@@ -26,10 +26,7 @@ def sentinel(path):
     if not os.path.exists(path):
         return False
     file_mtime = datetime.utcfromtimestamp(os.path.getmtime(path))
-    if file_mtime > start_time:
-        return True
-    else:
-        return False
+    return file_mtime > start_time
 
 
 def restart():
@@ -71,8 +68,7 @@ def main(args):
     if verbose:
         loglevel = logging.DEBUG
     log.setLevel(loglevel)
-    log_file_path = os.path.join(log_dir, 'dispatcher.{tube}.{pid}'.format(
-        pid=os.getpid(), tube=tube))
+    log_file_path = os.path.join(log_dir, f"dispatcher.{tube}.{os.getpid()}")
     setup_log_file(log_file_path)
     install_except_hook()
 

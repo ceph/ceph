@@ -5,7 +5,6 @@ import time
 import yaml
 
 from datetime import datetime
-from tarfile import ReadError
 
 import teuthology
 from teuthology import report
@@ -14,14 +13,12 @@ from teuthology.config import config as teuth_config
 from teuthology.exceptions import SkipJob
 from teuthology import setup_log_file, install_except_hook
 from teuthology.lock.ops import reimage_many
-from teuthology.misc import get_user
+from teuthology.misc import get_user, archive_logs, compress_logs
 from teuthology.config import FakeNamespace
 from teuthology.job_status import get_status
 from teuthology.nuke import nuke
 from teuthology.kill import kill_job
-from teuthology.misc import pull_directory
 from teuthology.task.internal import add_remotes
-from teuthology.orchestra import run
 from teuthology.misc import decanonicalize_hostname as shortname
 from teuthology.lock import query
 
@@ -43,8 +40,8 @@ def main(args):
         loglevel = logging.DEBUG
     log.setLevel(loglevel)
 
-    log_file_path = os.path.join(job_config['archive_path'], 'supervisor.{job_id}'.format(
-                                 job_id=job_config['job_id']))
+    log_file_path = os.path.join(job_config['archive_path'],
+                                 f"supervisor.{job_config['job_id']}")
     setup_log_file(log_file_path)
     install_except_hook()
 
@@ -190,7 +187,8 @@ def unlock_targets(job_config):
         log.info('Unlocking machines...')
         fake_ctx = create_fake_context(job_config)
         for machine in locked:
-            teuthology.lock.ops.unlock_one(fake_ctx, machine, job_info['owner'],
+            teuthology.lock.ops.unlock_one(fake_ctx,
+                                           machine, job_info['owner'],
                                            job_info['archive_path'])
     if job_status != 'pass' and job_config.get('nuke-on-error', False):
         log.info('Nuking machines...')
@@ -238,18 +236,13 @@ def run_with_watchdog(process, job_config):
 
 
 def create_fake_context(job_config, block=False):
-    if job_config['owner'] is None:
-        job_config['owner'] = get_user()
-
-    if 'os_version' in job_config:
-        os_version = job_config['os_version']
-    else:
-        os_version = None
+    owner = job_config.get('owner', get_user())
+    os_version = job_config.get('os_version', None)
 
     ctx_args = {
         'config': job_config,
         'block': block,
-        'owner': job_config['owner'],
+        'owner': owner,
         'archive': job_config['archive_path'],
         'machine_type': job_config['machine_type'],
         'os_type': job_config['os_type'],
@@ -257,8 +250,7 @@ def create_fake_context(job_config, block=False):
         'name': job_config['name'],
     }
 
-    fake_ctx = FakeNamespace(ctx_args)
-    return fake_ctx
+    return FakeNamespace(ctx_args)
 
 
 def transfer_archives(run_name, job_id, archive_base, job_config):
@@ -276,49 +268,3 @@ def transfer_archives(run_name, job_id, archive_base, job_config):
             archive_logs(ctx, log_path, log_type)
     else:
         log.info('No archives to transfer.')
-
-
-def archive_logs(ctx, remote_path, log_path):
-    """
-    Archive directories from all nodes in a cliuster. It pulls all files in
-    remote_path dir to job's archive dir under log_path dir.
-    """
-    path = os.path.join(ctx.archive, 'remote')
-    if (not os.path.exists(path)):
-        os.mkdir(path)
-    for remote in ctx.cluster.remotes.keys():
-        sub = os.path.join(path, remote.shortname)
-        if (not os.path.exists(sub)):
-            os.makedirs(sub)
-        try:
-            pull_directory(remote, remote_path, os.path.join(sub, log_path))
-        except ReadError:
-            pass
-
-
-def compress_logs(ctx, remote_dir):
-    """
-    Compress all files in remote_dir from all nodes in a cluster.
-    """
-    log.info('Compressing logs...')
-    run.wait(
-        ctx.cluster.run(
-            args=[
-                'sudo',
-                'find',
-                remote_dir,
-                '-name',
-                '*.log',
-                '-print0',
-                run.Raw('|'),
-                'sudo',
-                'xargs',
-                '-0',
-                '--no-run-if-empty',
-                '--',
-                'gzip',
-                '--',
-            ],
-            wait=False,
-        ),
-    )
