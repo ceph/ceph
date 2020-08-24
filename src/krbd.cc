@@ -49,6 +49,7 @@ static const int UDEV_BUF_SIZE = 1 << 20;  /* doubled to 2M (SO_RCVBUFFORCE) */
 struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
+  uint32_t flags;  /* KRBD_CTX_F_* */
 };
 
 static const std::string SNAP_HEAD_NAME("-");
@@ -369,7 +370,39 @@ private:
   std::string *m_pdevnode;
 };
 
-static int do_map(struct udev *udev, const krbd_spec& spec, const string& buf,
+static const char *get_event_source(const krbd_ctx *ctx)
+{
+  if (ctx->flags & KRBD_CTX_F_NOUDEV) {
+    /*
+     * For block devices (unlike network interfaces, they don't
+     * carry any namespace tags), the kernel broadcasts uevents
+     * into all network namespaces that are owned by the initial
+     * user namespace.  This restriction is new in 4.18: starting
+     * with 2.6.35 and through 4.17 the kernel broadcast uevents
+     * into all network namespaces, period.
+     *
+     * However, when invoked from a non-initial user namespace,
+     * udev_monitor_receive_device() has always ignored both kernel
+     * and udev uevents by virtue of requiring SCM_CREDENTIALS and
+     * checking that ucred->uid == 0.  When UIDs and GIDs are sent to
+     * a process in a user namespace, they are translated according
+     * to that process's UID and GID mappings and, unless root in the
+     * user namespace is mapped to the global root, that check fails.
+     * Normally they show up as 65534(nobody) because the global root
+     * is not mapped.
+     */
+    return "kernel";
+  }
+
+  /*
+   * Like most netlink messages, udev uevents don't cross network
+   * namespace boundaries and are therefore confined to the initial
+   * network namespace.
+   */
+  return "udev";
+}
+
+static int do_map(krbd_ctx *ctx, const krbd_spec& spec, const string& buf,
                   string *pname)
 {
   struct udev_monitor *mon;
@@ -378,7 +411,7 @@ static int do_map(struct udev *udev, const krbd_spec& spec, const string& buf,
   int fds[2];
   int r;
 
-  mon = udev_monitor_new_from_netlink(udev, "udev");
+  mon = udev_monitor_new_from_netlink(ctx->udev, get_event_source(ctx));
   if (!mon)
     return -ENOMEM;
 
@@ -464,7 +497,7 @@ static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
     }
   }
 
-  return do_map(ctx->udev, spec, buf, pname);
+  return do_map(ctx, spec, buf, pname);
 }
 
 static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
@@ -703,7 +736,7 @@ private:
   dev_t m_devno;
 };
 
-static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
+static int do_unmap(krbd_ctx *ctx, dev_t devno, const string& buf)
 {
   struct udev_monitor *mon;
   std::thread unmapper;
@@ -711,7 +744,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
   int fds[2];
   int r;
 
-  mon = udev_monitor_new_from_netlink(udev, "udev");
+  mon = udev_monitor_new_from_netlink(ctx->udev, get_event_source(ctx));
   if (!mon)
     return -ENOMEM;
 
@@ -735,7 +768,8 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
     goto out_mon;
   }
 
-  unmapper = make_named_thread("unmapper", [&buf, sysfs_r_fd = fds[1]]() {
+  unmapper = make_named_thread(
+      "unmapper", [&buf, sysfs_r_fd = fds[1], flags = ctx->flags]() {
     /*
      * On final device close(), kernel sends a block change event, in
      * response to which udev apparently runs blkid on the device.  This
@@ -747,7 +781,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
       if (sysfs_r == -EBUSY && tries < 2) {
         if (!tries) {
           usleep(250 * 1000);
-        } else {
+        } else if (!(flags & KRBD_CTX_F_NOUDEV)) {
           /*
            * libudev does not provide the "wait until the queue is empty"
            * API or the sufficient amount of primitives to build it from.
@@ -832,7 +866,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
     }
   }
 
-  return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
+  return do_unmap(ctx, wholedevno, build_unmap_buf(id, options));
 }
 
 static int unmap_image(struct krbd_ctx *ctx, const krbd_spec& spec,
@@ -863,7 +897,7 @@ static int unmap_image(struct krbd_ctx *ctx, const krbd_spec& spec,
     }
   }
 
-  return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
+  return do_unmap(ctx, devno, build_unmap_buf(id, options));
 }
 
 static bool dump_one_image(Formatter *f, TextTable *tbl,
@@ -997,7 +1031,7 @@ out_enm:
   return r;
 }
 
-extern "C" int krbd_create_from_context(rados_config_t cct,
+extern "C" int krbd_create_from_context(rados_config_t cct, uint32_t flags,
                                         struct krbd_ctx **pctx)
 {
   struct krbd_ctx *ctx = new struct krbd_ctx();
@@ -1008,6 +1042,7 @@ extern "C" int krbd_create_from_context(rados_config_t cct,
     delete ctx;
     return -ENOMEM;
   }
+  ctx->flags = flags;
 
   *pctx = ctx;
   return 0;
