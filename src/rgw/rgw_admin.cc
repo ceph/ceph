@@ -715,6 +715,9 @@ enum class OPT {
   ZONE_PLACEMENT_RM,
   ZONE_PLACEMENT_LIST,
   ZONE_PLACEMENT_GET,
+  FOREIGN_ZONE_CREATE,
+  FOREIGN_ZONE_MODIFY,
+  FOREIGN_ZONE_DELETE,
   CAPS_ADD,
   CAPS_RM,
   METADATA_GET,
@@ -946,6 +949,9 @@ static SimpleCmd::Commands all_cmds = {
   { "zone placement rm", OPT::ZONE_PLACEMENT_RM },
   { "zone placement list", OPT::ZONE_PLACEMENT_LIST },
   { "zone placement get", OPT::ZONE_PLACEMENT_GET },
+  { "foreign zone create", OPT::FOREIGN_ZONE_CREATE },
+  { "foreign zone modify", OPT::FOREIGN_ZONE_MODIFY },
+  { "foreign zone delete", OPT::FOREIGN_ZONE_DELETE },
   { "caps add", OPT::CAPS_ADD },
   { "caps rm", OPT::CAPS_RM },
   { "metadata get [*]", OPT::METADATA_GET },
@@ -3722,7 +3728,16 @@ int main(int argc, const char **argv)
   std::optional<string> opt_dest_object_version;
   std::optional<rgw_obj_key> opt_dest_object;
 
+  std::optional<list<string> > opt_endpoints;
   std::optional<string> opt_endpoint;
+  std::optional<string> opt_foreign_zone_name;
+  std::optional<string> opt_foreign_zone_id;
+  std::optional<rgw_user> opt_uid;
+  std::optional<string> opt_access_key;
+  std::optional<string> opt_secret;
+  std::optional<string> opt_path_prefix;
+
+  RGWDataProvider::SIPConfig sip_conf;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
@@ -3742,6 +3757,11 @@ int main(int argc, const char **argv)
         cerr << "no value for uid" << std::endl;
         exit(1);
       }
+      opt_uid = user_id_arg;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-uid", (char*)NULL)) {
+      rgw_user sip_uid;
+      sip_uid.from_str(val);
+      sip_conf.uid = sip_uid;
     } else if (ceph_argparse_witharg(args, i, &val, "--new-uid", (char*)NULL)) {
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -3751,10 +3771,16 @@ int main(int argc, const char **argv)
       user_ns = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
+      opt_access_key = access_key;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-access-key", (char*)NULL)) {
+      sip_conf.access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
+      opt_secret = secret_key;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-secret", "--sip-secret-key", (char*)NULL)) {
+      sip_conf.secret = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
@@ -4061,9 +4087,14 @@ int main(int argc, const char **argv)
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
       get_str_list(val, endpoints);
+      opt_endpoints = endpoints;
       if (!endpoints.empty()) {
         opt_endpoint = endpoints.front();
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-endpoints", (char*)NULL)) {
+      list<string> sip_endpoints;
+      get_str_list(val, sip_endpoints);
+      sip_conf.endpoints = sip_endpoints;
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
       get_str_list(val, sync_from);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
@@ -4120,6 +4151,9 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+      opt_path_prefix = path_prefix;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-path-prefix", (char*)NULL)) {
+      sip_conf.path_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
       totp_serial = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
@@ -4230,6 +4264,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoint", (char*)NULL)) {
       opt_endpoint = val;
       endpoints = { val };
+    } else if (ceph_argparse_witharg(args, i, &val, "--foreign-zone-name", (char*)NULL)) {
+      opt_foreign_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--foreign-zone-id", (char*)NULL)) {
+      opt_foreign_zone_id = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4308,6 +4346,8 @@ int main(int argc, const char **argv)
 			 OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
 			 OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
 			 OPT::ZONE_PLACEMENT_GET,
+                         OPT::FOREIGN_ZONE_CREATE, OPT::FOREIGN_ZONE_MODIFY,
+                         OPT::FOREIGN_ZONE_DELETE,
 			 OPT::REALM_CREATE,
 			 OPT::PERIOD_DELETE, OPT::PERIOD_GET,
 			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
@@ -6200,6 +6240,57 @@ int main(int argc, const char **argv)
 	encode_json("placement_pools", p->second, formatter.get());
 	formatter->flush(cout);
       }
+    case OPT::FOREIGN_ZONE_CREATE:
+    case OPT::FOREIGN_ZONE_MODIFY:
+    case OPT::FOREIGN_ZONE_DELETE:
+      {
+        if (!opt_foreign_zone_name ||
+            opt_foreign_zone_name->empty()) {
+          if (opt_cmd == OPT::FOREIGN_ZONE_CREATE) {
+            cerr << "ERROR: missing --foreign-zone-name" << std::endl;
+            return EINVAL;
+          } else if (!opt_foreign_zone_id ||
+                     opt_foreign_zone_id->empty()) {
+            cerr << "ERROR: missing --foreign-zone-name or --foreign-zone-id" << std::endl;
+            return EINVAL;
+          }
+        }
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+        if (opt_cmd == OPT::FOREIGN_ZONE_CREATE ||
+            opt_cmd == OPT::FOREIGN_ZONE_MODIFY) {
+          ret = zonegroup.modify_foreign_zone(opt_foreign_zone_name.value_or(string()),
+                                              opt_foreign_zone_id.value_or(string()),
+                                              endpoints,
+                                              sip_conf,
+                                              opt_cmd == OPT::FOREIGN_ZONE_MODIFY);
+          if (ret < 0) {
+            cerr << "failed to apply foreign zone config: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+        } else  if (opt_cmd == OPT::FOREIGN_ZONE_DELETE) {
+          ret = zonegroup.remove_foreign_zone(opt_foreign_zone_name.value_or(string()),
+                                              opt_foreign_zone_id.value_or(string()));
+          if (ret < 0) {
+            cerr << "failed to remove foreign zone: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+        }
+
+        zonegroup.post_process_params();
+        ret = zonegroup.update();
+        if (ret < 0) {
+          cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+      }
+      break;
     default:
       break;
     }

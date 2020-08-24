@@ -576,6 +576,8 @@ struct RGWDataProvider {
     std::optional<string> secret; /* secret to use, if not specified will try to use secret off backend */
     std::optional<std::string> path_prefix; /* url path prefix for sip operations */
 
+    void apply(const SIPConfig& sc);
+
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
       encode(endpoints, bl);
@@ -1079,6 +1081,15 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   const std::string& get_names_oid_prefix() const override;
   std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
+
+  int modify_foreign_zone(string zone_name,
+                          rgw_zone_id zone_id,
+                          const list<std::string>& endpoints,
+                          const RGWDataProvider::SIPConfig& sip_config,
+                          bool add);
+
+  int remove_foreign_zone(string zone_name,
+                          rgw_zone_id zone_id);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
