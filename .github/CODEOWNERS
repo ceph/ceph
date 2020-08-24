@@ -32,6 +32,7 @@
 /doc/mgr/orchestrator_modules.rst               @ceph/orchestrators
 /doc/cephadm                                    @ceph/orchestrators
 /doc/dev/cephadm.rst                            @ceph/orchestrators
+/doc/man/8/cephadm.rst                          @ceph/orchestrators
 
 #ceph-volume
 /src/ceph-volume                                @ceph/ceph-volume
