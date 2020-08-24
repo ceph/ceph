@@ -55,24 +55,23 @@ public:
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
     crimson::ct_error::object_corrupted>;
-  read_errorator::future<ceph::bufferlist> read(
-    const object_info_t& oi,
-    uint64_t off,
-    uint64_t len,
-    size_t truncate_size,
-    uint32_t truncate_seq,
-    uint32_t flags);
+  read_errorator::future<> read(
+    const ObjectState& os,
+    OSDOp& osd_op);
   read_errorator::future<> sparse_read(
     const ObjectState& os,
     OSDOp& osd_op);
-
   using checksum_errorator = ll_read_errorator::extend<
     crimson::ct_error::object_corrupted,
     crimson::ct_error::invarg>;
   checksum_errorator::future<> checksum(
     const ObjectState& os,
     OSDOp& osd_op);
-
+  using cmp_ext_errorator = ll_read_errorator::extend<
+    crimson::ct_error::invarg>;
+  cmp_ext_errorator::future<> cmp_ext(
+    const ObjectState& os,
+    OSDOp& osd_op);
   using stat_errorator = crimson::errorator<crimson::ct_error::enoent>;
   stat_errorator::future<> stat(
     const ObjectState& os,
@@ -101,6 +100,13 @@ public:
   seastar::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
+  using append_errorator = crimson::errorator<
+    crimson::ct_error::invarg>;
+  append_errorator::future<> append(
+    ObjectState& os,
+    OSDOp& osd_op,
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
   write_ertr::future<> truncate(
@@ -138,6 +144,11 @@ public:
   get_attr_errorator::future<> get_xattrs(
     const ObjectState& os,
     OSDOp& osd_op) const;
+  using rm_xattr_ertr = crimson::errorator<crimson::ct_error::enoent>;
+  rm_xattr_ertr::future<> rm_xattr(
+    ObjectState& os,
+    OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   seastar::future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -176,6 +187,12 @@ public:
     ObjectState& os,
     OSDOp& osd_op,
     ceph::os::Transaction& trans);
+  using omap_clear_ertr = crimson::errorator<crimson::ct_error::enoent>;
+  omap_clear_ertr::future<> omap_clear(
+    ObjectState& os,
+    OSDOp& osd_op,
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;

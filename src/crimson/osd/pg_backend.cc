@@ -181,39 +181,44 @@ static inline bool _read_verify_data(
   return true;
 }
 
-PGBackend::read_errorator::future<ceph::bufferlist>
-PGBackend::read(const object_info_t& oi,
-                const size_t offset,
-                size_t length,
-                const size_t truncate_size,
-                const uint32_t truncate_seq,
-                const uint32_t flags)
+PGBackend::read_errorator::future<>
+PGBackend::read(const ObjectState& os, OSDOp& osd_op)
 {
+  const auto& oi = os.oi;
+  const ceph_osd_op& op = osd_op.op;
+  const uint64_t offset = op.extent.offset;
+  uint64_t length = op.extent.length;
   logger().trace("read: {} {}~{}", oi.soid, offset, length);
+
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   // are we beyond truncate_size?
   size_t size = oi.size;
-  if ((truncate_seq > oi.truncate_seq) &&
-      (truncate_size < offset + length) &&
-      (truncate_size < size)) {
-    size = truncate_size;
+  if ((op.extent.truncate_seq > oi.truncate_seq) &&
+      (op.extent.truncate_size < offset + length) &&
+      (op.extent.truncate_size < size)) {
+    size = op.extent.truncate_size;
+  }
+  if (offset >= size) {
+    // read size was trimmed to zero and it is expected to do nothing,
+    return read_errorator::now();
   }
   if (!length) {
     // read the whole object if length is 0
     length = size;
   }
-  if (offset >= size) {
-    // read size was trimmed to zero and it is expected to do nothing,
-    return read_errorator::make_ready_future<bufferlist>();
-  }
-  return _read(oi.soid, offset, length, flags).safe_then(
-    [&oi](auto&& bl) -> read_errorator::future<ceph::bufferlist> {
-      if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
-	logger().debug("read: data length: {}", bl.length());
-        return read_errorator::make_ready_future<bufferlist>(std::move(bl));
-      } else {
-        return crimson::ct_error::object_corrupted::make();
-      }
-    });
+  return _read(oi.soid, offset, length, op.flags).safe_then(
+    [&oi, &osd_op](auto&& bl) -> read_errorator::future<> {
+    if (!_read_verify_data(oi, bl)) {
+      return crimson::ct_error::object_corrupted::make();
+    }
+    logger().debug("read: data length: {}", bl.length());
+    osd_op.rval = bl.length();
+    osd_op.outdata = std::move(bl);
+    return read_errorator::now();
+  });
 }
 
 PGBackend::read_errorator::future<>
@@ -342,6 +347,52 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
   });
 }
 
+PGBackend::cmp_ext_errorator::future<>
+PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
+{
+  const ceph_osd_op& op = osd_op.op;
+  // return the index of the first unmatched byte in the payload, hence the
+  // strange limit and check
+  if (op.extent.length > MAX_ERRNO) {
+    return crimson::ct_error::invarg::make();
+  }
+  uint64_t obj_size = os.oi.size;
+  if (os.oi.truncate_seq < op.extent.truncate_seq &&
+      op.extent.offset + op.extent.length > op.extent.truncate_size) {
+    obj_size = op.extent.truncate_size;
+  }
+  uint64_t ext_len;
+  if (op.extent.offset >= obj_size) {
+    ext_len = 0;
+  } else if (op.extent.offset + op.extent.length > obj_size) {
+    ext_len = obj_size - op.extent.offset;
+  } else {
+    ext_len = op.extent.length;
+  }
+  auto read_ext = ll_read_errorator::make_ready_future<ceph::bufferlist>();
+  if (ext_len == 0) {
+    logger().debug("{}: zero length extent", __func__);
+  } else if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+  } else {
+    read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
+  }
+  return read_ext.safe_then([&osd_op](auto&& read_bl) {
+    int32_t retcode = 0;
+    for (unsigned index = 0; index < osd_op.indata.length(); index++) {
+      char byte_in_op = osd_op.indata[index];
+      char byte_from_disk = (index < read_bl.length() ? read_bl[index] : 0);
+      if (byte_in_op != byte_from_disk) {
+        logger().debug("cmp_ext: mismatch at {}", index);
+        retcode = -MAX_ERRNO - index;
+	break;
+      }
+    }
+    logger().debug("cmp_ext: {}", retcode);
+    osd_op.rval = retcode;
+  });
+}
+
 PGBackend::stat_errorator::future<> PGBackend::stat(
   const ObjectState& os,
   OSDOp& osd_op)
@@ -425,13 +476,13 @@ seastar::future<> PGBackend::write(
       if (op.extent.truncate_size != os.oi.size) {
         os.oi.size = length;
         // TODO: truncate_update_size_and_usage()
-	if (op.extent.truncate_size > os.oi.size) {
-	  osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
-	      op.extent.truncate_size - os.oi.size);
-	} else {
-	  osd_op_params.clean_regions.mark_data_region_dirty(op.extent.truncate_size,
-	      os.oi.size - op.extent.truncate_size);
-	}
+        if (op.extent.truncate_size > os.oi.size) {
+          osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+              op.extent.truncate_size - os.oi.size);
+        } else {
+          osd_op_params.clean_regions.mark_data_region_dirty(op.extent.truncate_size,
+              os.oi.size - op.extent.truncate_size);
+        }
       }
     }
     os.oi.truncate_seq = op.extent.truncate_seq;
@@ -472,13 +523,14 @@ seastar::future<> PGBackend::write_same(
     throw crimson::osd::invalid_argument();
   }
   ceph::bufferlist repeated_indata;
-  for (uint64_t size; size < len; size += op.writesame.data_length) {
+  for (uint64_t size = 0; size < len; size += op.writesame.data_length) {
     repeated_indata.append(osd_op.indata);
   }
   maybe_create_new_object(os, txn);
   txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
-	    op.writesame.offset, op.writesame.length,
-	    std::move(repeated_indata), op.flags);
+            op.writesame.offset, len,
+            std::move(repeated_indata), op.flags);
+  os.oi.size = len;
   osd_op_params.clean_regions.mark_data_region_dirty(op.writesame.offset, len);
   return seastar::now();
 }
@@ -506,6 +558,28 @@ seastar::future<> PGBackend::writefull(
     os.oi.size = op.extent.length;
     osd_op_params.clean_regions.mark_data_region_dirty(0,
 	std::max((uint64_t) op.extent.length, os.oi.size));
+  }
+  return seastar::now();
+}
+
+PGBackend::append_errorator::future<> PGBackend::append(
+  ObjectState& os,
+  OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  const ceph_osd_op& op = osd_op.op;
+  if (op.extent.length != osd_op.indata.length()) {
+    return crimson::ct_error::invarg::make();
+  }
+  maybe_create_new_object(os, txn);
+  if (op.extent.length) {
+    txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
+              os.oi.size /* offset */, op.extent.length,
+              std::move(osd_op.indata), op.flags);
+    os.oi.size += op.extent.length;
+    osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+                                                       op.extent.length);
   }
   return seastar::now();
 }
@@ -538,21 +612,27 @@ PGBackend::write_ertr::future<> PGBackend::truncate(
     }
   }
   maybe_create_new_object(os, txn);
-  txn.truncate(coll->get_cid(),
-               ghobject_t{os.oi.soid}, op.extent.offset);
-  if (os.oi.size > op.extent.offset) {
-    // TODO: modified_ranges.union_of(trim);
-    osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
-        os.oi.size - op.extent.offset);
-  } else if (os.oi.size < op.extent.offset) {
-    osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+  if (os.oi.size != op.extent.offset) {
+    txn.truncate(coll->get_cid(),
+                 ghobject_t{os.oi.soid}, op.extent.offset);
+    if (os.oi.size > op.extent.offset) {
+      // TODO: modified_ranges.union_of(trim);
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        op.extent.offset,
+	os.oi.size - op.extent.offset);
+    } else {
+      // os.oi.size < op.extent.offset
+      osd_op_params.clean_regions.mark_data_region_dirty(
+        os.oi.size,
         op.extent.offset - os.oi.size);
+    }
+    os.oi.size = op.extent.offset;
+    os.oi.clear_data_digest();
   }
   // TODO: truncate_update_size_and_usage()
   // TODO: ctx->delta_stats.num_wr++;
   // ----
   // do no set exists, or we will break above DELETE -> TRUNCATE munging.
-  os.oi.clear_data_digest();
   return write_ertr::now();
 }
 
@@ -677,13 +757,11 @@ seastar::future<> PGBackend::setxattr(
 
   maybe_create_new_object(os, txn);
 
-  std::string name;
+  std::string name{"_"};
   ceph::bufferlist val;
   {
     auto bp = osd_op.indata.cbegin();
-    std::string aname;
-    bp.copy(osd_op.op.xattr.name_len, aname);
-    name = "_" + aname;
+    bp.copy(osd_op.op.xattr.name_len, name);
     bp.copy(osd_op.op.xattr.value_len, val);
     osd_op.indata.splice(0, bp.get_off());
   }
@@ -751,6 +829,26 @@ PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
   });
 }
 
+PGBackend::rm_xattr_ertr::future<> PGBackend::rm_xattr(
+  ObjectState& os,
+  OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  auto bp = osd_op.indata.cbegin();
+  string attr_name{"_"};
+  bp.copy(osd_op.op.xattr.name_len, attr_name);
+  osd_op.indata.splice(0, bp.get_off());
+  txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
+  return rm_xattr_ertr::now();
+}
+
 using get_omap_ertr =
   crimson::os::FuturizedStore::read_errorator::extend<
     crimson::ct_error::enodata>;
@@ -812,7 +910,10 @@ PGBackend::omap_get_keys(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   std::string start_after;
   uint64_t max_return;
   try {
@@ -934,6 +1035,10 @@ PGBackend::omap_get_vals_by_keys(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
 
   std::set<std::string> keys_to_get;
   try {
@@ -943,7 +1048,6 @@ PGBackend::omap_get_vals_by_keys(
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument();
   }
-
   return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get).safe_then(
     [&osd_op] (crimson::os::FuturizedStore::omap_values_t&& vals) {
       encode(vals, osd_op.outdata);
@@ -1027,6 +1131,30 @@ seastar::future<> PGBackend::omap_remove_range(
   //ctx->delta_stats.num_wr++;
   os.oi.clear_omap_digest();
   return seastar::now();
+}
+
+PGBackend::omap_clear_ertr::future<>
+PGBackend::omap_clear(
+  ObjectState& os,
+  OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+  if (!os.oi.is_omap()) {
+    return omap_clear_ertr::now();
+  }
+  txn.omap_clear(coll->get_cid(), ghobject_t{os.oi.soid});
+  osd_op_params.clean_regions.mark_omap_dirty();
+  os.oi.clear_omap_digest();
+  os.oi.clear_flag(object_info_t::FLAG_OMAP);
+  return omap_clear_ertr::now();
 }
 
 seastar::future<struct stat> PGBackend::stat(
