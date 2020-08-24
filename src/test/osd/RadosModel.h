@@ -779,9 +779,9 @@ public:
 		
   void _begin() override
   {
-    std::lock_guard state_locker{context->state_lock};
-    done = 0;
+    assert(!done);
     stringstream acc;
+    std::lock_guard state_locker{context->state_lock};
     acc << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
     string prefix = acc.str();
 
