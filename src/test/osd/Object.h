@@ -5,6 +5,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <stack>
 #include <random>
 
 #ifndef OBJECT_H
@@ -369,14 +370,16 @@ public:
 	  std::numeric_limits<uint64_t>::max();
       }
     };
-    std::list<ContState> layers;
+    // from latest to earliest
+    using layers_t = std::vector<ContState>;
+    layers_t layers;
 
     struct StackState {
       const uint64_t next;
       const uint64_t size;
     };
-    std::list<std::pair<std::list<ContState>::iterator, StackState> > stack;
-    std::list<ContState>::iterator current;
+    std::stack<std::pair<layers_t::iterator, StackState> > stack;
+    layers_t::iterator current;
 
     explicit iterator(ObjectDesc &obj) :
       pos(0),
