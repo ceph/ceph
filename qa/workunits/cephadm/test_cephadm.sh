@@ -40,7 +40,6 @@ if [ -z "$PYTHON_KLUDGE" ]; then
     # see which pythons we should test with
     PYTHONS=""
     which python3 && PYTHONS="$PYTHONS python3"
-    which python2 && PYTHONS="$PYTHONS python2"
     echo "PYTHONS $PYTHONS"
     if [ -z "$PYTHONS" ]; then
 	echo "No PYTHONS found!"
@@ -171,6 +170,9 @@ function nfs_stop()
 
 ## prepare + check host
 $SUDO $CEPHADM check-host
+
+## run a gather-facts (output to stdout)
+$SUDO $CEPHADM gather-facts
 
 ## version + --image
 $SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
