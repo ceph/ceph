@@ -2535,7 +2535,7 @@ public:
     op = this;
 
     /* allow this request to replace selected attrs */
-    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+    attrs_mod = rgw::sal::ATTRSMOD_MERGE;
   }
 
   bool only_bucket() override { return true; }
