@@ -211,7 +211,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=sub_name,type=CephString '
                    'name=snap_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
-            'desc': "Protect snapshot of a CephFS subvolume in a volume, "
+            'desc': "(deprecated) Protect snapshot of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
             'perm': 'rw'
         },
@@ -221,7 +221,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=sub_name,type=CephString '
                    'name=snap_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
-            'desc': "Unprotect a snapshot of a CephFS subvolume in a volume, "
+            'desc': "(deprecated) Unprotect a snapshot of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
             'perm': 'rw'
         },
