@@ -352,7 +352,8 @@ private:
 				 PExtentVector* extents);
 
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
-  int _flush(FileWriter *h, bool force);
+  int _flush(FileWriter *h, bool focce, std::unique_lock<ceph::mutex>& l);
+  int _flush(FileWriter *h, bool force, bool *flushed = nullptr);
   int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
 
 #ifdef HAVE_LIBAIO
@@ -365,7 +366,6 @@ private:
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
   bool _should_compact_log();
-  void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
 
   enum {
     REMOVE_DB = 1,
@@ -517,6 +517,8 @@ public:
 
   /// sync any uncommitted state to disk
   void sync_metadata(bool avoid_compact);
+  /// test and compact log, if necessary
+  void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
 
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
@@ -553,9 +555,10 @@ public:
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
-  void flush(FileWriter *h) {
-    std::lock_guard l(lock);
-    _flush(h, false);
+  void flush(FileWriter *h, bool force = false) {
+    std::unique_lock l(lock);
+    int r = _flush(h, force, l);
+    ceph_assert(r == 0);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
     std::lock_guard l(lock);
@@ -563,7 +566,9 @@ public:
   }
   int fsync(FileWriter *h) {
     std::unique_lock l(lock);
-    return _fsync(h, l);
+    int r = _fsync(h, l);
+    _maybe_compact_log(l);
+    return r;
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
 	   bufferlist *outbl, char *out) {
