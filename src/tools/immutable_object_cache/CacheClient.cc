@@ -380,7 +380,7 @@ namespace immutable_obj_cache {
   int CacheClient::register_client(Context* on_finish) {
     ObjectCacheRequest* reg_req = new ObjectCacheRegData(RBDSC_REGISTER,
                                                          m_sequence_id++,
-                                                         ceph_version_to_str());
+                                                         ceph_version_to_str(m_cct));
     reg_req->encode();
 
     bufferlist bl;

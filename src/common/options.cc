@@ -8800,6 +8800,10 @@ std::vector<Option> get_mds_client_options() {
     .set_description("Size of thread pool for ASIO completions")
     .add_tag("client"),
 
+    Option("debug_version_for_testing", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_description("Override ceph_version_short for testing"),
+
     Option("client_shutdown_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_RUNTIME)
     .set_default(30)
