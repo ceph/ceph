@@ -343,7 +343,7 @@ class MgrService(CephadmService):
         if mgr_services:
             mgr_endpoints = json.loads(mgr_services)
             for end_point in mgr_endpoints.values():
-                port = re.search('\:\d+\/', end_point)
+                port = re.search(r'\:\d+\/', end_point)
                 if port:
                     ports.append(int(port[0][1:-1]))
 
