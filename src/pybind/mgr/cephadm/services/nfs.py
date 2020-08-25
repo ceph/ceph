@@ -120,15 +120,12 @@ class NFSService(CephadmService):
 
     def get_or_create_keyring(self, entity: str) -> str:
         logger.info('Create keyring: %s' % entity)
-        ret, keyring, err = self.mgr.mon_command({
+
+        ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': entity,
         })
 
-        if ret != 0:
-            raise OrchestratorError(
-                'Unable to create keyring %s: %s %s'
-                % (entity, ret, err))
         return keyring
 
     def update_keyring_caps(self, entity: str, spec: NFSServiceSpec) -> None:
@@ -137,17 +134,12 @@ class NFSService(CephadmService):
             osd_caps = '%s namespace=%s' % (osd_caps, spec.namespace)
 
         logger.info('Updating keyring caps: %s' % entity)
-        ret, out, err = self.mgr.mon_command({
+        ret, out, err = self.mgr.check_mon_command({
             'prefix': 'auth caps',
             'entity': entity,
             'caps': ['mon', 'allow r',
                      'osd', osd_caps],
         })
-
-        if ret != 0:
-            raise OrchestratorError(
-                'Unable to update keyring caps %s: %s %s'
-                % (entity, ret, err))
 
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
