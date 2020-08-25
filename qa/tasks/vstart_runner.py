@@ -1268,6 +1268,16 @@ def scan_tests(modules):
             max_required_mgr, require_memstore
 
 
+class LogRotate():
+    def __init__(self):
+        self.conf_file_path = os.path.join(os.getcwd(), 'logrotate.conf')
+        self.state_file_path = os.path.join(os.getcwd(), 'logrotate.state')
+
+    def run_logrotate(self):
+        remote.run(args=['logrotate', '-f', self.conf_file_path, '-s',
+                         self.state_file_path, '--verbose'])
+
+
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
     remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
@@ -1376,13 +1386,49 @@ class LoggingResultTemplate(object):
 
 
 def launch_tests(overall_suite):
-    return launch_entire_suite(overall_suite)
+    return launch_individually(overall_suite) if opt_rotate_logs else \
+        launch_entire_suite(overall_suite)
 
 
 def get_logging_result_class():
     result_class = InteractiveFailureResult if opt_interactive_on_error else \
         unittest.TextTestResult
     return type('', (LoggingResultTemplate, result_class), {})
+
+
+def launch_individually(overall_suite):
+    no_of_tests_execed = 0
+
+    LoggingResult = get_logging_result_class()
+    if opt_rotate_logs:
+        logrotate = LogRotate()
+
+    started_at = datetime.datetime.utcnow()
+    for suite_, case in enumerate_methods(overall_suite):
+        # don't run logrotate beforehand since some ceph daemons might be
+        # down and pre/post-rotate scripts in logrotate.conf might fail.
+        if opt_rotate_logs:
+            logrotate.run_logrotate()
+
+        result = unittest.TextTestRunner(stream=LogStream(),
+                                         resultclass=LoggingResult,
+                                         verbosity=2, failfast=True).run(case)
+
+        if not result.wasSuccessful():
+            break
+
+        no_of_tests_execed += 1
+    time_elapsed = (datetime.datetime.utcnow() - started_at).total_seconds()
+
+    if result.wasSuccessful():
+        log.info('')
+        log.info('-'*70)
+        log.info('Ran {} tests in {}s'.format(no_of_tests_execed,
+                                              time_elapsed))
+        log.info('')
+        log.info('OK')
+
+    return result
 
 
 def launch_entire_suite(overall_suite):
@@ -1409,6 +1455,8 @@ def exec_test():
     opt_use_ns = False
     opt_brxnet= None
     opt_verbose = True
+    global opt_rotate_logs
+    opt_rotate_logs = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1446,6 +1494,8 @@ def exec_test():
                 sys.exit(-1)
         elif '--no-verbose' == f:
             opt_verbose = False
+        elif f == '--rotate-logs':
+            opt_rotate_logs = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
