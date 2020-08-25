@@ -6,6 +6,7 @@ import random
 import logging
 import collections
 import uuid
+import unittest
 from hashlib import md5
 from textwrap import dedent
 
@@ -1681,6 +1682,25 @@ class TestVolumes(CephFSTestCase):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_group_snapshot_unsupported_status(self):
+        group = self._generate_random_group_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # snapshot group
+        try:
+            self._fs_cmd("subvolumegroup", "snapshot", "create", self.volname, group, snapshot)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOSYS, "invalid error code on subvolumegroup snapshot create")
+        else:
+            self.fail("expected subvolumegroup snapshot create command to fail")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_subvolume_group_snapshot_create_and_rm(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
@@ -1707,6 +1727,7 @@ class TestVolumes(CephFSTestCase):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_subvolume_group_snapshot_idempotence(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
@@ -1736,6 +1757,7 @@ class TestVolumes(CephFSTestCase):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_nonexistent_subvolume_group_snapshot_rm(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
@@ -1771,6 +1793,7 @@ class TestVolumes(CephFSTestCase):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_subvolume_group_snapshot_rm_force(self):
         # test removing non-existing subvolume group snapshot with --force
         group = self._generate_random_group_name()
@@ -1781,6 +1804,7 @@ class TestVolumes(CephFSTestCase):
         except CommandFailedError:
             raise RuntimeError("expected the 'fs subvolumegroup snapshot rm --force' command to succeed")
 
+    @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_subvolume_group_snapshot_ls(self):
         # tests the 'fs subvolumegroup snapshot ls' command
 
