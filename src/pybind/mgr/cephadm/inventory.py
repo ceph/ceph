@@ -90,11 +90,11 @@ class Inventory:
     def spec_from_dict(self, info):
         hostname = info['hostname']
         return HostSpec(
-                hostname,
-                addr=info.get('addr', hostname),
-                labels=info.get('labels', []),
-                status='Offline' if hostname in self.mgr.offline_hosts else info.get('status', ''),
-            )
+            hostname,
+            addr=info.get('addr', hostname),
+            labels=info.get('labels', []),
+            status='Offline' if hostname in self.mgr.offline_hosts else info.get('status', ''),
+        )
 
     def all_specs(self) -> Iterator[HostSpec]:
         return map(self.spec_from_dict, self._inventory.values())
@@ -107,9 +107,9 @@ class SpecStore():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr = mgr
-        self.specs = {} # type: Dict[str, ServiceSpec]
-        self.spec_created = {} # type: Dict[str, datetime.datetime]
-        self.spec_preview = {} # type: Dict[str, ServiceSpec]
+        self.specs = {}  # type: Dict[str, ServiceSpec]
+        self.spec_created = {}  # type: Dict[str, datetime.datetime]
+        self.spec_preview = {}  # type: Dict[str, ServiceSpec]
 
     def load(self):
         # type: () -> None
@@ -164,6 +164,7 @@ class SpecStore():
             service_name, specs))
         return specs
 
+
 class HostCache():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
@@ -174,9 +175,9 @@ class HostCache():
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
-        self.daemon_refresh_queue = [] # type: List[str]
-        self.device_refresh_queue = [] # type: List[str]
-        self.osdspec_previews_refresh_queue = [] # type: List[str]
+        self.daemon_refresh_queue = []  # type: List[str]
+        self.device_refresh_queue = []  # type: List[str]
+        self.osdspec_previews_refresh_queue = []  # type: List[str]
 
         # host -> daemon name -> dict
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
@@ -288,7 +289,7 @@ class HostCache():
         if host in self.last_device_update:
             del self.last_device_update[host]
         self.mgr.event.set()
-    
+
     def distribute_new_registry_login_info(self):
         self.registry_login_queue = set(self.mgr.inventory.keys())
 
@@ -301,9 +302,11 @@ class HostCache():
             'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
-            j['last_daemon_update'] = self.last_daemon_update[host].strftime(DATEFMT) # type: ignore
+            j['last_daemon_update'] = self.last_daemon_update[host].strftime(
+                DATEFMT)  # type: ignore
         if host in self.last_device_update:
-            j['last_device_update'] = self.last_device_update[host].strftime(DATEFMT) # type: ignore
+            j['last_device_update'] = self.last_device_update[host].strftime(
+                DATEFMT)  # type: ignore
         for name, dd in self.daemons[host].items():
             j['daemons'][name] = dd.to_json()  # type: ignore
         for d in self.devices[host]:
@@ -472,7 +475,7 @@ class HostCache():
             return True
         # already up to date:
         return False
-    
+
     def update_last_etc_ceph_ceph_conf(self, host: str):
         if not self.mgr.last_monmap:
             return
@@ -512,7 +515,7 @@ class EventStore():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr: CephadmOrchestrator = mgr
-        self.events = {} # type: Dict[str, List[OrchestratorEvent]]
+        self.events = {}  # type: Dict[str, List[OrchestratorEvent]]
 
     def add(self, event: OrchestratorEvent) -> None:
 
@@ -529,7 +532,8 @@ class EventStore():
         self.events[event.kind_subject()] = self.events[event.kind_subject()][-5:]
 
     def for_service(self, spec: ServiceSpec, level, message) -> None:
-        e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', spec.service_name(), level, message)
+        e = OrchestratorEvent(datetime.datetime.utcnow(), 'service',
+                              spec.service_name(), level, message)
         self.add(e)
 
     def from_orch_error(self, e: OrchestratorError):
@@ -541,7 +545,6 @@ class EventStore():
                 "ERROR",
                 str(e)
             ))
-
 
     def for_daemon(self, daemon_name, level, message):
         e = OrchestratorEvent(datetime.datetime.utcnow(), 'daemon', daemon_name, level, message)
