@@ -204,7 +204,7 @@ static void handle_fatal_signal(int signum)
 	now.gmtime(jf.dump_stream("timestamp"));
 	jf.dump_string("process_name", g_process_name);
 	jf.dump_string("entity_name", g_ceph_context->_conf->name.to_str());
-	jf.dump_string("ceph_version", ceph_version_to_str());
+	jf.dump_string("ceph_version", ceph_version_to_str(g_ceph_context));
 
 	struct utsname u;
 	r = uname(&u);
