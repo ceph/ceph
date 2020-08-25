@@ -5133,11 +5133,11 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs.attrs);
   if (op_ret < 0) {
     return op_ret;
   }
-  populate_with_generic_attrs(s, attrs);
+  populate_with_generic_attrs(s, attrs.attrs);
 
   return 0;
 }
@@ -5189,7 +5189,7 @@ void RGWCopyObj::execute()
   src_object->set_atomic(&obj_ctx);
   dest_object->set_atomic(&obj_ctx);
 
-  encode_delete_at_attr(delete_at, attrs);
+  encode_delete_at_attr(delete_at, attrs.attrs);
 
   if (!s->system_request) { // no quota enforcement for system requests
     // get src object size (cached in obj_ctx from verify_permission())
@@ -5221,12 +5221,11 @@ void RGWCopyObj::execute()
     return;
   }
 
-  op_ret = store->getRados()->copy_obj(obj_ctx,
-	   s->user->get_id(),
+  op_ret = src_object->copy_object(obj_ctx,
+	   s->user,
 	   &s->info,
 	   source_zone,
 	   dest_object.get(),
-	   src_object.get(),
 	   dest_bucket.get(),
 	   src_bucket.get(),
 	   s->dest_placement,
@@ -5239,9 +5238,10 @@ void RGWCopyObj::execute()
 	   if_nomatch,
 	   attrs_mod,
 	   copy_if_newer,
-	   attrs, RGWObjCategory::Main,
+	   attrs,
+	   RGWObjCategory::Main,
 	   olh_epoch,
-	   (delete_at ? *delete_at : real_time()),
+	   delete_at,
 	   (version_id.empty() ? NULL : &version_id),
 	   &s->req_id, /* use req_id as tag */
 	   &etag,

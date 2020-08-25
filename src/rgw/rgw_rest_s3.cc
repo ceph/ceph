@@ -3214,11 +3214,11 @@ int RGWCopyObj_ObjStore_S3::get_params()
   auto tmp_md_d = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (tmp_md_d) {
     if (strcasecmp(tmp_md_d, "COPY") == 0) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE;
+      attrs_mod = rgw::sal::ATTRSMOD_NONE;
     } else if (strcasecmp(tmp_md_d, "REPLACE") == 0) {
-      attrs_mod = RGWRados::ATTRSMOD_REPLACE;
+      attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
+      attrs_mod = rgw::sal::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
       s->err.message = "Unknown metadata directive.";
       ldpp_dout(this, 0) << s->err.message << dendl;
@@ -3232,7 +3232,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_obj_name.compare(src_object->get_name()) == 0) &&
       src_object->get_instance().empty() &&
-      (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
+      (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
   }
 

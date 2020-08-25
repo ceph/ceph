@@ -1396,9 +1396,9 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
 
   const char * const fresh_meta = s->info.env->get("HTTP_X_FRESH_METADATA");
   if (fresh_meta && strcasecmp(fresh_meta, "TRUE") == 0) {
-    attrs_mod = RGWRados::ATTRSMOD_REPLACE;
+    attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
   } else {
-    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+    attrs_mod = rgw::sal::ATTRSMOD_MERGE;
   }
 
   int r = get_delete_at_param(s, delete_at);
@@ -1457,8 +1457,8 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     dump_etag(s, etag);
     dump_last_modified(s, mtime);
     dump_copy_info();
-    get_contype_from_attrs(attrs, content_type);
-    dump_object_metadata(this, s, attrs);
+    get_contype_from_attrs(attrs.attrs, content_type);
+    dump_object_metadata(this, s, attrs.attrs);
     end_header(s, this, !content_type.empty() ? content_type.c_str()
 	       : "binary/octet-stream");
   } else {

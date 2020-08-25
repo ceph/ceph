@@ -27,6 +27,12 @@ class RGWBucket;
 class RGWObject;
 class RGWBucketList;
 
+enum AttrsMod {
+  ATTRSMOD_NONE    = 0,
+  ATTRSMOD_REPLACE = 1,
+  ATTRSMOD_MERGE   = 2
+};
+
 struct RGWAttrs {
   std::map<std::string, ceph::buffer::list> attrs;
 
@@ -354,6 +360,21 @@ class RGWObject {
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
 			      std::string& version_id,optional_yield y) = 0;
+    virtual int copy_object(RGWObjectCtx& obj_ctx, RGWUser* user,
+               req_info *info, const rgw_zone_id& source_zone,
+               rgw::sal::RGWObject* dest_object, rgw::sal::RGWBucket* dest_bucket,
+               rgw::sal::RGWBucket* src_bucket,
+               const rgw_placement_rule& dest_placement,
+               ceph::real_time *src_mtime, ceph::real_time *mtime,
+               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
+               bool high_precision_time,
+               const char *if_match, const char *if_nomatch,
+               AttrsMod attrs_mod, bool copy_if_newer, RGWAttrs& attrs,
+               RGWObjCategory category, uint64_t olh_epoch,
+	       boost::optional<ceph::real_time> delete_at,
+               string *version_id, string *tag, string *etag,
+               void (*progress_cb)(off_t, void *), void *progress_data,
+               const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     virtual void set_atomic(RGWObjectCtx *rctx) const = 0;
@@ -488,6 +509,21 @@ class RGWRadosObject : public RGWObject {
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
 			      std::string& version_id,optional_yield y) override;
+    virtual int copy_object(RGWObjectCtx& obj_ctx, RGWUser* user,
+               req_info *info, const rgw_zone_id& source_zone,
+               rgw::sal::RGWObject* dest_object, rgw::sal::RGWBucket* dest_bucket,
+               rgw::sal::RGWBucket* src_bucket,
+               const rgw_placement_rule& dest_placement,
+               ceph::real_time *src_mtime, ceph::real_time *mtime,
+               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
+               bool high_precision_time,
+               const char *if_match, const char *if_nomatch,
+               AttrsMod attrs_mod, bool copy_if_newer, RGWAttrs& attrs,
+               RGWObjCategory category, uint64_t olh_epoch,
+	       boost::optional<ceph::real_time> delete_at,
+               string *version_id, string *tag, string *etag,
+               void (*progress_cb)(off_t, void *), void *progress_data,
+               const DoutPrefixProvider *dpp, optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     int set_acl(const RGWAccessControlPolicy& acl) { acls = acl; return 0; }
     virtual void set_atomic(RGWObjectCtx *rctx) const;
