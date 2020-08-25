@@ -386,6 +386,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
   if (values.cluster.empty()) {
     values.cluster = get_cluster_name(conffile.c_str());
   }
+  update_legacy_vals(values);
   return 0;
 }
 
@@ -418,7 +419,6 @@ md_config_t::parse_buffer(ConfigValues& values,
     }
   }
   cf.check_old_style_section_names({"mds", "mon", "osd"}, cerr);
-  update_legacy_vals(values);
   return 0;
 }
 
