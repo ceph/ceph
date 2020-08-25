@@ -44,7 +44,7 @@ class IscsiService(CephadmService):
                 cert_data = '\n'.join(spec.ssl_cert)
             else:
                 cert_data = spec.ssl_cert
-            ret, out, err = self.mgr.mon_command({
+            ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.crt',
                 'val': cert_data,
@@ -55,7 +55,7 @@ class IscsiService(CephadmService):
                 key_data = '\n'.join(spec.ssl_key)
             else:
                 key_data = spec.ssl_key
-            ret, out, err = self.mgr.mon_command({
+            ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.key',
                 'val': key_data,
