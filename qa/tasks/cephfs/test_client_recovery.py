@@ -636,7 +636,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait()
 
         if isinstance(self.mount_a, FuseMount):
-            self.skipTest("Not implemented in FUSE client yet")
+            self.mount_a.mount(mount_options=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
         else:
             try:
                 self.mount_a.mount(mount_options=['recover_session=clean'])
