@@ -1908,6 +1908,31 @@ class Toolbox(DeepSea):
                                "after reaching timeout"
                                .format(cluster_status))
 
+    def set_drive_group_limit(self, **kwargs):
+        """
+        Helper to modify drive_groups limit field value
+
+        ex.
+        set_drive_group_limit:
+            limit: -1
+
+        this will take all available disks from ceph-volume inventory
+        and then reduce/add by the limit value so you've spare drive/s
+        """
+        c_v_inventory = self.master_remote.sh('sudo ceph-volume inventory --format json')
+        disks = json.loads(c_v_inventory)
+        available_disks = [_ for _ in disks if _['available']]
+        self.log.info("c_v found {} available disks.".format(len(available_disks)))
+        value = kwargs['limit']
+        self.log.info("Do not allocate {} disk".format(value))
+        dg_file = "/srv/salt/ceph/configuration/files/drive_groups.yml"
+        dg_data = self.master_remote.read_file(dg_file)
+        dg_contents = yaml.safe_load(dg_data)
+        # assume single Drive Group entry
+        dg = next(iter(dg_contents.values()))
+        dg['data_devices']['limit'] = len(available_disks) + value
+        self.master_remote.write_file(dg_file, yaml.safe_dump(dg_contents), sudo=True)
+
     def begin(self):
         if not self.config:
             self.log.warning("empty config: nothing to do")

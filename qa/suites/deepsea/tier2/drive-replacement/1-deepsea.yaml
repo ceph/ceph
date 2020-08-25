@@ -6,12 +6,17 @@ tasks:
                         target: '*'
                         data_devices:
                             all: true
-                            limit: 4
         - deepsea.orch:
                 stage: prep
         - deepsea.orch:
                 stage: 1
         - deepsea.policy:
+        - deepsea.toolbox:
+        # Given a custom drive group
+        # append a limit entry (based on node's `ceph-volume inventory`)
+                set_drive_group_limit:
+                        # Have one spare drive after initial deployment
+                        limit: -1
         - deepsea.orch:
                 stage: 2
         - deepsea.ceph_conf:

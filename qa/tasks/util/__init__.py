@@ -10,6 +10,7 @@ from teuthology.exceptions import (
     )
 from paramiko.ssh_exception import NoValidConnectionsError
 
+
 def enumerate_osds(remote, logger):
     """
     Given a remote, enumerates the OSDs (if any) running on the machine
@@ -179,8 +180,8 @@ def introspect_roles(ctx, logger, quiet=True):
     nodes_storage = list(set(nodes_storage))
     nodes_monitor = list(set(nodes_monitor))
 
-    nodes_random_storage = random.sample(nodes_storage, 2 if len(nodes_storage) > 1 else 1)
-    nodes_random_monitor = random.sample(nodes_monitor, 2 if len(nodes_monitor) > 1 else 1)
+    nodes_random_storage = random.sample(nodes_storage, 2 if len(nodes_storage) > 1 else 1)  # noqa F841
+    nodes_random_monitor = random.sample(nodes_monitor, 2 if len(nodes_monitor) > 1 else 1)  # noqa F841
 
     nodes_storage_only = []
     for node in nodes_storage:
@@ -216,7 +217,7 @@ def introspect_roles(ctx, logger, quiet=True):
     elif len(nodes_monitor) < 3:
         ctx['dev_env'] = True
     else:
-        ctx['dev_env'] = False    
+        ctx['dev_env'] = False
     if not quiet:
         # report phase
         logger.info("ROLE INTROSPECTION REPORT")

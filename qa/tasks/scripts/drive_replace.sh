@@ -6,8 +6,8 @@ set -ex
 
 OSD_ID="$1"
 
-# write "ceph osd tree" JSON to a file for later "before-after" comparison
-ceph osd tree --format json | tee before.json
+# write "ceph osd tree" to a file for later "before-after" comparison
+ceph osd tree | tee before.txt
 
 # assert that the OSD's systemd unit is active
 if systemctl is-active "ceph-osd@$OSD_ID" ; then

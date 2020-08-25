@@ -149,11 +149,7 @@ class Validation(SESQA):
         In order to "hide" an existing disk from the ceph.c_v in teuthology
         the disk is formatted and mounted.
         """
-        total_osds = self.master_remote.sh(number_of_osds_in_cluster)
         osd_id = 0
-        disks = self._get_drive_group_limit()
-        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})"\
-            .format(total_osds, disks)
         self.scripts.run(
                 self.master_remote,
                 'drive_replace.sh',
@@ -166,20 +162,8 @@ class Validation(SESQA):
 
         Replaced osd_id should be back in the osd tree once stage.3 is ran
         """
-        total_osds = self.master_remote.sh(number_of_osds_in_cluster)
-        disks = self._get_drive_group_limit()
-        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})"\
-            .format(total_osds, disks)
-        self.master_remote.sh("sudo ceph osd tree --format json | tee after.json")
-        self.master_remote.sh("diff before.json after.json && echo 'Drive Replaced OK'")
-
-    def _get_drive_group_limit(self, **kwargs):
-        """
-        Helper to get drive_groups limit field value
-        """
-        drive_group = next(x for x in self.ctx['config']['tasks']
-                           if 'deepsea' in x and 'drive_group' in x['deepsea'])
-        return int(drive_group['deepsea']['drive_group']['custom']['data_devices']['limit'])
+        self.master_remote.sh("sudo ceph osd tree | tee after.txt")
+        self.master_remote.sh("diff before.txt after.txt && echo 'Drive Replaced OK'")
 
     def ses_rack_dc_region_unavailability(self, **kwargs):
         """
