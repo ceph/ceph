@@ -1,7 +1,7 @@
 
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - inode wrongly marked free
       - bad backtrace on inode
       - inode table repaired for inode

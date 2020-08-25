@@ -147,7 +147,7 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
     return namespace_replayer;
   }
 
-  MOCK_METHOD0(is_blacklisted, bool());
+  MOCK_METHOD0(is_blocklisted, bool());
   MOCK_METHOD0(get_instance_id, std::string());
 
   MOCK_METHOD1(init, void(Context*));
@@ -186,7 +186,7 @@ struct LeaderWatcher<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
-  MOCK_METHOD0(is_blacklisted, bool());
+  MOCK_METHOD0(is_blocklisted, bool());
   MOCK_METHOD0(is_leader, bool());
   MOCK_METHOD0(release_leader, void());
 
@@ -410,17 +410,17 @@ public:
                 }));
   }
 
-  void expect_leader_watcher_is_blacklisted(
-      MockLeaderWatcher &mock_leader_watcher, bool blacklisted) {
-    EXPECT_CALL(mock_leader_watcher, is_blacklisted())
-      .WillRepeatedly(Return(blacklisted));
+  void expect_leader_watcher_is_blocklisted(
+      MockLeaderWatcher &mock_leader_watcher, bool blocklisted) {
+    EXPECT_CALL(mock_leader_watcher, is_blocklisted())
+      .WillRepeatedly(Return(blocklisted));
   }
 
-  void expect_namespace_replayer_is_blacklisted(
+  void expect_namespace_replayer_is_blocklisted(
       MockNamespaceReplayer &mock_namespace_replayer,
-      bool blacklisted) {
-    EXPECT_CALL(mock_namespace_replayer, is_blacklisted())
-      .WillRepeatedly(Return(blacklisted));
+      bool blocklisted) {
+    EXPECT_CALL(mock_namespace_replayer, is_blocklisted())
+      .WillRepeatedly(Return(blocklisted));
   }
 
   void expect_namespace_replayer_get_instance_id(
@@ -542,7 +542,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   peer_spec.key = "234";
 
   auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blacklisted(*mock_default_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
                                            false);
 
   MockThreads mock_threads(m_threads);
@@ -550,7 +550,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
 
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
-  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
+  expect_leader_watcher_is_blocklisted(*mock_leader_watcher, false);
 
   InSequence seq;
 
@@ -604,7 +604,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   peer_spec.key = "234";
 
   auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blacklisted(*mock_default_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
                                            false);
 
   MockThreads mock_threads(m_threads);
@@ -613,7 +613,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
-  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
+  expect_leader_watcher_is_blocklisted(*mock_leader_watcher, false);
 
   InSequence seq;
 
@@ -684,15 +684,15 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   MockNamespace mock_namespace;
 
   auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blacklisted(*mock_default_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
                                            false);
 
   auto mock_ns1_namespace_replayer = new MockNamespaceReplayer("ns1");
-  expect_namespace_replayer_is_blacklisted(*mock_ns1_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_ns1_namespace_replayer,
                                            false);
 
   auto mock_ns2_namespace_replayer = new MockNamespaceReplayer("ns2");
-  expect_namespace_replayer_is_blacklisted(*mock_ns2_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_ns2_namespace_replayer,
                                            false);
 
   MockThreads mock_threads(m_threads);
@@ -701,7 +701,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
-  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
+  expect_leader_watcher_is_blocklisted(*mock_leader_watcher, false);
 
   auto& mock_cluster = get_mock_cluster();
   auto mock_local_rados_client = mock_cluster.do_create_rados_client(
@@ -805,11 +805,11 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   MockNamespace mock_namespace;
 
   auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blacklisted(*mock_default_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
                                            false);
   auto mock_ns1_namespace_replayer = new MockNamespaceReplayer("ns1");
   auto mock_ns2_namespace_replayer = new MockNamespaceReplayer("ns2");
-  expect_namespace_replayer_is_blacklisted(*mock_ns2_namespace_replayer,
+  expect_namespace_replayer_is_blocklisted(*mock_ns2_namespace_replayer,
                                            false);
   auto mock_ns3_namespace_replayer = new MockNamespaceReplayer("ns3");
 
@@ -819,7 +819,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
-  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
+  expect_leader_watcher_is_blocklisted(*mock_leader_watcher, false);
 
   auto& mock_cluster = get_mock_cluster();
   auto mock_local_rados_client = mock_cluster.do_create_rados_client(

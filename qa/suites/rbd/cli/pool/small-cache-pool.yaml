@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(CACHE_POOL_NEAR_FULL\)
       - \(CACHE_POOL_NO_HIT_SET\)

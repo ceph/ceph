@@ -275,7 +275,7 @@ The following entries describe valid capability profiles:
 :Description: Gives a user permissions to manipulate RBD images. When used
               as a Monitor cap, it provides the minimal privileges required
               by an RBD client application; this includes the ability
-	      to blacklist other client users. When used as an OSD cap, it
+	      to blocklist other client users. When used as an OSD cap, it
               provides read-write access to the specified pool to an
 	      RBD client application. The Manager cap supports optional
               ``pool`` and ``namespace`` keyword arguments.

@@ -14,13 +14,13 @@ class OpInfo {
 public:
   struct ClassInfo {
     ClassInfo(std::string&& class_name, std::string&& method_name,
-              bool read, bool write, bool whitelisted) :
+              bool read, bool write, bool allowed) :
       class_name(std::move(class_name)), method_name(std::move(method_name)),
-      read(read), write(write), whitelisted(whitelisted)
+      read(read), write(write), allowed(allowed)
     {}
     const std::string class_name;
     const std::string method_name;
-    const bool read, write, whitelisted;
+    const bool read, write, allowed;
   };
 
 private:
@@ -30,9 +30,9 @@ private:
   void set_rmw_flags(int flags);
 
   void add_class(std::string&& class_name, std::string&& method_name,
-                 bool read, bool write, bool whitelisted) {
+                 bool read, bool write, bool allowed) {
     classes.emplace_back(std::move(class_name), std::move(method_name),
-                          read, write, whitelisted);
+                          read, write, allowed);
   }
 
 public:

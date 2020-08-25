@@ -1,7 +1,7 @@
 
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - responding to mclientcaps\(revoke\)
       - not advance its oldest_client_tid
       - failing to advance its oldest client/flush tid

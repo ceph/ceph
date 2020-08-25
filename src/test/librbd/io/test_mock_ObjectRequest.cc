@@ -1566,14 +1566,14 @@ TEST_F(TestMockIoObjectRequest, ObjectMapError) {
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 0, 0);
   expect_object_may_exist(mock_image_ctx, 0, true);
   expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, true,
-                           -EBLACKLISTED);
+                           -EBLOCKLISTED);
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
     &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, 0,
     std::nullopt, {}, &ctx);
   req->send();
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
 }
 
 } // namespace io

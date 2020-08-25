@@ -51,8 +51,8 @@ const char* osd_error_category::message(int ev, char* buf,
   switch (static_cast<osd_errc>(ev)) {
   case osd_errc::old_snapc:
     return "ORDERSNAP flag set; writer has old snapc";
-  case osd_errc::blacklisted:
-    return "Blacklisted";
+  case osd_errc::blocklisted:
+    return "Blocklisted";
   }
 
   if (len) {
@@ -70,8 +70,8 @@ std::string osd_error_category::message(int ev) const {
   switch (static_cast<osd_errc>(ev)) {
   case osd_errc::old_snapc:
     return "ORDERSNAP flag set; writer has old snapc";
-  case osd_errc::blacklisted:
-    return "Blacklisted";
+  case osd_errc::blocklisted:
+    return "Blocklisted";
   }
 
   return cpp_strerror(ev);
@@ -79,7 +79,7 @@ std::string osd_error_category::message(int ev) const {
 
 boost::system::error_condition osd_error_category::default_error_condition(int ev) const noexcept {
   if (ev == static_cast<int>(osd_errc::old_snapc) ||
-      ev == static_cast<int>(osd_errc::blacklisted))
+      ev == static_cast<int>(osd_errc::blocklisted))
     return { ev, *this };
   else
     return { ev, boost::system::generic_category() };
@@ -89,7 +89,7 @@ bool osd_error_category::equivalent(int ev, const boost::system::error_condition
   switch (static_cast<osd_errc>(ev)) {
   case osd_errc::old_snapc:
       return c == boost::system::errc::invalid_argument;
-  case osd_errc::blacklisted:
+  case osd_errc::blocklisted:
       return c == boost::system::errc::operation_not_permitted;
   }
   return default_error_condition(ev) == c;

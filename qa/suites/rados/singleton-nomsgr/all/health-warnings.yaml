@@ -10,7 +10,7 @@ tasks:
 # we may land on ext4
         osd max object name len: 400
         osd max object namespace len: 64
-    log-whitelist:
+    log-ignorelist:
       - but it is still running
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)

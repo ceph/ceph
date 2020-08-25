@@ -418,8 +418,8 @@ void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
   }
 
   // Let the caller know that the operation has failed or was intentionally
-  // failed since the caller has been blacklisted.
-  if (r == -EBLACKLISTED) {
+  // failed since the caller has been blocklisted.
+  if (r == -EBLOCKLISTED) {
     onfinish->complete(r);
     return;
   }

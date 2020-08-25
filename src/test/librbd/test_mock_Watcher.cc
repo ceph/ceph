@@ -279,7 +279,7 @@ TEST_F(TestMockWatcher, ReregisterWatchError) {
   ASSERT_EQ(0, unregister_ctx.wait());
 }
 
-TEST_F(TestMockWatcher, ReregisterWatchBlacklist) {
+TEST_F(TestMockWatcher, ReregisterWatchBlocklist) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -291,7 +291,7 @@ TEST_F(TestMockWatcher, ReregisterWatchBlacklist) {
   InSequence seq;
   expect_aio_watch(mock_image_ctx, 0);
   expect_aio_unwatch(mock_image_ctx, 0);
-  expect_aio_watch(mock_image_ctx, -EBLACKLISTED);
+  expect_aio_watch(mock_image_ctx, -EBLOCKLISTED);
 
   C_SaferCond register_ctx;
   mock_image_watcher.register_watch(&register_ctx);
@@ -299,11 +299,11 @@ TEST_F(TestMockWatcher, ReregisterWatchBlacklist) {
   ASSERT_EQ(0, register_ctx.wait());
 
   ceph_assert(m_watch_ctx != nullptr);
-  m_watch_ctx->handle_error(0, -EBLACKLISTED);
+  m_watch_ctx->handle_error(0, -EBLOCKLISTED);
 
   // wait for recovery unwatch/watch
   ASSERT_TRUE(wait_for_watch(mock_image_ctx, 2));
-  ASSERT_TRUE(mock_image_watcher.is_blacklisted());
+  ASSERT_TRUE(mock_image_watcher.is_blocklisted());
 
   C_SaferCond unregister_ctx;
   mock_image_watcher.unregister_watch(&unregister_ctx);
@@ -324,7 +324,7 @@ TEST_F(TestMockWatcher, ReregisterUnwatchPendingUnregister) {
 
   // inject an unregister
   C_SaferCond unregister_ctx;
-  expect_aio_unwatch(mock_image_ctx, -EBLACKLISTED,
+  expect_aio_unwatch(mock_image_ctx, -EBLOCKLISTED,
                      [&mock_image_watcher, &unregister_ctx]() {
       mock_image_watcher.unregister_watch(&unregister_ctx);
     });
@@ -334,7 +334,7 @@ TEST_F(TestMockWatcher, ReregisterUnwatchPendingUnregister) {
   ASSERT_EQ(0, register_ctx.wait());
 
   ceph_assert(m_watch_ctx != nullptr);
-  m_watch_ctx->handle_error(0, -EBLACKLISTED);
+  m_watch_ctx->handle_error(0, -EBLOCKLISTED);
 
   ASSERT_EQ(0, unregister_ctx.wait());
 }

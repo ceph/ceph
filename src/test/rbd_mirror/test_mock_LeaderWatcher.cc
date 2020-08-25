@@ -63,8 +63,8 @@ template <>
 struct ManagedLock<MockTestImageCtx> {
   ManagedLock(librados::IoCtx& ioctx, librbd::AsioEngine& asio_engine,
               const std::string& oid, librbd::Watcher *watcher,
-              managed_lock::Mode  mode, bool blacklist_on_break_lock,
-              uint32_t blacklist_expire_seconds)
+              managed_lock::Mode  mode, bool blocklist_on_break_lock,
+              uint32_t blocklist_expire_seconds)
     : m_work_queue(asio_engine.get_work_queue()) {
     MockManagedLock::get_instance().construct();
   }

@@ -34,8 +34,8 @@ import { catchError, map } from 'rxjs/operators';
   providedIn: 'root'
 })
 export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
-  // TODO: Hotfix - remove WHITELIST'ing when a generic ErrorComponent is implemented
-  static readonly WHITELIST: string[] = ['501'];
+  // TODO: Hotfix - remove ALLOWLIST'ing when a generic ErrorComponent is implemented
+  static readonly ALLOWLIST: string[] = ['501'];
 
   constructor(private http: HttpClient, private router: Router) {}
 
@@ -48,7 +48,7 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
   }
 
   private doCheck(route: ActivatedRouteSnapshot) {
-    if (route.url.length > 0 && ModuleStatusGuardService.WHITELIST.includes(route.url[0].path)) {
+    if (route.url.length > 0 && ModuleStatusGuardService.ALLOWLIST.includes(route.url[0].path)) {
       return observableOf(true);
     }
     const config = route.data['moduleStatusGuardConfig'];

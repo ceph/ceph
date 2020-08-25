@@ -296,8 +296,8 @@ bool OSDCapGrant::is_capable(
             (*class_allowed)[i] = true;
             continue;
           }
-          // check 'allow x | class-{rw}': must be on whitelist
-          if (!classes[i].whitelisted) {
+          // check 'allow x | class-{rw}': must be on allow list
+          if (!classes[i].allowed) {
             continue;
           }
           if ((classes[i].read && !(allow & OSD_CAP_CLS_R)) ||

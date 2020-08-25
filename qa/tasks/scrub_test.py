@@ -324,7 +324,7 @@ def task(ctx, config):
     - chef:
     - install:
     - ceph:
-        log-whitelist:
+        log-ignorelist:
         - '!= data_digest'
         - '!= omap_digest'
         - '!= size'

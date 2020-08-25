@@ -336,7 +336,7 @@ class MDSRank {
       return map_targets.count(rank);
     }
 
-    bool evict_client(int64_t session_id, bool wait, bool blacklist,
+    bool evict_client(int64_t session_id, bool wait, bool blocklist,
                       std::ostream& ss, Context *on_killed=nullptr);
     int config_client(int64_t session_id, bool remove,
 		      const std::string& option, const std::string& value,

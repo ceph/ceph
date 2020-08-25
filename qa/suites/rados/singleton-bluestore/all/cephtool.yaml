@@ -14,7 +14,7 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - had wrong client addr
     - had wrong cluster addr

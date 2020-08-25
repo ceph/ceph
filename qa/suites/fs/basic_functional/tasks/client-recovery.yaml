@@ -3,7 +3,7 @@
 # to permit OSDs to complain about that.
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - evicting unresponsive client
       - but it is still running
       - slow request

@@ -34,7 +34,7 @@ namespace librbd {
 namespace api {
 
 template <typename I>
-const typename Trash<I>::TrashImageSources Trash<I>::RESTORE_SOURCE_WHITELIST {
+const typename Trash<I>::TrashImageSources Trash<I>::ALLOWED_RESTORE_SOURCES {
     cls::rbd::TRASH_IMAGE_SOURCE_USER,
     cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING,
     cls::rbd::TRASH_IMAGE_SOURCE_USER_PARENT

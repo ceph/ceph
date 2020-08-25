@@ -59,7 +59,7 @@ class Auth(RESTController):
     def logout(self):
         logger.debug('Logout successful')
         token = JwtManager.get_token_from_header()
-        JwtManager.blacklist_token(token)
+        JwtManager.blocklist_token(token)
         redirect_url = '#/login'
         if mgr.SSO_DB.protocol == 'saml2':
             redirect_url = 'auth/saml2/slo'
