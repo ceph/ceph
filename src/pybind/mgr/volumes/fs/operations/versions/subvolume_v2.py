@@ -96,13 +96,11 @@ class SubvolumeV2(SubvolumeV1):
     def mark_subvolume(self):
         # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
         # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
-        xattr_val = 1
         try:
-            self.fs.setxattr(self.base_path, 'ceph.dir.subvolume', str(xattr_val).encode('utf-8'), os.XATTR_CREATE)
-        except cephfs.ObjectExists:
-            return
+            # MDS treats this as a noop for already marked subvolume
+            self.fs.setxattr(self.base_path, 'ceph.dir.subvolume', b'1', 0)
         except cephfs.InvalidValue as e:
-            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume: '{0}'".format(xattr_val))
+            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
