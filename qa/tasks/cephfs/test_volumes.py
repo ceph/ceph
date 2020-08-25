@@ -7,6 +7,7 @@ import logging
 import collections
 import uuid
 from hashlib import md5
+from textwrap import dedent
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -434,6 +435,42 @@ class TestVolumes(CephFSTestCase):
                                        "The volume {0} not removed.".format(self.volname))
         else:
             raise RuntimeError("expected the 'fs volume rm' command to fail.")
+
+    def test_subvolume_marked(self):
+        """
+        ensure a subvolume is marked with the ceph.dir.subvolume xattr
+        """
+        subvolume = self._generate_random_subvolume_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # getpath
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+
+        # subdirectory of a subvolume cannot be moved outside the subvolume once marked with
+        # the xattr ceph.dir.subvolume, hence test by attempting to rename subvol path (incarnation)
+        # outside the subvolume
+        dstpath = os.path.join(self.mount_a.mountpoint, 'volumes', '_nogroup', 'new_subvol_location')
+        srcpath = os.path.join(self.mount_a.mountpoint, subvolpath)
+        rename_script = dedent("""
+            import os
+            import errno
+            try:
+                os.rename("{src}", "{dst}")
+            except OSError as e:
+                if e.errno != errno.EXDEV:
+                    raise RuntimeError("invalid error code on renaming subvolume incarnation out of subvolume directory")
+            else:
+                raise RuntimeError("expected renaming subvolume incarnation out of subvolume directory to fail")
+            """)
+        self.mount_a.run_python(rename_script.format(src=srcpath, dst=dstpath))
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_volume_rm_arbitrary_pool_removal(self):
         """
