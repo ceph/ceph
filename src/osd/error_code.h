@@ -27,7 +27,7 @@ const boost::system::error_category& osd_category() noexcept;
 
 enum class osd_errc {
   old_snapc = 85,  /* ORDERSNAP flag set; writer has old snapc*/
-  blacklisted = 108 /* blacklisted */
+  blocklisted = 108 /* blocklisted */
 };
 
 namespace boost::system {

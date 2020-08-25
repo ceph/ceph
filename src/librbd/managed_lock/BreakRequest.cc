@@ -30,13 +30,13 @@ template <typename I>
 BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx,
                               AsioEngine& asio_engine,
                               const std::string& oid, const Locker &locker,
-                              bool exclusive, bool blacklist_locker,
-                              uint32_t blacklist_expire_seconds,
+                              bool exclusive, bool blocklist_locker,
+                              uint32_t blocklist_expire_seconds,
                               bool force_break_lock, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_asio_engine(asio_engine), m_oid(oid), m_locker(locker),
-    m_exclusive(exclusive), m_blacklist_locker(blacklist_locker),
-    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_exclusive(exclusive), m_blocklist_locker(blocklist_locker),
+    m_blocklist_expire_seconds(blocklist_expire_seconds),
     m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
 }
 
@@ -131,12 +131,12 @@ void BreakRequest<I>::handle_get_locker(int r) {
     return;
   }
 
-  send_blacklist();
+  send_blocklist();
 }
 
 template <typename I>
-void BreakRequest<I>::send_blacklist() {
-  if (!m_blacklist_locker) {
+void BreakRequest<I>::send_blocklist() {
+  if (!m_blocklist_locker) {
     send_break_lock();
     return;
   }
@@ -146,7 +146,7 @@ void BreakRequest<I>::send_blacklist() {
                    << "locker entity=" << m_locker.entity << dendl;
 
   if (m_locker.entity == entity_name) {
-    lderr(m_cct) << "attempting to self-blacklist" << dendl;
+    lderr(m_cct) << "attempting to self-blocklist" << dendl;
     finish(-EINVAL);
     return;
   }
@@ -159,29 +159,22 @@ void BreakRequest<I>::send_blacklist() {
     return;
   }
 
-  std::stringstream cmd;
-  cmd << "{"
-      << "\"prefix\": \"osd blacklist\", "
-      << "\"blacklistop\": \"add\", "
-      << "\"addr\": \"" << locker_addr << "\"";
-  if (m_blacklist_expire_seconds != 0) {
-    cmd << ", \"expire\": " << m_blacklist_expire_seconds << ".0";
+  std::optional<std::chrono::seconds> expire;
+  if (m_blocklist_expire_seconds != 0) {
+    expire = std::chrono::seconds(m_blocklist_expire_seconds);
   }
-  cmd << "}";
-
-  bufferlist in_bl;
-  m_asio_engine.get_rados_api().mon_command(
-    {cmd.str()}, in_bl, nullptr, nullptr,
+  m_asio_engine.get_rados_api().blocklist_add(
+    m_locker.address, expire,
     librbd::asio::util::get_callback_adapter(
-      [this](int r) { handle_blacklist(r); }));
+      [this](int r) { handle_blocklist(r); }));
 }
 
 template <typename I>
-void BreakRequest<I>::handle_blacklist(int r) {
+void BreakRequest<I>::handle_blocklist(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to blacklist lock owner: " << cpp_strerror(r)
+    lderr(m_cct) << "failed to blocklist lock owner: " << cpp_strerror(r)
                  << dendl;
     finish(r);
     return;

@@ -6,6 +6,7 @@
 #include "common/ceph_mutex.h"
 #include "common/hobject.h"
 #include "librados/AioCompletionImpl.h"
+#include "mon/error_code.h"
 #include "osd/error_code.h"
 #include "osd/osd_types.h"
 #include "osdc/error_code.h"
@@ -509,6 +510,15 @@ void RADOS::mon_command(std::vector<std::string> command,
   auto r = impl->test_rados_client->mon_command(command, bl, outbl, outs);
   c->post(std::move(c),
           (r < 0 ? bs::error_code(-r, osd_category()) : bs::error_code()));
+}
+
+void RADOS::blocklist_add(std::string_view client_address,
+                          std::optional<std::chrono::seconds> expire,
+                          std::unique_ptr<SimpleOpComp> c) {
+  auto r = impl->test_rados_client->blocklist_add(
+    std::string(client_address), expire.value_or(0s).count());
+  c->post(std::move(c),
+          (r < 0 ? bs::error_code(-r, mon_category()) : bs::error_code()));
 }
 
 void RADOS::wait_for_latest_osd_map(std::unique_ptr<Op::Completion> c) {

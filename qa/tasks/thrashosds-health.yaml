@@ -3,7 +3,7 @@ overrides:
     conf:
       osd:
         osd max markdown count: 1000
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_

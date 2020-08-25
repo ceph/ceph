@@ -3,7 +3,7 @@ overrides:
   ceph:
     cephfs_ec_profile:
       - disabled
-    log-whitelist:
+    log-ignorelist:
       - OSD full dropping all updates
       - OSD near full
       - pausewr flag

@@ -15,7 +15,7 @@ tasks:
 - ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
-    log-whitelist:
+    log-ignorelist:
       - objects unfound and apparently lost
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
