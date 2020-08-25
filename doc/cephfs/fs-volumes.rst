@@ -111,12 +111,8 @@ List subvolume groups using::
 
     $ ceph fs subvolumegroup ls <vol_name>
 
-Create a snapshot (see :doc:`/cephfs/experimental-features`) of a
-subvolume group using::
-
-    $ ceph fs subvolumegroup snapshot create <vol_name> <group_name> <snap_name>
-
-This implicitly snapshots all the subvolumes under the subvolume group.
+.. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
+          snapshots can still be listed and deleted)
 
 Remove a snapshot of a subvolume group using::
 
