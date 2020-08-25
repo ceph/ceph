@@ -23,8 +23,14 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-const char *ceph_version_to_str(void)
+// Keep ver.c_str() available
+static std::string ver;
+
+const char *ceph_version_to_str(CephContext *cct)
 {
+  if (cct) ver = cct->_conf.get_val<std::string>("debug_version_for_testing");
+  if (ver.size() > 0)
+    return ver.c_str();
   return CEPH_GIT_NICE_VER;
 }
 
