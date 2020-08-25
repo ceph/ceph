@@ -30,6 +30,7 @@
 #include "messages/MClientReclaimReply.h"
 #include "messages/MLock.h"
 
+#include "CInode.h"
 #include "MDSRank.h"
 #include "Mutation.h"
 #include "MDSContext.h"
@@ -317,6 +318,69 @@ private:
   friend class ServerContext;
   friend class ServerLogContext;
   friend class Batch_Getattr_Lookup;
+
+  // placeholder for validation handler to store xattr specific
+  // data
+  struct XattrInfo {
+    virtual ~XattrInfo() {
+    }
+  };
+
+  struct XattrOp {
+    int op;
+    std::string xattr_name;
+    const bufferlist &xattr_value;
+    int flags = 0;
+
+    std::unique_ptr<XattrInfo> xinfo;
+
+    XattrOp(int op, std::string_view xattr_name, const bufferlist &xattr_value, int flags)
+      : op(op),
+        xattr_name(xattr_name),
+        xattr_value(xattr_value),
+        flags (flags) {
+    }
+  };
+
+  struct XattrHandler {
+    const std::string xattr_name;
+    const std::string description;
+
+    // basic checks are to be done in this handler. return -errno to
+    // reject xattr request (set or remove), zero to proceed. handlers
+    // may parse xattr value for verification if needed and have an
+    // option to store custom data in XattrOp::xinfo.
+    int (Server::*validate)(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                            XattrOp *xattr_op);
+
+    // set xattr for an inode in xattr_map
+    void (Server::*setxattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                             const XattrOp &xattr_op);
+
+    // remove xattr for an inode from xattr_map
+    void (Server::*removexattr)(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                const XattrOp &xattr_op);
+  };
+
+  inline static const std::string DEFAULT_HANDLER = "<default>";
+  static const XattrHandler xattr_handlers[];
+
+  const XattrHandler* get_xattr_or_default_handler(std::string_view xattr_name);
+
+  // generic variant to set/remove xattr in/from xattr_map
+  int xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                     const std::string &xattr_name, int op, int flags);
+  void xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
+                 const bufferlist &xattr_value);
+  void xattr_rm(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name);
+
+  // default xattr handlers
+  int default_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                             XattrOp *xattr_op);
+  void default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                const XattrOp &xattr_op);
+  void default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                   const XattrOp &xattr_op);
 
   static bool is_ceph_vxattr(std::string_view xattr_name) {
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||

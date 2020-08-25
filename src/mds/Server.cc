@@ -57,6 +57,7 @@
 #include <list>
 #include <iostream>
 #include <string_view>
+#include <functional>
 
 #include "common/config.h"
 
@@ -5816,6 +5817,99 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur)
   respond_to_request(mdr, -ENODATA);
 }
 
+const Server::XattrHandler Server::xattr_handlers[] = {
+  {
+    xattr_name: Server::DEFAULT_HANDLER,
+    description: "default xattr handler",
+    validate:  &Server::default_xattr_validate,
+    setxattr: &Server::default_setxattr_handler,
+    removexattr: &Server::default_removexattr_handler,
+  },
+};
+
+const Server::XattrHandler* Server::get_xattr_or_default_handler(std::string_view xattr_name) {
+  const XattrHandler *default_xattr_handler = nullptr;
+
+  for (auto &handler : xattr_handlers) {
+    if (handler.xattr_name == Server::DEFAULT_HANDLER) {
+      ceph_assert(default_xattr_handler == nullptr);
+      default_xattr_handler = &handler;
+    }
+    if (handler.xattr_name == xattr_name) {
+      dout(20) << "handler=" << handler.description << dendl;
+      return &handler;
+    }
+  }
+
+  ceph_assert(default_xattr_handler != nullptr);
+  dout(20) << "handler=" << default_xattr_handler->description << dendl;
+  return default_xattr_handler;
+}
+
+int Server::xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                           const std::string &xattr_name, int op, int flags) {
+  if (op == CEPH_MDS_OP_SETXATTR) {
+    if (xattrs) {
+      if ((flags & CEPH_XATTR_CREATE) && xattrs->count(mempool::mds_co::string(xattr_name))) {
+        dout(10) << "setxattr '" << xattr_name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
+        return -EEXIST;
+      }
+    }
+    if ((flags & CEPH_XATTR_REPLACE) && !(xattrs && xattrs->count(mempool::mds_co::string(xattr_name)))) {
+      dout(10) << "setxattr '" << xattr_name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
+      return -ENODATA;
+    }
+
+    return 0;
+  }
+
+  if (op == CEPH_MDS_OP_RMXATTR) {
+    if (xattrs && xattrs->count(mempool::mds_co::string(xattr_name)) == 0) {
+      dout(10) << "removexattr '" << xattr_name << "' and ENODATA on " << *cur << dendl;
+      return -ENODATA;
+    }
+
+    return 0;
+  }
+
+  derr << ": unhandled validation for: " << xattr_name << dendl;
+  return -EINVAL;
+}
+
+void Server::xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
+                       const bufferlist &xattr_value) {
+  size_t len = xattr_value.length();
+  bufferptr b = buffer::create(len);
+  if (len) {
+    xattr_value.begin().copy(len, b.c_str());
+  }
+  auto em = xattrs->emplace(std::piecewise_construct,
+                            std::forward_as_tuple(mempool::mds_co::string(xattr_name)),
+                            std::forward_as_tuple(b));
+  if (!em.second) {
+    em.first->second = b;
+  }
+}
+
+void Server::xattr_rm(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name) {
+  xattrs->erase(mempool::mds_co::string(xattr_name));
+}
+
+int Server::default_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                   XattrOp *xattr_op) {
+  return xattr_validate(cur, xattrs, xattr_op->xattr_name, xattr_op->op, xattr_op->flags);
+}
+
+void Server::default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                      const XattrOp &xattr_op) {
+  xattr_set(xattrs, xattr_op.xattr_name, xattr_op.xattr_value);
+}
+
+void Server::default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                         const XattrOp &xattr_op) {
+  xattr_rm(xattrs, xattr_op.xattr_name);
+}
+
 void Server::handle_client_setxattr(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -5854,6 +5948,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   size_t len = req->get_data().length();
   size_t inc = len + name.length();
 
+  auto handler = Server::get_xattr_or_default_handler(name);
   const auto& pxattrs = cur->get_projected_xattrs();
   if (pxattrs) {
     // check xattrs kv pairs size
@@ -5871,18 +5966,12 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
       respond_to_request(mdr, -ENOSPC);
       return;
     }
-
-    if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(mempool::mds_co::string(name))) {
-      dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
-      respond_to_request(mdr, -EEXIST);
-      return;
-    }
   }
 
-  if ((flags & CEPH_XATTR_REPLACE) &&
-      !(pxattrs && pxattrs->count(mempool::mds_co::string(name)))) {
-    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
-    respond_to_request(mdr, -ENODATA);
+  XattrOp xattr_op(CEPH_MDS_OP_SETXATTR, name, req->get_data(), flags);
+  int r = std::invoke(handler->validate, this, cur, pxattrs, &xattr_op);
+  if (r < 0) {
+    respond_to_request(mdr, r);
     return;
   }
 
@@ -5896,15 +5985,11 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     pi.inode->rstat.rctime = mdr->get_op_stamp();
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
+
   if ((flags & CEPH_XATTR_REMOVE)) {
-    pi.xattrs->erase(mempool::mds_co::string(name));
+    std::invoke(handler->removexattr, this, cur, pi.xattrs, xattr_op);
   } else {
-    bufferptr b = buffer::create(len);
-    if (len)
-      req->get_data().begin().copy(len, b.c_str());
-    auto em = pi.xattrs->emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(name)), std::forward_as_tuple(b));
-    if (!em.second)
-      em.first->second = b;
+    std::invoke(handler->setxattr, this, cur, pi.xattrs, xattr_op);
   }
 
   // log + wait
@@ -5948,10 +6033,15 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
+
+  auto handler = Server::get_xattr_or_default_handler(name);
+  bufferlist bl;
+  XattrOp xattr_op(CEPH_MDS_OP_RMXATTR, name, bl, 0);
+
   const auto& pxattrs = cur->get_projected_xattrs();
-  if (pxattrs && pxattrs->count(mempool::mds_co::string(name)) == 0) {
-    dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
-    respond_to_request(mdr, -ENODATA);
+  int r = std::invoke(handler->validate, this, cur, pxattrs, &xattr_op);
+  if (r < 0) {
+    respond_to_request(mdr, r);
     return;
   }
 
@@ -5959,14 +6049,13 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
 
   // project update
   auto pi = cur->project_inode(mdr, true);
-  auto &px = *pi.xattrs;
   pi.inode->version = cur->pre_dirty();
   pi.inode->ctime = mdr->get_op_stamp();
   if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
     pi.inode->rstat.rctime = mdr->get_op_stamp();
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
-  px.erase(mempool::mds_co::string(name));
+  std::invoke(handler->removexattr, this, cur, pi.xattrs, xattr_op);
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
