@@ -12,7 +12,7 @@ from teuthology import safepath
 from teuthology.config import config as teuth_config
 from teuthology.exceptions import SkipJob
 from teuthology import setup_log_file, install_except_hook
-from teuthology.lock.ops import reimage_many
+from teuthology.lock.ops import reimage_machines
 from teuthology.misc import get_user, archive_logs, compress_logs
 from teuthology.config import FakeNamespace
 from teuthology.job_status import get_status
@@ -47,7 +47,7 @@ def main(args):
 
     # reimage target machines before running the job
     if 'targets' in job_config:
-        reimage_machines(job_config)
+        reimage(job_config)
         with open(config_file_path, 'w') as f:
             yaml.safe_dump(job_config, f, default_flow_style=False)
 
@@ -152,7 +152,7 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
         unlock_targets(job_config)
 
 
-def reimage_machines(job_config):
+def reimage(job_config):
     # Reimage the targets specified in job config
     # and update their keys in config after reimaging
     ctx = create_fake_context(job_config)
@@ -160,7 +160,7 @@ def reimage_machines(job_config):
     report.try_push_job_info(ctx.config, dict(status='waiting'))
     targets = job_config['targets']
     try:
-        reimaged = reimage_many(ctx, targets, job_config['machine_type'])
+        reimaged = reimage_machines(ctx, targets, job_config['machine_type'])
     except Exception:
         log.info('Reimaging error. Nuking machines...')
         # Reimage failures should map to the 'dead' status instead of 'fail'

@@ -17,7 +17,7 @@ standard arguments:
   -v, --verbose                  be more verbose
   -t, --tube TUBE                which beanstalk tube to read jobs from
   -l, --log-dir LOG_DIR          path in which to store logs
-  -a DIR, --archive-dir DIR     path to archive results in
+  -a DIR, --archive-dir DIR      path to archive results in
   --supervisor                   run dispatcher in job supervisor mode
   --bin-path BIN_PATH            teuthology bin path
   --job-config CONFIG            file descriptor of job's config file
