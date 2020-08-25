@@ -35,7 +35,7 @@ void PluginRegistry<I>::init(const std::string& plugins, Context* on_finish) {
       plugin_registry->get_with_load("librbd", "librbd_" + token));
     if (plugin == nullptr) {
       lderr(cct) << "failed to load plugin: " << token << dendl;
-      ctx->complete(-ENOENT);
+      ctx->complete(-ENOSYS);
       break;
     }
 
