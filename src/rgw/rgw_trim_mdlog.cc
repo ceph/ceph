@@ -206,17 +206,18 @@ struct MasterTrimEnv : public TrimEnv {
 };
 
 struct PeerTrimEnv : public TrimEnv {
-  /// last trim timestamp for each shard, only applies to current period's mdlog
-  std::vector<ceph::real_time> last_trim_timestamps;
+  /// last trim marker for each shard, only applies to current period's mdlog
+  std::vector<std::string> last_trim_markers;
+
 
   PeerTrimEnv(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http, int num_shards)
     : TrimEnv(dpp, store, http, num_shards),
-      last_trim_timestamps(num_shards)
+      last_trim_markers(num_shards)
   {}
 
   void set_num_shards(int num_shards) {
     this->num_shards = num_shards;
-    last_trim_timestamps.resize(num_shards);
+    last_trim_markers.resize(num_shards);
   }
 };
 
@@ -385,14 +386,15 @@ class MetaPeerTrimShardCR : public RGWCoroutine {
   const std::string& period_id;
   const int shard_id;
   RGWMetadataLogInfo info;
-  ceph::real_time stable; //< safe timestamp to trim, according to master
-  ceph::real_time *last_trim; //< last trimmed timestamp, updated on trim
+  std::string stable; //< marker to trim, according to master
+  std::string *last_trim; //< last trimmed marker, updated on trim
   rgw_mdlog_shard_data result; //< result from master's mdlog listing
+  bool exclusive{true}; // if true, trims upto (not including) marker
 
  public:
   MetaPeerTrimShardCR(RGWMetaSyncEnv& env, RGWMetadataLog *mdlog,
                       const std::string& period_id, int shard_id,
-                      ceph::real_time *last_trim)
+                      std::string *last_trim)
     : RGWCoroutine(env.store->ctx()), env(env), mdlog(mdlog),
       period_id(period_id), shard_id(shard_id), last_trim(last_trim)
   {}
@@ -412,10 +414,10 @@ int MetaPeerTrimShardCR::operate(const DoutPrefixProvider *dpp)
           << ": " << cpp_strerror(retcode) << dendl;
       return set_cr_error(retcode);
     }
-    if (result.entries.empty()) {
-      // if there are no mdlog entries, we don't have a timestamp to compare. we
+    if (result.marker.empty()) {
+      // if there are no mdlog entries, we don't have a marker to compare. we
       // can't just trim everything, because there could be racing updates since
-      // this empty reply. query the mdlog shard info to read its max timestamp,
+      // this empty reply. query the mdlog shard info to read its marker,
       // then retry the listing to make sure it's still empty before trimming to
       // that
       ldpp_dout(dpp, 10) << "empty master mdlog shard " << shard_id
@@ -428,7 +430,7 @@ int MetaPeerTrimShardCR::operate(const DoutPrefixProvider *dpp)
             << ": " << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
-      if (ceph::real_clock::is_zero(info.last_update)) {
+      if (info.marker.empty()) {
         return set_cr_done(); // nothing to trim
       }
       ldpp_dout(dpp, 10) << "got mdlog shard info with last update="
@@ -443,18 +445,15 @@ int MetaPeerTrimShardCR::operate(const DoutPrefixProvider *dpp)
         return set_cr_error(retcode);
       }
       // if the mdlog is still empty, trim to max marker
-      if (result.entries.empty()) {
-        stable = info.last_update;
+      if (result.marker.empty()) {
+        stable = info.marker;
+	exclusive = false; // trim including marker
       } else {
-        stable = result.entries.front().timestamp;
-
-        // can only trim -up to- master's first timestamp, so subtract a second.
-        // (this is why we use timestamps instead of markers for the peers)
-        stable -= std::chrono::seconds(1);
+        stable = result.marker;
+	// the subtraction of '-1' will be done in Omap backend trim operation
       }
     } else {
-      stable = result.entries.front().timestamp;
-      stable -= std::chrono::seconds(1);
+      stable = result.marker;
     }
 
     if (stable <= *last_trim) {
@@ -468,8 +467,10 @@ int MetaPeerTrimShardCR::operate(const DoutPrefixProvider *dpp)
         << " at timestamp=" << stable
         << " last_trim=" << *last_trim << dendl;
     yield {
-      auto oid = mdlog->get_shard_oid(shard_id);
-      call(new RGWRadosTimelogTrimCR(dpp, env.store, oid, real_time{}, stable, "", ""));
+      RGWCoroutine* peer_trim_cr = mdlog->peer_trim_cr(shard_id, stable, exclusive);
+      if (peer_trim_cr) {
+        call(peer_trim_cr);
+      }
     }
     if (retcode < 0 && retcode != -ENODATA) {
       ldpp_dout(dpp, 1) << "failed to trim mdlog shard " << shard_id
@@ -509,7 +510,7 @@ bool MetaPeerTrimShardCollectCR::spawn_next()
   if (shard_id >= env.num_shards) {
     return false;
   }
-  auto& last_trim = env.last_trim_timestamps[shard_id];
+  auto& last_trim = env.last_trim_markers[shard_id];
   spawn(new MetaPeerTrimShardCR(meta_env, mdlog, period_id, shard_id, &last_trim),
         false);
   shard_id++;

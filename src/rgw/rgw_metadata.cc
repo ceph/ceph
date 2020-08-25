@@ -319,6 +319,33 @@ RGWCoroutine* RGWMetadataLog::purge_cr()
 			      std::move(oids));
 }
 
+RGWCoroutine* RGWMetadataLog::peer_trim_cr(int shard_id, std::string marker, bool exclusive)
+{
+  // Extract timestamp from marker
+  auto oid = get_shard_oid(shard_id);
+
+  if (!exclusive) {
+  	return new RGWRadosTimelogTrimCR(store, oid, {}, {}, {}, marker);
+  }
+
+  ceph::real_time stable;
+  int sec, usec;
+  char keyext[256];
+
+  int ret = sscanf(marker.c_str(), "1_%d.%d_%255s", &sec, &usec, keyext);
+
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: scanning marker ret = " << ret << dendl;
+    return NULL;
+  } else {
+    stable = utime_t(sec, usec).to_real_time();
+    // can only trim -up to- master's first timestamp, so subtract a second.
+    // (this is why we use timestamps instead of markers for the peers)
+    stable -= std::chrono::seconds(1);
+  }
+
+  return new RGWRadosTimelogTrimCR(store, oid, {}, stable, "", "");
+}
 
 obj_version& RGWMetadataObject::get_version()
 {

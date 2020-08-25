@@ -149,6 +149,7 @@ public:
 
   bc::flat_set<int> read_clear_modified();
   RGWCoroutine* purge_cr();
+  RGWCoroutine* peer_trim_cr(int shard_id, std::string marker, bool exclusive);
 };
 
 struct LogStatusDump {
