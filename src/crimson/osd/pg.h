@@ -427,6 +427,9 @@ public:
   bool is_primary() const final {
     return peering_state.is_primary();
   }
+  bool is_nonprimary() const {
+    return peering_state.is_nonprimary();
+  }
   bool is_peered() const final {
     return peering_state.is_peered();
   }
