@@ -637,4 +637,15 @@ public:
   void dump(std::ostream& sout) override;
 };
 
+class WithoutSlowDirVolumeSelector : public OriginalVolumeSelector {
+public:
+  WithoutSlowDirVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total)
+    : OriginalVolumeSelector(_wal_total, _db_total, _slow_total) {}
+
+  void get_paths(const std::string& base, paths& res) const override;
+};
+
 #endif
