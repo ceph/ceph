@@ -19,7 +19,7 @@ public:
   ParentCache(CephContext* cct) : Interface<ImageCtxT>(cct) {
   }
 
-  void init(ImageCtxT* image_ctx, HookPoints* hook_points,
+  void init(ImageCtxT* image_ctx, Api<ImageCtxT>& api, HookPoints* hook_points,
             Context* on_finish) override;
 
 private:

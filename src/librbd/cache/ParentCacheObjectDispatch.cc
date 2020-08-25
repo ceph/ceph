@@ -5,10 +5,10 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/cache/ParentCacheObjectDispatch.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
-#include "librbd/io/Utils.h"
-#include "librbd/cache/ParentCacheObjectDispatch.h"
+#include "librbd/plugin/Api.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 
@@ -27,8 +27,8 @@ namespace cache {
 
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
-    I* image_ctx)
-  : m_image_ctx(image_ctx),
+    I* image_ctx, plugin::Api<I>& plugin_api)
+  : m_image_ctx(image_ctx), m_plugin_api(plugin_api),
     m_lock(ceph::make_mutex(
       "librbd::cache::ParentCacheObjectDispatch::lock", true, false)) {
   ceph_assert(m_image_ctx->data_ctx.is_valid());
@@ -136,7 +136,7 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
         *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
         on_dispatched->complete(r);
       });
-    io::util::read_parent<I>(m_image_ctx, object_no, {{read_off, read_len}},
+    m_plugin_api.read_parent(m_image_ctx, object_no, {{read_off, read_len}},
                              snap_id, parent_trace, read_data, ctx);
     return;
   }
