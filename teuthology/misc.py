@@ -1370,10 +1370,10 @@ def archive_logs(ctx, remote_path, log_path):
     remote_path dir to job's archive dir under log_path dir.
     """
     path = os.path.join(ctx.archive, 'remote')
-    os.mkdirs(path, exist_ok=True)
+    os.makedirs(path, exist_ok=True)
     for remote in ctx.cluster.remotes.keys():
         sub = os.path.join(path, remote.shortname)
-        os.mkdirs(sub, exist_ok=True)
+        os.makedirs(sub, exist_ok=True)
         try:
             pull_directory(remote, remote_path, os.path.join(sub, log_path))
         except ReadError:
@@ -1387,22 +1387,8 @@ def compress_logs(ctx, remote_dir):
     log.info('Compressing logs...')
     run.wait(
         ctx.cluster.run(
-            args=[
-                'sudo',
-                'find',
-                remote_dir,
-                '-name',
-                '*.log',
-                '-print0',
-                run.Raw('|'),
-                'sudo',
-                'xargs',
-                '-0',
-                '--no-run-if-empty',
-                '--',
-                'gzip',
-                '--',
-            ],
+            args=(f"sudo find {remote_dir} -name *.log -print0 | "
+                  f"sudo xargs -0 --no-run-if-empty -- gzip --"),
             wait=False,
         ),
     )
