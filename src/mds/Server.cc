@@ -6012,6 +6012,11 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     return;
   }
 
+  if (!is_allowed_ceph_xattr(name)) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur)
     return;
@@ -6102,6 +6107,11 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
       return;
 
     handle_remove_vxattr(mdr, cur);
+    return;
+  }
+
+  if (!is_allowed_ceph_xattr(name)) {
+    respond_to_request(mdr, -EINVAL);
     return;
   }
 

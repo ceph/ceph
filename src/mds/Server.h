@@ -417,6 +417,15 @@ private:
            xattr_name == "ceph.dir.pin.distributed"sv;
   }
 
+  static bool is_allowed_ceph_xattr(std::string_view xattr_name) {
+    // not a ceph xattr -- allow!
+    if (xattr_name.rfind("ceph.", 0) != 0) {
+      return true;
+    }
+
+    return xattr_name == "ceph.mirror.info";
+  }
+
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder& gather);
 
