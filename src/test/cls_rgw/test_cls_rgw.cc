@@ -72,11 +72,11 @@ void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, ui
 
 void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
                    string& tag, const cls_rgw_obj_key& key, string& loc,
-                   uint16_t bi_flags = 0, bool log_op = true)
+                   uint16_t bi_flags = 0)
 {
   ObjectWriteOperation op;
   rgw_zone_set zones_trace;
-  cls_rgw_bucket_prepare_op(op, index_op, tag, key, loc, log_op, bi_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(op, index_op, tag, key, loc, bi_flags, zones_trace);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
@@ -466,7 +466,7 @@ TEST_F(cls_rgw, index_list)
     string loc = str_int("loc", i);
 
     index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
-		  0 /* bi_flags */, false /* log_op */);
+		  0 /* bi_flags */);
 
     rgw_bucket_dir_entry_meta meta;
     meta.category = RGWObjCategory::None;
@@ -544,7 +544,7 @@ TEST_F(cls_rgw, index_list_delimited)
       const string obj = str_int(p, i);
 
       index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
-		    0 /* bi_flags */, false /* log_op */);
+		    0 /* bi_flags */);
 
       index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta,
 		     0 /* bi_flags */, false /* log_op */);
@@ -559,7 +559,7 @@ TEST_F(cls_rgw, index_list_delimited)
       const string obj = p + str_int("f", i);
 
       index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
-		    0 /* bi_flags */, false /* log_op */);
+		    0 /* bi_flags */);
 
       index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta,
 		     0 /* bi_flags */, false /* log_op */);
