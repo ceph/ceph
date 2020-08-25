@@ -5821,8 +5821,8 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
 
-  // magic ceph.* namespace?
-  if (name.compare(0, 5, "ceph.") == 0) {
+  // is a ceph virtual xattr?
+  if (is_ceph_vxattr(name)) {
     // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
     CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
     if (!cur)
@@ -5923,7 +5923,8 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
   std::string name(req->get_path2());
 
-  if (name.compare(0, 5, "ceph.") == 0) {
+  // is a ceph virtual xattr?
+  if (is_ceph_vxattr(name)) {
     // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
     CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
     if (!cur)

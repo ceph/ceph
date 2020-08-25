@@ -318,6 +318,16 @@ private:
   friend class ServerLogContext;
   friend class Batch_Getattr_Lookup;
 
+  static bool is_ceph_vxattr(std::string_view xattr_name) {
+    return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
+           xattr_name.rfind("ceph.file.layout", 0) == 0 ||
+           xattr_name.rfind("ceph.quota", 0) == 0 ||
+           xattr_name == "ceph.dir.subvolume"sv ||
+           xattr_name == "ceph.dir.pin"sv ||
+           xattr_name == "ceph.dir.pin.random"sv ||
+           xattr_name == "ceph.dir.pin.distributed"sv;
+  }
+
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder& gather);
 
