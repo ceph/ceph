@@ -68,6 +68,9 @@ private:
 
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
+
+private:
+  bool is_misdirected(const PG& pg) const;
 };
 
 }
