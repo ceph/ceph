@@ -10,6 +10,7 @@ class MockOSD:
     def __init__(self, osd_id):
         self.osd_id = osd_id
 
+
 class TestOSDRemoval:
 
     @pytest.mark.parametrize(
@@ -62,11 +63,13 @@ class TestOSDRemoval:
 
     def test_destroy_osd(self, rm_util):
         rm_util.destroy_osd(1)
-        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd destroy-actual', 'id': 1, 'yes_i_really_mean_it': True})
+        rm_util._run_mon_cmd.assert_called_with(
+            {'prefix': 'osd destroy-actual', 'id': 1, 'yes_i_really_mean_it': True})
 
     def test_purge_osd(self, rm_util):
         rm_util.purge_osd(1)
-        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
+        rm_util._run_mon_cmd.assert_called_with(
+            {'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
 
 
 class TestOSD:

@@ -46,7 +46,7 @@ def with_cephadm_module(module_options=None, store=None):
             mock.patch("cephadm.services.osd.OSDService.get_osdspec_affinity", return_value='test_spec'), \
             mock.patch("cephadm.module.CephadmOrchestrator.remote"):
 
-        m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
+        m = CephadmOrchestrator.__new__(CephadmOrchestrator)
         if module_options is not None:
             for k, v in module_options.items():
                 m._ceph_set_module_option('cephadm', k, v)
@@ -114,7 +114,7 @@ def wait(m, c):
 
 
 @contextmanager
-def with_host(m:CephadmOrchestrator, name):
+def with_host(m: CephadmOrchestrator, name):
     # type: (CephadmOrchestrator, str) -> None
     wait(m, m.add_host(HostSpec(hostname=name)))
     yield
