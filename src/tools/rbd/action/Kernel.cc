@@ -222,7 +222,7 @@ static int parse_map_options(const std::string &options_string,
 }
 
 static int parse_unmap_options(const std::string &options_string,
-                               MapOptions* map_options)
+                               MapOptions* unmap_options)
 {
   char *options = strdup(options_string.c_str());
   BOOST_SCOPE_EXIT(options) {
@@ -238,9 +238,9 @@ static int parse_unmap_options(const std::string &options_string,
       *value_char++ = '\0';
 
     if (!strcmp(this_char, "force")) {
-      put_map_option("force", this_char, map_options);
+      put_map_option("force", this_char, unmap_options);
     } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
-      put_map_option("udev", this_char, map_options);
+      put_map_option("udev", this_char, unmap_options);
     } else {
       std::cerr << "rbd: unknown unmap option '" << this_char << "'"
                 << std::endl;
@@ -439,7 +439,7 @@ out:
 
 static int do_kernel_unmap(const char *dev, const char *poolname,
                            const char *nspace_name, const char *imgname,
-                           const char *snapname, MapOptions&& map_options)
+                           const char *snapname, MapOptions&& unmap_options)
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
@@ -447,14 +447,14 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
   uint32_t flags = 0;
   int r;
 
-  for (auto it = map_options.begin(); it != map_options.end(); ) {
+  for (auto it = unmap_options.begin(); it != unmap_options.end(); ) {
     if (it->first == "udev") {
       if (it->second == "noudev") {
         flags |= KRBD_CTX_F_NOUDEV;
       }
-      it = map_options.erase(it);
+      it = unmap_options.erase(it);
     } else {
-      if (it != map_options.begin())
+      if (it != unmap_options.begin())
         oss << ",";
       oss << it->second;
       ++it;
@@ -596,10 +596,10 @@ int execute_unmap(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  MapOptions map_options;
+  MapOptions unmap_options;
   if (vm.count("options")) {
     for (auto &options : vm["options"].as<std::vector<std::string>>()) {
-      r = parse_unmap_options(options, &map_options);
+      r = parse_unmap_options(options, &unmap_options);
       if (r < 0) {
         std::cerr << "rbd: couldn't parse unmap options" << std::endl;
         return r;
@@ -621,7 +621,7 @@ int execute_unmap(const po::variables_map &vm,
   r = do_kernel_unmap(device_name.empty() ? nullptr : device_name.c_str(),
                       pool_name.c_str(), nspace_name.c_str(),
                       image_name.c_str(), snap_name.c_str(),
-                      std::move(map_options));
+                      std::move(unmap_options));
   if (r < 0) {
     std::cerr << "rbd: unmap failed: " << cpp_strerror(r) << std::endl;
     return r;
