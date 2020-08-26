@@ -53,7 +53,7 @@ Skip test on FreeBSD as it generates different output there.
       mirror image enable         Enable RBD mirroring for an image.
       mirror image promote        Promote an image to primary for RBD mirroring.
       mirror image resync         Force resync to primary image for RBD mirroring.
-      mirror image status         Show RDB mirroring status for an image.
+      mirror image status         Show RBD mirroring status for an image.
       mirror pool demote          Demote all primary images in the pool.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
