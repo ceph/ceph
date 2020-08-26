@@ -1490,14 +1490,6 @@ protected:
   void process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, int r, uint64_t offset);
   void finish_promote_manifest(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_and_requeue_proxy_ops(hobject_t oid);
-  int do_manifest_flush(OpRequestRef op, ObjectContextRef obc, FlushOpRef manifest_fop,
-			uint64_t start_offset, bool block);
-  int start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
-			   std::optional<std::function<void()>> &&on_flush);
-  void finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r, ObjectContextRef obc, 
-			     uint64_t last_offset);
-  void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
-			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
 			 RefCountCallback* cb);
@@ -1514,7 +1506,6 @@ protected:
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend struct C_CopyChunk;
-  friend struct C_ManifestFlush;
   friend struct RefCountCallback;
 
 public:
