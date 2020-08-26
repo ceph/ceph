@@ -97,9 +97,7 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   msg->pgid = pg.get_pgid();
   msg->map_epoch = pg.get_osdmap_epoch();
   msg->min_epoch = pg.get_last_peering_reset();
-  std::vector<PullOp> pulls;
-  pulls.push_back(po);
-  msg->set_pulls(&pulls);
+  msg->set_pulls({std::move(po)});
   return shard_services.send_to_osd(
     pi.from.osd,
     std::move(msg),
@@ -744,7 +742,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
     }).then([this, m, &response](bool complete) {
       if (complete) {
 	auto& pop = m->pushes[0];
-	recovering[pop.soid].set_pulled();
+	recovering.at(pop.soid).set_pulled();
 	return seastar::make_ready_future<>();
       } else {
 	auto reply = make_message<MOSDPGPull>();
@@ -753,8 +751,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
 	reply->pgid = pg.get_info().pgid;
 	reply->map_epoch = m->map_epoch;
 	reply->min_epoch = m->min_epoch;
-	vector<PullOp> vec = { std::move(response) };
-	reply->set_pulls(&vec);
+	reply->set_pulls({std::move(response)});
 	return shard_services.send_to_osd(m->from.osd, std::move(reply), pg.get_osdmap_epoch());
       }
     });
