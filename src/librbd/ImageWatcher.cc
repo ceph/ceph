@@ -750,12 +750,16 @@ Context *ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &reques
     std::unique_lock async_request_locker{m_async_request_lock};
     bool found = m_async_pending.erase(request);
     if (!found) {
+      ldout(m_image_ctx.cct, 20) << this << " " << request
+                                 << ": not found in pending" << dendl;
       return nullptr;
     }
   }
 
   bool canceled = m_task_finisher->cancel(Task(TASK_CODE_QUIESCE, request));
   if (!canceled) {
+    ldout(m_image_ctx.cct, 20) << this << " " << request
+                               << ": timer task not found" << dendl;
     return nullptr;
   }
 
