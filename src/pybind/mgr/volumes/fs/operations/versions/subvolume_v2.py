@@ -163,6 +163,8 @@ class SubvolumeV2(SubvolumeV1):
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
         retained = self.retained
+        if retained and self.has_pending_purges:
+            raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             self.fs.mkdirs(subvol_path, mode)
@@ -204,6 +206,8 @@ class SubvolumeV2(SubvolumeV1):
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
         retained = self.retained
+        if retained and self.has_pending_purges:
+            raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             # source snapshot attrs are used to create clone subvolume
