@@ -43,6 +43,7 @@ target_link_libraries(rbd_test_mock PUBLIC
 set(unittest_librbd_srcs
   test_main.cc
   test_mock_fixture.cc
+  test_mock_ConfigWatcher.cc
   test_mock_DeepCopyRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
