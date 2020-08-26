@@ -28,6 +28,7 @@ Synopsis
 | **cephadm** **adopt** [-h] --name NAME --style STYLE [--cluster CLUSTER]
 |                       [--legacy-dir LEGACY_DIR] [--config-json CONFIG_JSON]
 |                       [--skip-firewalld] [--skip-pull]
+|                       [--container-init]
 
 | **cephadm** **rm-daemon** [-h] --name NAME --fsid FSID [--force]
 |                           [--force-delete-data]

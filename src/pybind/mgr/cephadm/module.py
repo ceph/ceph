@@ -206,6 +206,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                          'at runtime.',
         },
         {
+            'name': 'container_init',
+            'type': 'bool',
+            'default': False,
+            'desc': 'Run podman/docker with `--init`',
+        },
+        {
             'name': 'prometheus_alerts_path',
             'type': 'str',
             'default': '/etc/prometheus/ceph/ceph_default_alerts.yml',
@@ -280,6 +286,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
             self.allow_ptrace = False
+            self.container_init = False
             self.prometheus_alerts_path = ''
             self.migration_current = None
             self.config_dashboard = True
@@ -1118,6 +1125,10 @@ you may want to run:
 
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
+
+            if self.container_init:
+                final_args += ['--container-init']
+
             final_args += args
 
             self.log.debug('args: %s' % (' '.join(final_args)))
