@@ -77,6 +77,7 @@ Synopsis
 |                           [--registry-username REGISTRY_USERNAME]
 |                           [--registry-password REGISTRY_PASSWORD]
 |                           [--registry-json REGISTRY_JSON]
+|                           [--container-init]
 
 
 
@@ -84,6 +85,7 @@ Synopsis
 |                        [--config-json CONFIG_JSON] [--keyring KEYRING]
 |                        [--key KEY] [--osd-fsid OSD_FSID] [--skip-firewalld]
 |                        [--tcp-ports TCP_PORTS] [--reconfig] [--allow-ptrace]
+|                        [--container-init]
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
@@ -235,6 +237,8 @@ Arguments:
 * [--registry-username REGISTRY_USERNAME] username of account to login to on custom registry
 * [--registry-password REGISTRY_PASSWORD] password of account to login to on custom registry
 * [--registry-json REGISTRY_JSON] JSON file containing registry login info (see registry-login command documentation)
+* [--container-init]              Run podman/docker with `--init`
+
 
 ceph-volume
 -----------
@@ -284,6 +288,7 @@ Arguments:
 * [--tcp-ports                List of tcp ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
 * [--allow-ptrace]            Allow SYS_PTRACE on daemon container
+* [--container-init]          Run podman/docker with `--init`
 
 
 enter
