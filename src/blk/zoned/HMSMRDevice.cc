@@ -78,14 +78,7 @@ HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_
 
 bool HMSMRDevice::support(const std::string& path)
 {
-  int r = zbc_device_is_zoned(path.c_str(), false, nullptr);
-  if (r == 1) {
-    return true;
-  } else if (r < 0) {
-    derr << __func__ << " zbc_device_is_zoned(" << path << ") failed: "
-         << cpp_strerror(r) << dendl;
-  }
-  return false;
+  return zbc_device_is_zoned(path.c_str(), false, nullptr) == 1;
 }
 
 int HMSMRDevice::_lock()
