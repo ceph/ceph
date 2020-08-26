@@ -438,29 +438,30 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
         module = self
 
         class Root(object):
+            # pylint: disable=inconsistent-return-statements
             @cherrypy.expose
-            def index(self):
-                active_uri = module.get_active_uri()
-                if active_uri:
-                    module.log.info("Redirecting to active '%s'", active_uri)
-                    raise cherrypy.HTTPRedirect(active_uri)
-                else:
+            def default(self, *args, **kwargs):
+                if module.get_module_option('standby_behaviour', 'redirect') == 'redirect':
+                    active_uri = module.get_active_uri()
+                    if active_uri:
+                        module.log.info("Redirecting to active '%s'", active_uri)
+                        raise cherrypy.HTTPRedirect(active_uri)
                     template = """
-                <html>
-                    <!-- Note: this is only displayed when the standby
-                         does not know an active URI to redirect to, otherwise
-                         a simple redirect is returned instead -->
-                    <head>
-                        <title>Ceph</title>
-                        <meta http-equiv="refresh" content="{delay}">
-                    </head>
-                    <body>
-                        No active ceph-mgr instance is currently running
-                        the dashboard.  A failover may be in progress.
-                        Retrying in {delay} seconds...
-                    </body>
-                </html>
-                    """
+                    <html>
+                        <!-- Note: this is only displayed when the standby
+                                does not know an active URI to redirect to, otherwise
+                                a simple redirect is returned instead -->
+                        <head>
+                            <title>Ceph</title>
+                            <meta http-equiv="refresh" content="{delay}">
+                        </head>
+                        <body>
+                            No active ceph-mgr instance is currently running
+                            the dashboard. A failover may be in progress.
+                            Retrying in {delay} seconds...
+                        </body>
+                    </html>
+                        """
                     return template.format(delay=5)
 
         cherrypy.tree.mount(Root(), "{}/".format(self.url_prefix), {})
