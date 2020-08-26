@@ -151,22 +151,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         },
         {
             'name': 'container_image_prometheus',
-            'default': 'prom/prometheus:v2.18.1',
+            'default': 'docker.io/prom/prometheus:v2.18.1',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_grafana',
-            'default': 'ceph/ceph-grafana:6.6.2',
+            'default': 'docker.io/ceph/ceph-grafana:6.6.2',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_alertmanager',
-            'default': 'prom/alertmanager:v0.20.0',
+            'default': 'docker.io/prom/alertmanager:v0.20.0',
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_node_exporter',
-            'default': 'prom/node-exporter:v0.18.1',
+            'default': 'docker.io/prom/node-exporter:v0.18.1',
             'desc': 'Prometheus container image',
         },
         {
