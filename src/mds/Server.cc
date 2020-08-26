@@ -4512,14 +4512,16 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
  */
 class C_MDS_inode_update_finish : public ServerLogContext {
   CInode *in;
-  bool truncating_smaller, changed_ranges, new_realm;
+  bool truncating_smaller, changed_ranges, adjust_realm;
 public:
   C_MDS_inode_update_finish(Server *s, MDRequestRef& r, CInode *i,
-			    bool sm=false, bool cr=false, bool nr=false) :
+			    bool sm=false, bool cr=false, bool ar=false) :
     ServerLogContext(s, r), in(i),
-    truncating_smaller(sm), changed_ranges(cr), new_realm(nr) { }
+    truncating_smaller(sm), changed_ranges(cr), adjust_realm(ar) { }
   void finish(int r) override {
     ceph_assert(r == 0);
+
+    int snap_op = (in->snaprealm ? CEPH_SNAP_OP_UPDATE : CEPH_SNAP_OP_SPLIT);
 
     // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
@@ -4533,10 +4535,9 @@ public:
       mds->mdcache->truncate_inode(in, mdr->ls);
     }
 
-    if (new_realm) {
-      int op = CEPH_SNAP_OP_SPLIT;
-      mds->mdcache->send_snap_update(in, 0, op);
-      mds->mdcache->do_realm_invalidate_and_update_notify(in, op);
+    if (adjust_realm) {
+      mds->mdcache->send_snap_update(in, 0, snap_op);
+      mds->mdcache->do_realm_invalidate_and_update_notify(in, snap_op);
     }
 
     get_mds()->balancer->hit_inode(in, META_POP_IWR);
@@ -5298,7 +5299,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     return;
   }
 
-  bool new_realm = false;
+  bool adjust_realm = false;
   if (name.compare(0, 15, "ceph.dir.layout") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
@@ -5367,28 +5368,76 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     lov.add_xlock(&cur->policylock);
     if (quota.is_enable() && !cur->get_projected_srnode()) {
       lov.add_xlock(&cur->snaplock);
-      new_realm = true;
+      adjust_realm = true;
     }
 
     if (!mds->locker->acquire_locks(mdr, lov))
       return;
 
-    auto &pi = cur->project_inode(false, new_realm);
+    if (cur->get_projected_inode()->quota == quota) {
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    auto &pi = cur->project_inode(false, adjust_realm);
     pi.inode.quota = quota;
 
-    if (new_realm) {
-      SnapRealm *realm = cur->find_snaprealm();
-      auto seq = realm->get_newest_seq();
-      auto &newsnap = *pi.snapnode;
-      newsnap.created = seq;
-      newsnap.seq = seq;
-    }
+    if (adjust_realm)
+      pi.snapnode->created = pi.snapnode->seq = cur->find_snaprealm()->get_newest_seq();
+
     mdr->no_early_reply = true;
     pip = &pi.inode;
 
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
-  } else if (name.find("ceph.dir.pin") == 0) {
+  } else if (name == "ceph.dir.subvolume"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    bool val;
+    try {
+      val = boost::lexical_cast<bool>(value);
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    lov.add_xlock(&cur->policylock);
+    lov.add_xlock(&cur->snaplock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    SnapRealm *realm = cur->find_snaprealm();
+    if (val) {
+      inodeno_t subvol_ino = realm->get_subvolume_ino();
+      // can't create subvolume inside another subvolume
+      if (subvol_ino && subvol_ino != cur->ino()) {
+	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+    }
+
+    const auto srnode = cur->get_projected_srnode();
+    if (val == (srnode && srnode->is_subvolume())) {
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    auto& pi = cur->project_inode(false, true);
+    if (!srnode)
+      pi.snapnode->created = pi.snapnode->seq = realm->get_newest_seq();
+    if (val)
+      pi.snapnode->mark_subvolume();
+    else
+      pi.snapnode->clear_subvolume();
+
+    mdr->no_early_reply = true;
+    pip = &pi.inode;
+    adjust_realm = true;
+  } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
       return;
@@ -5434,7 +5483,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
-								   false, false, new_realm));
+								   false, false, adjust_realm));
   return;
 }
 
@@ -6026,12 +6075,22 @@ void Server::handle_client_link(MDRequestRef& mdr)
       return;
   }
 
+  CInode* target_pin = targeti->get_projected_parent_dir()->inode;
+  SnapRealm *target_realm = target_pin->find_snaprealm();
+  if (target_pin != dir->inode &&
+      target_realm->get_subvolume_ino() !=
+      dir->inode->find_snaprealm()->get_subvolume_ino()) {
+    dout(7) << "target is in different subvolume, failing..." << dendl;
+    respond_to_request(mdr, -EXDEV);
+    return;
+  }
+
   // go!
   ceph_assert(g_conf()->mds_kill_link_at != 1);
 
   // local or remote?
   if (targeti->is_auth()) 
-    _link_local(mdr, dn, targeti);
+    _link_local(mdr, dn, targeti, target_realm);
   else 
     _link_remote(mdr, true, dn, targeti);
   mds->balancer->maybe_fragment(dir, false);  
@@ -6056,7 +6115,7 @@ public:
 };
 
 
-void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
+void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm)
 {
   dout(10) << "_link_local " << *dn << " to " << *targeti << dendl;
 
@@ -6076,10 +6135,10 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   pi.inode.version = tipv;
 
   bool adjust_realm = false;
-  if (!targeti->is_projected_snaprealm_global()) {
+  if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
     sr_t *newsnap = targeti->project_snaprealm();
     targeti->mark_snaprealm_global(newsnap);
-    targeti->record_snaprealm_parent_dentry(newsnap, NULL, targeti->get_projected_parent_dn(), true);
+    targeti->record_snaprealm_parent_dentry(newsnap, target_realm, targeti->get_projected_parent_dn(), true);
     adjust_realm = true;
   }
 
@@ -6332,10 +6391,13 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
     inc = true;
     pi.inode.nlink++;
-    if (!targeti->is_projected_snaprealm_global()) {
+
+    CDentry *target_pdn = targeti->get_projected_parent_dn();
+    SnapRealm *target_realm = target_pdn->get_dir()->inode->find_snaprealm();
+    if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
       sr_t *newsnap = targeti->project_snaprealm();
       targeti->mark_snaprealm_global(newsnap);
-      targeti->record_snaprealm_parent_dentry(newsnap, NULL, targeti->get_projected_parent_dn(), true);
+      targeti->record_snaprealm_parent_dentry(newsnap, target_realm, target_pdn, true);
       adjust_realm = true;
       realm_projected = true;
     }
@@ -6752,7 +6814,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (!mdr->more()->desti_srnode) {
     if (in->is_projected_snaprealm_global()) {
       sr_t *new_srnode = in->prepare_new_srnode(0);
-      in->record_snaprealm_parent_dentry(new_srnode, NULL, dn, dnl->is_primary());
+      in->record_snaprealm_parent_dentry(new_srnode, nullptr, dn, dnl->is_primary());
       // dropping the last linkage or dropping the last remote linkage,
       // detch the inode from global snaprealm
       auto nlink = in->get_projected_inode()->nlink;
@@ -7694,6 +7756,21 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   }
   */
 
+  SnapRealm *dest_realm = nullptr;
+  SnapRealm *src_realm = nullptr;
+  if (!linkmerge) {
+    dest_realm = destdir->inode->find_snaprealm();
+    if (srcdir->inode == destdir->inode)
+      src_realm = dest_realm;
+    else
+      src_realm = srcdir->inode->find_snaprealm();
+    if (src_realm != dest_realm &&
+	src_realm->get_subvolume_ino() != dest_realm->get_subvolume_ino()) {
+      respond_to_request(mdr, -EXDEV);
+      return;
+    }
+  }
+
   ceph_assert(g_conf()->mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
@@ -7724,7 +7801,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	srci->get_projected_inode()->nlink == 1 &&
 	srci->is_projected_snaprealm_global()) {
       sr_t *new_srnode = srci->prepare_new_srnode(0);
-      srci->record_snaprealm_parent_dentry(new_srnode, NULL, destdn, false);
+      srci->record_snaprealm_parent_dentry(new_srnode, nullptr, destdn, false);
 
       srci->clear_snaprealm_global(new_srnode);
       mdr->more()->srci_srnode = new_srnode;
@@ -7733,7 +7810,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     if (oldin && !mdr->more()->desti_srnode) {
       if (oldin->is_projected_snaprealm_global()) {
 	sr_t *new_srnode = oldin->prepare_new_srnode(0);
-	oldin->record_snaprealm_parent_dentry(new_srnode, NULL, destdn, destdnl->is_primary());
+	oldin->record_snaprealm_parent_dentry(new_srnode, dest_realm, destdn, destdnl->is_primary());
 	// dropping the last linkage or dropping the last remote linkage,
 	// detch the inode from global snaprealm
 	auto nlink = oldin->get_projected_inode()->nlink;
@@ -7743,7 +7820,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	  oldin->clear_snaprealm_global(new_srnode);
 	mdr->more()->desti_srnode = new_srnode;
       } else if (destdnl->is_primary()) {
-	SnapRealm *dest_realm = destdir->inode->find_snaprealm();
 	snapid_t follows = dest_realm->get_newest_seq();
 	if (oldin->snaprealm || follows + 1 > oldin->get_oldest_snap()) {
 	  sr_t *new_srnode = oldin->prepare_new_srnode(follows);
@@ -7753,13 +7829,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       }
     }
     if (!mdr->more()->srci_srnode) {
-      SnapRealm *dest_realm = destdir->inode->find_snaprealm();
       if (srci->is_projected_snaprealm_global()) {
 	sr_t *new_srnode = srci->prepare_new_srnode(0);
-	srci->record_snaprealm_parent_dentry(new_srnode, dest_realm, srcdn, srcdnl->is_primary());
+	srci->record_snaprealm_parent_dentry(new_srnode, src_realm, srcdn, srcdnl->is_primary());
 	mdr->more()->srci_srnode = new_srnode;
       } else if (srcdnl->is_primary()) {
-	SnapRealm *src_realm = srcdir->inode->find_snaprealm();
 	snapid_t follows = src_realm->get_newest_seq();
 	if (src_realm != dest_realm &&
 	    (srci->snaprealm || follows + 1 > srci->get_oldest_snap())) {
@@ -9689,6 +9763,12 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
+
+  if (inodeno_t subvol_ino = diri->find_snaprealm()->get_subvolume_ino();
+      (subvol_ino && subvol_ino != diri->ino())) {
+    respond_to_request(mdr, -EPERM);
+    return;
+  }
 
   // check if we can create any more snapshots
   // we don't allow any more if we are already at or beyond the limit
