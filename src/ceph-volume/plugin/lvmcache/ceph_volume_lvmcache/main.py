@@ -405,7 +405,7 @@ def rm_lvmcache(origin_lv):
 
 class LVMCache(object):
 
-    help_menu = 'Manage LVM cache'
+    help = help_menu = 'Manage LVM cache'
     _help = """
 Manage lvmcache.
 
@@ -456,7 +456,7 @@ $> ceph-volume lvmcache dump
         self.argv = argv
 
 
-    def help(self):
+    def print_help(self):
         return self._help
 
 
@@ -465,7 +465,7 @@ $> ceph-volume lvmcache dump
         parser = argparse.ArgumentParser(
             prog='lvmcache',
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=self.help(),
+            description=self.print_help(),
         )
         parser.add_argument(
             '--cachemetadata',
