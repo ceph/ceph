@@ -1143,9 +1143,9 @@ int CrushWrapper::insert_item(
 
     if (!name_exists(q->second)) {
       ldout(cct, 5) << "insert_item creating bucket " << q->second << dendl;
-      int empty = 0, newid;
+      int zero_weight = 0, newid;
       int r = add_bucket(0, 0,
-			 CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &newid);
+			 CRUSH_HASH_DEFAULT, p->first, 1, &cur, &zero_weight, &newid);
       if (r < 0) {
         ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r)
 		      << dendl;
