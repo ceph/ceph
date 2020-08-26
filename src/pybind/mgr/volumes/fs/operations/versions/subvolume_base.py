@@ -4,7 +4,6 @@ import uuid
 import errno
 import logging
 from hashlib import md5
-from typing import Dict, Union
 
 import cephfs
 
@@ -126,7 +125,7 @@ class SubvolumeBase(object):
 
     def get_attrs(self, pathname):
         # get subvolume attributes
-        attrs = {} # type: Dict[str, Union[int, str, None]]
+        attrs = {}
         stx = self.fs.statx(pathname,
                             cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID | cephfs.CEPH_STATX_MODE,
                             cephfs.AT_SYMLINK_NOFOLLOW)
