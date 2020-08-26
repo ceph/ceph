@@ -115,6 +115,12 @@ private:
   seastar::future<bool> maybe_pull_missing_obj(
     const hobject_t& soid,
     eversion_t need);
+
+  /// load object context for recovery if it is not ready yet
+  seastar::future<> load_obc_for_recovery(
+    const hobject_t& soid,
+    bool pulled);
+
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
   ///
