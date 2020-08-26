@@ -2446,220 +2446,6 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   return cache_result_t::NOOP;
 }
 
-struct C_ManifestFlush : public Context {
-  PrimaryLogPGRef pg;
-  hobject_t oid;
-  epoch_t lpr;
-  ceph_tid_t tid;
-  utime_t start;
-  uint64_t offset;
-  uint64_t last_offset;
-  C_ManifestFlush(PrimaryLogPG *p, hobject_t o, epoch_t e)
-    : pg(p), oid(o), lpr(e),
-      tid(0), start(ceph_clock_now())
-  {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    std::scoped_lock locker{*pg};
-    pg->handle_manifest_flush(oid, tid, r, offset, last_offset, lpr);
-    pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now() - start);
-  }
-};
-
-void PrimaryLogPG::handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
-                                         uint64_t offset, uint64_t last_offset,
-                                         epoch_t lpr)
-{
-  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
-  if (p == flush_ops.end()) {
-    dout(10) << __func__ << " no flush_op found" << dendl;
-    return;
-  }
-  if (p->second->rval < 0) {
-    return;
-  }
-  p->second->io_results[offset] = r;
-  for (auto &ior: p->second->io_results) {
-    if (ior.second < 0) {
-      finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
-      p->second->rval = r;
-      return;
-    }
-  }
-  if (p->second->chunks == p->second->io_results.size()) {
-    if (lpr == get_last_peering_reset()) {
-      ceph_assert(p->second->obc);
-      finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
-    }
-  }
-}
-
-int PrimaryLogPG::start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
-				       std::optional<std::function<void()>> &&on_flush)
-{
-  auto p = obc->obs.oi.manifest.chunk_map.begin();
-  FlushOpRef manifest_fop(std::make_shared<FlushOp>());
-  manifest_fop->op = op;
-  manifest_fop->obc = obc;
-  manifest_fop->flushed_version = obc->obs.oi.user_version;
-  manifest_fop->blocking = blocking;
-  manifest_fop->on_flush = std::move(on_flush);
-  int r = do_manifest_flush(op, obc, manifest_fop, p->first, blocking);
-  if (r < 0) {
-    return r;
-  }
-
-  // all clean
-  if (manifest_fop->io_tids.empty()) {
-    return 0;
-  }
-
-  flush_ops[obc->obs.oi.soid] = manifest_fop;
-  return -EINPROGRESS;
-}
-
-int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, FlushOpRef manifest_fop,
-				    uint64_t start_offset, bool block)
-{
-  struct object_manifest_t &manifest = obc->obs.oi.manifest;
-  hobject_t soid = obc->obs.oi.soid;
-  ceph_tid_t tid;
-  SnapContext snapc;
-  uint64_t max_copy_size = 0, last_offset = 0;
-
-  map<uint64_t, chunk_info_t>::iterator iter = manifest.chunk_map.find(start_offset); 
-  ceph_assert(iter != manifest.chunk_map.end());
-  for (;iter != manifest.chunk_map.end(); ++iter) {
-    last_offset = iter->first;
-    max_copy_size += iter->second.length;
-    if (get_copy_chunk_size() < max_copy_size) {
-      break;
-    }
-  }
-
-  iter = manifest.chunk_map.find(start_offset);
-  for (;iter != manifest.chunk_map.end(); ++iter) {
-    uint64_t tgt_length = iter->second.length;
-    uint64_t tgt_offset= iter->second.offset;
-    hobject_t tgt_soid = iter->second.oid;
-    object_locator_t oloc(tgt_soid);
-    ObjectOperation obj_op;
-    bufferlist chunk_data;
-    int r = pgbackend->objects_read_sync(
-	soid, iter->first, tgt_length, 0, &chunk_data);
-    if (r < 0) {
-      dout(0) << __func__ << " read fail " << " offset: " << tgt_offset
-	      << " len: " << tgt_length << " r: " << r << dendl;
-      return r;
-    }
-    if (!chunk_data.length()) {
-      return -ENODATA;
-    }
-
-    unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
-		     CEPH_OSD_FLAG_RWORDERED;
-    tgt_length = chunk_data.length();
-
-    /* 
-     * TODO:
-     * set_chunk will not imply that flush eventually re-write 
-     * the chunk if it becomes overwritten. So, we need to remove this part
-     * entirely and rework the dedup procedure based on thw following scenarios.
-     * 
-     * 1. An external agent runs a CDC and explicitly sends set-chunk commands for 
-     * each chunk it chooses to dedup.
-     * 2. The osd internally runs a CDC on the extents of the object that are not yet 
-     * dedup'd and performs the dedup directly.
-     *
-     */
-
-    if (is_dedup_chunk(iter->second)) {
-      pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
-      object_t fp_oid = [&fp_algo, &chunk_data]() -> string {
-        switch (fp_algo) {
-	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
-	  return ceph::crypto::digest<ceph::crypto::SHA1>(chunk_data).to_str();
-	case pg_pool_t::TYPE_FINGERPRINT_SHA256:
-	  return ceph::crypto::digest<ceph::crypto::SHA256>(chunk_data).to_str();
-	case pg_pool_t::TYPE_FINGERPRINT_SHA512:
-	  return ceph::crypto::digest<ceph::crypto::SHA512>(chunk_data).to_str();
-	default:
-	  assert(0 == "unrecognized fingerprint type");
-	  return {};
-	}
-      }();
-      tgt_soid.oid = fp_oid;
-      iter->second.oid = tgt_soid;
-      // skip if the same content exits in prev snap at same offset
-      if (obc->ssc->snapset.clones.size()) {
-	ObjectContextRef cobc = get_prev_clone_obc(obc);
-	if (cobc) {
-	  auto c = cobc->obs.oi.manifest.chunk_map.find(iter->first);
-	  if (c != cobc->obs.oi.manifest.chunk_map.end()) {
-	    if (iter->second == cobc->obs.oi.manifest.chunk_map[iter->first]) {
-	      continue;
-	    }
-	  }
-	}
-      }
-      {
-	bufferlist t;
-	cls_cas_chunk_create_or_get_ref_op get_call;
-	get_call.source = soid.get_head();
-	get_call.data = chunk_data;
-	::encode(get_call, t);
-	obj_op.call("cas", "chunk_create_or_get_ref", t);
-      }
-    } else {
-      obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
-    }
-
-    C_ManifestFlush *fin = new C_ManifestFlush(this, soid, get_last_peering_reset());
-    fin->offset = iter->first;
-    fin->last_offset = last_offset;
-    manifest_fop->chunks++;
-
-    tid = osd->objecter->mutate(
-      tgt_soid.oid, oloc, obj_op, snapc,
-      ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-      flags, new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())));
-    fin->tid = tid;
-    manifest_fop->io_tids[iter->first] = tid;
-
-    dout(20) << __func__ << " offset: " << tgt_offset << " len: " << tgt_length 
-	    << " oid: " << tgt_soid.oid << " ori oid: " << soid.oid.name 
-	    << " tid: " << tid << dendl;
-    if (last_offset < iter->first) {
-      break;
-    }
-  }
-
-  return 0;
-}
-
-void PrimaryLogPG::finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
-					 ObjectContextRef obc, uint64_t last_offset)
-{
-  dout(10) << __func__ << " " << oid << " tid " << tid
-	   << " " << cpp_strerror(r) << " last_offset: " << last_offset << dendl;
-  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
-  if (p == flush_ops.end()) {
-    dout(10) << __func__ << " no flush_op found" << dendl;
-    return;
-  }
-  map<uint64_t, chunk_info_t>::iterator iter = 
-      obc->obs.oi.manifest.chunk_map.find(last_offset); 
-  ceph_assert(iter != obc->obs.oi.manifest.chunk_map.end());
-  for (;iter != obc->obs.oi.manifest.chunk_map.end(); ++iter) {
-    if (last_offset < iter->first) {
-      do_manifest_flush(p->second->op, obc, p->second, iter->first, p->second->blocking);
-      return;
-    }
-  }
-  finish_flush(oid, tid, r);
-}
-
 void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 				      MOSDOpReply *orig_reply, int r,
 				      OpContext *ctx_for_op_returns)
@@ -10166,6 +9952,15 @@ int PrimaryLogPG::start_flush(
   bool preoctopus_compat =
     get_osdmap()->require_osd_release < ceph_release_t::octopus;
   SnapSet snapset;
+  if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
+    /*
+     * TODO: "flush" for a manifest object means re-running the CDC algorithm on the portions of the
+     * object that are not currently dedup'd (not in the manifest chunk_map) and re-deduping the resulting
+     * chunks.  Adding support for that operation here is future work.
+     *
+     */
+    return -EOPNOTSUPP;
+  }
   if (preoctopus_compat) {
     // for pre-octopus compatibility, filter SnapSet::snaps.  not
     // certain we need this, but let's be conservative.
@@ -10242,15 +10037,6 @@ int PrimaryLogPG::start_flush(
     vector<ceph_tid_t> tids;
     cancel_flush(fop, false, &tids);
     osd->objecter->op_cancel(tids, -ECANCELED);
-  }
-
-  if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
-    int r = start_manifest_flush(op, obc, blocking, std::move(on_flush));
-    if (r != -EINPROGRESS) {
-      if (blocking)
-	obc->stop_block();
-    }
-    return r;
   }
 
   /**
