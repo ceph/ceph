@@ -59,8 +59,8 @@ public:
     DEFAULT_CHOOSE_ARGS = -1
   };
 
-  std::map<int32_t, std::string> type_map; /* bucket/device type names */
-  std::map<int32_t, std::string> name_map; /* bucket/device names */
+  std::map<int32_t, std::string> type_map; // item(bucket/device) type id ==> item type name
+  std::map<int32_t, std::string> name_map; // item id ==> item name
   std::map<int32_t, std::string> rule_name_map;
 
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
