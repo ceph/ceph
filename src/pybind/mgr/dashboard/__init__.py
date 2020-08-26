@@ -38,12 +38,10 @@ else:
     os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
                                         os.environ['PATH'])
 
-    from tests import mock, mock_ceph_modules  # type: ignore
+    from tests import mock  # type: ignore
 
     mgr = mock.Mock()
     mgr.get_frontend_path.side_effect = lambda: os.path.abspath("./frontend/dist")
-
-    mock_ceph_modules()
 
 # DO NOT REMOVE: required for ceph-mgr to load a module
 from .module import Module, StandbyModule  # noqa: F401
