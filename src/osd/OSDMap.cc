@@ -4188,11 +4188,6 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
     }
   }
 
-  for (int i=0; i<get_max_osd(); i++) {
-    set_state(i, 0);
-    set_weight(i, CEPH_OSD_OUT);
-  }
-
   map<string,string> profile_map;
   r = get_erasure_code_profile_default(cct, profile_map, &ss);
   if (r < 0) {
