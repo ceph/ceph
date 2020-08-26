@@ -23,7 +23,10 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  auto& recovery_waiter = recovering[soid];
+  [[maybe_unused]] auto [r, added] =
+    recovering.emplace(soid, WaitForObjectRecovery{});
+  // start tracking the recovery of soid
+  assert(added);
   return seastar::do_with(std::map<pg_shard_t, PushOp>(), get_shards_to_push(soid),
     [this, soid, need](auto& pops, auto& shards) {
     return maybe_pull_missing_obj(soid, need).then([this, soid](bool pulled) {
@@ -31,10 +34,11 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
     }).then([this, soid, need, &pops, &shards] {
       return prep_push(soid, need, &pops, shards);
     }).handle_exception([this, soid](auto e) {
-      auto& recovery_waiter = recovering[soid];
-      if (recovery_waiter.obc)
-	recovery_waiter.obc->drop_recovery_read();
-      recovering.erase(soid);
+      auto recovery_waiter = recovering.find(soid);
+      if (auto obc = recovery_waiter->second.obc; obc) {
+        obc->drop_recovery_read();
+      }
+      recovering.erase(recovery_waiter);
       return seastar::make_exception_future<>(e);
     }).then([this, &pops, &shards, soid] {
       return seastar::parallel_for_each(shards,
@@ -49,26 +53,26 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	return shard_services.send_to_osd(shard->first.osd, std::move(msg),
 					  pg.get_osdmap_epoch()).then(
 	  [this, soid, shard] {
-	  return recovering[soid].wait_for_pushes(shard->first);
+	  return recovering.at(soid).wait_for_pushes(shard->first);
 	});
       });
     }).then([this, soid] {
-      bool error = recovering[soid].pi.recovery_progress.error;
+      auto& recovery = recovering.at(soid);
+      bool error = recovery.pi.recovery_progress.error;
       if (!error) {
-	auto push_info = recovering[soid].pushing.begin();
-	object_stat_sum_t stat = {};
-	if (push_info != recovering[soid].pushing.end()) {
-	  stat = push_info->second.stat;
-	} else {
-	  // no push happened, take pull_info's stat
-	  stat = recovering[soid].pi.stat;
-	}
-	pg.get_recovery_handler()->on_global_recover(soid, stat, false);
-	return seastar::make_ready_future<>();
+        auto push_info = recovery.pushing.begin();
+        object_stat_sum_t stat = {};
+        if (push_info != recovery.pushing.end()) {
+          stat = push_info->second.stat;
+        } else {
+          // no push happened, take pull_info's stat
+          stat = recovery.pi.stat;
+        }
+        pg.get_recovery_handler()->on_global_recover(soid, stat, false);
+        return seastar::make_ready_future<>();
       } else {
-	auto& recovery_waiter = recovering[soid];
-	if (recovery_waiter.obc)
-	  recovery_waiter.obc->drop_recovery_read();
+	if (recovery.obc)
+	  recovery.obc->drop_recovery_read();
 	recovering.erase(soid);
 	return seastar::make_exception_future<>(
 	    std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
@@ -87,8 +91,7 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
     return seastar::make_ready_future<bool>(false);
   }
   PullOp po;
-  assert(recovering.count(soid));
-  auto& recovery_waiter = recovering[soid];
+  auto& recovery_waiter = recovering.at(soid);
   auto& pi = recovery_waiter.pi;
   prepare_pull(po, pi, soid, need);
   auto msg = make_message<MOSDPGPull>();
@@ -113,7 +116,7 @@ seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
   const hobject_t& soid,
   bool pulled)
 {
-  auto& recovery_waiter = recovering[soid];
+  auto& recovery_waiter = recovering.at(soid);
   if (recovery_waiter.obc) {
     return seastar::now();
   }
