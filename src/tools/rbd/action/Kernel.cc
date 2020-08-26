@@ -505,15 +505,16 @@ int execute_map(const po::variables_map &vm,
     }
   }
 
+  // connect to the cluster to get the default pool and the default map
+  // options
   librados::Rados rados;
-  librados::IoCtx ioctx;
-  r = utils::init(pool_name, nspace_name, &rados, &ioctx);
+  r = utils::init_rados(&rados);
   if (r < 0) {
     return r;
   }
 
-  // delay processing default options until after global option overrides have
-  // been received
+  utils::normalize_pool_name(&pool_name);
+
   MapOptions default_map_options;
   r = parse_map_options(
       g_conf().get_val<std::string>("rbd_default_map_options"),
@@ -522,7 +523,6 @@ int execute_map(const po::variables_map &vm,
     std::cerr << "rbd: couldn't parse default map options" << std::endl;
     return r;
   }
-
   for (auto& [key, value] : default_map_options) {
     if (map_options.count(key) == 0) {
       map_options[key] = value;
@@ -579,7 +579,16 @@ int execute_unmap(const po::variables_map &vm,
     }
   }
 
-  utils::init_context();
+  if (device_name.empty() && pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
 
   r = do_kernel_unmap(device_name.empty() ? nullptr : device_name.c_str(),
                       pool_name.c_str(), nspace_name.c_str(),
