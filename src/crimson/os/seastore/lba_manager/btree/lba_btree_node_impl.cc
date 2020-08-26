@@ -435,6 +435,7 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
     auto begin = i->get_key();
     ret.emplace_back(
       std::make_unique<BtreeLBAPin>(
+	this,
 	val.paddr,
 	lba_node_meta_t{ begin, begin + val.len, 0}));
   }
@@ -473,6 +474,7 @@ LBALeafNode::insert_ret LBALeafNode::insert(
   return insert_ret(
     insert_ertr::ready_future_marker{},
     std::make_unique<BtreeLBAPin>(
+      this,
       val.paddr,
       lba_node_meta_t{ begin, begin + val.len, 0}));
 }
