@@ -1366,21 +1366,21 @@ void OSDMap::set_max_osd(int m)
 {
   int o = max_osd;
   max_osd = m;
-  osd_state.resize(m);
-  osd_weight.resize(m);
+  osd_state.resize(max_osd);
+  osd_weight.resize(max_osd);
   for (; o<max_osd; o++) {
     osd_state[o] = 0;
     osd_weight[o] = CEPH_OSD_OUT;
   }
-  osd_info.resize(m);
-  osd_xinfo.resize(m);
-  osd_addrs->client_addrs.resize(m);
-  osd_addrs->cluster_addrs.resize(m);
-  osd_addrs->hb_back_addrs.resize(m);
-  osd_addrs->hb_front_addrs.resize(m);
-  osd_uuid->resize(m);
+  osd_info.resize(max_osd);
+  osd_xinfo.resize(max_osd);
+  osd_addrs->client_addrs.resize(max_osd);
+  osd_addrs->cluster_addrs.resize(max_osd);
+  osd_addrs->hb_back_addrs.resize(max_osd);
+  osd_addrs->hb_front_addrs.resize(max_osd);
+  osd_uuid->resize(max_osd);
   if (osd_primary_affinity)
-    osd_primary_affinity->resize(m, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
+    osd_primary_affinity->resize(max_osd, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
 
   calc_num_osds();
 }
