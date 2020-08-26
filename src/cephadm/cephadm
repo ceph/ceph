@@ -3028,6 +3028,9 @@ def command_bootstrap():
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', args.registry_username, '--force'])
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', args.registry_password, '--force'])
 
+    if args.container_init:
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', args.container_init, '--force'])
+
     if not args.skip_dashboard:
         # Configure SSL port (cephadm only allows to configure dashboard SSL port)
         # if the user does not want to use SSL he can change this setting once the cluster is up
@@ -5384,6 +5387,10 @@ def _get_parser():
         '--force-start',
         action='store_true',
         help="start newly adoped daemon, even if it wasn't running previously")
+    parser_adopt.add_argument(
+        '--container-init',
+        action='store_true',
+        help='Run podman/docker with `--init`')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
