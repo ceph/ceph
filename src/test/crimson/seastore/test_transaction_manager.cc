@@ -166,6 +166,10 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
     return { tm->create_transaction(), test_mappings };
   }
 
+  test_transaction_t create_weak_transaction() {
+    return { tm->create_weak_transaction(), test_mappings };
+  }
+
   TestBlockRef alloc_extent(
     test_transaction_t &t,
     laddr_t hint,
@@ -203,7 +207,7 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
   }
 
   void check_mappings() {
-    auto t = create_transaction();
+    auto t = create_weak_transaction();
     check_mappings(t);
   }
 
@@ -264,7 +268,7 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
       auto ext = get_extent(t, i.first, i.second.desc.len);
       EXPECT_EQ(i.second, ext->get_desc());
     }
-    auto lt = create_lazy_transaction();
+    auto lt = create_weak_transaction();
     lba_manager->scan_mappings(
       *lt.t,
       0,

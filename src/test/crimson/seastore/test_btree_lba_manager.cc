@@ -131,6 +131,14 @@ struct btree_lba_manager_test :
     return t;
   }
 
+  auto create_weak_transaction() {
+    auto t = test_transaction_t{
+      make_weak_transaction(),
+      test_lba_mappings
+    };
+    return t;
+  }
+
   void submit_test_transaction(test_transaction_t t) {
     submit_transaction(std::move(t.t)).get0();
     test_lba_mappings.swap(t.mappings);
