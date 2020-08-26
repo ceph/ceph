@@ -1883,6 +1883,7 @@ def get_container(fsid, daemon_type, daemon_id,
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
+        init=args.container_init,
     )
 
 
@@ -2348,8 +2349,10 @@ class CephContainer:
                  envs=None,
                  privileged=False,
                  ptrace=False,
-                 bind_mounts=None):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool, Optional[List[List[str]]]) -> None
+                 bind_mounts=None,
+                 init=False,
+                 ):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool, Optional[List[List[str]]], bool) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
@@ -2360,6 +2363,7 @@ class CephContainer:
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
+        self.init = init
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -2378,6 +2382,7 @@ class CephContainer:
                     '--group-add=disk']
         if self.ptrace:
             priv.append('--cap-add=SYS_PTRACE')
+        init = ['--init'] if self.init else []
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -2398,7 +2403,7 @@ class CephContainer:
             '--net=host',
             '--ipc=host',
         ] + self.container_args + priv + \
-        cname + envs + \
+        cname + init + envs + \
         vols + binds + entrypoint + \
         [
             self.image
@@ -5660,6 +5665,10 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--registry-json',
         help='json file with custom registry login info (URL, Username, Password)')
+    parser_bootstrap.add_argument(
+        '--container-init',
+        action='store_true',
+        help='Run podman/docker with `--init`')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -5703,6 +5712,10 @@ def _get_parser():
         '--allow-ptrace',
         action='store_true',
         help='Allow SYS_PTRACE on daemon container')
+    parser_deploy.add_argument(
+        '--container-init',
+        action='store_true',
+        help='Run podman/docker with `--init`')
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
