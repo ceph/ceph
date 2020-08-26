@@ -1,5 +1,4 @@
 tasks:
-- install: null
 - ceph:
     fs: xfs
     log-ignorelist:

@@ -1,13 +1,15 @@
 tasks:
-- install:
 - ceph:
-    fs: ext4
     log-ignorelist:
     - but it is still running
     - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(PG_
+    - \(OSD_
+    - \(OBJECT_
     - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:
-      all:
-        - rados/load-gen-mix.sh
+      client.0:
+        - rados/test_python.sh

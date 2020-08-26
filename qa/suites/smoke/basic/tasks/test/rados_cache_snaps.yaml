@@ -1,5 +1,4 @@
 tasks:
-- install: null
 - ceph:
     log-ignorelist:
       - overall HEALTH_
