@@ -1,6 +1,8 @@
 >=16.0.0
 --------
 
+* The ``ceph df`` command now lists the number of pgs in each pool.
+
 * Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
   by default. However, if enabled, user now have to pass the
   ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
