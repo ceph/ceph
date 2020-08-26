@@ -124,6 +124,65 @@ aspects of your Ceph cluster:
 * **Ceph Manager Modules**: Enable and disable all Ceph Manager modules, change
   the module-specific configuration settings.
 
+Overview of the Dashboard Landing Page
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Displays overall cluster status, performance and capacity metrics. Gives instant
+feedback to changes in the cluster and provides easy access to subpages of the
+dashboard.
+
+Status
+""""""
+
+* **Cluster Status**: Displays overall cluster health. In case of any error it
+  displays a short description of the error and provides a link to the logs.
+* **Hosts**: Displays the total number of hosts associated to the cluster and
+  links to the subpage displaying the list and descriptions of all hosts.
+* **Monitors**: Displays the total number of all MONs and their quorum status,
+  open sessions and links to the subpage providing a list and descriptions of all
+  the MONs.
+* **OSDs**: Displays total number of object storage daemons for Ceph (ceph-osds)
+  and the total number of OSDs running (up), total number of OSDs in the cluster
+  (in) and total number of OSDs out of the cluster (out). Provides link to the
+  subpage containing a list of all OSDs and related management actions.
+* **Managers**: Displays the total number of active and standby Ceph Manager
+  daemons (ceph-mgr) running alongside monitor daemons.
+* **Object Gateway**: Displays the total number of active object gateways and 
+  provides a link to the subpage displaying a list of all object gateway daemons.
+* **Metadata Servers**: Displays total number of active and standby metadata
+  servers daemons for CephFS (ceph-mds).
+* **iSCSI Gateways**: Display the total number of iSCSI gateways available, total
+  number of active iSCSI gateways (up) and total number of inactive iSCSI
+  Gateways (down). Provides link to the subpage providing a list of all iSCSI
+  Gateways.
+
+Capacity
+""""""""
+
+* **Raw Capacity**: Displays the total physical capacity used out of the total
+  physical capacity provided by the ceph storage nodes (OSDs).
+* **Objects**: Displays the number of objects in use and the status of objects
+  including the percentage of healthy, misplaced, degraded and unfound status of
+  objects. An object is the smallest unit of data storage in Ceph cluster.
+* **PG Status**: Displays the total number of placement groups in use and the
+  status of placement groups, including the percentage of clean, working,
+  warning and unknown status of placement groups.
+* **Pools**: Displays the total number of pools and links to the subpage that
+  lists all Ceph pools and their details.
+* **PGs per OSD**: Displays the number of placement groups per object storage
+  daemons.
+
+Performance
+"""""""""""
+
+* **Client READ/Write**: Displays an overview of rate the read/write operations,
+  the total number of input and output operations performed by the cluster on
+  storage devices on the client side.
+* **Client Throughput**: Displays the data transfer rate to and from Ceph clients.
+* **Recovery throughput**: Displays rate of moving the data back to the cluster
+  if the cluster is recovering to parity when the hard drive is lost.
+* **Scrubbing**: Displays whether Ceph is comparing the data to other pieces of
+  data to ensure there is no data corruption on the cluster's storage devices.
 
 Supported Browsers
 ^^^^^^^^^^^^^^^^^^
