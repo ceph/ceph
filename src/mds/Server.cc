@@ -56,6 +56,7 @@
 
 #include <list>
 #include <iostream>
+#include <regex>
 #include <string_view>
 #include <functional>
 
@@ -5825,6 +5826,13 @@ const Server::XattrHandler Server::xattr_handlers[] = {
     setxattr: &Server::default_setxattr_handler,
     removexattr: &Server::default_removexattr_handler,
   },
+  {
+    xattr_name: "ceph.mirror.info",
+    description: "mirror info xattr handler",
+    validate: &Server::mirror_info_xattr_validate,
+    setxattr: &Server::mirror_info_setxattr_handler,
+    removexattr: &Server::mirror_info_removexattr_handler
+  },
 };
 
 const Server::XattrHandler* Server::get_xattr_or_default_handler(std::string_view xattr_name) {
@@ -5908,6 +5916,84 @@ void Server::default_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr
 void Server::default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
                                          const XattrOp &xattr_op) {
   xattr_rm(xattrs, xattr_op.xattr_name);
+}
+
+// mirror info xattr handlers
+const std::string Server::MirrorXattrInfo::MIRROR_INFO_REGEX = "^cluster_id=([a-f0-9]{8}-" \
+                                                               "[a-f0-9]{4}-[a-f0-9]{4}-" \
+                                                               "[a-f0-9]{4}-[a-f0-9]{12})" \
+                                                               " fs_id=(\\d+)$";
+const std::string Server::MirrorXattrInfo::CLUSTER_ID = "ceph.mirror.info.cluster_id";
+const std::string Server::MirrorXattrInfo::FS_ID = "ceph.mirror.info.fs_id";
+int Server::parse_mirror_info_xattr(const std::string &name, const std::string &value,
+                                    std::string &cluster_id, std::string &fs_id) {
+  dout(20) << "parsing name=" << name << ", value=" << value << dendl;
+
+  static const std::regex regex(Server::MirrorXattrInfo::MIRROR_INFO_REGEX);
+  std::smatch match;
+
+  std::regex_search(value, match, regex);
+  if (match.size() != 3) {
+    derr << "mirror info parse error" << dendl;
+    return -EINVAL;
+  }
+
+  cluster_id = match[1];
+  fs_id = match[2];
+  dout(20) << " parsed cluster_id=" << cluster_id << ", fs_id=" << fs_id << dendl;
+  return 0;
+}
+
+int Server::mirror_info_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                       XattrOp *xattr_op) {
+  if (!cur->is_root()) {
+    return -EINVAL;
+  }
+
+  int v1 = xattr_validate(cur, xattrs, Server::MirrorXattrInfo::CLUSTER_ID, xattr_op->op, xattr_op->flags);
+  int v2 = xattr_validate(cur, xattrs, Server::MirrorXattrInfo::FS_ID, xattr_op->op, xattr_op->flags);
+  if (v1 != v2) {
+    derr << "inconsistent mirror info state (" << v1 << "," << v2 << ")" << dendl;
+    return -EINVAL;
+  }
+
+  if (v1 < 0) {
+    return v1;
+  }
+
+  if (xattr_op->op == CEPH_MDS_OP_RMXATTR) {
+    return 0;
+  }
+
+  std::string cluster_id;
+  std::string fs_id;
+  int r = parse_mirror_info_xattr(xattr_op->xattr_name, xattr_op->xattr_value.to_str(),
+                                  cluster_id, fs_id);
+  if (r < 0) {
+    return r;
+  }
+
+  xattr_op->xinfo = std::make_unique<MirrorXattrInfo>(cluster_id, fs_id);
+  return 0;
+}
+
+void Server::mirror_info_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                          const XattrOp &xattr_op) {
+  auto mirror_info = dynamic_cast<MirrorXattrInfo&>(*(xattr_op.xinfo));
+
+  bufferlist bl;
+  bl.append(mirror_info.cluster_id.c_str(), mirror_info.cluster_id.length());
+  xattr_set(xattrs, Server::MirrorXattrInfo::CLUSTER_ID, bl);
+
+  bl.clear();
+  bl.append(mirror_info.fs_id.c_str(), mirror_info.fs_id.length());
+  xattr_set(xattrs, Server::MirrorXattrInfo::FS_ID, bl);
+}
+
+void Server::mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                             const XattrOp &xattr_op) {
+  xattr_rm(xattrs, Server::MirrorXattrInfo::CLUSTER_ID);
+  xattr_rm(xattrs, Server::MirrorXattrInfo::FS_ID);
 }
 
 void Server::handle_client_setxattr(MDRequestRef& mdr)

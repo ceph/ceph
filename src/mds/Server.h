@@ -326,6 +326,21 @@ private:
     }
   };
 
+  struct MirrorXattrInfo : XattrInfo {
+    std::string cluster_id;
+    std::string fs_id;
+
+    static const std::string MIRROR_INFO_REGEX;
+    static const std::string CLUSTER_ID;
+    static const std::string FS_ID;
+
+    MirrorXattrInfo(std::string_view cluster_id,
+                    std::string_view fs_id)
+      : cluster_id(cluster_id),
+        fs_id(fs_id) {
+    }
+  };
+
   struct XattrOp {
     int op;
     std::string xattr_name;
@@ -381,6 +396,16 @@ private:
                                 const XattrOp &xattr_op);
   void default_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
                                    const XattrOp &xattr_op);
+
+  // mirror info xattr handler
+  int parse_mirror_info_xattr(const std::string &name, const std::string &value,
+                              std::string &cluster_id, std::string &fs_id);
+  int mirror_info_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                 XattrOp *xattr_op);
+  void mirror_info_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                    const XattrOp &xattr_op);
+  void mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                       const XattrOp &xattr_op);
 
   static bool is_ceph_vxattr(std::string_view xattr_name) {
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
