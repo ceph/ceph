@@ -67,6 +67,11 @@ public:
     return make_transaction();
   }
 
+  /// Creates weak transaction
+  TransactionRef create_weak_transaction() {
+    return make_weak_transaction();
+  }
+
   /**
    * Read extents corresponding to specified lba range
    */
