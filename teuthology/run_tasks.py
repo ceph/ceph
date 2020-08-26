@@ -111,10 +111,11 @@ def run_tasks(tasks, ctx):
                 'task': taskname,
                 'owner': ctx.owner,
             }
-            if 'teuthology_branch' in config:
-                tags['teuthology_branch'] = config['teuthology_branch']
-            if 'branch' in config:
-                tags['branch'] = config['branch']
+            optional_tags = ('teuthology_branch', 'branch', 'suite',
+                             'machine_type', 'os_type', 'os_version')
+            for tag in optional_tags:
+                if tag in config:
+                    tags[tag] = config[tag]
 
             # Remove ssh keys from reported config
             if 'targets' in config:
