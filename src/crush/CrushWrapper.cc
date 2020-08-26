@@ -1123,9 +1123,10 @@ int CrushWrapper::insert_item(
 
   int cur = item;
 
-  // create locations if locations don't exist and add child in
-  // location with 0 weight the more detail in the insert_item method
-  // declaration in CrushWrapper.h
+  // 1. create locations if locations don't exist
+  // 2. add child in the location with 0 weight.
+  // Check more detail of insert_item method declared in
+  // CrushWrapper.h
   for (auto p = type_map.begin(); p != type_map.end(); ++p) {
     // ignore device type
     if (p->first == 0)
