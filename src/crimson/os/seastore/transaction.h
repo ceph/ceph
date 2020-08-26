@@ -17,21 +17,8 @@ namespace crimson::os::seastore {
  * Representation of in-progress mutation. Used exclusively through Cache methods.
  */
 class Transaction {
-  friend class Cache;
-
-  RootBlockRef root;        ///< ref to root if read or written by transaction
-
-  segment_off_t offset = 0; ///< relative offset of next block
-
-  pextent_set_t read_set;   ///< set of extents read by paddr
-  ExtentIndex write_set;    ///< set of extents written by paddr
-
-  std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
-  std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
-
-  pextent_set_t retired_set; ///< list of extents mutated by this transaction
-
 public:
+  using Ref = std::unique_ptr<Transaction>;
   enum class get_extent_ret {
     PRESENT,
     ABSENT,
@@ -98,8 +85,23 @@ public:
   const auto &get_retired_set() {
     return retired_set;
   }
+
+private:
+  friend class Cache;
+
+  RootBlockRef root;        ///< ref to root if read or written by transaction
+
+  segment_off_t offset = 0; ///< relative offset of next block
+
+  pextent_set_t read_set;   ///< set of extents read by paddr
+  ExtentIndex write_set;    ///< set of extents written by paddr
+
+  std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
+  std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
+
+  pextent_set_t retired_set; ///< list of extents mutated by this transaction
 };
-using TransactionRef = std::unique_ptr<Transaction>;
+using TransactionRef = Transaction::Ref;
 
 inline TransactionRef make_transaction() {
   return std::make_unique<Transaction>();
