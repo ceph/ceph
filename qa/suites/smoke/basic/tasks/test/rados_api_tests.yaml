@@ -1,5 +1,6 @@
-overrides:
-  ceph:
+tasks:
+- ceph:
+    fs: ext4
     log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
@@ -11,21 +12,18 @@ overrides:
       - \(OBJECT_
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
-      - \(OSD_SLOW_PING_TIME
+      - reached quota
+      - but it is still running
       - slow request
     conf:
-      client:
-        rbd cache: true
-      global:
-        ms inject socket failures: 5000
-        mon client directed command retry: 5
-tasks:
-- install: null
-- ceph:
-    fs: xfs
+      mon:
+        mon warn on pool no app: false
 - thrashosds:
+    chance_pgnum_grow: 2
+    chance_pgnum_shrink: 2
+    chance_pgpnum_fix: 1
     timeout: 1200
-- rbd_fsx:
+- workunit:
     clients:
-    - client.0
-    ops: 2000
+      client.0:
+      - rados/test.sh
