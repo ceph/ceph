@@ -351,7 +351,7 @@ class Module(MgrModule):
         r = self.get("device " + devid)
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
-        daemons = [d for d in r['device'].get('daemons', []) if not d.startswith('osd.')]
+        daemons = [d for d in r['device'].get('daemons', []) if d.startswith('osd.')]
         if not daemons:
             return (-errno.EAGAIN, '',
                     'device ' + devid + ' not claimed by any active OSD daemons')
