@@ -44,6 +44,7 @@ void usage()
   cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
+  cout << "   --clean-temps           clean pg_temps" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
   cout << "   --test-map-pg <pgid>    map a pgid to osds" << std::endl;
   cout << "   --test-map-object <objectname> [--pool <poolid>] map an object to osds"
@@ -136,6 +137,7 @@ int main(int argc, const char **argv)
   bool mark_up_in = false;
   int marked_out = -1;
   bool clear_temp = false;
+  bool clean_temps = false;
   bool test_map_pgs = false;
   bool test_map_pgs_dump = false;
   bool test_random = false;
@@ -201,6 +203,8 @@ int main(int argc, const char **argv)
       marked_out = std::stoi(val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
+    } else if (ceph_argparse_flag(args, i, "--clean-temps", (char*)NULL)) {
+      clean_temps = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
       test_map_pgs = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump", (char*)NULL)) {
@@ -356,6 +360,14 @@ int main(int argc, const char **argv)
   if (clear_temp) {
     cout << "clearing pg/primary temp" << std::endl;
     osdmap.clear_temp();
+  }
+  if (clean_temps) {
+    cout << "cleaning pg temps" << std::endl;
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    OSDMap tmpmap;
+    tmpmap.deepish_copy_from(osdmap);
+    tmpmap.apply_incremental(pending_inc);
+    OSDMap::clean_temps(g_ceph_context, osdmap, tmpmap, &pending_inc);
   }
   int upmap_fd = STDOUT_FILENO;
   if (upmap || upmap_cleanup) {
