@@ -25,34 +25,9 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   logger().debug("{}: {}, {}", __func__, soid, need);
   auto& recovery_waiter = recovering[soid];
   return seastar::do_with(std::map<pg_shard_t, PushOp>(), get_shards_to_push(soid),
-    [this, soid, need, &recovery_waiter](auto& pops, auto& shards) {
-    return [this, soid, need, &recovery_waiter] {
-      pg_missing_tracker_t local_missing = pg.get_local_missing();
-      if (local_missing.is_missing(soid)) {
-	PullOp po;
-	auto& pi = recovery_waiter.pi;
-	prepare_pull(po, pi, soid, need);
-	auto msg = make_message<MOSDPGPull>();
-	msg->from = pg.get_pg_whoami();
-	msg->set_priority(pg.get_recovery_op_priority());
-	msg->pgid = pg.get_pgid();
-	msg->map_epoch = pg.get_osdmap_epoch();
-	msg->min_epoch = pg.get_last_peering_reset();
-	std::vector<PullOp> pulls;
-	pulls.push_back(po);
-	msg->set_pulls(&pulls);
-	return shard_services.send_to_osd(pi.from.osd,
-					   std::move(msg),
-					   pg.get_osdmap_epoch()).then(
-	  [&recovery_waiter] {
-	  return recovery_waiter.wait_for_pull().then([] {
-	    return seastar::make_ready_future<bool>(true);
-	  });
-	});
-      } else {
-	return seastar::make_ready_future<bool>(false);
-      }
-    }().then([this, &pops, &shards, soid, need, &recovery_waiter](bool pulled) mutable {
+    [this, soid, need](auto& pops, auto& shards) {
+    return maybe_pull_missing_obj(soid, need).then(
+      [this, &pops, &shards, soid, need, &recovery_waiter](bool pulled) mutable {
       return [this, &recovery_waiter, soid, pulled] {
 	if (!recovery_waiter.obc) {
 	  return pg.get_or_load_head_obc(soid).safe_then(
@@ -135,6 +110,40 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	    std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
       }
     });
+  });
+}
+
+seastar::future<bool>
+ReplicatedRecoveryBackend::maybe_pull_missing_obj(
+  const hobject_t& soid,
+  eversion_t need)
+{
+  pg_missing_tracker_t local_missing = pg.get_local_missing();
+  if (!local_missing.is_missing(soid)) {
+    return seastar::make_ready_future<bool>(false);
+  }
+  PullOp po;
+  assert(recovering.count(soid));
+  auto& recovery_waiter = recovering[soid];
+  auto& pi = recovery_waiter.pi;
+  prepare_pull(po, pi, soid, need);
+  auto msg = make_message<MOSDPGPull>();
+  msg->from = pg.get_pg_whoami();
+  msg->set_priority(pg.get_recovery_op_priority());
+  msg->pgid = pg.get_pgid();
+  msg->map_epoch = pg.get_osdmap_epoch();
+  msg->min_epoch = pg.get_last_peering_reset();
+  std::vector<PullOp> pulls;
+  pulls.push_back(po);
+  msg->set_pulls(&pulls);
+  return shard_services.send_to_osd(
+    pi.from.osd,
+    std::move(msg),
+    pg.get_osdmap_epoch()
+  ).then([&recovery_waiter] {
+    return recovery_waiter.wait_for_pull();
+  }).then([] {
+    return seastar::make_ready_future<bool>(true);
   });
 }
 
