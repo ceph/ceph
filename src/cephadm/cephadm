@@ -162,7 +162,7 @@ class Monitoring(object):
 
     components = {
         "prometheus": {
-            "image": "docker.io/prom/prometheus:v2.18.1",
+            "image": "registry.suse.com/caasp/v5/prometheus-server:2.18.0",
             "cpus": '2',
             "memory": '4GB',
             "args": [
@@ -175,7 +175,7 @@ class Monitoring(object):
             ],
         },
         "node-exporter": {
-            "image": "docker.io/prom/node-exporter:v0.18.1",
+            "image": "registry.suse.com/caasp/v5/prometheus-node-exporter:0.17.0",
             "cpus": "1",
             "memory": "1GB",
             "args": [
@@ -183,7 +183,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "docker.io/ceph/ceph-grafana:6.7.4",
+            "image": "registry.suse.com/ses/7/ceph/grafana:7.0.3",
             "cpus": "2",
             "memory": "4GB",
             "args": [],
@@ -195,7 +195,7 @@ class Monitoring(object):
             ],
         },
         "alertmanager": {
-            "image": "docker.io/prom/alertmanager:v0.20.0",
+            "image": "registry.suse.com/caasp/v5/prometheus-alertmanager:0.16.2",
             "cpus": "2",
             "memory": "2GB",
             "args": [
