@@ -34,7 +34,7 @@ POOL_ARGS = POOL_PROPERTIES + [x for x,_ in POOL_QUOTA_PROPERTIES]
 def humanify_command(command):
     out = [command['prefix']]
 
-    for arg, val in command.iteritems():
+    for arg, val in command.items():
         if arg != 'prefix':
             out.append("%s=%s" % (str(arg), str(val)))
 
