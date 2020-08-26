@@ -131,6 +131,10 @@ Options
 
    clears pg_temp and primary_temp variables.
 
+.. option:: --clean-temps
+
+   clean pg_temps.
+
 .. option:: --health
 
    dump health checks
