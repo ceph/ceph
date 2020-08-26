@@ -100,7 +100,8 @@ private:
       if (m_task_code != rhs.m_task_code) {
         return m_task_code < rhs.m_task_code;
       } else if ((m_task_code == TASK_CODE_ASYNC_REQUEST ||
-                  m_task_code == TASK_CODE_ASYNC_PROGRESS) &&
+                  m_task_code == TASK_CODE_ASYNC_PROGRESS ||
+                  m_task_code == TASK_CODE_QUIESCE) &&
                  m_async_request_id != rhs.m_async_request_id) {
         return m_async_request_id < rhs.m_async_request_id;
       }
