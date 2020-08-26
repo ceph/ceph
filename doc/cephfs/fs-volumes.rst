@@ -91,7 +91,7 @@ List subvolume groups using::
 
     $ ceph fs subvolumegroup ls <vol_name>
 
-.. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
+.. note:: Subvolume group snapshot feature is no longer supported in nautilus CephFS (existing group
           snapshots can still be listed and deleted)
 
 Remove a snapshot of a subvolume group using::
