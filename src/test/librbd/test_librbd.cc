@@ -8518,20 +8518,21 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
         m_cond.notify_one();
       }
 
-      void wait_for_quiesce_count(size_t count) {
+      void wait_for_quiesce() {
         std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
-                                    [this, count] {
-                                      return this->quiesce_count == count;
+                                    [this] {
+                                      return quiesce_count >= 1;
                                     }));
       }
 
-      void wait_for_unquiesce_count(size_t count) {
+      void wait_for_unquiesce() {
         std::unique_lock<std::mutex> locker(m_lock);
         ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
-                                    [this, count] {
-                                      return this->unquiesce_count == count;
+                                    [this] {
+                                      return quiesce_count == unquiesce_count;
                                     }));
+        quiesce_count = unquiesce_count = 0;
       }
     } watcher(image);
     uint64_t handle;
@@ -8541,22 +8542,21 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
     std::cerr << "test quiesce is not long enough to time out" << std::endl;
 
     thread quiesce1([&image, &watcher, handle]() {
-      watcher.wait_for_quiesce_count(1);
+      watcher.wait_for_quiesce();
       sleep(8);
       image.quiesce_complete(handle, 0);
     });
 
     ASSERT_EQ(0, image.snap_create("snap1"));
     quiesce1.join();
-    ASSERT_EQ(1U, watcher.quiesce_count);
-    watcher.wait_for_unquiesce_count(1);
-    ASSERT_EQ(1U, watcher.unquiesce_count);
+    ASSERT_GE(watcher.quiesce_count, 1U);
+    watcher.wait_for_unquiesce();
 
     std::cerr << "test quiesce is timed out" << std::endl;
 
     bool timed_out = false;
     thread quiesce2([&image, &watcher, handle, &timed_out]() {
-      watcher.wait_for_quiesce_count(2);
+      watcher.wait_for_quiesce();
       for (int i = 0; !timed_out && i < 60; i++) {
         std::cerr << "waiting for timed out ... " << i << std::endl;
         sleep(1);
@@ -8567,12 +8567,11 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
     ASSERT_EQ(-ETIMEDOUT, image.snap_create("snap2"));
     timed_out = true;
     quiesce2.join();
-    ASSERT_EQ(2U, watcher.quiesce_count);
-    watcher.wait_for_unquiesce_count(2);
-    ASSERT_EQ(2U, watcher.unquiesce_count);
+    ASSERT_GE(watcher.quiesce_count, 1U);
+    watcher.wait_for_unquiesce();
 
     thread quiesce3([&image, handle, &watcher]() {
-      watcher.wait_for_quiesce_count(3);
+      watcher.wait_for_quiesce();
       image.quiesce_complete(handle, 0);
     });
 
@@ -8580,9 +8579,8 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     ASSERT_EQ(0, image.snap_create("snap2"));
     quiesce3.join();
-    ASSERT_EQ(3U, watcher.quiesce_count);
-    watcher.wait_for_unquiesce_count(3);
-    ASSERT_EQ(3U, watcher.unquiesce_count);
+    ASSERT_GE(watcher.quiesce_count, 1U);
+    watcher.wait_for_unquiesce();
 
     ASSERT_EQ(0, image.snap_remove("snap1"));
     ASSERT_EQ(0, image.snap_remove("snap2"));
