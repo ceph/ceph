@@ -1,8 +1,12 @@
+import os
+
+if 'UNITTEST' in os.environ:
+    import tests
+
 import cephfs
 import contextlib
 import datetime
 import errno
-import os
 import socket
 import time
 import logging
