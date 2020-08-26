@@ -1378,7 +1378,7 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   } else {
     string key;
     combine_strings(prefix, k, keylen, &key);
-    put_bat(bat, cf, key, to_set_bl);
+    put_bat(bat, db->default_cf, key, to_set_bl);
   }
 }
 
