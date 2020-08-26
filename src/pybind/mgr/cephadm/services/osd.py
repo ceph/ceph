@@ -32,7 +32,8 @@ class OSDService(CephadmService):
             cmd = self.driveselection_to_ceph_volume(drive_selection,
                                                      osd_id_claims.get(host, []))
             if not cmd:
-                logger.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
+                logger.debug("No data_devices, skipping DriveGroup: {}".format(
+                    drive_group.service_id))
                 return None
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = self.create_single_host(
@@ -83,9 +84,9 @@ class OSDService(CephadmService):
                     continue
                 if osd_uuid_map.get(osd_id) != osd['tags']['ceph.osd_fsid']:
                     logger.debug('mismatched osd uuid (cluster has %s, osd '
-                                   'has %s)' % (
-                                       osd_uuid_map.get(osd_id),
-                                       osd['tags']['ceph.osd_fsid']))
+                                 'has %s)' % (
+                                     osd_uuid_map.get(osd_id),
+                                     osd['tags']['ceph.osd_fsid']))
                     continue
 
                 created.append(osd_id)
@@ -385,7 +386,8 @@ class RemoveUtil(object):
         while not self.ok_to_stop(osds):
             if len(osds) <= 1:
                 # can't even stop one OSD, aborting
-                self.mgr.log.info("Can't even stop one OSD. Cluster is probably busy. Retrying later..")
+                self.mgr.log.info(
+                    "Can't even stop one OSD. Cluster is probably busy. Retrying later..")
                 return []
 
             # This potentially prolongs the global wait time.
