@@ -303,7 +303,7 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('--watch-channel', dest="watch_channel",
                         help="which log channel to follow " \
-                        "when using -w/--watch.  One of ['cluster', 'audit', '*'",
+                        "when using -w/--watch.  One of ['cluster', 'audit', '*']",
                         default='cluster')
 
     parser.add_argument('--version', '-v', action="store_true", help="display version")
