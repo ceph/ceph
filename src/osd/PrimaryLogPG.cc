@@ -2344,16 +2344,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   maybe_force_recovery();
 }
 
-bool PrimaryLogPG::is_dedup_chunk(const chunk_info_t& chunk)
-{
-  if (pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
-      chunk.has_reference() &&
-      fp_algo != pg_pool_t::TYPE_FINGERPRINT_NONE) {
-    return true;
-  }
-  return false;
-}
-
 PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   OpRequestRef op,
   bool write_ordered,
@@ -3348,14 +3338,12 @@ void PrimaryLogPG::dec_refcount_by_dirty(OpContext* ctx)
   ObjectContextRef cobc = nullptr;
   ObjectContextRef obc = ctx->obc;
   for (auto &p : ctx->obs->oi.manifest.chunk_map) {
-    if (is_dedup_chunk(p.second)) {
-      if (!ctx->clean_regions.is_clean_region(p.first, p.second.length)) {
-	ctx->new_obs.oi.manifest.chunk_map.erase(p.first);
-	if (ctx->new_obs.oi.manifest.chunk_map.empty()) {
-	  ctx->new_obs.oi.manifest.type = object_manifest_t::TYPE_NONE;
-	  ctx->new_obs.oi.clear_flag(object_info_t::FLAG_MANIFEST);
-	  ctx->delta_stats.num_objects_manifest--;
-	}
+    if (!ctx->clean_regions.is_clean_region(p.first, p.second.length)) {
+      ctx->new_obs.oi.manifest.chunk_map.erase(p.first);
+      if (ctx->new_obs.oi.manifest.chunk_map.empty()) {
+	ctx->new_obs.oi.manifest.type = object_manifest_t::TYPE_NONE;
+	ctx->new_obs.oi.clear_flag(object_info_t::FLAG_MANIFEST);
+	ctx->delta_stats.num_objects_manifest--;
       }
     }
   }
@@ -6882,6 +6870,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ERANGE;
 	  goto fail;
 	}
+	if (!(osd_op.op.flags & CEPH_OSD_OP_FLAG_WITH_REFERENCE)) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
 
 	for (auto &p : oi.manifest.chunk_map) {
 	  interval_set<uint64_t> chunk;
@@ -6900,7 +6892,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	hobject_t target(tgt_name, tgt_oloc.key, snapid_t(),
 			 raw_pg.ps(), raw_pg.pool(),
 			 tgt_oloc.nspace);
-	bool need_reference = (osd_op.op.flags & CEPH_OSD_OP_FLAG_WITH_REFERENCE);
 	bool has_reference = (oi.manifest.chunk_map.find(src_offset) != oi.manifest.chunk_map.end()) &&
 			     (oi.manifest.chunk_map[src_offset].test_flag(chunk_info_t::FLAG_HAS_REFERENCE));
 	if (has_reference) {
@@ -6911,7 +6902,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	chunk_info.oid = target;
 	chunk_info.offset = tgt_offset;
 	chunk_info.length = src_length;
-	if (op_finisher == nullptr && need_reference) {
+	if (op_finisher == nullptr)  {
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
@@ -6935,11 +6926,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->delta_stats.num_objects_manifest++;
 	oi.set_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
-	if (!has_reference && need_reference) {
+	if (!has_reference) {
 	  oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_HAS_REFERENCE);
-	}
-	if (need_reference && pool.info.get_fingerprint_type() != pg_pool_t::TYPE_FINGERPRINT_NONE) {
-	  oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_HAS_FINGERPRINT);
 	}
 	ctx->modify = true;
 	ctx->cache_operation = true;
