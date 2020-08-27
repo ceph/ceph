@@ -9,7 +9,7 @@
          i18n>Details</a>
       <ng-template ngbNavContent>
         <cd-table-key-value [renderObjects]="true"
-                            [data]="filterNonPoolData(selection)"
+                            [data]="selection | function: filterNonPoolData"
                             [autoReload]="false">
         </cd-table-key-value>
       </ng-template>

@@ -14,6 +14,7 @@ import { DurationPipe } from './duration.pipe';
 import { EmptyPipe } from './empty.pipe';
 import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
+import { FunctionPipe } from './function.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
@@ -46,6 +47,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     JoinPipe,
     LogPriorityPipe,
     FilterPipe,
+    FunctionPipe,
     CdDatePipe,
     EmptyPipe,
     EncodeUriPipe,
@@ -75,6 +77,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     JoinPipe,
     LogPriorityPipe,
     FilterPipe,
+    FunctionPipe,
     CdDatePipe,
     EmptyPipe,
     EncodeUriPipe,
@@ -103,6 +106,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IscsiBackstorePipe,
     JoinPipe,
     LogPriorityPipe,
+    FunctionPipe,
     CdDatePipe,
     EmptyPipe,
     EncodeUriPipe,
