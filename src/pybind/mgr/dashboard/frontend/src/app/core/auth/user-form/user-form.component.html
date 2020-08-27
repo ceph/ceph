@@ -36,7 +36,8 @@
         </div>
 
         <!-- Password -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
           <label class="cd-col-form-label"
                  for="password">
             <ng-container i18n>Password</ng-container>
@@ -78,7 +79,8 @@
         </div>
 
         <!-- Confirm password -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
           <label i18n
                  class="cd-col-form-label"
                  for="confirmpassword">Confirm password</label>
@@ -96,13 +98,13 @@
                         cdPasswordButton="confirmpassword">
                 </button>
               </span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                    i18n>Password confirmation doesn't match the password.</span>
             </div>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
                   i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
-                  i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
 
