@@ -319,6 +319,14 @@ RGWCoroutine* RGWMetadataLog::purge_cr()
 			      std::move(oids));
 }
 
+RGWCoroutine* RGWMetadataLog::master_trim_cr(int shard_id, const std::string& marker,
+	       				      std::string* last_trim)
+{
+  auto oid = get_shard_oid(shard_id);
+    
+  return new RGWSyncLogTrimCR(store, oid, marker, last_trim);
+}
+
 RGWCoroutine* RGWMetadataLog::peer_trim_cr(int shard_id, std::string marker, bool exclusive)
 {
   // Extract timestamp from marker

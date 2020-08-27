@@ -149,6 +149,8 @@ public:
 
   bc::flat_set<int> read_clear_modified();
   RGWCoroutine* purge_cr();
+  RGWCoroutine* master_trim_cr(int shard_id, const std::string& marker,
+	       			std::string* last_trim);
   RGWCoroutine* peer_trim_cr(int shard_id, std::string marker, bool exclusive);
 };
 

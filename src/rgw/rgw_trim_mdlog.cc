@@ -267,13 +267,15 @@ bool MetaMasterTrimShardCollectCR::spawn_next()
       continue;
     }
 
-    auto oid = mdlog->get_shard_oid(shard_id);
-
-    ldpp_dout(env.dpp, 10) << "trimming log shard " << shard_id
+    ldout(cct, 10) << "trimming log shard " << shard_id
         << " at marker=" << stable
         << " last_trim=" << last_trim
         << " realm_epoch=" << sync_status.sync_info.realm_epoch << dendl;
-    spawn(new RGWSyncLogTrimCR(env.dpp, env.store, oid, stable, &last_trim), false);
+    RGWCoroutine* master_trim_cr = mdlog->master_trim_cr(shard_id, stable, &last_trim);
+    if (master_trim_cr) {
+      spawn(master_trim_cr, false);
+    }
+
     shard_id++;
     return true;
   }
