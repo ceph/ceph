@@ -23,79 +23,22 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  auto& recovery_waiter = recovering[soid];
+  [[maybe_unused]] auto [r, added] =
+    recovering.emplace(soid, WaitForObjectRecovery{});
+  // start tracking the recovery of soid
+  assert(added);
   return seastar::do_with(std::map<pg_shard_t, PushOp>(), get_shards_to_push(soid),
-    [this, soid, need, &recovery_waiter](auto& pops, auto& shards) {
-    return [this, soid, need, &recovery_waiter] {
-      pg_missing_tracker_t local_missing = pg.get_local_missing();
-      if (local_missing.is_missing(soid)) {
-	PullOp po;
-	auto& pi = recovery_waiter.pi;
-	prepare_pull(po, pi, soid, need);
-	auto msg = make_message<MOSDPGPull>();
-	msg->from = pg.get_pg_whoami();
-	msg->set_priority(pg.get_recovery_op_priority());
-	msg->pgid = pg.get_pgid();
-	msg->map_epoch = pg.get_osdmap_epoch();
-	msg->min_epoch = pg.get_last_peering_reset();
-	std::vector<PullOp> pulls;
-	pulls.push_back(po);
-	msg->set_pulls(&pulls);
-	return shard_services.send_to_osd(pi.from.osd,
-					   std::move(msg),
-					   pg.get_osdmap_epoch()).then(
-	  [&recovery_waiter] {
-	  return recovery_waiter.wait_for_pull().then([] {
-	    return seastar::make_ready_future<bool>(true);
-	  });
-	});
-      } else {
-	return seastar::make_ready_future<bool>(false);
-      }
-    }().then([this, &pops, &shards, soid, need, &recovery_waiter](bool pulled) mutable {
-      return [this, &recovery_waiter, soid, pulled] {
-	if (!recovery_waiter.obc) {
-	  return pg.get_or_load_head_obc(soid).safe_then(
-	    [&recovery_waiter, pulled](auto p) {
-	    auto& [obc, existed] = p;
-	    logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
-	    recovery_waiter.obc = obc;
-	    if (!existed) {
-	      // obc is loaded with excl lock
-	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-	    }
-	    bool got = recovery_waiter.obc->get_recovery_read().get0();
-	    ceph_assert_always(pulled ? got : 1);
-	    if (!got) {
-	      return recovery_waiter.obc->get_recovery_read(true)
-	      .then([](bool) { return seastar::now(); });
-	    }
-	    return seastar::make_ready_future<>();
-	  }, crimson::osd::PG::load_obc_ertr::all_same_way(
-	      [this, &recovery_waiter, soid](const std::error_code& e) {
-	      auto [obc, existed] =
-		  shard_services.obc_registry.get_cached_obc(soid);
-	      logger().debug("recover_object: load failure of obc: {}",
-		  obc->obs.oi.soid);
-	      recovery_waiter.obc = obc;
-	      // obc is loaded with excl lock
-	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-	      ceph_assert_always(recovery_waiter.obc->get_recovery_read().get0());
-	      return seastar::make_ready_future<>();
-	    })
-	  );
-	} else {
-	  logger().debug("recover_object: already has obc!");
-	}
-	return seastar::now();
-      }().then([this, soid, need, &pops, &shards] {
-	return prep_push(soid, need, &pops, shards);
-      });
+    [this, soid, need](auto& pops, auto& shards) {
+    return maybe_pull_missing_obj(soid, need).then([this, soid](bool pulled) {
+      return load_obc_for_recovery(soid, pulled);
+    }).then([this, soid, need, &pops, &shards] {
+      return prep_push(soid, need, &pops, shards);
     }).handle_exception([this, soid](auto e) {
-      auto& recovery_waiter = recovering[soid];
-      if (recovery_waiter.obc)
-	recovery_waiter.obc->drop_recovery_read();
-      recovering.erase(soid);
+      auto recovery_waiter = recovering.find(soid);
+      if (auto obc = recovery_waiter->second.obc; obc) {
+        obc->drop_recovery_read();
+      }
+      recovering.erase(recovery_waiter);
       return seastar::make_exception_future<>(e);
     }).then([this, &pops, &shards, soid] {
       return seastar::parallel_for_each(shards,
@@ -110,32 +53,103 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	return shard_services.send_to_osd(shard->first.osd, std::move(msg),
 					  pg.get_osdmap_epoch()).then(
 	  [this, soid, shard] {
-	  return recovering[soid].wait_for_pushes(shard->first);
+	  return recovering.at(soid).wait_for_pushes(shard->first);
 	});
       });
     }).then([this, soid] {
-      bool error = recovering[soid].pi.recovery_progress.error;
+      auto& recovery = recovering.at(soid);
+      bool error = recovery.pi.recovery_progress.error;
       if (!error) {
-	auto push_info = recovering[soid].pushing.begin();
-	object_stat_sum_t stat = {};
-	if (push_info != recovering[soid].pushing.end()) {
-	  stat = push_info->second.stat;
-	} else {
-	  // no push happened, take pull_info's stat
-	  stat = recovering[soid].pi.stat;
-	}
-	pg.get_recovery_handler()->on_global_recover(soid, stat, false);
-	return seastar::make_ready_future<>();
+        auto push_info = recovery.pushing.begin();
+        object_stat_sum_t stat = {};
+        if (push_info != recovery.pushing.end()) {
+          stat = push_info->second.stat;
+        } else {
+          // no push happened, take pull_info's stat
+          stat = recovery.pi.stat;
+        }
+        pg.get_recovery_handler()->on_global_recover(soid, stat, false);
+        return seastar::make_ready_future<>();
       } else {
-	auto& recovery_waiter = recovering[soid];
-	if (recovery_waiter.obc)
-	  recovery_waiter.obc->drop_recovery_read();
+	if (recovery.obc)
+	  recovery.obc->drop_recovery_read();
 	recovering.erase(soid);
 	return seastar::make_exception_future<>(
 	    std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
       }
     });
   });
+}
+
+seastar::future<bool>
+ReplicatedRecoveryBackend::maybe_pull_missing_obj(
+  const hobject_t& soid,
+  eversion_t need)
+{
+  pg_missing_tracker_t local_missing = pg.get_local_missing();
+  if (!local_missing.is_missing(soid)) {
+    return seastar::make_ready_future<bool>(false);
+  }
+  PullOp po;
+  auto& recovery_waiter = recovering.at(soid);
+  auto& pi = recovery_waiter.pi;
+  prepare_pull(po, pi, soid, need);
+  auto msg = make_message<MOSDPGPull>();
+  msg->from = pg.get_pg_whoami();
+  msg->set_priority(pg.get_recovery_op_priority());
+  msg->pgid = pg.get_pgid();
+  msg->map_epoch = pg.get_osdmap_epoch();
+  msg->min_epoch = pg.get_last_peering_reset();
+  msg->set_pulls({std::move(po)});
+  return shard_services.send_to_osd(
+    pi.from.osd,
+    std::move(msg),
+    pg.get_osdmap_epoch()
+  ).then([&recovery_waiter] {
+    return recovery_waiter.wait_for_pull();
+  }).then([] {
+    return seastar::make_ready_future<bool>(true);
+  });
+}
+
+seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
+  const hobject_t& soid,
+  bool pulled)
+{
+  auto& recovery_waiter = recovering.at(soid);
+  if (recovery_waiter.obc) {
+    return seastar::now();
+  }
+  return pg.get_or_load_head_obc(soid).safe_then(
+    [&recovery_waiter, pulled](auto p) {
+    auto& [obc, existed] = p;
+    logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
+    recovery_waiter.obc = obc;
+    if (!existed) {
+      // obc is loaded with excl lock
+      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
+    }
+    bool got = recovery_waiter.obc->get_recovery_read().get0();
+    ceph_assert_always(pulled ? got : 1);
+    if (got) {
+      return seastar::make_ready_future<>();
+    }
+    return recovery_waiter.obc->get_recovery_read(true).then([](bool) {
+      return seastar::now();
+    });
+  }, crimson::osd::PG::load_obc_ertr::all_same_way(
+      [this, &recovery_waiter, soid](const std::error_code& e) {
+      auto [obc, existed] =
+	  shard_services.obc_registry.get_cached_obc(soid);
+      logger().debug("load_obc_for_recovery: load failure of obc: {}",
+	  obc->obs.oi.soid);
+      recovery_waiter.obc = obc;
+      // obc is loaded with excl lock
+      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
+      ceph_assert_always(recovery_waiter.obc->get_recovery_read().get0());
+      return seastar::make_ready_future<>();
+    })
+  );
 }
 
 seastar::future<> ReplicatedRecoveryBackend::push_delete(
@@ -731,7 +745,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
     }).then([this, m, &response](bool complete) {
       if (complete) {
 	auto& pop = m->pushes[0];
-	recovering[pop.soid].set_pulled();
+	recovering.at(pop.soid).set_pulled();
 	return seastar::make_ready_future<>();
       } else {
 	auto reply = make_message<MOSDPGPull>();
@@ -740,8 +754,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
 	reply->pgid = pg.get_info().pgid;
 	reply->map_epoch = m->map_epoch;
 	reply->min_epoch = m->min_epoch;
-	vector<PullOp> vec = { std::move(response) };
-	reply->set_pulls(&vec);
+	reply->set_pulls({std::move(response)});
 	return shard_services.send_to_osd(m->from.osd, std::move(reply), pg.get_osdmap_epoch());
       }
     });
