@@ -1,5 +1,5 @@
 function(build_yamlcpp)
-  find_package(yaml-cpp)
+  find_package(yaml_cpp)
   if(NOT ${YAML_CPP_FOUND})
     set(YAML_CPP_FOUND false PARENT_SCOPE)
     set(yaml-cpp_DOWNLOAD_DIR "${CMAKE_SOURCE_DIR}/src/jaegertracing")
