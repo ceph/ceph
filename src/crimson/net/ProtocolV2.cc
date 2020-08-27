@@ -1591,6 +1591,12 @@ void ProtocolV2::execute_establishing(
   trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
   if (existing_conn) {
     existing_conn->protocol->close(dispatch_reset, std::move(accept_me));
+    if (unlikely(state != state_t::ESTABLISHING)) {
+      logger().warn("{} triggered {} during execute_establishing(), "
+                    "the accept event will not be delivered!",
+                    conn, get_state_name(state));
+      abort_protocol();
+    }
   } else {
     accept_me();
   }
