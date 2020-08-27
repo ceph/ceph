@@ -1226,12 +1226,12 @@ def get_last_local_ceph_image():
         [container_path, 'images',
          '--filter', 'label=ceph=True',
          '--format', '{{.Repository}} {{.Tag}}'])
-    out_lines = out.splitlines()
-    if len(out_lines) > 0:
-        repository, tag = out_lines[0].split()
-        r = '{}:{}'.format(repository, tag)
-        logger.info('Using recent ceph image %s' % r)
-        return r
+    for line in out.splitlines():
+        if len(line.split()) == 2:
+            repository, tag = line.split()
+            r = '{}:{}'.format(repository, tag)
+            logger.info('Using recent ceph image %s' % r)
+            return r
     return None
 
 
