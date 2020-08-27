@@ -1,3 +1,7 @@
+# Disable autopep8 for this file:
+
+# fmt: off
+
 from typing import NamedTuple, List
 import pytest
 
@@ -315,7 +319,7 @@ def test_scheduler_daemons(host_key, hosts,
     )
 
 
-## =========================
+# =========================
 
 
 class NodeAssignmentTest(NamedTuple):
