@@ -257,7 +257,8 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
-  journal_seq_t seq)
+  journal_seq_t seq,
+  SegmentCleaner *cleaner)
 {
   if (t.root) {
     remove_extent(root);
@@ -284,6 +285,11 @@ void Cache::complete_commit(
     i->state = CachedExtent::extent_state_t::CLEAN;
     logger().debug("complete_commit: fresh {}", *i);
     add_extent(i);
+    if (cleaner) {
+      cleaner->mark_space_used(
+	i->get_paddr(),
+	i->get_length());
+    }
   }
 
   // Add new copy of mutated blocks, set_io_wait to block until written
@@ -299,6 +305,14 @@ void Cache::complete_commit(
     i->state = CachedExtent::extent_state_t::DIRTY;
     if (i->version == 1) {
       i->dirty_from = seq;
+    }
+  }
+
+  if (cleaner) {
+    for (auto &i: t.retired_set) {
+      cleaner->mark_space_free(
+	i->get_paddr(),
+	i->get_length());
     }
   }
 

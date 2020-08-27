@@ -141,13 +141,6 @@ Journal::roll_journal_segment()
 	  current_journal_segment->close() :
 	  Segment::close_ertr::now()).safe_then(
     [this, old_segment_id] {
-      // TODO: pretty sure this needs to be atomic in some sense with
-      // making use of the new segment, maybe this bit needs to take
-      // the first transaction of the new segment?  Or the segment
-      // header should include deltas?
-      if (old_segment_id != NULL_SEG_ID) {
-	segment_provider->put_segment(old_segment_id);
-      }
       return segment_provider->get_segment();
     }).safe_then([this](auto segment) {
       return segment_manager.open(segment);
@@ -155,6 +148,14 @@ Journal::roll_journal_segment()
       current_journal_segment = sref;
       written_to = 0;
       return initialize_segment(*current_journal_segment);
+    }).safe_then([=](auto seq) {
+      if (old_segment_id != NULL_SEG_ID) {
+	segment_provider->close_segment(old_segment_id);
+      }
+      segment_provider->set_journal_segment(
+	current_journal_segment->get_segment_id(),
+	seq);
+      return seq;
     }).handle_error(
       roll_journal_segment_ertr::pass_further{},
       crimson::ct_error::all_same_way([] { ceph_assert(0 == "TODO"); })
@@ -226,8 +227,17 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	      return lt.second.journal_segment_seq <
 		rt.second.journal_segment_seq;
 	    });
+
 	  current_journal_segment_seq =
 	    segments.rbegin()->second.journal_segment_seq + 1;
+	  std::for_each(
+	    segments.begin(),
+	    segments.end(),
+	    [this](auto &seg) {
+	      segment_provider->init_mark_segment_closed(
+		seg.first,
+		seg.second.journal_segment_seq);
+	    });
 
 	  auto journal_tail = segments.rbegin()->second.journal_tail;
 	  segment_provider->update_journal_tail_committed(journal_tail);

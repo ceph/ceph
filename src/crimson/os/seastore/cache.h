@@ -295,7 +295,8 @@ public:
   void complete_commit(
     Transaction &t,            ///< [in, out] current transaction
     paddr_t final_block_start, ///< [in] offset of initial block
-    journal_seq_t seq          ///< [in] journal commit seq
+    journal_seq_t seq,         ///< [in] journal commit seq
+    SegmentCleaner *cleaner=nullptr ///< [out] optional segment stat listener
   );
 
   /**

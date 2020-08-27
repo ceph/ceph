@@ -68,7 +68,8 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
   void init() {
     segment_cleaner = std::make_unique<SegmentCleaner>(
       SegmentCleaner::config_t::default_from_segment_manager(
-	*segment_manager));
+	*segment_manager),
+      true);
     journal = std::make_unique<Journal>(*segment_manager);
     cache = std::make_unique<Cache>(*segment_manager);
     lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
@@ -198,12 +199,34 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
       get_random_contents());
   }
 
+  bool check_usage() {
+    auto t = create_weak_transaction();
+    SpaceTrackerIRef tracker(segment_cleaner->get_empty_space_tracker());
+    lba_manager->scan_mapped_space(
+      *t.t,
+      [&tracker](auto offset, auto len) {
+	tracker->allocate(
+	  offset.segment,
+	  offset.offset,
+	  len);
+      }).unsafe_get0();
+    return segment_cleaner->debug_check_space(*tracker);
+  }
+
   void replay() {
+    logger().debug("{}: begin", __func__);
+    EXPECT_TRUE(check_usage());
     tm->close().unsafe_get();
     destroy();
     static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
     init();
     tm->mount().unsafe_get();
+    logger().debug("{}: end", __func__);
+  }
+
+  void check() {
+    check_mappings();
+    check_usage();
   }
 
   void check_mappings() {
@@ -300,9 +323,9 @@ TEST_F(transaction_manager_test_t, basic)
 	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
   });
 }
@@ -321,10 +344,11 @@ TEST_F(transaction_manager_test_t, mutate)
 	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
+    ASSERT_TRUE(check_usage());
     replay();
     {
       auto t = create_transaction();
@@ -334,12 +358,13 @@ TEST_F(transaction_manager_test_t, mutate)
 	SIZE);
       auto mut = mutate_extent(t, ext);
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
+    ASSERT_TRUE(check_usage());
     replay();
-    check_mappings();
+    check();
   });
 }
 
@@ -367,13 +392,12 @@ TEST_F(transaction_manager_test_t, create_remove_same_transaction)
 	'a');
 
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
     replay();
-    check_mappings();
+    check();
   });
 }
-
 
 TEST_F(transaction_manager_test_t, inc_dec_ref)
 {
@@ -389,35 +413,35 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
 	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
     replay();
     {
       auto t = create_transaction();
       inc_ref(t, ADDR);
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
     {
       auto t = create_transaction();
       dec_ref(t, ADDR);
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
     replay();
     {
       auto t = create_transaction();
       dec_ref(t, ADDR);
       check_mappings(t);
-      check_mappings();
+      check();
       submit_transaction(std::move(t));
-      check_mappings();
+      check();
     }
   });
 }
@@ -436,7 +460,7 @@ TEST_F(transaction_manager_test_t, cause_lba_split)
       ASSERT_EQ(i * SIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
-    check_mappings();
+    check();
   });
 }
 
@@ -457,8 +481,8 @@ TEST_F(transaction_manager_test_t, random_writes)
       submit_transaction(std::move(t));
     }
 
-    for (unsigned i = 0; i < 5; ++i) {
-      for (unsigned j = 0; j < 50; ++j) {
+    for (unsigned i = 0; i < 4; ++i) {
+      for (unsigned j = 0; j < 65; ++j) {
 	auto t = create_transaction();
 	for (unsigned k = 0; k < 2; ++k) {
 	  auto ext = get_extent(
@@ -477,7 +501,7 @@ TEST_F(transaction_manager_test_t, random_writes)
       }
       replay();
       logger().debug("random_writes: checking");
-      check_mappings();
+      check();
       logger().debug("random_writes: done replaying/checking");
     }
   });

@@ -78,6 +78,26 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  return submit_transaction(std::move(t));
 	});
       });
+  }).safe_then([this] {
+    return seastar::do_with(
+      make_weak_transaction(),
+      [this](auto &t) {
+	assert(segment_cleaner.debug_check_space(
+		 *segment_cleaner.get_empty_space_tracker()));
+	return lba_manager.scan_mapped_space(
+	  *t,
+	  [this](paddr_t addr, extent_len_t len) {
+	    logger().debug("TransactionManager::mount: marking {}~{} used",
+			 addr,
+			 len);
+	    segment_cleaner.mark_space_used(
+	      addr,
+	      len ,
+	      /* init_scan = */ true);
+	  });
+      });
+  }).safe_then([this] {
+    segment_cleaner.complete_init();
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::all_same_way([] {
@@ -170,7 +190,7 @@ TransactionManager::submit_transaction(
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, journal_seq] = p;
 	segment_cleaner.set_journal_head(journal_seq);
-	cache.complete_commit(*t, addr, journal_seq);
+	cache.complete_commit(*t, addr, journal_seq, &segment_cleaner);
 	lba_manager.complete_transaction(*t);
       },
       submit_transaction_ertr::pass_further{},
