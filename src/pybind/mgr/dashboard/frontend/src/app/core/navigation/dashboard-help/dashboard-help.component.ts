@@ -3,9 +3,8 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { Icons } from '../../../shared/enum/icons.enum';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { DocService } from '../../../shared/services/doc.service';
 import { AboutComponent } from '../about/about.component';
 
 @Component({
@@ -21,16 +20,14 @@ export class DashboardHelpComponent implements OnInit {
   icons = Icons;
 
   constructor(
-    private summaryService: SummaryService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
     private modalService: BsModalService,
-    private authStorageService: AuthStorageService
+    private authStorageService: AuthStorageService,
+    private docService: DocService
   ) {}
 
   ngOnInit() {
-    this.summaryService.subscribeOnce((summary) => {
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
+    this.docService.subscribeOnce('dashboard', (url: string) => {
+      this.docsUrl = url;
     });
   }
 
