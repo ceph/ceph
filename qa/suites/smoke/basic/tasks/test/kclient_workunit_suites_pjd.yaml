@@ -3,15 +3,11 @@ overrides:
     conf:
       global:
         ms die on skipped message: false
-      client:
-        rbd default features: 5
 tasks:
-- install:
 - ceph:
-- rbd:
-    all:
-      image_size: 20480
+    fs: xfs
+- kclient:
 - workunit:
     clients:
       all:
-        - suites/iozone.sh
+        - suites/pjd.sh

@@ -1,5 +1,4 @@
 tasks:
-- install:
 - ceph:
 - ceph-fuse: [client.0]
 - workunit:
