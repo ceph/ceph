@@ -588,20 +588,20 @@ def task(ctx, config):
     else:
         nested_config = dict(
                 branch=config.get('branch'),
-                tag=config.get('tag'),
-                sha1=config.get('sha1'),
                 debuginfo=config.get('debuginfo'),
-                flavor=flavor,
                 downgrade_packages=config.get('downgrade_packages', []),
+                exclude_packages=config.get('exclude_packages', []),
                 extra_packages=config.get('extra_packages', []),
                 extra_system_packages=config.get('extra_system_packages', []),
-                exclude_packages=config.get('exclude_packages', []),
                 extras=config.get('extras', None),
-                wait_for_package=config.get('wait_for_package', False),
-                project=project,
-                packages=config.get('packages', dict()),
+                flavor=flavor,
                 install_ceph_packages=config.get('install_ceph_packages', True),
+                packages=config.get('packages', dict()),
+                project=project,
                 repos_only=config.get('repos_only', False),
+                sha1=config.get('sha1'),
+                tag=config.get('tag'),
+                wait_for_package=config.get('wait_for_package', False),
         )
         if repos:
             nested_config['repos'] = repos
