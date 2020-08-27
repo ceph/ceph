@@ -190,3 +190,6 @@ if 'UNITTEST' in os.environ:
             'rbd': mock.Mock(),
             'cephfs': mock.Mock(),
         })
+
+    # Unconditionally mock the rados objects when we're imported
+    mock_ceph_modules()  # type: ignore
