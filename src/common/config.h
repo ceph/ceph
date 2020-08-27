@@ -124,6 +124,7 @@ public:
   int parse_buffer(ConfigValues& values, const ConfigTracker& tracker,
 		   const char* buf, size_t len,
 		   std::ostream *warnings);
+  void update_legacy_vals(ConfigValues& values);
   // Absorb config settings from the environment
   void parse_env(unsigned entity_type,
 		 ConfigValues& values, const ConfigTracker& tracker,
@@ -294,7 +295,6 @@ private:
   void assign_member(member_ptr_t ptr, const Option::value_t &val);
 
 
-  void update_legacy_vals(ConfigValues& values);
   void update_legacy_val(ConfigValues& values,
 			 const Option &opt,
 			 member_ptr_t member);
