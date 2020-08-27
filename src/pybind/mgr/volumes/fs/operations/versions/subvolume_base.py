@@ -203,6 +203,7 @@ class SubvolumeBase(object):
             uid = self.group.uid
         else:
             try:
+                uid = int(uid)
                 if uid < 0:
                     raise ValueError
             except ValueError:
@@ -213,6 +214,7 @@ class SubvolumeBase(object):
             gid = self.group.gid
         else:
             try:
+                gid = int(gid)
                 if gid < 0:
                     raise ValueError
             except ValueError:
