@@ -135,7 +135,7 @@ public:
   seastar::future<> stop();
 
   void dump_status(Formatter*) const;
-
+  void dump_pg_state_history(Formatter*) const;
   void print(std::ostream&) const;
 
   seastar::future<> send_incremental_map(crimson::net::Connection* conn,
