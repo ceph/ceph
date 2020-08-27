@@ -54,6 +54,17 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value]
 
+    def mark_subvolume(self):
+        # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
+        # subvolume root is where snapshots would be taken, and hence is the <uuid> dir for v1 subvolumes
+        try:
+            # MDS treats this as a noop for already marked subvolume
+            self.fs.setxattr(self.path, 'ceph.dir.subvolume', b'1', 0)
+        except cephfs.InvalidValue as e:
+            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
     def snapshot_base_path(self):
         """ Base path for all snapshots """
         return os.path.join(self.path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
@@ -77,7 +88,15 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
-            self.set_attrs(subvol_path, size, isolate_nspace, pool, uid, gid)
+            self.mark_subvolume()
+            attrs = {
+                'uid': uid,
+                'gid': gid,
+                'data_pool': pool,
+                'pool_namespace': self.namespace if isolate_nspace else None,
+                'quota': size
+            }
+            self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
@@ -120,9 +139,19 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
+            # source snapshot attrs are used to create clone subvolume.
+            # attributes of subvolume's content though, are synced during the cloning process.
+            attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
+
+            # override snapshot pool setting, if one is provided for the clone
+            if pool is not None:
+                attrs["data_pool"] = pool
+                attrs["pool_namespace"] = None
+
             # create directory and set attributes
-            self.fs.mkdirs(subvol_path, source_subvolume.mode)
-            self.set_attrs(subvol_path, None, None, pool, source_subvolume.uid, source_subvolume.gid)
+            self.fs.mkdirs(subvol_path, attrs.get("mode"))
+            self.mark_subvolume()
+            self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
@@ -184,6 +213,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             subvol_path = self.path
             log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
             st = self.fs.stat(subvol_path)
+            # unconditionally mark as subvolume, to handle pre-existing subvolumes without the mark
+            self.mark_subvolume()
 
             self.uid = int(st.st_uid)
             self.gid = int(st.st_gid)

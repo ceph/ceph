@@ -163,9 +163,14 @@ class VolumeClient(object):
                     try:
                         with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CREATE) as subvolume:
                             # idempotent creation -- valid. Attributes set is supported.
-                            uid = uid if uid else subvolume.uid
-                            gid = gid if gid else subvolume.gid
-                            subvolume.set_attrs(subvolume.path, size, isolate_nspace, pool, uid, gid)
+                            attrs = {
+                                'uid': uid if uid else subvolume.uid,
+                                'gid': gid if gid else subvolume.gid,
+                                'data_pool': pool,
+                                'pool_namespace': subvolume.namespace if isolate_nspace else None,
+                                'quota': size
+                            }
+                            subvolume.set_attrs(subvolume.path, attrs)
                     except VolumeException as ve:
                         if ve.errno == -errno.ENOENT:
                             self._create_subvolume(fs_handle, volname, group, subvolname, **kwargs)
@@ -530,15 +535,18 @@ class VolumeClient(object):
     ### group snapshot
 
     def create_subvolume_group_snapshot(self, **kwargs):
-        ret       = 0, "", ""
+        ret       = -errno.ENOSYS, "", "subvolume group snapshots are not supported"
         volname   = kwargs['vol_name']
         groupname = kwargs['group_name']
-        snapname  = kwargs['snap_name']
+        # snapname  = kwargs['snap_name']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    group.create_snapshot(snapname)
+                    # as subvolumes are marked with the vxattr ceph.dir.subvolume deny snapshots
+                    # at the subvolume group (see: https://tracker.ceph.com/issues/46074)
+                    # group.create_snapshot(snapname)
+                    pass
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
