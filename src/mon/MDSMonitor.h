@@ -127,6 +127,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   void count_metadata(const std::string& field, ceph::Formatter *f);
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
+  void get_versions(std::map<string, list<string> > &versions);
 protected:
 
   // MDS daemon GID to latest health state from that GID

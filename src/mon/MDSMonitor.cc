@@ -1876,6 +1876,20 @@ void MDSMonitor::count_metadata(const std::string &field, Formatter *f)
   f->close_section();
 }
 
+void MDSMonitor::get_versions(std::map<string, list<string> > &versions)
+{
+  map<mds_gid_t,Metadata> meta;
+  load_metadata(meta);
+  const auto &fsmap = get_fsmap();
+  std::map<mds_gid_t, mds_info_t> map = fsmap.get_mds_info();
+  dout(10) << __func__ << " mds meta=" << meta << dendl;
+  for (auto& p : meta) {
+    auto q = p.second.find("ceph_version_short");
+    if (q == p.second.end()) continue;
+    versions[q->second].push_back(string("mds.") + map[p.first].name);
+  }
+}
+
 int MDSMonitor::dump_metadata(const FSMap& fsmap, const std::string &who,
     Formatter *f, ostream& err)
 {
