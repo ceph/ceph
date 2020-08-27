@@ -72,6 +72,8 @@ public:
     return config.segment_size;
   }
 
+  void remount();
+
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
     paddr_t addr,
