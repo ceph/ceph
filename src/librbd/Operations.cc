@@ -234,7 +234,7 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r < 0) {
-      complete(r == -EBLACKLISTED ? -EBLACKLISTED : -EROFS);
+      complete(r == -EBLOCKLISTED ? -EBLOCKLISTED : -EROFS);
       return;
     }
 

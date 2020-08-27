@@ -865,23 +865,32 @@ class LocalCephManager(CephManager):
         proc = self.controller.run(args=args, wait=False, stdout=StringIO())
         return proc
 
+    def run_cluster_cmd(self, **kwargs):
+        """
+        Run a Ceph command and the object representing the process for the
+        command.
+
+        Accepts arguments same as teuthology.orchestra.remote.run().
+        """
+        kwargs['args'] = [os.path.join(BIN_PREFIX,'ceph')]+list(kwargs['args'])
+        return self.controller.run(**kwargs)
+
     def raw_cluster_cmd(self, *args, **kwargs):
         """
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] +\
-                                   list(args), **kwargs, stdout=StringIO())
-        return proc.stdout.getvalue()
+        kwargs['args'] = args
+        if kwargs.get('stdout') is None:
+            kwargs['stdout'] = StringIO()
+        return self.run_cluster_cmd(**kwargs).stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         like raw_cluster_cmd but don't check status, just return rc
         """
-        kwargs['check_status'] = False
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
-                                        list(args), **kwargs)
-        return proc.exitstatus
+        kwargs['args'], kwargs['check_status'] = args, False
+        return self.run_cluster_cmd(**kwargs).exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
                      timeout=None, stdout=None):

@@ -176,6 +176,11 @@ class Heartbeat::Connection {
       is_winner_side{is_winner_side} {
     connect();
   }
+  Connection(const Connection&) = delete;
+  Connection(Connection&&) = delete;
+  Connection& operator=(const Connection&) = delete;
+  Connection& operator=(Connection&&) = delete;
+
   ~Connection();
 
   bool matches(crimson::net::Connection* _conn) const;
@@ -235,7 +240,7 @@ class Heartbeat::Connection {
   crimson::net::ConnectionRef conn;
   bool is_connected = false;
 
- friend std::ostream& operator<<(std::ostream& os, const Connection c) {
+ friend std::ostream& operator<<(std::ostream& os, const Connection& c) {
    if (c.type == type_t::front) {
      return os << "con_front(osd." << c.peer << ")";
    } else {
@@ -393,6 +398,7 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   ~Peer();
   Peer(Peer&&) = delete;
   Peer(const Peer&) = delete;
+  Peer& operator=(Peer&&) = delete;
   Peer& operator=(const Peer&) = delete;
 
   void set_epoch(epoch_t epoch) { session.set_epoch(epoch); }

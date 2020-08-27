@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - reached quota
       - mons down
       - overall HEALTH_
@@ -24,7 +24,6 @@ overrides:
         ms inject socket failures: 2500
         mon client directed command retry: 5
 tasks:
-- install: null
 - ceph:
     fs: xfs
 - mon_thrash:

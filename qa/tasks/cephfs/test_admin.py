@@ -1,4 +1,5 @@
 import json
+from io import StringIO
 
 from teuthology.orchestra.run import CommandFailedError
 
@@ -15,6 +16,29 @@ class TestAdminCommands(CephFSTestCase):
 
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
+
+    def test_fsnames_can_only_by_goodchars(self):
+        n = 'test_fsnames_can_only_by_goodchars'
+        metapoolname, datapoolname = n+'-testmetapool', n+'-testdatapool'
+        badname = n+'badname@#'
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                            n+metapoolname)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                            n+datapoolname)
+
+        # test that fsname not with "goodchars" fails
+        args = ['fs', 'new', badname, metapoolname, datapoolname]
+        proc = self.fs.mon_manager.run_cluster_cmd(args=args,stderr=StringIO(),
+                                                   check_status=False)
+        self.assertIn('invalid chars', proc.stderr.getvalue().lower())
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
+                                            metapoolname,
+                                            '--yes-i-really-really-mean-it-not-faking')
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', datapoolname,
+                                            datapoolname,
+                                            '--yes-i-really-really-mean-it-not-faking')
 
     def test_fs_status(self):
         """

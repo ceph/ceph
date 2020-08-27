@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+
+import _ from 'lodash';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { Credentials } from '../../../shared/models/credentials';
@@ -14,11 +16,13 @@ import { ModalService } from '../../../shared/services/modal.service';
 export class LoginComponent implements OnInit {
   model = new Credentials();
   isLoginActive = false;
+  returnUrl: string;
 
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
+    private route: ActivatedRoute,
     private router: Router
   ) {}
 
@@ -60,7 +64,8 @@ export class LoginComponent implements OnInit {
 
   login() {
     this.authService.login(this.model).subscribe(() => {
-      this.router.navigate(['']);
+      const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/');
+      this.router.navigate([url]);
     });
   }
 }

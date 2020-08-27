@@ -7,13 +7,24 @@ import time
 
 import cherrypy
 
-from . import BaseController, ApiController, RESTController, Endpoint
+from . import BaseController, ApiController, RESTController, Endpoint, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
     UserDoesNotExist, PasswordPolicyException, PwdExpirationDateNotValid
 from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES, PasswordPolicy
 from ..services.auth import JwtManager
+
+USER_SCHEMA = ([{
+    "username": (str, 'Username of the user'),
+    "roles": ([str], 'User Roles'),
+    "name": (str, 'User Name'),
+    "email": (str, 'User email address'),
+    "lastUpdate": (int, 'Details last updated'),
+    "enabled": (bool, 'Is the user enabled?'),
+    "pwdExpirationDate": (str, 'Password Expiration date'),
+    "pwdUpdateRequired": (bool, 'Is Password Update Required?')
+}], '')
 
 
 def validate_password_policy(password, username=None, old_password=None):
@@ -36,6 +47,7 @@ def validate_password_policy(password, username=None, old_password=None):
 
 
 @ApiController('/user', Scope.USER)
+@ControllerDoc("Display User Details", "User")
 class User(RESTController):
 
     @staticmethod
@@ -54,7 +66,8 @@ class User(RESTController):
             raise DashboardException(msg='Role does not exist',
                                      code='role_does_not_exist',
                                      component='user')
-
+    @EndpointDoc("Get List Of Users",
+                 responses={200: USER_SCHEMA})
     def list(self):
         users = mgr.ACCESS_CTRL_DB.users
         result = [User._user_to_dict(u) for _, u in users.items()]
@@ -143,6 +156,7 @@ class User(RESTController):
 
 
 @ApiController('/user')
+@ControllerDoc("Get User Password Policy Details", "UserPasswordPolicy")
 class UserPasswordPolicy(RESTController):
 
     @Endpoint('POST')
@@ -174,6 +188,7 @@ class UserPasswordPolicy(RESTController):
 
 
 @ApiController('/user/{username}')
+@ControllerDoc("Change User Password", "UserChangePassword")
 class UserChangePassword(BaseController):
 
     @Endpoint('POST')

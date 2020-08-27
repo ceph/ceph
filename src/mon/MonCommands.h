@@ -363,7 +363,7 @@ COMMAND_WITH_FLAG("mds newfs "
 	"make new filesystem using pools <metadata> and <data>",
 	"mds", "rw", FLAG(OBSOLETE))
 COMMAND("fs new "
-	"name=fs_name,type=CephString "
+	"name=fs_name,type=CephString,goodchars=[A-Za-z0-9-_.] "
 	"name=metadata,type=CephString "
 	"name=data,type=CephString "
 	"name=force,type=CephBool,req=false "
@@ -996,14 +996,27 @@ COMMAND("osd new "
         "exist and have been previously destroyed. "
         "Reads secrets from JSON file via `-i <file>` (see man page).",
         "osd", "rw")
-COMMAND("osd blacklist "
+COMMAND("osd blocklist "
+	"name=blocklistop,type=CephChoices,strings=add|rm "
+	"name=addr,type=CephEntityAddr "
+	"name=expire,type=CephFloat,range=0.0,req=false",
+	"add (optionally until <expire> seconds from now) or remove <addr> from blocklist",
+	"osd", "rw")
+COMMAND("osd blocklist ls", "show blocklisted clients", "osd", "r")
+COMMAND("osd blocklist clear", "clear all blocklisted clients", "osd", "rw")
+
+COMMAND_WITH_FLAG("osd blacklist "
 	"name=blacklistop,type=CephChoices,strings=add|rm "
 	"name=addr,type=CephEntityAddr "
 	"name=expire,type=CephFloat,range=0.0,req=false",
 	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist",
-	"osd", "rw")
-COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r")
-COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw")
+	"osd", "rw",
+	FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd blacklist ls", "show blacklisted clients", "osd", "r",
+	FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
+	FLAG(DEPRECATED))
+
 COMMAND("osd pool mksnap "
 	"name=pool,type=CephPoolname "
 	"name=snap,type=CephString",

@@ -83,6 +83,10 @@
   .filter-chips {
     float: right;
     padding: 0 8px;
+
+    .badge-remove {
+      color: bd.$white;
+    }
   }
 }
 

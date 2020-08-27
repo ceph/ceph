@@ -1369,7 +1369,7 @@ private:
   ceph::unordered_set<dir_result_t*> opened_dirs;
   uint64_t fd_gen = 1;
 
-  bool   blacklisted = false;
+  bool   blocklisted = false;
 
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
   ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;

@@ -357,8 +357,8 @@ public:
 
     /// Notification to check outstanding operation targets
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
-    /// Notification to check outstanding blacklist
-    virtual void check_blacklisted_watchers() = 0;
+    /// Notification to check outstanding blocklist
+    virtual void check_blocklisted_watchers() = 0;
     /// Notification to clear state associated with primary
     virtual void clear_primary_state() = 0;
 

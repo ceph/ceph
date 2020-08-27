@@ -21,7 +21,7 @@ Synopsis
 
 | **cephadm** **inspect-image**
 
-| **cephadm** **ls**
+| **cephadm** **ls** [-h] [--no-detail] [--legacy-dir LEGACY_DIR]
 
 | **cephadm** **list-networks**
 
@@ -345,6 +345,11 @@ list daemon instances known to cephadm on **this** host::
             "configured": "2020-04-21T01:16:41.775024"
         },
     ...
+
+Arguments:
+
+* [--no-detail]             Do not include daemon status
+* [--legacy-dir LEGACY_DIR] Base directory for legacy daemon data
 
 logs
 ----

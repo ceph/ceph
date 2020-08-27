@@ -172,7 +172,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         encoded = json.dumps({
             'ident': list(self.ident),
             'fault': list(self.fault),
-            })
+        })
         self.set_store('active_devices', encoded)
 
     def _refresh_health(self):
@@ -206,7 +206,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             stdout=json.dumps({
                 'ident': list(self.ident),
                 'fault': list(self.fault)
-                }, indent=4, sort_keys=True))
+            }, indent=4, sort_keys=True))
 
     def light_on(self, fault_ident, devid):
         # type: (str, str) -> HandleCommandResult
@@ -278,7 +278,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         'name=addr,type=CephString,req=false '
         'name=labels,type=CephString,n=N,req=false',
         'Add a host')
-    def _add_host(self, hostname:str, addr: Optional[str]=None, labels: Optional[List[str]]=None):
+    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None):
         s = HostSpec(hostname=hostname, addr=addr, labels=labels)
         completion = self.add_host(s)
         self._orchestrator_wait([completion])
@@ -395,7 +395,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for host_ in completion.result: # type: InventoryHost
+            for host_ in completion.result:  # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
                     table.add_row(
                         (
@@ -468,7 +468,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
                  'PLACEMENT',
                  'IMAGE NAME', 'IMAGE ID'
-                ],
+                 ],
                 border=False)
             table.align['NAME'] = 'l'
             table.align['RUNNING'] = 'r'
@@ -701,7 +701,8 @@ Usage:
             host_name, block_device = svc_arg.split(":")
             block_devices = block_device.split(',')
             devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)
+            drive_group = DriveGroupSpec(placement=PlacementSpec(
+                host_pattern=host_name), data_devices=devs)
         except (TypeError, KeyError, ValueError):
             msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
@@ -984,7 +985,8 @@ Usage:
                 raise OrchestratorError('%s is not a valid daemon name' % name)
             (daemon_type) = name.split('.')[0]
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                raise OrchestratorError('must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
+                raise OrchestratorError(
+                    'must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
         completion = self.remove_daemons(names)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -1035,7 +1037,8 @@ Usage:
         else:
             placementspec = PlacementSpec.from_string(placement)
             assert service_type
-            specs = [ServiceSpec(service_type, placement=placementspec, unmanaged=unmanaged, preview_only=dry_run)]
+            specs = [ServiceSpec(service_type, placement=placementspec,
+                                 unmanaged=unmanaged, preview_only=dry_run)]
 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
@@ -1101,7 +1104,7 @@ Usage:
         'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
-        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false ' 
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
     def _apply_rgw(self,
@@ -1151,7 +1154,7 @@ Usage:
         'name=namespace,type=CephString,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
-        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false ' 
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
     def _apply_nfs(self,
@@ -1198,7 +1201,7 @@ Usage:
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
-        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false ' 
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an iSCSI service')
     def _apply_iscsi(self,
@@ -1375,8 +1378,8 @@ Usage:
         """
         if image and re.match(r'^v?\d+\.\d+\.\d+$', image) and ceph_version is None:
             ver = image[1:] if image.startswith('v') else image
-            s =  f"Error: unable to pull image name `{image}`.\n" \
-                 f"  Maybe you meant `--ceph-version {ver}`?"
+            s = f"Error: unable to pull image name `{image}`.\n" \
+                f"  Maybe you meant `--ceph-version {ver}`?"
             raise OrchestratorValidationError(s)
 
     @_cli_write_command(

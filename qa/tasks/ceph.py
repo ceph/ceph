@@ -17,6 +17,7 @@ import time
 import gevent
 import re
 import socket
+import yaml
 
 from paramiko import SSHException
 from tasks.ceph_manager import CephManager, write_conf
@@ -75,8 +76,19 @@ def generate_caps(type_):
 @contextlib.contextmanager
 def ceph_crash(ctx, config):
     """
-    Gather crash dumps from /var/lib/crash
+    Gather crash dumps from /var/lib/ceph/crash
     """
+
+    # Add logs directory to job's info log file
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'crash': '/var/lib/ceph/crash'}
+        else:
+            info_yaml['archive']['crash'] = '/var/lib/ceph/crash'
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
     try:
         yield
 
@@ -145,6 +157,16 @@ def ceph_log(ctx, config):
             wait=False,
         )
     )
+
+    # Add logs directory to job's info log file
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+        info_yaml = yaml.safe_load(info_file)
+        info_file.seek(0)
+        if 'archive' not in info_yaml:
+            info_yaml['archive'] = {'log': '/var/log/ceph'}
+        else:
+            info_yaml['archive']['log'] = '/var/log/ceph'
+        yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
 
     class Rotater(object):
         stop_event = gevent.event.Event()
@@ -539,13 +561,15 @@ def create_simple_monmap(ctx, remote, conf, mons,
     return fsid
 
 
-def maybe_redirect_stderr(args, config, cluster, type_, id_):
+def maybe_redirect_stderr(config, type_, args, log_path):
     if type_ == 'osd' and \
        config.get('flavor', 'default') == 'crimson':
-        log_path = f'/var/log/ceph/{cluster}-{type_}.{id_}.log'
-        return args + [run.Raw('2>>'), log_path]
+        # teuthworker uses ubuntu:ubuntu to access the test nodes
+        create_log_cmd = \
+            f'sudo install -b -o ubuntu -g ubuntu /dev/null {log_path}'
+        return create_log_cmd, args + [run.Raw('2>>'), log_path]
     else:
-        return args
+        return None, args
 
 
 @contextlib.contextmanager
@@ -923,9 +947,12 @@ def cluster(ctx, config):
                         '--mkkey',
                         '-i', id_,
                         '--monmap', monmap_path]
-                remote.run(
-                    args=maybe_redirect_stderr(args, config,
-                                               cluster_name, 'osd', id_))
+                log_path = f'/var/log/ceph/{cluster_name}-osd.{id_}.log'
+                create_log_cmd, args = \
+                    maybe_redirect_stderr(config, 'osd', args, log_path)
+                if create_log_cmd:
+                    remote.sh(create_log_cmd)
+                remote.run(args=args)
             except run.CommandFailedError:
                 # try without --no-mon-config.. this may be an upgrade test
                 remote.run(
@@ -1099,13 +1126,13 @@ def cluster(ctx, config):
             return stdout or None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config['log_whitelist']) is not None:
+                             config['log_ignorelist']) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log_whitelist'])
+                    match = first_in_ceph_log(pattern, config['log_ignorelist'])
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(
@@ -1377,10 +1404,11 @@ def run_daemon(ctx, config, type_):
                                                        valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
-            run_cmd = maybe_redirect_stderr(run_cmd,
-                                            config,
-                                            cluster_name, type_, id_)
-
+            log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
+            create_log_cmd, run_cmd = \
+                maybe_redirect_stderr(config, type_, run_cmd, log_path)
+            if create_log_cmd:
+                remote.sh(create_log_cmd)
             # always register mgr; don't necessarily start
             ctx.daemons.register_daemon(
                 remote, type_, id_,
@@ -1542,7 +1570,7 @@ def restart(ctx, config):
                 ctx.managers[cluster].mark_down_osd(id_)
             ctx.daemons.get_daemon(type_, id_, cluster).restart()
             clusters.add(cluster)
-    
+
     if config.get('wait-for-healthy', True):
         for cluster in clusters:
             healthy(ctx=ctx, config=dict(cluster=cluster))
@@ -1737,7 +1765,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-            log-whitelist: ['foo.*bar', 'bad message']
+            log-ignorelist: ['foo.*bar', 'bad message']
 
     To run multiple ceph clusters, use multiple ceph tasks, and roles
     with a cluster name prefix, e.g. cluster1.client.0. Roles with no
@@ -1809,7 +1837,7 @@ def task(ctx, config):
             mkfs_options=config.get('mkfs_options', None),
             mount_options=config.get('mount_options', None),
             skip_mgr_daemons=config.get('skip_mgr_daemons', False),
-            log_whitelist=config.get('log-whitelist', []),
+            log_ignorelist=config.get('log-ignorelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
             cluster=config['cluster'],
             mon_bind_msgr2=config.get('mon_bind_msgr2', True),

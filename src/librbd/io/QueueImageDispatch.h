@@ -23,11 +23,13 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
+template <typename> class FlushTracker;
 
 template <typename ImageCtxT>
 class QueueImageDispatch : public ImageDispatchInterface {
 public:
   QueueImageDispatch(ImageCtxT* image_ctx);
+  ~QueueImageDispatch();
 
   ImageDispatchLayer get_dispatch_layer() const override {
     return IMAGE_DISPATCH_LAYER_QUEUE;
@@ -69,13 +71,15 @@ public:
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override {
-  }
+  void handle_finished(int r, uint64_t tid) override;
 
 private:
   ImageCtxT* m_image_ctx;
 
-  bool enqueue(DispatchResult* dispatch_result, Context* on_dispatched);
+  FlushTracker<ImageCtxT>* m_flush_tracker;
+
+  bool enqueue(bool read_op, uint64_t tid, DispatchResult* dispatch_result,
+               Context* on_dispatched);
 
 };
 

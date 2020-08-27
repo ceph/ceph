@@ -6,7 +6,7 @@ roles:
 - [mon.a, mds.a, mgr.x, osd.0, osd.1, client.0]
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - MDS in read-only mode
       - force file system read-only
       - overall HEALTH_

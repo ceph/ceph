@@ -12,7 +12,7 @@ tasks:
     branch: nautilus
 - print: "**** done installing nautilus"
 - ceph:
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(FS_
       - \(MDS_

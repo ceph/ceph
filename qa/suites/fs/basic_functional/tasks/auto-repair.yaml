@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - force file system read-only
       - bad backtrace
       - MDS in read-only mode

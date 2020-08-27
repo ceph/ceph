@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
@@ -20,7 +20,6 @@ overrides:
         ms inject socket failures: 5000
         mon client directed command retry: 5
 tasks:
-- install: null
 - ceph:
     fs: xfs
 - thrashosds:

@@ -137,8 +137,12 @@ seastar::future<> ClientRequest::process_op(
     return seastar::now();
   }).then([this, &pg] {
     return with_blocking_future(handle.enter(pp(pg).get_obc));
-  }).then([this, &pg]() {
+  }).then([this, &pg]() -> PG::load_obc_ertr::future<> {
     op_info.set_from_op(&*m, *pg.get_osdmap());
+    if (is_misdirected(pg)) {
+      logger().trace("process_op: dropping misdirected op");
+      return seastar::now();
+    }
     return pg.with_locked_obc(
       m,
       op_info,
@@ -157,6 +161,31 @@ seastar::future<> ClientRequest::process_op(
     logger().error("ClientRequest saw error code {}", code);
     return seastar::now();
   }));
+}
+
+bool ClientRequest::is_misdirected(const PG& pg) const
+{
+  // primary can handle both normal ops and balanced reads
+  if (pg.is_primary()) {
+    return false;
+  }
+  // otherwise take a closer look
+  if (const int flags = m->get_flags();
+      flags & CEPH_OSD_FLAG_BALANCE_READS ||
+      flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
+    if (!op_info.may_read()) {
+      // no read found, so it can't be balanced read
+      return true;
+    }
+    if (op_info.may_write() || op_info.may_cache()) {
+      // write op, but i am not primary
+      return true;
+    }
+    // balanced reads; any replica will do
+    return pg.is_nonprimary();
+  }
+  // neither balanced nor localize reads
+  return true;
 }
 
 }

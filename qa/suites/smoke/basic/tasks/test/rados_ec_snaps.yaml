@@ -1,8 +1,7 @@
 tasks:
-- install: null
 - ceph:
     fs: xfs
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_

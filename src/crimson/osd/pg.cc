@@ -629,7 +629,12 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
                 obc,
                 ox_deleter = std::move(ox),
                 rvec = op_info.allows_returnvec()] {
-    auto result = m->ops.empty() || !rvec ? 0 : m->ops.back().rval.code;
+    // TODO: should stop at the first op which returns a negative retval,
+    //       cmpext uses it for returning the index of first unmatched byte
+    int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
+    if (result > 0 && !rvec) {
+      result = 0;
+    }
     auto reply = make_message<MOSDOpReply>(m.get(),
                                            result,
                                            get_osdmap_epoch(),

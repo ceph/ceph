@@ -4,7 +4,6 @@ from __future__ import absolute_import
 from enum import Enum
 import cherrypy
 from mgr_module import CLICommand, Option
-
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .ttl_cache import ttl_cache
@@ -33,7 +32,6 @@ class Features(Enum):
 
 
 PREDISABLED_FEATURES = set()  # type: Set[str]
-
 
 Feature2Controller = {
     Features.RBD: [Rbd, RbdSnapshot, RbdTrash],
@@ -139,11 +137,22 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import ApiController, RESTController
+        from ..controllers import ApiController, RESTController, ControllerDoc, EndpointDoc
+
+        FEATURES_SCHEMA = {
+            "rbd": (bool, ''),
+            "mirroring": (bool, ''),
+            "iscsi": (bool, ''),
+            "cephfs": (bool, ''),
+            "rgw": (bool, ''),
+            "nfs": (bool, '')
+        }
 
         @ApiController('/feature_toggles')
+        @ControllerDoc("Manage Features API", "FeatureTogglesEndpoint")
         class FeatureTogglesEndpoint(RESTController):
-
+            @EndpointDoc("Get List Of Features",
+                         responses={200: FEATURES_SCHEMA})
             def list(_):  # pylint: disable=no-self-argument  # noqa: N805
                 return {
                     # pylint: disable=protected-access

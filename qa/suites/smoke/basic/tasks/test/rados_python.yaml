@@ -1,7 +1,6 @@
 tasks:
-- install:
 - ceph:
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - overall HEALTH_
     - \(OSDMAP_FLAGS\)

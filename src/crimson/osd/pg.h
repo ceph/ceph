@@ -282,7 +282,7 @@ public:
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
   }
-  void check_blacklisted_watchers() final {
+  void check_blocklisted_watchers() final {
     // Not needed yet
   }
   void clear_primary_state() final {
@@ -426,6 +426,9 @@ public:
   // Utility
   bool is_primary() const final {
     return peering_state.is_primary();
+  }
+  bool is_nonprimary() const {
+    return peering_state.is_nonprimary();
   }
   bool is_peered() const final {
     return peering_state.is_peered();
