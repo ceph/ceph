@@ -168,6 +168,7 @@ Scheduler arguments:
                               with --rerun argument. This number can be found
                               in the output of teuthology-suite command. -1
                               for a random seed [default: -1].
+ --force-priority             Skip the priority check.
 
 """.format(
     default_machine_type=config.default_machine_type,
