@@ -34,7 +34,7 @@ std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args)
  */
 class OsdStatusHook : public AdminSocketHook {
 public:
-  explicit OsdStatusHook(crimson::osd::OSD& osd) :
+  explicit OsdStatusHook(const crimson::osd::OSD& osd) :
     AdminSocketHook{"status", "", "OSD status"},
     osd(osd)
   {}
@@ -49,10 +49,10 @@ public:
     return seastar::make_ready_future<tell_result_t>(f.get());
   }
 private:
-  crimson::osd::OSD& osd;
+  const crimson::osd::OSD& osd;
 };
 template std::unique_ptr<AdminSocketHook>
-make_asok_hook<OsdStatusHook>(crimson::osd::OSD& osd);
+make_asok_hook<OsdStatusHook>(const crimson::osd::OSD& osd);
 
 /**
  * An OSD admin hook: send beacon
