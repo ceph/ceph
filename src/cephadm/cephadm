@@ -385,7 +385,7 @@ class CephIscsi(object):
         mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config:z'
         mounts[log_dir] = '/var/log/rbd-target-api:z'
-        mounts['/dev/log'] = '/dev/log:z'
+        mounts['/dev'] = '/dev:z'
         return mounts
 
     @staticmethod
@@ -480,8 +480,6 @@ class CephIscsi(object):
         # type: () -> CephContainer
         tcmu_container = get_container(self.fsid, self.daemon_type, self.daemon_id)
         tcmu_container.entrypoint = "/usr/bin/tcmu-runner"
-        tcmu_container.volume_mounts.pop("/dev/log")
-        tcmu_container.volume_mounts["/dev"] = "/dev:z"
         tcmu_container.cname = self.get_container_name(desc='tcmu')
         return tcmu_container
 
