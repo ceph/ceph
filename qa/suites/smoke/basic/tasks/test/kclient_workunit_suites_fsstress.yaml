@@ -4,11 +4,10 @@ overrides:
       global:
         ms die on skipped message: false
 tasks:
-- install:
 - ceph:
     fs: xfs
 - kclient:
 - workunit:
     clients:
       all:
-        - suites/pjd.sh
+        - suites/fsstress.sh
