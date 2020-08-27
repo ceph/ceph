@@ -87,7 +87,7 @@
                  [cssClasses]="paginationClasses"
                  [selectionType]="selectionType"
                  [selected]="selection.selected"
-                 (select)="onSelect()"
+                 (select)="onSelect($event)"
                  [sorts]="userConfig.sorts"
                  (sort)="changeSorting($event)"
                  [columns]="tableColumns"
