@@ -76,7 +76,11 @@ seastar::future<> ConfigProxy::parse_config_files(const std::string& conf_files)
       }
       return crimson::read_file(*path++).then([this](auto&& buf) {
         return do_change([buf=std::move(buf), this](ConfigValues& values) {
-          if (get_config().parse_buffer(values, obs_mgr, buf.get(), buf.size(), &std::cerr)) {
+          if (get_config().parse_buffer(values, obs_mgr,
+                                        buf.get(), buf.size(),
+                                        &std::cerr) == 0) {
+            get_config().update_legacy_vals(values);
+          } else {
             throw std::invalid_argument("parse error");
           }
         }).then([] {
