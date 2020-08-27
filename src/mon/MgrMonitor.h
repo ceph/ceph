@@ -129,6 +129,7 @@ public:
   void print_nodes(ceph::Formatter *f) const;
   void count_metadata(const std::string& field, ceph::Formatter *f);
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
+  void get_versions(std::map<string, list<string> > &versions);
 
   // When did the mon last call into our tick() method?  Used for detecting
   // when the mon was not updating us for some period (e.g. during slow
