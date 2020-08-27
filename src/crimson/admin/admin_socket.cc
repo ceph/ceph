@@ -397,8 +397,9 @@ public:
 				      ceph::bufferlist&&) const final
   {
     std::vector<std::string> argv;
-    [[maybe_unused]] bool found = cmd_getval(cmdmap, "injected_args", argv);
-    assert(found);
+    if (!cmd_getval(cmdmap, "injected_args", argv)) {
+      return seastar::make_ready_future<tell_result_t>();
+    }
     const std::string args = boost::algorithm::join(argv, " ");
     return local_conf().inject_args(args).then([] {
       return seastar::make_ready_future<tell_result_t>();
