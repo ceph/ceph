@@ -1424,7 +1424,7 @@ int RGWOp::read_bucket_cors()
   try {
     bucket_cors.decode(iter);
   } catch (buffer::error& err) {
-    ldpp_dout(this, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    ldpp_dout(this, 0) << "ERROR: could not decode CORS, caught buffer::error" << dendl;
     return -EIO;
   }
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
