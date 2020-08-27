@@ -116,6 +116,14 @@ EphemeralSegmentManager::~EphemeralSegmentManager()
   }
 }
 
+void EphemeralSegmentManager::remount()
+{
+  for (auto &i : segment_state) {
+    if (i == Segment::segment_state_t::OPEN)
+      i = Segment::segment_state_t::CLOSED;
+  }
+}
+
 SegmentManager::open_ertr::future<SegmentRef> EphemeralSegmentManager::open(
   segment_id_t id)
 {

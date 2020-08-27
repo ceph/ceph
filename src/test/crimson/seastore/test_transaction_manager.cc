@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
+#include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
@@ -199,10 +200,9 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
 
   void replay() {
     tm->close().unsafe_get();
-    auto next = segment_cleaner->get_next();
     destroy();
+    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
     init();
-    segment_cleaner->set_next(next);
     tm->mount().unsafe_get();
   }
 
