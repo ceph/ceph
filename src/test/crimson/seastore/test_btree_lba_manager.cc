@@ -50,10 +50,6 @@ struct btree_lba_manager_test :
       next++);
   }
 
-  void put_segment(segment_id_t segment) final {
-    return;
-  }
-
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t committed) final {}
 

@@ -71,11 +71,17 @@ public:
   using get_segment_ret = get_segment_ertr::future<segment_id_t>;
   virtual get_segment_ret get_segment() = 0;
 
-  /* TODO: we'll want to use this to propogate information about segment contents */
-  virtual void put_segment(segment_id_t segment) = 0;
+  virtual void close_segment(segment_id_t) {}
+
+  virtual void set_journal_segment(
+    segment_id_t segment,
+    segment_seq_t seq) {}
 
   virtual journal_seq_t get_journal_tail_target() const = 0;
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
+
+  virtual void init_mark_segment_closed(
+    segment_id_t segment, segment_seq_t seq) {}
 
   virtual ~JournalSegmentProvider() {}
 };
