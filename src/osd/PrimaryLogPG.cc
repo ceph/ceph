@@ -6884,8 +6884,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	for (auto &p : oi.manifest.chunk_map) {
-	  if ((p.first <= src_offset && p.first + p.second.length > src_offset) ||
-	      (p.first > src_offset && p.first <= src_offset + src_length)) {
+	  interval_set<uint64_t> chunk;
+	  chunk.insert(p.first, p.second.length);
+	  if (chunk.intersects(src_offset, src_length)) {
 	    dout(20) << __func__ << " overlapped !! offset: " << src_offset << " length: " << src_length
 		    << " chunk_info: " << p << dendl;
 	    result = -EOPNOTSUPP;
