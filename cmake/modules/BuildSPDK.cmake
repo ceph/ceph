@@ -19,10 +19,21 @@ macro(build_spdk)
     set(spdk_CFLAGS "${spdk_CFLAGS} -Wno-address-of-packed-member")
   endif()
   include(ExternalProject)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
+    # a safer option than relying on the build host's arch
+    set(target_arch core2)
+  else()
+    # default arch used by SPDK
+    set(target_arch native)
+  endif()
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk
-    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR} --without-isal --without-vhost
+    CONFIGURE_COMMAND ./configure
+      --with-dpdk=${DPDK_DIR}
+      --without-isal
+      --without-vhost
+      --target-arch=${target_arch}
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
