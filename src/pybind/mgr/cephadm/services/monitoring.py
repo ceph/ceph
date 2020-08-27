@@ -61,7 +61,10 @@ class GrafanaService(CephadmService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon
-        return daemon_descrs[-1]
+        if daemon_descrs:
+            return daemon_descrs[-1]
+        # if empty list provided, return empty Daemon Desc
+        return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         # TODO: signed cert
@@ -141,7 +144,10 @@ class AlertmanagerService(CephadmService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?
-        return daemon_descrs[0]
+        if daemon_descrs:
+            return daemon_descrs[0]
+        # if empty list provided, return empty Daemon Desc
+        return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
@@ -231,7 +237,10 @@ class PrometheusService(CephadmService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?
-        return daemon_descrs[0]
+        if daemon_descrs:
+            return daemon_descrs[0]
+        # if empty list provided, return empty Daemon Desc
+        return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
