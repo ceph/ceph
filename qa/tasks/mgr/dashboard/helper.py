@@ -148,7 +148,7 @@ class DashboardTestCase(MgrTestCase):
         super(DashboardTestCase, cls).setUpClass()
         cls._assign_ports("dashboard", "ssl_server_port")
         cls._load_module("dashboard")
-        cls._base_uri = cls._get_uri("dashboard").rstrip('/')
+        cls.update_base_uri()
 
         if cls.CEPHFS:
             cls.mds_cluster.clear_firewall()
@@ -184,6 +184,11 @@ class DashboardTestCase(MgrTestCase):
         if cls.AUTO_AUTHENTICATE:
             cls.login('admin', 'admin')
 
+    @classmethod
+    def update_base_uri(cls):
+        if cls._base_uri is None:
+            cls._base_uri = cls._get_uri("dashboard").rstrip('/')
+
     def setUp(self):
         super(DashboardTestCase, self).setUp()
         if not self._loggedin and self.AUTO_AUTHENTICATE:
@@ -197,6 +202,7 @@ class DashboardTestCase(MgrTestCase):
     # pylint: disable=inconsistent-return-statements
     @classmethod
     def _request(cls, url, method, data=None, params=None):
+        cls.update_base_uri()
         url = "{}{}".format(cls._base_uri, url)
         log.info("Request %s to %s", method, url)
         headers = {}
