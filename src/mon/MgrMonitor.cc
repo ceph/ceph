@@ -1290,6 +1290,18 @@ void MgrMonitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
+void MgrMonitor::get_versions(std::map<string, list<string> > &versions)
+{
+  std::set<string> ls = map.get_all_names();
+  for (auto& name : ls) {
+    std::map<string,string> meta;
+    load_metadata(name, meta, nullptr);
+    auto p = meta.find("ceph_version_short");
+    if (p == meta.end()) continue;
+    versions[p->second].push_back(string("mgr.") + name);
+  }
+}
+
 int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
 {
   std::map<string,string> m;
