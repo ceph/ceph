@@ -278,10 +278,8 @@ void Cache::complete_commit(
     logger().debug("complete_commit: new root {}", *t.root);
   }
 
-  paddr_t cur = final_block_start;
   for (auto &i: t.fresh_block_list) {
-    i->set_paddr(cur);
-    cur.offset += i->get_length();
+    i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
 
