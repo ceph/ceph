@@ -25,12 +25,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "list_user"; }
 };
 
-void RGWOp_User_List::execute()
+void RGWOp_User_List::execute(const Span& parent_span)
 {
   RGWUserAdminOpState op_state;
 
@@ -53,12 +53,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_user_info"; }
 };
 
-void RGWOp_User_Info::execute()
+void RGWOp_User_Info::execute(const Span& parent_span)
 {
   RGWUserAdminOpState op_state;
 
@@ -100,12 +100,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "create_user"; }
 };
 
-void RGWOp_User_Create::execute()
+void RGWOp_User_Create::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string display_name;
@@ -241,12 +241,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "modify_user"; }
 };
 
-void RGWOp_User_Modify::execute()
+void RGWOp_User_Modify::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string display_name;
@@ -383,12 +383,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "remove_user"; }
 };
 
-void RGWOp_User_Remove::execute()
+void RGWOp_User_Remove::execute(const Span& parent_span)
 {
   std::string uid_str;
   bool purge_data;
@@ -424,12 +424,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "create_subuser"; }
 };
 
-void RGWOp_Subuser_Create::execute()
+void RGWOp_Subuser_Create::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string subuser;
@@ -500,12 +500,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "modify_subuser"; }
 };
 
-void RGWOp_Subuser_Modify::execute()
+void RGWOp_Subuser_Modify::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string subuser;
@@ -567,12 +567,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "remove_subuser"; }
 };
 
-void RGWOp_Subuser_Remove::execute()
+void RGWOp_Subuser_Remove::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string subuser;
@@ -610,12 +610,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "create_access_key"; }
 };
 
-void RGWOp_Key_Create::execute()
+void RGWOp_Key_Create::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string subuser;
@@ -666,12 +666,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "remove_access_key"; }
 };
 
-void RGWOp_Key_Remove::execute()
+void RGWOp_Key_Remove::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string subuser;
@@ -713,12 +713,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "add_user_caps"; }
 };
 
-void RGWOp_Caps_Add::execute()
+void RGWOp_Caps_Add::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string caps;
@@ -751,12 +751,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "remove_user_caps"; }
 };
 
-void RGWOp_Caps_Remove::execute()
+void RGWOp_Caps_Remove::execute(const Span& parent_span)
 {
   std::string uid_str;
   std::string caps;
@@ -808,13 +808,13 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_quota_info"; }
 };
 
 
-void RGWOp_Quota_Info::execute()
+void RGWOp_Quota_Info::execute(const Span& parent_span)
 {
   RGWUserAdminOpState op_state;
 
@@ -880,7 +880,7 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "set_quota_info"; }
 };
@@ -933,7 +933,7 @@ public:
  *
  */
 
-void RGWOp_Quota_Set::execute()
+void RGWOp_Quota_Set::execute(const Span& parent_span)
 {
   RGWUserAdminOpState op_state;
 

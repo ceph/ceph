@@ -344,10 +344,10 @@ class RGWRESTStreamOutCB : public RGWGetDataCB {
   RGWRESTStreamS3PutObj *req;
 public:
   explicit RGWRESTStreamOutCB(RGWRESTStreamS3PutObj *_req) : req(_req) {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override; /* callback for object iteration when sending data */
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override; /* callback for object iteration when sending data */
 };
 
-int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span)
 {
   dout(20) << "RGWRESTStreamOutCB::handle_data bl.length()=" << bl.length() << " bl_ofs=" << bl_ofs << " bl_len=" << bl_len << dendl;
   if (!bl_ofs && bl_len == bl.length()) {
@@ -978,7 +978,7 @@ class StreamIntoBufferlist : public RGWGetDataCB {
   bufferlist& bl;
 public:
   explicit StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override {
     bl.claim_append(inbl);
     return bl_len;
   }

@@ -19,7 +19,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRestOIDCProvider::verify_permission()
+int RGWRestOIDCProvider::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -49,7 +49,7 @@ int RGWRestOIDCProvider::verify_permission()
   return 0;
 }
 
-void RGWRestOIDCProvider::send_response()
+void RGWRestOIDCProvider::send_response(const Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -68,7 +68,7 @@ int RGWRestOIDCProviderWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("oidc-provider", RGW_CAP_WRITE);
 }
 
-int RGWCreateOIDCProvider::verify_permission()
+int RGWCreateOIDCProvider::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -113,7 +113,7 @@ int RGWCreateOIDCProvider::get_params()
   return 0;
 }
 
-void RGWCreateOIDCProvider::execute()
+void RGWCreateOIDCProvider::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -137,7 +137,7 @@ void RGWCreateOIDCProvider::execute()
 
 }
 
-void RGWDeleteOIDCProvider::execute()
+void RGWDeleteOIDCProvider::execute(const Span& parent_span)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
   op_ret = provider.delete_obj();
@@ -155,7 +155,7 @@ void RGWDeleteOIDCProvider::execute()
   }
 }
 
-void RGWGetOIDCProvider::execute()
+void RGWGetOIDCProvider::execute(const Span& parent_span)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
   op_ret = provider.get();
@@ -176,7 +176,7 @@ void RGWGetOIDCProvider::execute()
   }
 }
 
-int RGWListOIDCProviders::verify_permission()
+int RGWListOIDCProviders::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -196,7 +196,7 @@ int RGWListOIDCProviders::verify_permission()
   return 0;
 }
 
-void RGWListOIDCProviders::execute()
+void RGWListOIDCProviders::execute(const Span& parent_span)
 {
   vector<RGWOIDCProvider> result;
   op_ret = RGWOIDCProvider::get_providers(store->getRados(), s->user->get_tenant(), result);

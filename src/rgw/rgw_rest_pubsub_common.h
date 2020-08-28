@@ -23,13 +23,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_topic_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_CREATE; }
@@ -43,13 +43,13 @@ protected:
   rgw_pubsub_user_topics result;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_topics_list"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPICS_LIST; }
@@ -66,13 +66,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_topic_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_GET; }
@@ -88,13 +88,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_topic_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_DELETE; }
@@ -112,13 +112,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_subscription_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_CREATE; }
@@ -135,13 +135,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_subscription_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_GET; }
@@ -158,13 +158,13 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_subscription_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_DELETE; }
@@ -183,13 +183,13 @@ protected:
 public:
   RGWPSAckSubEventOp() {}
 
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_subscription_ack"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_ACK; }
@@ -212,13 +212,13 @@ protected:
 public:
   RGWPSPullSubEventsOp() {}
 
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "pubsub_subscription_pull"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_SUB_PULL; }
@@ -235,9 +235,9 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
 
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
 
@@ -255,9 +255,9 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
 
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
   
@@ -275,9 +275,9 @@ protected:
   virtual int get_params() = 0;
 
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
 
-  void pre_exec() override {
+  void pre_exec(const Span& parent_span = nullptr) override {
     rgw_bucket_object_pre_exec(s);
   }
 

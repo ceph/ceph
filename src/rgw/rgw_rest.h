@@ -167,7 +167,7 @@ public:
     sent_header = false;
   }
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWGetObjTags_ObjStore : public RGWGetObjTags {
@@ -261,8 +261,8 @@ public:
   ~RGWPutObj_ObjStore() override {}
 
   int verify_params() override;
-  int get_params() override;
-  int get_data(bufferlist& bl) override;
+  int get_params(const Span& parent_span = nullptr) override;
+  int get_data(bufferlist& bl, const Span& parent_span = nullptr) override;
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj
@@ -306,7 +306,7 @@ protected:
 
   int read_form_part_header(struct post_form_part *part, bool& done);
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 
   static int parse_part_field(const std::string& line,
                               std::string& field_name, /* out */
@@ -392,7 +392,7 @@ public:
   RGWPutACLs_ObjStore() {}
   ~RGWPutACLs_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWGetLC_ObjStore : public RGWGetLC {
@@ -406,7 +406,7 @@ public:
   RGWPutLC_ObjStore() {}
   ~RGWPutLC_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWDeleteLC_ObjStore : public RGWDeleteLC {
@@ -451,7 +451,7 @@ public:
   RGWCompleteMultipart_ObjStore() {}
   ~RGWCompleteMultipart_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWAbortMultipart_ObjStore : public RGWAbortMultipart {
@@ -465,7 +465,7 @@ public:
   RGWListMultipart_ObjStore() {}
   ~RGWListMultipart_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWListBucketMultiparts_ObjStore : public RGWListBucketMultiparts {
@@ -473,7 +473,7 @@ public:
   RGWListBucketMultiparts_ObjStore() {}
   ~RGWListBucketMultiparts_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWBulkDelete_ObjStore : public RGWBulkDelete {
@@ -493,7 +493,7 @@ public:
   RGWDeleteMultiObj_ObjStore() {}
   ~RGWDeleteMultiObj_ObjStore() override {}
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWInfo_ObjStore : public RGWInfo {
@@ -506,7 +506,7 @@ class RGWPutBucketObjectLock_ObjStore : public RGWPutBucketObjectLock {
 public:
   RGWPutBucketObjectLock_ObjStore() = default;
   ~RGWPutBucketObjectLock_ObjStore() = default;
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWGetBucketObjectLock_ObjStore : public RGWGetBucketObjectLock {
@@ -531,7 +531,7 @@ class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
 public:
   RGWPutObjLegalHold_ObjStore() = default;
   ~RGWPutObjLegalHold_ObjStore() override = default;
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
 };
 
 class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
@@ -551,10 +551,10 @@ public:
     RGWOp::init(store, s, dialect_handler);
     flusher.init(s, this);
   }
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
   virtual int check_caps(const RGWUserCaps& caps)
     { return -EPERM; } /* should to be implemented! */
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
 
@@ -584,8 +584,8 @@ public:
   static int validate_object_name(const string& object);
   static int reallocate_formatter(struct req_state *s, int type);
 
-  int init_permissions(RGWOp* op) override;
-  int read_permissions(RGWOp* op) override;
+  int init_permissions(RGWOp* op, const Span& parent_span = nullptr) override;
+  int read_permissions(RGWOp* op, const Span& parent_span = nullptr) override;
 
   virtual RGWOp* get_op(void);
   virtual void put_op(RGWOp* op);

@@ -45,7 +45,7 @@ bool topics_has_endpoint_secret(const rgw_pubsub_user_topics& topics) {
     }
     return false;
 }
-void RGWPSCreateTopicOp::execute() {
+void RGWPSCreateTopicOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -60,7 +60,7 @@ void RGWPSCreateTopicOp::execute() {
   ldout(s->cct, 20) << "successfully created topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSListTopicsOp::execute() {
+void RGWPSListTopicsOp::execute(const Span& parent_span) {
   ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_user_topics(&result);
   // if there are no topics it is not considered an error
@@ -77,7 +77,7 @@ void RGWPSListTopicsOp::execute() {
   ldout(s->cct, 20) << "successfully got topics" << dendl;
 }
 
-void RGWPSGetTopicOp::execute() {
+void RGWPSGetTopicOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -96,7 +96,7 @@ void RGWPSGetTopicOp::execute() {
   ldout(s->cct, 1) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSDeleteTopicOp::execute() {
+void RGWPSDeleteTopicOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -110,7 +110,7 @@ void RGWPSDeleteTopicOp::execute() {
   ldout(s->cct, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSCreateSubOp::execute() {
+void RGWPSCreateSubOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -125,7 +125,7 @@ void RGWPSCreateSubOp::execute() {
   ldout(s->cct, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSGetSubOp::execute() {
+void RGWPSGetSubOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -145,7 +145,7 @@ void RGWPSGetSubOp::execute() {
   ldout(s->cct, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSDeleteSubOp::execute() {
+void RGWPSDeleteSubOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -160,7 +160,7 @@ void RGWPSDeleteSubOp::execute() {
   ldout(s->cct, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSAckSubEventOp::execute() {
+void RGWPSAckSubEventOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -175,7 +175,7 @@ void RGWPSAckSubEventOp::execute() {
   ldout(s->cct, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSPullSubEventsOp::execute() {
+void RGWPSPullSubEventsOp::execute(const Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -196,7 +196,7 @@ void RGWPSPullSubEventsOp::execute() {
 }
 
 
-int RGWPSCreateNotifOp::verify_permission() {
+int RGWPSCreateNotifOp::verify_permission(const Span& parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;
@@ -218,7 +218,7 @@ int RGWPSCreateNotifOp::verify_permission() {
   return 0;
 }
 
-int RGWPSDeleteNotifOp::verify_permission() {
+int RGWPSDeleteNotifOp::verify_permission(const Span& parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;
@@ -237,7 +237,7 @@ int RGWPSDeleteNotifOp::verify_permission() {
   return 0;
 }
 
-int RGWPSListNotifsOp::verify_permission() {
+int RGWPSListNotifsOp::verify_permission(const Span& parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;

@@ -16,8 +16,8 @@ protected:
   string max_session_duration;
   RGWRole _role;
 public:
-  int verify_permission() override;
-  void send_response() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   virtual uint64_t get_op() = 0;
 };
 
@@ -36,8 +36,8 @@ public:
 class RGWCreateRole : public RGWRoleWrite {
 public:
   RGWCreateRole() = default;
-  int verify_permission() override;
-  void execute() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "create_role"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_ROLE; }
@@ -47,7 +47,7 @@ public:
 class RGWDeleteRole : public RGWRoleWrite {
 public:
   RGWDeleteRole() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "delete_role"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_ROLE; }
@@ -58,8 +58,8 @@ class RGWGetRole : public RGWRoleRead {
   int _verify_permission(const RGWRole& role);
 public:
   RGWGetRole() = default;
-  int verify_permission() override;
-  void execute() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "get_role"; }
   RGWOpType get_type() override { return RGW_OP_GET_ROLE; }
@@ -69,7 +69,7 @@ public:
 class RGWModifyRole : public RGWRoleWrite {
 public:
   RGWModifyRole() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "modify_role"; }
   RGWOpType get_type() override { return RGW_OP_MODIFY_ROLE; }
@@ -79,8 +79,8 @@ public:
 class RGWListRoles : public RGWRoleRead {
 public:
   RGWListRoles() = default;
-  int verify_permission() override;
-  void execute() override;
+ int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "list_roles"; }
   RGWOpType get_type() override { return RGW_OP_LIST_ROLES; }
@@ -90,7 +90,7 @@ public:
 class RGWPutRolePolicy : public RGWRoleWrite {
 public:
   RGWPutRolePolicy() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "put_role_policy"; }
   RGWOpType get_type() override { return RGW_OP_PUT_ROLE_POLICY; }
@@ -100,7 +100,7 @@ public:
 class RGWGetRolePolicy : public RGWRoleRead {
 public:
   RGWGetRolePolicy() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "get_role_policy"; }
   RGWOpType get_type() override { return RGW_OP_GET_ROLE_POLICY; }
@@ -110,7 +110,7 @@ public:
 class RGWListRolePolicies : public RGWRoleRead {
 public:
   RGWListRolePolicies() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "list_role_policies"; }
   RGWOpType get_type() override { return RGW_OP_LIST_ROLE_POLICIES; }
@@ -120,7 +120,7 @@ public:
 class RGWDeleteRolePolicy : public RGWRoleWrite {
 public:
   RGWDeleteRolePolicy() = default;
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "delete_role_policy"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_ROLE_POLICY; }

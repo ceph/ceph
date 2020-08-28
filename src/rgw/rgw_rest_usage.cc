@@ -17,12 +17,12 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_READ);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_usage"; }
 };
 
-void RGWOp_Usage_Get::execute() {
+void RGWOp_Usage_Get::execute(const Span& parent_span) {
   map<std::string, bool> categories;
 
   string uid_str;
@@ -63,12 +63,12 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_WRITE);
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "trim_usage"; }
 };
 
-void RGWOp_Usage_Delete::execute() {
+void RGWOp_Usage_Delete::execute(const Span& parent_span) {
   string uid_str;
   string bucket_name;
   uint64_t start, end;
