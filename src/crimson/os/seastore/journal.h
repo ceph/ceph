@@ -150,9 +150,9 @@ public:
     return roll.safe_then(
       [this, rsize, record=std::move(record)]() mutable {
 	return write_record(rsize, std::move(record)
-	).safe_then([this](auto addr) {
+	).safe_then([this, rsize](auto addr) {
 	  return std::make_pair(
-	    addr.add_offset(block_size),
+	    addr.add_offset(rsize.mdlength),
 	    get_journal_seq(addr));
 	});
       });
