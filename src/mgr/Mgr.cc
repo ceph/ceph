@@ -112,10 +112,9 @@ void MetadataUpdate::finish(int r)
         }
         daemon_meta.erase("hostname");
 	map<string,string> m;
-        for (const auto &i : daemon_meta) {
-          m[i.first] = i.second.get_str();
+        for (const auto &[key, val] : daemon_meta) {
+          m.emplace(key, val.get_str());
 	}
-
 	daemon_state.update_metadata(state, m);
       } else {
         state = std::make_shared<DaemonState>(daemon_state.types);
@@ -130,8 +129,8 @@ void MetadataUpdate::finish(int r)
         daemon_meta.erase("hostname");
 
 	map<string,string> m;
-        for (const auto &i : daemon_meta) {
-          m[i.first] = i.second.get_str();
+        for (const auto &[key, val] : daemon_meta) {
+          m.emplace(key, val.get_str());
         }
 	state->set_metadata(m);
 
@@ -371,8 +370,8 @@ void Mgr::load_all_metadata()
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
-    for (const auto &i : daemon_meta) {
-      dm->metadata[i.first] = i.second.get_str();
+    for (const auto &[key, val] : daemon_meta) {
+      dm->metadata.emplace(key, val.get_str());
     }
 
     daemon_state.insert(dm);
@@ -394,8 +393,8 @@ void Mgr::load_all_metadata()
     daemon_meta.erase("hostname");
 
     map<string,string> m;
-    for (const auto &i : daemon_meta) {
-      m[i.first] = i.second.get_str();
+    for (const auto &[key, val] : daemon_meta) {
+      m.emplace(key, val.get_str());
     }
     dm->set_metadata(m);
 
