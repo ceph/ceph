@@ -15,7 +15,7 @@ details.
 Background
 ==========
 
-Ceph Monitors maintain a "master copy" of the :term:`cluster map`, which means a
+Ceph Monitors maintain a "master copy" of the :term:`Cluster Map`, which means a
 :term:`Ceph Client` can determine the location of all Ceph Monitors, Ceph OSD
 Daemons, and Ceph Metadata Servers just by connecting to one Ceph Monitor and
 retrieving a current cluster map. Before Ceph Clients can read from or write to
