@@ -24,6 +24,8 @@ export LC_ALL=C # the following is vulnerable to i18n
 ARCH=$(uname -m)
 
 function munge_ceph_spec_in {
+    local with_jaeger=$1
+    shift
     local with_seastar=$1
     shift
     local for_make_check=$1
@@ -31,6 +33,9 @@ function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
+    if $with_jaeger; then
+        sed -i -e 's/%bcond_with jaeger/%bcond_without jaeger/g' $OUTFILE
+    fi
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
@@ -41,6 +46,8 @@ function munge_ceph_spec_in {
 
 function munge_debian_control {
     local version=$1
+    shift
+    local with_jaeger=$1
     shift
     local with_seastar=$1
     shift
@@ -53,6 +60,9 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
+    if $with_jaeger; then
+	    sed -i -e 's/^# Crimson[[:space:]]//g' $control
+    fi
     if $with_seastar; then
 	sed -i -e 's/^# Crimson[[:space:]]//g' $control
     fi
@@ -266,6 +276,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
 
     exit
 else
+    [ $WITH_jaeger ] && with_jaeger=true || with_jaeger=false
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
     case "$ID" in
@@ -278,9 +289,15 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
+                $SUDO apt-get install -y nlohmann-json-dev
                 ;;
             *Disco*)
                 [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
+                $SUDO apt-get install -y nlohmann-json-dev
+                ;;
+	        *Focal*)
+                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.71-all-dev
+                $SUDO apt-get install -y nlohmann-json3-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -334,7 +351,7 @@ else
                 $SUDO dnf copr enable -y tchaikov/gcc-toolset-9 centos-stream-x86_64
                 ;;
         esac
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_jaeger $with_seastar $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
@@ -346,7 +363,7 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_jaeger $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
