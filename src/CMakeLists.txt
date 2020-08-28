@@ -275,6 +275,10 @@ if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+if(WITH_JAEGER)
+  include(IncludeJaeger)
+endif()
+
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
@@ -382,6 +386,12 @@ set(libcommon_files
   osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
+
+if(WITH_JAEGER)
+  file(GLOB jager_tracing_file "common/tracer.cc")
+  list(APPEND libcommon_files ${jager_tracing_file})
+endif()
+
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
@@ -422,6 +432,7 @@ set(ceph_common_deps
   ${GSSAPI_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}
   ${CMAKE_DL_LIBS})
+
 if(HAVE_UDEV)
   list(APPEND ceph_common_deps ${UDEV_LIBRARIES})
 endif()
@@ -444,6 +455,14 @@ endif()
 
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
+endif()
+
+if(WITH_JAEGER)
+  list(APPEND ceph_common_deps
+  yaml-cpp::yaml-cpp
+  opentracing::libopentracing
+  thrift::libthrift
+  jaegertracing::libjaegertracing)
 endif()
 
 if(WIN32)
@@ -937,4 +956,3 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
-

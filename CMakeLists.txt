@@ -354,6 +354,12 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+option(WITH_JAEGER "Use jaeger to create tracepoints and display it on JaegerUI" OFF)
+if(WITH_JAEGER)
+  set(HAVE_JAEGER TRUE)
+  add_definitions(-DWITH_JAEGER)
+endif()
+
 option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
 if(WITH_BOOST_CONTEXT)
   set(HAVE_BOOST_CONTEXT ON)
@@ -677,7 +683,7 @@ add_tags(ctags
   SRC_DIR src
   TAG_FILE tags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
-  EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
+  EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
 
 set(VERSION 15.2.0)
