@@ -1596,7 +1596,8 @@ static int purge_bucket_instance(rgw::sal::RGWRadosStore *store, const RGWBucket
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
     int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-    int ret = bs.init(bucket_info.bucket, shard_id, bucket_info.layout.current_index, nullptr);
+    const auto& current = bucket_info.layout.current_index;
+    int ret = bs.init(bucket_info.bucket, shard_id, current, nullptr);
     if (ret < 0) {
       cerr << "ERROR: bs.init(bucket=" << bucket_info.bucket << ", shard=" << shard_id
            << "): " << cpp_strerror(-ret) << std::endl;
@@ -3032,7 +3033,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post()
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(bci.info);
+  int ret = bihandler->svc.bi->init_index(bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
   }

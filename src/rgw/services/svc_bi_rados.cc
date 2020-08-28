@@ -112,7 +112,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
 }
 
 static void get_bucket_index_objects(const string& bucket_oid_base,
-                                     uint32_t num_shards,
+                                     uint32_t num_shards, uint64_t gen_id,
                                      map<int, string> *_bucket_objects,
                                      int shard_id = -1)
 {
@@ -120,18 +120,30 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
   if (!num_shards) {
     bucket_objects[0] = bucket_oid_base;
   } else {
-    char buf[bucket_oid_base.size() + 32];
+    char buf[bucket_oid_base.size() + 64];
     if (shard_id < 0) {
       for (uint32_t i = 0; i < num_shards; ++i) {
-        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
-        bucket_objects[i] = buf;
+        if (gen_id) {
+          snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, i);
+          bucket_objects[i] = buf;
+          } else {
+            snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
+            bucket_objects[i] = buf;
+          }
       }
     } else {
       if ((uint32_t)shard_id > num_shards) {
         return;
+      } else {
+		if (gen_id) {
+		  snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
+		  bucket_objects[shard_id] = buf;
+		} else {
+		  // for backward compatibility, gen_id(0) will not be added in the object name
+		  snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
+		  bucket_objects[shard_id] = buf;
+		}
       }
-      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
-      bucket_objects[shard_id] = buf;
     }
   }
 }
@@ -177,10 +189,35 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
     return ret;
   }
 
-  get_bucket_index_objects(bucket_oid_base, bucket_info.layout.current_index.layout.normal.num_shards, bucket_objs, shard_id);
+  auto gen = bucket_info.layout.current_index.gen;
+
+  get_bucket_index_objects(bucket_oid_base, bucket_info.layout.current_index.layout.normal.num_shards, gen, bucket_objs, shard_id);
   if (bucket_instance_ids) {
     get_bucket_instance_ids(bucket_info, shard_id, bucket_instance_ids);
   }
+  return 0;
+}
+
+int RGWSI_BucketIndex_RADOS::open_bucket_log_in_index(const RGWBucketInfo& bucket_info,
+                                                   std::optional<int> _shard_id,
+                                                   RGWSI_RADOS::Pool *index_pool,
+                                                   map<int, string> *bucket_objs,
+                                                   map<int, string> *bucket_instance_ids)
+{
+  int shard_id = _shard_id.value_or(-1);
+  string bucket_oid_base;
+  int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
+  if (ret < 0) {
+    ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
+                   << ret << dendl;
+    return ret;
+  }
+
+  auto gen = bucket_info.current_log_layout.log_gen;
+
+  get_bucket_index_objects(bucket_oid_base, bucket_info.current_log_layout.log_layout.index_log.num_shards,
+                           gen, bucket_objs, shard_id);
+
   return 0;
 }
 
@@ -195,9 +232,10 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_b
     (*bucket_obj) = bucket_oid_base;
   } else {
     char buf[bucket_oid_base.size() + 64];
-    if (gen_id != 0) {
-      snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id); 
+    if (gen_id) {
+      snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
       (*bucket_obj) = buf;
+	  ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
     } else {
       // for backward compatibility, gen_id(0) will not be added in the object name
       snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
@@ -208,7 +246,7 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_b
 
 int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
                                                      uint32_t num_shards, rgw::BucketHashType hash_type,
-                                                     string *bucket_obj, int *shard_id)
+                                                     uint64_t gen_id, string *bucket_obj, int *shard_id)
 {
   int r = 0;
   switch (hash_type) {
@@ -221,8 +259,12 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
         }
       } else {
         uint32_t sid = bucket_shard_index(obj_key, num_shards);
-        char buf[bucket_oid_base.size() + 32];
-        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
+        char buf[bucket_oid_base.size() + 64];
+        if (gen_id) {
+          snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, sid);
+        } else {
+          snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
+        }
         (*bucket_obj) = buf;
         if (shard_id) {
           *shard_id = (int)sid;
@@ -254,7 +296,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   string oid;
 
   ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.layout.current_index.layout.normal.num_shards,
-        bucket_info.layout.current_index.layout.normal.hash_type, &oid, shard_id);
+        bucket_info.layout.current_index.layout.normal.hash_type, bucket_info.layout.current_index.gen, &oid, shard_id);
   if (ret < 0) {
     ldout(cct, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
     return ret;
@@ -267,7 +309,8 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket_info,
                                                      int shard_id,
-                                                     const rgw::bucket_index_layout_generation& idx_layout,
+                                                     uint32_t num_shards,
+                                                     uint64_t gen,
                                                      RGWSI_RADOS::Obj *bucket_obj)
 {
   RGWSI_RADOS::Pool index_pool;
@@ -281,8 +324,8 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 
   string oid;
 
-  get_bucket_index_object(bucket_oid_base, idx_layout.layout.normal.num_shards,
-                          shard_id, idx_layout.gen, &oid);
+  get_bucket_index_object(bucket_oid_base, num_shards,
+                          shard_id, gen, &oid);
 
   *bucket_obj = svc.rados->obj(index_pool, oid);
 
@@ -317,8 +360,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-
-int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
+int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
 {
   RGWSI_RADOS::Pool index_pool;
 
@@ -331,14 +373,15 @@ int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   map<int, string> bucket_objs;
-  get_bucket_index_objects(dir_oid, bucket_info.layout.current_index.layout.normal.num_shards, &bucket_objs);
+  get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
   return CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
 				    bucket_objs,
 				    cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info)
+
+int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
 {
   RGWSI_RADOS::Pool index_pool;
 
@@ -351,7 +394,8 @@ int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info)
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   std::map<int, std::string> bucket_objs;
-  get_bucket_index_objects(dir_oid, bucket_info.layout.current_index.layout.normal.num_shards, &bucket_objs);
+  get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards,
+                          idx_layout.gen, &bucket_objs);
 
   return CLSRGWIssueBucketIndexClean(index_pool.ioctx(),
 				     bucket_objs,

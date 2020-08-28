@@ -1066,9 +1066,6 @@ static void show_reshard_status(
   for (const auto& entry : status) {
     formatter->open_object_section("entry");
     formatter->dump_string("reshard_status", to_string(entry.reshard_status));
-    formatter->dump_string("new_bucket_instance_id",
-			   entry.new_bucket_instance_id);
-    formatter->dump_int("num_shards", entry.num_shards);
     formatter->close_section();
   }
   formatter->close_section();
@@ -6548,8 +6545,8 @@ next:
     for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
       int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-
-      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
+      const auto& current = bucket_info.layout.current_index;
+      int ret = bs.init(bucket, shard_id, current, nullptr /* no RGWBucketInfo */);
       marker.clear();
 
       if (ret < 0) {
@@ -6560,7 +6557,7 @@ next:
       do {
         entries.clear();
         ret = store->getRados()->bi_list(bs, object, marker, max_entries, &entries, &is_truncated);
-        if (ret < 0) {
+        if (ret < 0) {            
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
@@ -6613,7 +6610,8 @@ next:
     for (int i = 0; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
       int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
+      const auto& current = bucket_info.layout.current_index;
+      int ret = bs.init(bucket, shard_id, current, nullptr /* no RGWBucketInfo */);
       if (ret < 0) {
         cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
         return -ret;
