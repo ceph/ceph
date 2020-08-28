@@ -99,11 +99,13 @@ def remove_packages(ctx, config, pkgs):
         "deb": deb._remove,
         "rpm": rpm._remove,
     }
+    cleanup = config.get('cleanup', False)
     with parallel() as p:
         for remote in ctx.cluster.remotes.keys():
-            system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_pkgs[
-                    system_type], ctx, config, remote, pkgs[system_type])
+            if not remote.is_reimageable or cleanup:
+                system_type = teuthology.get_system_type(remote)
+                p.spawn(remove_pkgs[
+                        system_type], ctx, config, remote, pkgs[system_type])
 
 
 def remove_sources(ctx, config):
@@ -117,13 +119,15 @@ def remove_sources(ctx, config):
         'deb': deb._remove_sources_list,
         'rpm': rpm._remove_sources_list,
     }
+    cleanup = config.get('cleanup', False)
+    project = config.get('project', 'ceph')
     with parallel() as p:
-        project = config.get('project', 'ceph')
-        log.info("Removing {proj} sources lists".format(
-            proj=project))
         for remote in ctx.cluster.remotes.keys():
-            remove_fn = remove_sources_pkgs[remote.os.package_type]
-            p.spawn(remove_fn, ctx, config, remote)
+            if not remote.is_reimageable or cleanup:
+                log.info("Removing {p} sources lists on {r}"
+                         .format(p=project,r=remote))
+                remove_fn = remove_sources_pkgs[remote.os.package_type]
+                p.spawn(remove_fn, ctx, config, remote)
 
 
 def get_package_list(ctx, config):
@@ -588,20 +592,21 @@ def task(ctx, config):
     else:
         nested_config = dict(
                 branch=config.get('branch'),
-                tag=config.get('tag'),
-                sha1=config.get('sha1'),
+                cleanup=config.get('cleanup'),
                 debuginfo=config.get('debuginfo'),
-                flavor=flavor,
                 downgrade_packages=config.get('downgrade_packages', []),
+                exclude_packages=config.get('exclude_packages', []),
                 extra_packages=config.get('extra_packages', []),
                 extra_system_packages=config.get('extra_system_packages', []),
-                exclude_packages=config.get('exclude_packages', []),
                 extras=config.get('extras', None),
-                wait_for_package=config.get('wait_for_package', False),
-                project=project,
-                packages=config.get('packages', dict()),
+                flavor=flavor,
                 install_ceph_packages=config.get('install_ceph_packages', True),
+                packages=config.get('packages', dict()),
+                project=project,
                 repos_only=config.get('repos_only', False),
+                sha1=config.get('sha1'),
+                tag=config.get('tag'),
+                wait_for_package=config.get('wait_for_package', False),
         )
         if repos:
             nested_config['repos'] = repos
