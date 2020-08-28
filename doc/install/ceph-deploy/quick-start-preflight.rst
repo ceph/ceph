@@ -32,6 +32,11 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 	echo deb https://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
+#. Add the Ceph source, replace ``{ceph-stable-release}`` with a stable Ceph release (e.g.,``luminous``.)::
+
+	export CEPH_DEPLOY_REPO_URL=https://download.ceph.com/debian-{ceph-stable-release}
+	export CEPH_DEPLOY_GPG_URL=https://download.ceph.com/keys/release.asc
+
 #. Update your repository and install ``ceph-deploy``::
 
 	sudo apt update
