@@ -620,7 +620,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 } /* namespace rgw */
 
 
-void RGW_SWIFT_Auth_Get::execute()
+void RGW_SWIFT_Auth_Get::execute(const Span& parent_span)
 {
   int ret = -EPERM;
 
@@ -701,7 +701,7 @@ void RGW_SWIFT_Auth_Get::execute()
   swift_key = &siter->second;
 
   if (swift_key->key.compare(key) != 0) {
-    dout(0) << "NOTICE: RGW_SWIFT_Auth_Get::execute(): bad swift key" << dendl;
+    dout(0) << "NOTICE: RGW_SWIFT_Auth_Get::execute(const Span& parent_span): bad swift key" << dendl;
     ret = -EPERM;
     goto done;
   }
