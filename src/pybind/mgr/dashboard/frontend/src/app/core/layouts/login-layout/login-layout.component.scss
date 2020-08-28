@@ -1,6 +1,6 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
-::ng-deep .login {
+::ng-deep cd-login-layout .login {
   background-color: bd.$secondary;
   background-image: url('../../../../assets/ceph_background.gif');
   background-position: right bottom;
