@@ -171,7 +171,7 @@ void ETagVerifier_MPU::calculate_etag()
   hash.Final(m);
   mpu_etag_hash.Update((const unsigned char *)m, sizeof(m));
 
-  /* Refer RGWCompleteMultipart::execute() for ETag calculation for MPU object */
+  /* Refer RGWCompleteMultipart::execute(const jspan* const parent_span) for ETag calculation for MPU object */
   mpu_etag_hash.Final(mpu_m);
   buf_to_hex(mpu_m, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],

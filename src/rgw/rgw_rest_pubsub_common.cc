@@ -47,7 +47,7 @@ bool topics_has_endpoint_secret(const rgw_pubsub_user_topics& topics) {
     return false;
 }
 
-void RGWPSCreateTopicOp::execute(optional_yield y) {
+void RGWPSCreateTopicOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -62,7 +62,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   ldout(s->cct, 20) << "successfully created topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSListTopicsOp::execute(optional_yield y) {
+void RGWPSListTopicsOp::execute(optional_yield y, const jspan* const parent_span) {
   ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_user_topics(&result);
   // if there are no topics it is not considered an error
@@ -79,7 +79,7 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
   ldout(s->cct, 20) << "successfully got topics" << dendl;
 }
 
-void RGWPSGetTopicOp::execute(optional_yield y) {
+void RGWPSGetTopicOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -98,7 +98,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   ldout(s->cct, 1) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSDeleteTopicOp::execute(optional_yield y) {
+void RGWPSDeleteTopicOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -112,7 +112,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   ldout(s->cct, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSCreateSubOp::execute(optional_yield y) {
+void RGWPSCreateSubOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -127,7 +127,7 @@ void RGWPSCreateSubOp::execute(optional_yield y) {
   ldout(s->cct, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSGetSubOp::execute(optional_yield y) {
+void RGWPSGetSubOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -147,7 +147,7 @@ void RGWPSGetSubOp::execute(optional_yield y) {
   ldout(s->cct, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSDeleteSubOp::execute(optional_yield y) {
+void RGWPSDeleteSubOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -162,7 +162,7 @@ void RGWPSDeleteSubOp::execute(optional_yield y) {
   ldout(s->cct, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSAckSubEventOp::execute(optional_yield y) {
+void RGWPSAckSubEventOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -177,7 +177,7 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
   ldout(s->cct, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSPullSubEventsOp::execute(optional_yield y) {
+void RGWPSPullSubEventsOp::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -198,7 +198,7 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
 }
 
 
-int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
+int RGWPSCreateNotifOp::verify_permission(optional_yield y, const jspan* const parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;
@@ -220,7 +220,7 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
   return 0;
 }
 
-int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
+int RGWPSDeleteNotifOp::verify_permission(optional_yield y, const jspan* const parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;
@@ -239,7 +239,7 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
   return 0;
 }
 
-int RGWPSListNotifsOp::verify_permission(optional_yield y) {
+int RGWPSListNotifsOp::verify_permission(optional_yield y, const jspan* const parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;

@@ -323,8 +323,10 @@ bool rgw_bucket_object_check_filter(const string& oid)
   return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
 }
 
-int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key)
+int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   RGWObjectCtx rctx(store);
 
   if (key.instance.empty()) {
@@ -333,7 +335,7 @@ int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucke
 
   rgw_obj obj(bucket, key);
 
-  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+  return store->getRados()->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status(), 0, ceph::real_time(), nullptr, span.get());
 }
 
 static int aio_wait(librados::AioCompletion *handle)
@@ -2700,8 +2702,10 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                RGWBucketEntryPoint& info,
                                                optional_yield y,
-                                               const Bucket::PutParams& params)
+                                               const Bucket::PutParams& params, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->store_bucket_entrypoint_info(ctx,
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
@@ -2710,7 +2714,7 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                     params.mtime,
                                                     params.attrs,
                                                     params.objv_tracker,
-                                                    y);
+                                                    y, span_1.get());
   });
 }
 
@@ -2802,7 +2806,7 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,
                                                 optional_yield y,
-                                                const BucketInstance::PutParams& params)
+                                                const BucketInstance::PutParams& params, const jspan* const parent_span)
 {
   if (params.objv_tracker) {
     info.objv_tracker = *params.objv_tracker;
@@ -2815,16 +2819,18 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 params.exclusive,
                                                 params.mtime,
                                                 params.attrs,
-                                                y);
+                                                y, parent_span);
 }
 
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo& info,
                                             optional_yield y,
-                                            const BucketInstance::PutParams& params)
+                                            const BucketInstance::PutParams& params, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return do_store_bucket_instance_info(ctx, bucket, info, y, params);
+    return do_store_bucket_instance_info(ctx, bucket, info, y, params, span_1.get());
   });
 }
 
@@ -2940,14 +2946,19 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             map<string, bufferlist>& attrs,
                                             RGWObjVersionTracker *objv_tracker,
-                                            optional_yield y)
+                                            optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
     rgw_bucket& bucket = bucket_info.bucket;
 
     if (!bucket_info.has_instance_obj) {
       /* an old bucket object, need to convert it */
+        [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info", span_1.get());
         int ret = convert_old_bucket_info(ctx, bucket, y);
+        jaeger_tracing::finish_span(span_2.get());
+
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
           return ret;
@@ -2960,7 +2971,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                          y,
                                          BucketInstance::PutParams().set_attrs(&attrs)
                                                                     .set_objv_tracker(objv_tracker)
-                                                                    .set_orig_info(&bucket_info));
+                                                                    .set_orig_info(&bucket_info), span_1.get());
     });
 }
 
@@ -2970,11 +2981,11 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               ceph::real_time creation_time,
 			      optional_yield y,
                               bool update_entrypoint,
-                              rgw_ep_info *pinfo)
+                              rgw_ep_info *pinfo, const jspan* const parent_span)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return do_link_bucket(ctx, user_id, bucket, creation_time,
-                          update_entrypoint, pinfo, y);
+                          update_entrypoint, pinfo, y, parent_span);
   });
 }
 
@@ -2984,8 +2995,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                  ceph::real_time creation_time,
                                  bool update_entrypoint,
                                  rgw_ep_info *pinfo,
-				 optional_yield y)
+				 optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   int ret;
 
   RGWBucketEntryPoint ep;
@@ -3000,11 +3012,13 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
       ep = pinfo->ep;
       pattrs = &pinfo->attrs;
     } else {
+      [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span.get());
       ret = svc.bucket->read_bucket_entrypoint_info(ctx,
                                                     meta_key,
                                                     &ep, &rot,
                                                     nullptr, &attrs,
                                                     y);
+      jaeger_tracing::finish_span(span_1.get());
       if (ret < 0 && ret != -ENOENT) {
         ldout(cct, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
@@ -3013,7 +3027,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     }
   }
 
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("rgw_user.cc : RGWUserCtl::add_bucket", span.get());
   ret = ctl.user->add_bucket(user_id, bucket, creation_time, y);
+  jaeger_tracing::finish_span(span_2.get());
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -3030,14 +3046,14 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   ep.owner = user_id;
   ep.bucket = bucket;
   ret = svc.bucket->store_bucket_entrypoint_info(
-    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y);
+    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y, span.get());
   if (ret < 0)
     goto done_err;
 
   return 0;
 
 done_err:
-  int r = do_unlink_bucket(ctx, user_id, bucket, true, y);
+  int r = do_unlink_bucket(ctx, user_id, bucket, true, y, span.get());
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed unlinking bucket on error cleanup: "
                            << cpp_strerror(-r) << dendl;
@@ -3045,10 +3061,10 @@ done_err:
   return ret;
 }
 
-int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint)
+int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint, const jspan* const parent_span)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y);
+    return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y, parent_span);
   });
 }
 
@@ -3056,9 +3072,12 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                    const rgw_user& user_id,
                                    const rgw_bucket& bucket,
                                    bool update_entrypoint,
-				   optional_yield y)
+				   optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span("rgw_user.cc : RGWUserCtl::remove_bucket", span.get());
   int ret = ctl.user->remove_bucket(user_id, bucket, y);
+  jaeger_tracing::finish_span(span_1.get());
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3071,7 +3090,9 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
   string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span.get());
   ret = svc.bucket->read_bucket_entrypoint_info(ctx, meta_key, &ep, &ot, nullptr, &attrs, y);
+  jaeger_tracing::finish_span(span_2.get());
   if (ret == -ENOENT)
     return 0;
   if (ret < 0)
@@ -3086,7 +3107,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   }
 
   ep.linked = false;
-  return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y);
+  return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y, span.get());
 }
 
 int RGWBucketCtl::set_acl(ACLOwner& owner, rgw_bucket& bucket,

@@ -303,6 +303,7 @@ int radosgw_Main(int argc, const char **argv)
   ceph::crypto::init_openssl_engine_once();
 
   common_init_finish(g_ceph_context);
+  jaeger_tracing::init_jaeger();
 
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);

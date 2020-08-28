@@ -49,7 +49,7 @@ public:
   ~RGWGetObj_ObjStore_S3() override {}
 
   int verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) override;
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   int send_response_data_error(optional_yield y) override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
@@ -73,7 +73,7 @@ public:
   RGWPutObjTags_ObjStore_S3() {}
   ~RGWPutObjTags_ObjStore_S3() {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -94,7 +94,7 @@ public:
 class RGWPutBucketTags_ObjStore_S3 : public RGWPutBucketTags_ObjStore
 {
 public:
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -113,7 +113,7 @@ public:
 class RGWPutBucketReplication_ObjStore_S3 : public RGWPutBucketReplication_ObjStore
 {
 public:
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -130,7 +130,7 @@ public:
   RGWListBuckets_ObjStore_S3() {}
   ~RGWListBuckets_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override {
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override {
     limit = -1; /* no limit */
     return 0;
   }
@@ -144,7 +144,7 @@ public:
   RGWGetUsage_ObjStore_S3() {}
   ~RGWGetUsage_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override ;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override ;
   void send_response() override;
 };
 
@@ -152,18 +152,18 @@ class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
 protected:
   bool objs_container;
   bool encode_key {false};
-  int get_common_params();
-  void send_common_response();
-  void send_common_versioned_response();
+  int get_common_params(const jspan* const parent_span = nullptr);
+  void send_common_response(const jspan* const parent_span = nullptr);
+  void send_common_versioned_response(const jspan* const parent_span = nullptr);
   public:
   RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
-  void send_versioned_response();
+  void send_versioned_response(const jspan* const parent_span = nullptr);
 };
 
 class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore_S3 {
@@ -177,7 +177,7 @@ public:
   }
   ~RGWListBucket_ObjStore_S3v2() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
   void send_versioned_response();
 };
@@ -211,7 +211,7 @@ public:
   RGWSetBucketVersioning_ObjStore_S3() {}
   ~RGWSetBucketVersioning_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -228,7 +228,7 @@ public:
   RGWSetBucketWebsite_ObjStore_S3() {}
   ~RGWSetBucketWebsite_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -253,7 +253,7 @@ public:
   RGWCreateBucket_ObjStore_S3() {}
   ~RGWCreateBucket_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -273,16 +273,16 @@ public:
   RGWPutObj_ObjStore_S3() {}
   ~RGWPutObj_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
-  int get_data(bufferlist& bl) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
+  int get_data(bufferlist& bl, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 
   int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-                         rgw::putobj::DataProcessor *cb) override;
+                         rgw::putobj::DataProcessor *cb, const jspan* const parent_span = nullptr) override;
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                          RGWGetObj_Filter* cb,
                          map<string, bufferlist>& attrs,
-                         bufferlist* manifest_bl) override;
+                         bufferlist* manifest_bl, const jspan* const parent_span = nullptr) override;
 };
 
 class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
@@ -311,7 +311,7 @@ public:
     return RGWPostObj_ObjStore::verify_requester(auth_registry, y);
   }
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   int complete_get_params();
 
   void send_response() override;
@@ -325,7 +325,7 @@ public:
   RGWDeleteObj_ObjStore_S3() {}
   ~RGWDeleteObj_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -335,10 +335,10 @@ public:
   RGWCopyObj_ObjStore_S3() : sent_header(false) {}
   ~RGWCopyObj_ObjStore_S3() override {}
 
-  int init_dest_policy() override;
-  int get_params(optional_yield y) override;
+  int init_dest_policy(const jspan* const parent_span = nullptr) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   int check_storage_class(const rgw_placement_rule& src_placement) override;
-  void send_partial_response(off_t ofs) override;
+  void send_partial_response(off_t ofs, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -357,7 +357,7 @@ public:
 
   int get_policy_from_state(rgw::sal::RGWRadosStore *store, struct req_state *s, stringstream& ss) override;
   void send_response() override;
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
 };
 
 class RGWGetLC_ObjStore_S3 : public RGWGetLC_ObjStore {
@@ -366,7 +366,7 @@ protected:
 public:
   RGWGetLC_ObjStore_S3() {}
   ~RGWGetLC_ObjStore_S3() override {}
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
  void send_response() override;
 };
@@ -400,7 +400,7 @@ public:
   RGWPutCORS_ObjStore_S3() {}
   ~RGWPutCORS_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -433,7 +433,7 @@ public:
   RGWSetRequestPayment_ObjStore_S3() {}
   ~RGWSetRequestPayment_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -444,9 +444,9 @@ public:
   RGWInitMultipart_ObjStore_S3() {}
   ~RGWInitMultipart_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
-  int prepare_encryption(map<string, bufferlist>& attrs) override;
+  int prepare_encryption(map<string, bufferlist>& attrs, const jspan* const parent_span = nullptr) override;
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
@@ -454,7 +454,7 @@ public:
   RGWCompleteMultipart_ObjStore_S3() {}
   ~RGWCompleteMultipart_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -489,7 +489,7 @@ public:
   RGWDeleteMultiObj_ObjStore_S3() {}
   ~RGWDeleteMultiObj_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_status() override;
   void begin_response() override;
   void send_partial_response(rgw_obj_key& key, bool delete_marker,
@@ -515,7 +515,7 @@ class RGWPutObjRetention_ObjStore_S3 : public RGWPutObjRetention_ObjStore {
 public:
   RGWPutObjRetention_ObjStore_S3() {}
   ~RGWPutObjRetention_ObjStore_S3() {}
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -553,7 +553,7 @@ public:
   RGWConfigBucketMetaSearch_ObjStore_S3() {}
   ~RGWConfigBucketMetaSearch_ObjStore_S3() {}
 
-  int get_params(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -928,7 +928,7 @@ public:
 
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
 
-  virtual int get_params(optional_yield y) override;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) override;
 
 private:
   void encode_short(char* buff, uint16_t s, int& i);

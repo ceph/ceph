@@ -185,6 +185,10 @@ if(WITH_LTTNG)
   add_dependencies(rgw_common rgw_op-tp rgw_rados-tp)
 endif()
 
+if(WITH_JAEGER)
+  add_dependencies(rgw_common jaegertracing::libjaegertracing)
+endif()
+
 set(rgw_a_srcs
   rgw_auth_keystone.cc
   rgw_client_io.cc

@@ -202,8 +202,10 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 
 int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
-			   RGWMPObj& mp_obj)
+			   RGWMPObj& mp_obj, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   rgw_obj meta_obj;
   meta_obj.init_ns(bucket_info.bucket, mp_obj.get_meta(), RGW_OBJ_NS_MULTIPART);
   meta_obj.set_in_extra_data(true);
@@ -217,9 +219,11 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   uint64_t parts_accounted_size = 0;
 
   do {
+    [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("rgw_multi.cc : list_multipart_parts", span_1.get());
     ret = list_multipart_parts(store, bucket_info, cct,
 			       mp_obj.get_upload_id(), mp_obj.get_meta(),
 			       1000, marker, obj_parts, &marker, &truncated);
+    jaeger_tracing::finish_span(span_2.get());
     if (ret < 0) {
       ldout(cct, 20) << __func__ << ": list_multipart_parts returned " <<
 	ret << dendl;
@@ -235,11 +239,13 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         string oid = mp_obj.get_part(obj_iter->second.num);
         obj.init_ns(bucket_info.bucket, oid, RGW_OBJ_NS_MULTIPART);
         obj.index_hash_source = mp_obj.get_key();
-        ret = store->getRados()->delete_obj(*obj_ctx, bucket_info, obj, 0);
+        ret = store->getRados()->delete_obj(*obj_ctx, bucket_info, obj, 0, 0, ceph::real_time(), nullptr, span_1.get());
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
+        [[maybe_unused]] const auto span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::update_gc_chain", span_1.get());
         store->getRados()->update_gc_chain(meta_obj, obj_part.manifest, &chain);
+        jaeger_tracing::finish_span(span_3.get());
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
           rgw_obj head;
@@ -256,7 +262,9 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   } while (truncated);
 
   /* use upload id as tag and do it synchronously */
+  [[maybe_unused]] const auto span_4 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::send_chain_to_gc", span_1.get());
   ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+  jaeger_tracing::finish_span(span_4.get());
   if (ret < 0) {
     ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
     if (ret == -ENOENT) {
@@ -273,12 +281,12 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   if (!remove_objs.empty()) {
     del_op.params.remove_objs = &remove_objs;
   }
-  
+
   del_op.params.abortmp = true;
   del_op.params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
-  ret = del_op.delete_obj(null_yield);
+  ret = del_op.delete_obj(null_yield, span_1.get());
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -291,8 +299,10 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 			   const string& delim,
 			   const int& max_uploads,
 			   vector<rgw_bucket_dir_entry> *objs,
-			   map<string, bool> *common_prefixes, bool *is_truncated)
+			   map<string, bool> *common_prefixes, bool *is_truncated, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
   MultipartMetaFilter mp_filter;
@@ -303,12 +313,14 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
 
-  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
+  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield, span_1.get()));
 }
 
 int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-				string& prefix, string& delim)
+				string& prefix, string& delim, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   constexpr int max = 1000;
   int ret, num_deleted = 0;
   vector<rgw_bucket_dir_entry> objs;
@@ -318,7 +330,7 @@ int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RG
 
   do {
     ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
-				 max, &objs, nullptr, &is_truncated);
+				 max, &objs, nullptr, &is_truncated, span_1.get());
     if (ret < 0) {
       ldout(store->ctx(), 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<

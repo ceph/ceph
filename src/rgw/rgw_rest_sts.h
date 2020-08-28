@@ -115,7 +115,7 @@ protected:
   STS::STSService sts;
 public:
   RGWREST_STS() = default;
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
 };
 
@@ -131,7 +131,7 @@ protected:
   string iss;
 public:
   RGWSTSAssumeRoleWithWebIdentity() = default;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "assume_role_web_identity"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE_WEB_IDENTITY; }
@@ -148,7 +148,7 @@ protected:
   string tokenCode;
 public:
   RGWSTSAssumeRole() = default;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "assume_role"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE; }
@@ -161,8 +161,8 @@ protected:
   string tokenCode;
 public:
   RGWSTSGetSessionToken() = default;
-  void execute(optional_yield y) override;
-  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "get_session_token"; }
   RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }

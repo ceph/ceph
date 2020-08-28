@@ -10,7 +10,7 @@ public:
   ut_get_sink() {}
   virtual ~ut_get_sink() {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr) override
   {
     auto& bl_buffers = bl.buffers();
     auto i = bl_buffers.begin();
@@ -36,7 +36,7 @@ public:
   ut_get_sink_size() {}
   virtual ~ut_get_sink_size() {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr) override
   {
     if (bl_len > (off_t)max_size)
       max_size = bl_len;
@@ -65,7 +65,7 @@ public:
 
 
 struct MockGetDataCB : public RGWGetObj_Filter {
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 } cb;

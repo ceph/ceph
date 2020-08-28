@@ -19,6 +19,8 @@
 
 #include <array>
 #include <string_view>
+#include<stack>
+
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
@@ -39,6 +41,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
+#include "rgw_tracer.h"
 
 namespace ceph {
   class Formatter;
@@ -1515,6 +1518,7 @@ struct req_state : DoutPrefixProvider {
   string bucket_instance_id;
   int bucket_instance_shard_id{-1};
   string redirect_zone_endpoint;
+  std::unique_ptr<jspan> root_span;
 
   string redirect;
 
@@ -2094,7 +2098,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
                             const rgw::ARN& res,
-                            const uint64_t op);
+                            const uint64_t op, const jspan* const parent_span = nullptr);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct req_state * const s,
                                       int perm);

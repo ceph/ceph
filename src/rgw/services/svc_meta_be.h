@@ -80,7 +80,7 @@ public:
 
   struct Context { /*
                     * A single metadata operation context. Will be holding info about
-                    * backend and operation itself; operation might span multiple backend
+                    * backend and operation itself; operation might jspan multiple backend
                     * calls.
                     */
     virtual ~Context() = 0;

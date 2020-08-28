@@ -1,0 +1,16 @@
+usr/lib/libopentracing.so.*
+usr/lib/libjaegertracing.so.*
+usr/lib/libthrift.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*
+usr/lib/libyaml-cpp.so.*

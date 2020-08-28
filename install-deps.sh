@@ -26,6 +26,8 @@ ARCH=$(uname -m)
 function munge_ceph_spec_in {
     local with_seastar=$1
     shift
+    local with_jaeger=$1
+    shift
     local with_zbd=$1
     shift
     local for_make_check=$1
@@ -33,6 +35,9 @@ function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
+    if $with_jaeger; then
+        sed -i -e 's/%bcond_with jaeger/%bcond_without jaeger/g' $OUTFILE
+    fi
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
@@ -46,6 +51,8 @@ function munge_ceph_spec_in {
 
 function munge_debian_control {
     local version=$1
+    shift
+    local with_jaeger=$1
     shift
     local with_seastar=$1
     shift
@@ -284,9 +291,15 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
+                $SUDO apt-get install -y nlohmann-json-dev
                 ;;
             *Disco*)
                 [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
+                $SUDO apt-get install -y nlohmann-json-dev
+                ;;
+	    *Focal*)
+                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.71-all-dev
+                $SUDO apt-get install -y nlohmann-json3-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc

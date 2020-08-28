@@ -5,7 +5,7 @@
  * All operations via the rados gateway are carried out by
  * small classes known as RGWOps. This class contains a req_state
  * and each possible command is a subclass of this with a defined
- * execute() method that does whatever the subclass name implies.
+ * execute(const jspan* const parent_span = nullptr) method that does whatever the subclass name implies.
  * These subclasses must be further subclassed (by interface type)
  * to provide additional virtual methods such as send_response or get_params.
  */
@@ -85,8 +85,8 @@ protected:
   rgw::sal::RGWRadosStore* store{nullptr};
   struct req_state *s{nullptr};
 
-  int do_init_permissions(optional_yield y);
-  int do_read_permissions(RGWOp* op, bool only_bucket, optional_yield y);
+  int do_init_permissions(optional_yield y, const jspan* const parent_span = nullptr);
+  int do_read_permissions(RGWOp* op, bool only_bucket, optional_yield y, const jspan* const parent_span = nullptr);
 
 public:
   RGWHandler() {}
@@ -96,7 +96,7 @@ public:
                    struct req_state* _s,
                    rgw::io::BasicClient* cio);
 
-  virtual int init_permissions(RGWOp*, optional_yield y) {
+  virtual int init_permissions(RGWOp*, optional_yield y, const jspan* const parent_span = nullptr) {
     return 0;
   }
 
@@ -167,11 +167,11 @@ public:
     this->s = s;
     this->dialect_handler = dialect_handler;
   }
-  int read_bucket_cors();
+  int read_bucket_cors(const jspan* const parent_span = nullptr);
   bool generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age);
 
   virtual int verify_params() { return 0; }
-  virtual bool prefetch_data() { return false; }
+  virtual bool prefetch_data(const jspan* const parent_span = nullptr) { return false; }
 
   /* Authenticate requester -- verify its identity.
    *
@@ -186,10 +186,10 @@ public:
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
     return dialect_handler->authorize(this, y);
   }
-  virtual int verify_permission(optional_yield y) = 0;
+  virtual int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   virtual int verify_op_mask();
   virtual void pre_exec() {}
-  virtual void execute(optional_yield y) = 0;
+  virtual void execute(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   virtual void send_response() {}
   virtual void complete() {
     send_response();
@@ -228,9 +228,9 @@ public:
    * Filter can modify content of bl.
    * When bl_len == 0 , it means 'flush
    */
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr) override {
     if (next) {
-      return next->handle_data(bl, bl_ofs, bl_len);
+      return next->handle_data(bl, bl_ofs, bl_len, parent_span);
     }
     return 0;
   }
@@ -330,15 +330,15 @@ public:
     get_legal_hold = false;
  }
 
-  bool prefetch_data() override;
+  bool prefetch_data(const jspan* const parent_span = nullptr) override;
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   int parse_range();
   int read_user_manifest_part(
     rgw::sal::RGWBucket* bucket,
@@ -347,13 +347,13 @@ public:
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
     const off_t start_ofs,
     const off_t end_ofs,
-    bool swift_slo);
-  int handle_user_manifest(const char *prefix, optional_yield y);
-  int handle_slo_manifest(bufferlist& bl, optional_yield y);
+    bool swift_slo, const jspan* const parent_span = nullptr);
+  int handle_user_manifest(const char *prefix, optional_yield y, const jspan* const parent_span = nullptr);
+  int handle_slo_manifest(bufferlist& bl, optional_yield y, const jspan* const parent_span = nullptr);
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   virtual int send_response_data_error(optional_yield y) = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
@@ -378,7 +378,7 @@ public:
   explicit RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
   ~RGWGetObj_CB() override {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr) override {
     return op->get_data_cb(bl, bl_ofs, bl_len);
   }
 };
@@ -388,8 +388,8 @@ class RGWGetObjTags : public RGWOp {
   bufferlist tags_bl;
   bool has_tags{false};
  public:
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
 
   virtual void send_response_data(bufferlist& bl) = 0;
@@ -403,11 +403,11 @@ class RGWPutObjTags : public RGWOp {
  protected:
   bufferlist tags_bl;
  public:
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "put_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
@@ -417,8 +417,8 @@ class RGWPutObjTags : public RGWOp {
 class RGWDeleteObjTags: public RGWOp {
  public:
   void pre_exec() override;
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "delete_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -430,8 +430,8 @@ protected:
   bufferlist tags_bl;
   bool has_tags{false};
 public:
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
 
   virtual void send_response_data(bufferlist& bl) = 0;
@@ -445,11 +445,11 @@ protected:
   bufferlist tags_bl;
   bufferlist in_data;
 public:
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "put_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_TAGGING; }
@@ -458,8 +458,8 @@ public:
 class RGWDeleteBucketTags : public RGWOp {
 public:
   void pre_exec() override;
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "delete_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -470,8 +470,8 @@ struct rgw_sync_policy_group;
 
 class RGWGetBucketReplication : public RGWOp {
 public:
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
 
   virtual void send_response_data() = 0;
@@ -485,11 +485,11 @@ protected:
   bufferlist in_data;
   std::vector<rgw_sync_policy_group> sync_policy_groups;
 public:
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "put_bucket_replication"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_REPLICATION; }
@@ -500,8 +500,8 @@ protected:
   virtual void update_sync_policy(rgw_sync_policy_info *policy) = 0;
 public:
   void pre_exec() override;
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "delete_bucket_replication"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -570,9 +570,9 @@ public:
     : deleter(nullptr) {
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   virtual int get_data(std::list<acct_path_t>& items,
                        bool * is_truncated) = 0;
@@ -647,9 +647,9 @@ public:
             struct req_state* const s,
             RGWHandler* const h) override;
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "bulk_upload"; }
 
@@ -755,11 +755,11 @@ public:
       is_truncated(false) {
   }
 
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
-  virtual void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) {
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
+  virtual void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets, const jspan* const parent_span = nullptr) {
     /* The default implementation, used by e.g. S3, just generates a new
      * part of listing and sends it client immediately. Swift can behave
      * differently: when the reverse option is requested, all incoming
@@ -796,10 +796,10 @@ public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
   }
 
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override {}
 
   virtual bool should_get_stats() { return false; }
@@ -816,8 +816,8 @@ protected:
 public:
   RGWStatAccount() = default;
 
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "stat_account"; }
@@ -845,20 +845,20 @@ protected:
 
   int shard_id;
 
-  int parse_max_keys();
+  int parse_max_keys(const jspan* const parent_span = nullptr);
 
 public:
   RGWListBucket() : list_versions(false), max(0),
                     default_max(0), is_truncated(false),
 		    allow_unordered(false), shard_id(-1) {}
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
   }
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_bucket"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
@@ -869,8 +869,8 @@ public:
 class RGWGetBucketLogging : public RGWOp {
 public:
   RGWGetBucketLogging() {}
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield) override { }
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield, const jspan* const parent_span = nullptr) override { }
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_logging"; }
@@ -882,8 +882,8 @@ class RGWGetBucketLocation : public RGWOp {
 public:
   RGWGetBucketLocation() {}
   ~RGWGetBucketLocation() override {}
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield) override { }
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield, const jspan* const parent_span = nullptr) override { }
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_location"; }
@@ -899,9 +899,9 @@ protected:
 public:
   RGWGetBucketVersioning() = default;
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_versioning"; }
@@ -925,11 +925,11 @@ protected:
 public:
   RGWSetBucketVersioning() : versioning_status(VersioningNotChanged) {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) { return 0; }
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) { return 0; }
 
   void send_response() override = 0;
   const char* name() const override { return "set_bucket_versioning"; }
@@ -941,9 +941,9 @@ class RGWGetBucketWebsite : public RGWOp {
 public:
   RGWGetBucketWebsite() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_website"; }
@@ -958,11 +958,11 @@ protected:
 public:
   RGWSetBucketWebsite() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) { return 0; }
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) { return 0; }
 
   void send_response() override = 0;
   const char* name() const override { return "set_bucket_website"; }
@@ -974,9 +974,9 @@ class RGWDeleteBucketWebsite : public RGWOp {
 public:
   RGWDeleteBucketWebsite() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket_website"; }
@@ -989,9 +989,9 @@ protected:
   std::unique_ptr<rgw::sal::RGWBucket> bucket;
 
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "stat_bucket"; }
@@ -1025,16 +1025,16 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
     relaxed_region_enforcement =
 	s->cct->_conf.get_val<bool>("rgw_relaxed_region_enforcement");
   }
-  virtual int get_params(optional_yield y) { return 0; }
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "create_bucket"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_BUCKET; }
@@ -1048,9 +1048,9 @@ protected:
 public:
   RGWDeleteBucket() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket"; }
@@ -1192,28 +1192,28 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   /* this is for cases when copying data from other object */
   virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                                  RGWGetObj_Filter* cb,
                                  map<string, bufferlist>& attrs,
-                                 bufferlist* manifest_bl) {
+                                 bufferlist* manifest_bl, const jspan* const parent_span = nullptr) {
     *filter = nullptr;
     return 0;
   }
   virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-                                 rgw::putobj::DataProcessor *cb) {
+                                 rgw::putobj::DataProcessor *cb, const jspan* const parent_span = nullptr) {
     return 0;
   }
 
-  int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
-  int get_data(const off_t fst, const off_t lst, bufferlist& bl);
+  int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jspan* const parent_span = nullptr);
+  int get_data(const off_t fst, const off_t lst, bufferlist& bl, const jspan* const parent_span = nullptr);
 
-  virtual int get_params(optional_yield y) = 0;
-  virtual int get_data(bufferlist& bl) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
+  virtual int get_data(bufferlist& bl, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_obj"; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
@@ -1258,15 +1258,15 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
                                  rgw::putobj::DataProcessor *cb) {
     return 0;
   }
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   virtual int get_data(ceph::bufferlist& bl, bool& again) = 0;
   void send_response() override = 0;
   const char* name() const override { return "post_obj"; }
@@ -1299,11 +1299,11 @@ public:
     policy.set_ctx(s->cct);
   }
   int init_processing(optional_yield y) override;
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override { }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                    const set<string>& rmattr_names,
@@ -1338,11 +1338,11 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_bucket_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_BUCKET; }
@@ -1364,11 +1364,11 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_obj_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_OBJECT; }
@@ -1397,12 +1397,12 @@ public:
       bypass_governance_mode(false) {
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
-  int handle_slo_manifest(bufferlist& bl, optional_yield y);
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
+  int handle_slo_manifest(bufferlist& bl, optional_yield y, const jspan* const parent_span = nullptr);
 
-  virtual int get_params(optional_yield y) { return 0; }
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "delete_obj"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
@@ -1453,7 +1453,7 @@ protected:
 
   bool need_to_check_storage_class = false;
 
-  int init_common();
+  int init_common(const jspan* const parent_span = nullptr);
 
 public:
   RGWCopyObj() {
@@ -1484,18 +1484,18 @@ public:
     RGWOp::init(store, s, h);
     dest_policy.set_ctx(s->cct);
   }
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void progress_cb(off_t ofs);
 
   virtual int check_storage_class(const rgw_placement_rule& src_placement) {
     return 0;
   }
 
-  virtual int init_dest_policy() { return 0; }
-  virtual int get_params(optional_yield y) = 0;
-  virtual void send_partial_response(off_t ofs) {}
+  virtual int init_dest_policy(const jspan* const parent_span = nullptr) { return 0; }
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
+  virtual void send_partial_response(off_t ofs, const jspan* const parent_span = nullptr) {}
   void send_response() override = 0;
   const char* name() const override { return "copy_obj"; }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
@@ -1510,9 +1510,9 @@ protected:
 public:
   RGWGetACLs() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_acls"; }
@@ -1529,12 +1529,12 @@ public:
   RGWPutACLs() {}
   ~RGWPutACLs() override {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   virtual int get_policy_from_state(rgw::sal::RGWRadosStore *store, struct req_state *s, stringstream& ss) { return 0; }
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_acls"; }
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
@@ -1548,9 +1548,9 @@ public:
   RGWGetLC() { }
   ~RGWGetLC() override { }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield) override = 0;
+  void execute(optional_yield, const jspan* const parent_span = nullptr) override = 0;
 
   void send_response() override = 0;
   const char* name() const override { return "get_lifecycle"; }
@@ -1579,12 +1579,12 @@ public:
     cookie = buf;
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
 //  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_PUT_LC; }
@@ -1594,9 +1594,9 @@ public:
 class RGWDeleteLC : public RGWOp {
 public:
   RGWDeleteLC() = default;
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_lifecycle"; }
@@ -1610,8 +1610,8 @@ protected:
 public:
   RGWGetCORS() {}
 
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_cors"; }
@@ -1628,10 +1628,10 @@ public:
   RGWPutCORS() {}
   ~RGWPutCORS() override {}
 
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_cors"; }
   RGWOpType get_type() override { return RGW_OP_PUT_CORS; }
@@ -1644,8 +1644,8 @@ protected:
 public:
   RGWDeleteCORS() {}
 
-  int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_cors"; }
@@ -1663,9 +1663,9 @@ public:
                      req_hdrs(NULL), req_meth(NULL) {
   }
 
-  int verify_permission(optional_yield y) override {return 0;}
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override {return 0;}
   int validate_cors_request(RGWCORSConfiguration *cc);
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
   void send_response() override = 0;
   const char* name() const override { return "options_cors"; }
@@ -1680,9 +1680,9 @@ protected:
 public:
   RGWGetRequestPayment() : requester_pays(0) {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_request_payment"; }
@@ -1697,11 +1697,11 @@ protected:
 public:
  RGWSetRequestPayment() : requester_pays(false) {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) { return 0; }
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) { return 0; }
 
   void send_response() override = 0;
   const char* name() const override { return "set_request_payment"; }
@@ -1722,16 +1722,16 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "init_multipart"; }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
+  virtual int prepare_encryption(map<string, bufferlist>& attrs, const jspan* const parent_span = nullptr) { return 0; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
@@ -1746,12 +1746,12 @@ public:
   RGWCompleteMultipart() : serializer(nullptr) {}
   ~RGWCompleteMultipart() override { delete serializer; }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void complete() override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "complete_multipart"; }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
@@ -1762,9 +1762,9 @@ class RGWAbortMultipart : public RGWOp {
 public:
   RGWAbortMultipart() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   void send_response() override = 0;
   const char* name() const override { return "abort_multipart"; }
@@ -1792,11 +1792,11 @@ public:
     RGWOp::init(store, s, h);
     policy = RGWAccessControlPolicy(s->cct);
   }
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_multipart"; }
   RGWOpType get_type() override { return RGW_OP_LIST_MULTIPART; }
@@ -1840,11 +1840,11 @@ public:
     max_uploads = default_max;
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_bucket_multiparts"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET_MULTIPARTS; }
@@ -1857,11 +1857,11 @@ public:
   RGWGetCrossDomainPolicy() = default;
   ~RGWGetCrossDomainPolicy() override = default;
 
-  int verify_permission(optional_yield) override {
+  int verify_permission(optional_yield, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 
-  void execute(optional_yield) override {
+  void execute(optional_yield, const jspan* const parent_span = nullptr) override {
     op_ret = 0;
   }
 
@@ -1882,11 +1882,11 @@ public:
   RGWGetHealthCheck() = default;
   ~RGWGetHealthCheck() override = default;
 
-  int verify_permission(optional_yield) override {
+  int verify_permission(optional_yield, const jspan* const parent_span = nullptr) override {
     return 0;
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "get_health_check"; }
 
@@ -1913,11 +1913,11 @@ public:
     quiet = false;
     status_dumped = false;
   }
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   virtual void send_status() = 0;
   virtual void begin_response() = 0;
   virtual void send_partial_response(rgw_obj_key& key, bool delete_marker,
@@ -1933,15 +1933,15 @@ public:
   RGWInfo() = default;
   ~RGWInfo() override = default;
 
-  int verify_permission(optional_yield) override { return 0; }
+  int verify_permission(optional_yield, const jspan* const parent_span = nullptr) override { return 0; }
   const char* name() const override { return "get info"; }
   RGWOpType get_type() override { return RGW_OP_GET_INFO; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y);
+extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y, const jspan* const parent_span = nullptr);
 extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-				     bool prefetch_data, optional_yield y);
+				     bool prefetch_data, optional_yield y, const jspan* const parent_span = nullptr);
 extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
 extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
@@ -2136,11 +2136,11 @@ public:
     attrs.emplace(std::move(key), std::move(bl));
   }
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   void send_response() override = 0;
   const char* name() const override { return "set_attrs"; }
   RGWOpType get_type() override { return RGW_OP_SET_ATTRS; }
@@ -2159,11 +2159,11 @@ public:
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
-  int verify_permission(optional_yield) override {
+  int verify_permission(optional_yield, const jspan* const parent_span = nullptr) override {
     return check_caps(s->user->get_info().caps);
   }
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "get_obj_layout"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_OBJ_LAYOUT; }
@@ -2177,12 +2177,12 @@ public:
   ~RGWPutBucketPolicy() {
   }
   void send_response() override;
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
-  void execute(optional_yield y) override;
-  int get_params(optional_yield y);
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr);
   const char* name() const override { return "put_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_PUT_BUCKET_POLICY;
@@ -2194,11 +2194,11 @@ class RGWGetBucketPolicy : public RGWOp {
 public:
   RGWGetBucketPolicy() = default;
   void send_response() override;
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   uint32_t op_mask() override {
     return RGW_OP_TYPE_READ;
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_GET_BUCKET_POLICY;
@@ -2209,12 +2209,12 @@ class RGWDeleteBucketPolicy : public RGWOp {
 public:
   RGWDeleteBucketPolicy() = default;
   void send_response() override;
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
-  void execute(optional_yield y) override;
-  int get_params(optional_yield y);
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr);
   const char* name() const override { return "delete_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_DELETE_BUCKET_POLICY;
@@ -2229,11 +2229,11 @@ protected:
 public:
   RGWPutBucketObjectLock() = default;
   ~RGWPutBucketObjectLock() {}
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "put_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -2241,9 +2241,9 @@ public:
 
 class RGWGetBucketObjectLock : public RGWOp {
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
@@ -2258,11 +2258,11 @@ protected:
   bool bypass_governance_mode;
 public:
   RGWPutObjRetention():bypass_perm(true), bypass_governance_mode(false) {}
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "put_obj_retention"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_RETENTION; }
@@ -2272,9 +2272,9 @@ class RGWGetObjRetention : public RGWOp {
 protected:
   RGWObjectRetention obj_retention;
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_obj_retention"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
@@ -2286,11 +2286,11 @@ protected:
   bufferlist data;
   RGWObjectLegalHold obj_legal_hold;
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "put_obj_legal_hold"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_LEGAL_HOLD; }
@@ -2300,9 +2300,9 @@ class RGWGetObjLegalHold : public RGWOp {
 protected:
   RGWObjectLegalHold obj_legal_hold;
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_obj_legal_hold"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
@@ -2316,11 +2316,11 @@ protected:
 public:
   RGWConfigBucketMetaSearch() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
-  virtual int get_params(optional_yield y) = 0;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
   const char* name() const override { return "config_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -2330,9 +2330,9 @@ class RGWGetBucketMetaSearch : public RGWOp {
 public:
   RGWGetBucketMetaSearch() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield) override {}
+  void execute(optional_yield, const jspan* const parent_span = nullptr) override {}
 
   const char* name() const override { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_META_SEARCH; }
@@ -2343,9 +2343,9 @@ class RGWDelBucketMetaSearch : public RGWOp {
 public:
   RGWDelBucketMetaSearch() {}
 
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
 
   const char* name() const override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
@@ -2361,10 +2361,10 @@ public:
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
   }
-  int verify_permission(optional_yield) override {return 0;}
+  int verify_permission(optional_yield, const jspan* const parent_span = nullptr) override {return 0;}
   virtual void send_response() override = 0;
-  virtual int get_params(optional_yield y) = 0;
-  void execute(optional_yield y) override;
+  virtual int get_params(optional_yield y, const jspan* const parent_span = nullptr) = 0;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "get_cluster_stat"; }
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
@@ -2373,11 +2373,11 @@ class RGWGetBucketPolicyStatus : public RGWOp {
 protected:
   bool isPublic {false};
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_policy_status"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_POLICY_STATUS; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2386,12 +2386,12 @@ protected:
   bufferlist data;
   PublicAccessBlockConfiguration access_conf;
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "put_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  int get_params(optional_yield y);
-  void execute(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr);
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2399,12 +2399,12 @@ class RGWGetBucketPublicAccessBlock : public RGWOp {
 protected:
   PublicAccessBlockConfiguration access_conf;
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-  int get_params(optional_yield y);
-  void execute(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr);
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2412,12 +2412,12 @@ class RGWDeleteBucketPublicAccessBlock : public RGWOp {
 protected:
   PublicAccessBlockConfiguration access_conf;
 public:
-  int verify_permission(optional_yield y) override;
+  int verify_permission(optional_yield y, const jspan* const parent_span = nullptr) override;
   const char* name() const override { return "delete_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  int get_params(optional_yield y);
-  void execute(optional_yield y) override;
+  int get_params(optional_yield y, const jspan* const parent_span = nullptr);
+  void execute(optional_yield y, const jspan* const parent_span = nullptr) override;
   void send_response() override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };

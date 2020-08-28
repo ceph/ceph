@@ -159,8 +159,10 @@ int RGWGetObj_ObjStore_S3Website::send_response_data_error(optional_yield y)
   return RGWGetObj_ObjStore_S3::send_response_data_error(y);
 }
 
-int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
+int RGWGetObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
   // for multisite sync requests, only read the slo manifest itself, rather than
   // all of the data from its parts. the parts will sync as separate objects
   skip_manifest = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-manifest");
@@ -176,6 +178,8 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
 
 int RGWGetObj_ObjStore_S3::send_response_data_error(optional_yield y)
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   bufferlist bl;
   return send_response_data(bl, 0 , 0);
 }
@@ -214,6 +218,8 @@ inline bool str_has_cntrl(const char* s) {
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   const char *content_type = NULL;
   string content_type_str;
   map<string, string> response_attrs;
@@ -501,6 +507,9 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
 
 void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
@@ -525,8 +534,10 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 }
 
 
-int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
+int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
   RGWXMLParser parser;
 
   if (!parser.init()){
@@ -568,6 +579,8 @@ int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
 
 void RGWPutObjTags_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -578,6 +591,9 @@ void RGWPutObjTags_ObjStore_S3::send_response()
 
 void RGWDeleteObjTags_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   int r = op_ret;
   if (r == -ENOENT)
     r = 0;
@@ -591,6 +607,9 @@ void RGWDeleteObjTags_ObjStore_S3::send_response()
 
 void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -618,8 +637,11 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
   }
 }
 
-int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
+int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   RGWXMLParser parser;
 
   if (!parser.init()){
@@ -667,6 +689,8 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
 
 void RGWPutBucketTags_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -676,6 +700,9 @@ void RGWPutBucketTags_ObjStore_S3::send_response()
 
 void RGWDeleteBucketTags_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1157,6 +1184,9 @@ struct ReplicationConfiguration {
 
 void RGWGetBucketReplication_ObjStore_S3::send_response_data()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1186,8 +1216,11 @@ void RGWGetBucketReplication_ObjStore_S3::send_response_data()
   }
 }
 
-int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y)
+int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   RGWXMLParser parser;
 
   if (!parser.init()){
@@ -1232,6 +1265,8 @@ int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y)
 
 void RGWPutBucketReplication_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1247,6 +1282,8 @@ void RGWDeleteBucketReplication_ObjStore_S3::update_sync_policy(rgw_sync_policy_
 
 void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1256,6 +1293,9 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1274,6 +1314,9 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 
 void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (!sent_data)
     return;
 
@@ -1288,6 +1331,9 @@ void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buc
 
 void RGWListBuckets_ObjStore_S3::send_response_end()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (sent_data) {
     s->formatter->close_section();
     list_all_buckets_end(s);
@@ -1295,7 +1341,7 @@ void RGWListBuckets_ObjStore_S3::send_response_end()
   }
 }
 
-int RGWGetUsage_ObjStore_S3::get_params(optional_yield y)
+int RGWGetUsage_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
   start_date = s->info.args.get("start-date");
   end_date = s->info.args.get("end-date");
@@ -1437,8 +1483,11 @@ void RGWGetUsage_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWListBucket_ObjStore_S3::get_common_params()
+int RGWListBucket_ObjStore_S3::get_common_params(const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
 
@@ -1468,9 +1517,12 @@ int RGWListBucket_ObjStore_S3::get_common_params()
   return 0;
 }
 
-int RGWListBucket_ObjStore_S3::get_params(optional_yield y)
+int RGWListBucket_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
-  int ret = get_common_params();
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
+  int ret = get_common_params(span.get());
   if (ret < 0) {
     return ret;
   }
@@ -1483,7 +1535,7 @@ int RGWListBucket_ObjStore_S3::get_params(optional_yield y)
   return 0;
 }
 
-int RGWListBucket_ObjStore_S3v2::get_params(optional_yield y)
+int RGWListBucket_ObjStore_S3v2::get_params(optional_yield y, const jspan* const parent_span)
 {
 int ret = get_common_params();
 if (ret < 0) {
@@ -1500,8 +1552,11 @@ if(!continuation_token_exist) {
 return 0;
 }
 
-void RGWListBucket_ObjStore_S3::send_common_versioned_response()
+void RGWListBucket_ObjStore_S3::send_common_versioned_response(const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (!s->bucket_tenant.empty()) {
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
@@ -1530,14 +1585,17 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
     }
   }
 
-void RGWListBucket_ObjStore_S3::send_versioned_response()
+void RGWListBucket_ObjStore_S3::send_versioned_response(const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
-  RGWListBucket_ObjStore_S3::send_common_versioned_response();
+  RGWListBucket_ObjStore_S3::send_common_versioned_response(span.get());
   s->formatter->dump_string("KeyMarker", marker.name);
   s->formatter->dump_string("VersionIdMarker", marker.instance);
   if (is_truncated && !next_marker.empty()) {
@@ -1610,8 +1668,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 }
 
 
-void RGWListBucket_ObjStore_S3::send_common_response()
+void RGWListBucket_ObjStore_S3::send_common_response(const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (!s->bucket_tenant.empty()) {
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
@@ -1641,6 +1702,8 @@ void RGWListBucket_ObjStore_S3::send_common_response()
 
 void RGWListBucket_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret < 0) {
     set_req_state_err(s, op_ret);
   }
@@ -1903,6 +1966,9 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
 
 void RGWGetBucketVersioning_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1953,8 +2019,11 @@ struct ver_config_status {
   }
 };
 
-int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y)
+int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   int r = 0;
   bufferlist data;
   std::tie(r, data) =
@@ -2008,7 +2077,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y)
         mfa_status = true;
         break;
       default:
-        ldpp_dout(this, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
+        ldpp_dout(this, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(const jspan* const parent_span): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
         r = -EIO;
     }
   } else if (status_conf.retcode < 0) {
@@ -2019,14 +2088,19 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y)
 
 void RGWSetBucketVersioning_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
 }
 
-int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
+int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
   int r = 0;
@@ -2101,6 +2175,8 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
 
 void RGWSetBucketWebsite_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -2109,6 +2185,9 @@ void RGWSetBucketWebsite_ObjStore_S3::send_response()
 
 void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret == 0) {
     op_ret = STATUS_NO_CONTENT;
   }
@@ -2119,6 +2198,9 @@ void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
 
 void RGWGetBucketWebsite_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -2145,6 +2227,9 @@ static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucke
 
 void RGWStatBucket_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret >= 0) {
     dump_bucket_metadata(s, bucket.get());
   }
@@ -2219,8 +2304,11 @@ public:
   }
 };
 
-int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
+int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
@@ -2295,6 +2383,8 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
 
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret == -ERR_BUCKET_EXISTS)
     op_ret = 0;
   if (op_ret)
@@ -2319,6 +2409,9 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;
@@ -2341,8 +2434,11 @@ static inline void map_qs_metadata(struct req_state* s)
   }
 }
 
-int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
+int RGWPutObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateeway", "s3");
+
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
@@ -2442,8 +2538,11 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
   return RGWPutObj_ObjStore::get_params(y);
 }
 
-int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
+int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   const int ret = RGWPutObj_ObjStore::get_data(bl);
   if (ret == 0) {
     const int ret_auth = do_aws4_auth_completion();
@@ -2468,6 +2567,8 @@ static int get_success_retcode(int code)
 
 void RGWPutObj_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret) {
     set_req_state_err(s, op_ret);
     dump_errno(s);
@@ -2549,8 +2650,10 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     std::unique_ptr<RGWGetObj_Filter>* filter,
     RGWGetObj_Filter* cb,
     map<string, bufferlist>& attrs,
-    bufferlist* manifest_bl)
+    bufferlist* manifest_bl, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   std::map<std::string, std::string> crypt_http_responses_unused;
 
   int res = 0;
@@ -2575,8 +2678,10 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-    rgw::putobj::DataProcessor *cb)
+    rgw::putobj::DataProcessor *cb, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   int res = 0;
   if (!multipart_upload_id.empty()) {
     RGWMPObj mp(s->object->get_name(), multipart_upload_id);
@@ -2631,7 +2736,7 @@ std::string RGWPostObj_ObjStore_S3::get_current_content_type() const
   return content_type;
 }
 
-int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
+int RGWPostObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
   op_ret = RGWPostObj_ObjStore::get_params(y);
   if (op_ret < 0) {
@@ -3139,8 +3244,11 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   return res;
 }
 
-int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
+int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
 
   if (s->system_request) {
@@ -3169,6 +3277,8 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   int r = op_ret;
   if (r == -ENOENT)
     r = 0;
@@ -3184,8 +3294,10 @@ void RGWDeleteObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-int RGWCopyObj_ObjStore_S3::init_dest_policy()
+int RGWCopyObj_ObjStore_S3::init_dest_policy(const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
   /* build a policy for the target object */
@@ -3198,8 +3310,11 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
   return 0;
 }
 
-int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
+int RGWCopyObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
@@ -3259,8 +3374,11 @@ int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_pl
   return 0;
 }
 
-void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
+void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (! sent_header) {
     if (op_ret)
     set_req_state_err(s, op_ret);
@@ -3285,6 +3403,8 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 
 void RGWCopyObj_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (!sent_header)
     send_partial_response(0);
 
@@ -3300,6 +3420,9 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
 void RGWGetACLs_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3309,8 +3432,11 @@ void RGWGetACLs_ObjStore_S3::send_response()
   dump_body(s, acls);
 }
 
-int RGWPutACLs_ObjStore_S3::get_params(optional_yield y)
+int RGWPutACLs_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   int ret =  RGWPutACLs_ObjStore::get_params(y);
   if (ret >= 0) {
     const int ret_auth = do_aws4_auth_completion();
@@ -3353,6 +3479,8 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store
 
 void RGWPutACLs_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3360,7 +3488,7 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-void RGWGetLC_ObjStore_S3::execute(optional_yield y)
+void RGWGetLC_ObjStore_S3::execute(optional_yield y, const jspan* const parent_span)
 {
   config.set_ctx(s->cct);
 
@@ -3423,6 +3551,9 @@ void RGWDeleteLC_ObjStore_S3::send_response()
 
 void RGWGetCORS_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   if (op_ret) {
     if (op_ret == -ENOENT)
       set_req_state_err(s, ERR_NO_SUCH_CORS_CONFIGURATION);
@@ -3444,8 +3575,11 @@ void RGWGetCORS_ObjStore_S3::send_response()
   }
 }
 
-int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
+int RGWPutCORS_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
+
   RGWCORSXMLParser_S3 parser(s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
@@ -3514,6 +3648,8 @@ int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
 
 void RGWPutCORS_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3523,6 +3659,9 @@ void RGWPutCORS_ObjStore_S3::send_response()
 
 void RGWDeleteCORS_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   int r = op_ret;
   if (!r || r == -ENOENT)
     r = STATUS_NO_CONTENT;
@@ -3601,7 +3740,7 @@ public:
   }
 };
 
-int RGWSetRequestPayment_ObjStore_S3::get_params(optional_yield y)
+int RGWSetRequestPayment_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
@@ -3637,8 +3776,11 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
   end_header(s);
 }
 
-int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
+int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   op_ret = create_s3_policy(s, store, s3policy, s->owner);
   if (op_ret < 0)
@@ -3651,6 +3793,8 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
 
 void RGWInitMultipart_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3677,15 +3821,20 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   }
 }
 
-int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
+int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+
   int res = 0;
   res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
   return res;
 }
 
-int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
+int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+
   int ret = RGWCompleteMultipart_ObjStore::get_params(y);
   if (ret < 0) {
     return ret;
@@ -3698,6 +3847,8 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
 
 void RGWCompleteMultipart_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3732,6 +3883,9 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
 
 void RGWAbortMultipart_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   int r = op_ret;
   if (!r)
     r = STATUS_NO_CONTENT;
@@ -3743,6 +3897,9 @@ void RGWAbortMultipart_ObjStore_S3::send_response()
 
 void RGWListMultipart_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3795,6 +3952,9 @@ void RGWListMultipart_ObjStore_S3::send_response()
 
 void RGWListBucketMultiparts_ObjStore_S3::send_response()
 {
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "s3");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+
   if (op_ret < 0)
     set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -3863,7 +4023,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWDeleteMultiObj_ObjStore_S3::get_params(optional_yield y)
+int RGWDeleteMultiObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
   int ret = RGWDeleteMultiObj_ObjStore::get_params(y);
   if (ret < 0) {
@@ -3980,7 +4140,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   rgw_flush_formatter(s, &f);
 }
 
-int RGWConfigBucketMetaSearch_ObjStore_S3::get_params(optional_yield y)
+int RGWConfigBucketMetaSearch_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
   auto iter = s->info.x_meta_map.find("x-amz-meta-search");
   if (iter == s->info.x_meta_map.end()) {
@@ -4114,7 +4274,7 @@ void RGWGetBucketObjectLock_ObjStore_S3::send_response()
 }
 
 
-int RGWPutObjRetention_ObjStore_S3::get_params(optional_yield y)
+int RGWPutObjRetention_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
   const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
   if (bypass_gov_header) {
@@ -5951,7 +6111,7 @@ RGWSelectObj_ObjStore_S3::~RGWSelectObj_ObjStore_S3()
 {
 }
 
-int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
+int RGWSelectObj_ObjStore_S3::get_params(optional_yield y, const jspan* const parent_span)
 {
 
   //retrieve s3-select query from payload

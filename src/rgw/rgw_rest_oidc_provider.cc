@@ -20,7 +20,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRestOIDCProvider::verify_permission(optional_yield y)
+int RGWRestOIDCProvider::verify_permission(optional_yield y, const jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -69,7 +69,7 @@ int RGWRestOIDCProviderWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("oidc-provider", RGW_CAP_WRITE);
 }
 
-int RGWCreateOIDCProvider::verify_permission(optional_yield y)
+int RGWCreateOIDCProvider::verify_permission(optional_yield y, const jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -114,7 +114,7 @@ int RGWCreateOIDCProvider::get_params()
   return 0;
 }
 
-void RGWCreateOIDCProvider::execute(optional_yield y)
+void RGWCreateOIDCProvider::execute(optional_yield y, const jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -138,7 +138,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
 }
 
-void RGWDeleteOIDCProvider::execute(optional_yield y)
+void RGWDeleteOIDCProvider::execute(optional_yield y, const jspan* const parent_span)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
   op_ret = provider.delete_obj(y);
@@ -156,7 +156,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
   }
 }
 
-void RGWGetOIDCProvider::execute(optional_yield y)
+void RGWGetOIDCProvider::execute(optional_yield y, const jspan* const parent_span)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
   op_ret = provider.get();
@@ -177,7 +177,7 @@ void RGWGetOIDCProvider::execute(optional_yield y)
   }
 }
 
-int RGWListOIDCProviders::verify_permission(optional_yield y)
+int RGWListOIDCProviders::verify_permission(optional_yield y, const jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -197,7 +197,7 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWListOIDCProviders::execute(optional_yield y)
+void RGWListOIDCProviders::execute(optional_yield y, const jspan* const parent_span)
 {
   vector<RGWOIDCProvider> result;
   op_ret = RGWOIDCProvider::get_providers(store->getRados(), s->user->get_tenant(), result);

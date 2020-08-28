@@ -30,7 +30,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-void RGWOp_ZoneGroupMap_Get::execute(optional_yield y) {
+void RGWOp_ZoneGroupMap_Get::execute(optional_yield y, const jspan* const parent_span) {
   op_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj, y);
   if (op_ret < 0) {
     dout(5) << "failed to read zone_group map" << dendl;
