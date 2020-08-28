@@ -241,7 +241,7 @@ typedef void * rados_object_list_cursor;
  * The item populated by rados_object_list in
  * the results array.
  */
-typedef struct rados_object_list_item {
+typedef struct {
 
   /// oid length
   size_t oid_length;
