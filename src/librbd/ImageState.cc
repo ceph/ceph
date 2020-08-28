@@ -284,7 +284,8 @@ public:
 
   void notify_quiesce(Context *on_finish) {
     std::lock_guard locker{m_lock};
-    if (m_on_notify != nullptr) {
+    if (m_blocked) {
+      ldout(m_cct, 20) << "QuiesceWatchers::" << __func__ << ": queue" << dendl;
       m_pending_notify.push_back(on_finish);
       return;
     }
@@ -304,11 +305,18 @@ public:
       std::lock_guard locker{m_lock};
       ceph_assert(m_on_notify != nullptr);
       ceph_assert(m_handle_quiesce_cnt > 0);
+      ceph_assert(m_blocked);
 
       m_handle_quiesce_cnt--;
 
       if (m_handle_quiesce_cnt > 0) {
+        // TOFO: r should be saved
         return;
+      }
+
+      if (r < 0) {
+        // TODO: fix for multiple watchers case
+        m_blocked = false;
       }
 
       std::swap(on_notify, m_on_notify);
@@ -330,6 +338,7 @@ private:
   std::list<Context *> m_pending_notify;
   std::map<uint64_t, Context*> m_pending_unregister;
   uint64_t m_handle_quiesce_cnt = 0;
+  bool m_blocked = false;
 
   void notify(EventType event_type, Context *on_finish) {
     ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -343,7 +352,13 @@ private:
                      << event_type << dendl;
 
     Context *ctx = nullptr;
-    if (event_type == UNQUIESCE) {
+    if (event_type == QUIESCE) {
+      ceph_assert(!m_blocked);
+      m_blocked = true;
+    } else {
+      ceph_assert(event_type == UNQUIESCE);
+      ceph_assert(m_blocked);
+
       ctx = create_async_context_callback(
         m_work_queue, create_context_callback<
           QuiesceWatchers, &QuiesceWatchers::handle_notify_unquiesce>(this));
@@ -408,6 +423,9 @@ private:
 
     Context *on_notify = nullptr;
     std::swap(on_notify, m_on_notify);
+
+    ceph_assert(m_blocked);
+    m_blocked = false;
 
     if (!m_pending_notify.empty()) {
       auto on_finish = m_pending_notify.front();
