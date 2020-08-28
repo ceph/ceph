@@ -9,8 +9,8 @@
 #include "include/Context.h"
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "test/immutable_object_cache/MockCacheDaemon.h"
-#include "librbd/io/Utils.h"
 #include "librbd/cache/ParentCacheObjectDispatch.h"
+#include "librbd/plugin/Api.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/mock/MockImageCtx.h"
 
@@ -27,7 +27,7 @@ struct MockParentImageCacheImageCtx : public MockImageCtx {
   ~MockParentImageCacheImageCtx() {}
 };
 
-}; // anonymous namespace
+} // anonymous namespace
 
 namespace cache {
 
@@ -36,42 +36,20 @@ struct TypeTraits<MockParentImageCacheImageCtx> {
   typedef ceph::immutable_obj_cache::MockCacheClient CacheClient;
 };
 
-}; // namespace cache
+} // namespace cache
 
-namespace io {
-namespace util {
+namespace plugin {
 
-namespace {
-
-struct Mock {
-  static Mock* s_instance;
-
-  Mock() {
-    s_instance = this;
-  }
-
-  MOCK_METHOD7(read_parent,
-               void(librbd::MockParentImageCacheImageCtx *, uint64_t,
-                    const io::Extents &, librados::snap_t, const ZTracer::Trace &,
-                    ceph::bufferlist*, Context*));
+template <>
+struct Api<MockParentImageCacheImageCtx> {
+  MOCK_METHOD7(read_parent, void(MockParentImageCacheImageCtx*, uint64_t,
+                                 const librbd::io::Extents &, librados::snap_t,
+                                 const ZTracer::Trace &, ceph::bufferlist*,
+                                 Context*));
 };
 
-Mock *Mock::s_instance = nullptr;
-
-} // anonymous namespace
-
-template<> void read_parent(
-    librbd::MockParentImageCacheImageCtx *image_ctx, uint64_t object_no,
-    const io::Extents &extents, librados::snap_t snap_id,
-    const ZTracer::Trace &trace, ceph::bufferlist* data, Context* on_finish) {
-  Mock::s_instance->read_parent(image_ctx, object_no, extents, snap_id, trace,
-                                data, on_finish);
-}
-
-} // namespace util
-} // namespace io
-
-}; // namespace librbd
+} // namespace plugin
+} // namespace librbd
 
 #include "librbd/cache/ParentCacheObjectDispatch.cc"
 template class librbd::cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx>;
@@ -89,7 +67,7 @@ using ::testing::WithArgs;
 class TestMockParentCacheObjectDispatch : public TestMockFixture {
 public :
   typedef cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx> MockParentImageCache;
-  typedef io::util::Mock MockUtils;
+  typedef plugin::Api<MockParentImageCacheImageCtx> MockPluginApi;
 
   // ====== mock cache client ====
   void expect_cache_run(MockParentImageCache& mparent_image_cache, bool ret_val) {
@@ -135,10 +113,10 @@ public :
       })));
   }
 
-  void expect_read_parent(MockUtils &mock_utils, uint64_t object_no,
+  void expect_read_parent(MockPluginApi &mock_plugin_api, uint64_t object_no,
                           const io::Extents &extents, librados::snap_t snap_id,
                           int r) {
-    EXPECT_CALL(mock_utils,
+    EXPECT_CALL(mock_plugin_api,
                 read_parent(_, object_no, extents, snap_id, _, _, _))
       .WillOnce(WithArg<6>(CompleteContext(r, static_cast<asio::ContextWQ*>(nullptr))));
   }
@@ -189,7 +167,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_initialization_success) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.child = &mock_image_ctx;
 
-  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
+  MockPluginApi mock_plugin_api;
+  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
+                                                              mock_plugin_api);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond cond;
@@ -226,7 +206,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_initialization_fail_at_connect) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.child = &mock_image_ctx;
 
-  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
+  MockPluginApi mock_plugin_api;
+  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
+                                                              mock_plugin_api);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond cond;
@@ -260,7 +242,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_initialization_fail_at_register) 
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.child = &mock_image_ctx;
 
-  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
+  MockPluginApi mock_plugin_api;
+  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
+                                                              mock_plugin_api);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond cond;
@@ -297,7 +281,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.child = &mock_image_ctx;
 
-  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
+  MockPluginApi mock_plugin_api;
+  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
+                                                              mock_plugin_api);
 
   std::string temp_oid("12345");
   ceph::bufferlist temp_bl;
@@ -337,7 +323,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.child = &mock_image_ctx;
 
-  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
+  MockPluginApi mock_plugin_api;
+  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
+                                                              mock_plugin_api);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond conn_cond;
@@ -386,7 +374,9 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.child = &mock_image_ctx;
 
-  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
+  MockPluginApi mock_plugin_api;
+  auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx,
+                                                              mock_plugin_api);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond conn_cond;
@@ -417,8 +407,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_read_dne) {
 
   expect_cache_lookup_object(*mock_parent_image_cache, "");
 
-  MockUtils mock_utils;
-  expect_read_parent(mock_utils, 0, {{0, 4096}}, CEPH_NOSNAP, 0);
+  expect_read_parent(mock_plugin_api, 0, {{0, 4096}}, CEPH_NOSNAP, 0);
 
   C_SaferCond on_dispatched;
   io::DispatchResult dispatch_result;

@@ -5,6 +5,7 @@
 #include "include/Context.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/plugin/Api.h"
 #include <boost/tokenizer.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -15,7 +16,12 @@
 namespace librbd {
 
 template <typename I>
-PluginRegistry<I>::PluginRegistry(I* image_ctx) : m_image_ctx(image_ctx) {
+PluginRegistry<I>::PluginRegistry(I* image_ctx)
+  : m_image_ctx(image_ctx), m_plugin_api(std::make_unique<plugin::Api<I>>()) {
+}
+
+template <typename I>
+PluginRegistry<I>::~PluginRegistry() {
 }
 
 template <typename I>
@@ -35,13 +41,13 @@ void PluginRegistry<I>::init(const std::string& plugins, Context* on_finish) {
       plugin_registry->get_with_load("librbd", "librbd_" + token));
     if (plugin == nullptr) {
       lderr(cct) << "failed to load plugin: " << token << dendl;
-      ctx->complete(-ENOENT);
+      ctx->complete(-ENOSYS);
       break;
     }
 
     m_plugin_hook_points.emplace_back();
     auto hook_points = &m_plugin_hook_points.back();
-    plugin->init(m_image_ctx, hook_points, ctx);
+    plugin->init(m_image_ctx, *m_plugin_api, hook_points, ctx);
   }
 
   gather_ctx->activate();
