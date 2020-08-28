@@ -11821,8 +11821,12 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
   }
 
   r = 0;
-  for (const auto& p : in->xattrs) {
-    size_t this_len = p.first.length() + 1;
+  for ([[maybe_unused]] const auto &[xattr_name, xattr_value_bl] : in->xattrs) {
+    if (xattr_name.rfind("ceph.", 0) == 0) {
+      continue;
+    }
+
+    size_t this_len = xattr_name.length() + 1;
     r += this_len;
     if (len_only)
       continue;
@@ -11832,7 +11836,7 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
       goto out;
     }
 
-    memcpy(name, p.first.c_str(), this_len);
+    memcpy(name, xattr_name.c_str(), this_len);
     name += this_len;
     size -= this_len;
   }
