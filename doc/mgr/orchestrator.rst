@@ -80,20 +80,20 @@ Many hosts can be added at once using
 
     ---
     service_type: host
-    addr: node-00
+    address: node-00
     hostname: node-00
     labels:
     - example1
     - example2
     ---
     service_type: host
-    addr: node-01
+    address: node-01
     hostname: node-01
     labels:
     - grafana
     ---
     service_type: host
-    addr: node-02
+    address: node-02
     hostname: node-02
 
 This can be combined with service specifications (below) to create a cluster spec file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
