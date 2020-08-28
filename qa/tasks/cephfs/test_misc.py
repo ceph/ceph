@@ -12,6 +12,22 @@ log = logging.getLogger(__name__)
 class TestMisc(CephFSTestCase):
     CLIENTS_REQUIRED = 2
 
+    def test_statfs_on_deleted_fs(self):
+        """
+        That statfs does not cause monitors to SIGSEGV after fs deletion.
+        """
+
+        self.mount_b.umount_wait()
+        self.mount_a.run_shell_payload("stat -f .")
+        self.fs.delete_all_filesystems()
+        # This will hang either way, run in background.
+        p = self.mount_a.run_shell_payload("stat -f .", wait=False, timeout=60, check_status=False)
+        time.sleep(30)
+        self.assertFalse(p.finished)
+        # the process is stuck in uninterruptible sleep, just kill the mount
+        self.mount_a.umount_wait(force=True)
+        p.wait()
+
     def test_getattr_caps(self):
         """
         Check if MDS recognizes the 'mask' parameter of open request.
