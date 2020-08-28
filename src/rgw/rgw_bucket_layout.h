@@ -66,7 +66,6 @@ void decode(bucket_index_layout& l, bufferlist::const_iterator& bl);
 struct bucket_index_layout_generation {
   uint64_t gen = 0;
   bucket_index_layout layout;
-
 };
 
 void encode(const bucket_index_layout_generation& l, bufferlist& bl, uint64_t f=0);
