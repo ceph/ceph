@@ -401,6 +401,7 @@ std::vector<Option> get_global_options() {
     Option("cluster_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service("osd")
     .set_flag(Option::FLAG_STARTUP)
+    .set_flag(Option::FLAG_MINIMAL_CONF)
     .add_tag("network")
     .set_description("Network(s) from which to choose a cluster address to bind to"),
 
