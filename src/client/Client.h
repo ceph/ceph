@@ -1282,6 +1282,7 @@ private:
   size_t _vxattrcb_dir_rentries(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rfiles(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rsnaps(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
 
