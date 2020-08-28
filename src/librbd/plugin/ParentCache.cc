@@ -33,7 +33,7 @@ namespace librbd {
 namespace plugin {
 
 template <typename I>
-void ParentCache<I>::init(I* image_ctx, HookPoints* hook_points,
+void ParentCache<I>::init(I* image_ctx, Api<I>& api, HookPoints* hook_points,
                           Context* on_finish) {
   m_image_ctx = image_ctx;
   bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
@@ -46,7 +46,8 @@ void ParentCache<I>::init(I* image_ctx, HookPoints* hook_points,
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
+  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(
+    m_image_ctx, api);
   on_finish = new LambdaContext([this, on_finish, parent_cache](int r) {
       if (r < 0) {
         // the object dispatcher will handle cleanup if successfully initialized
