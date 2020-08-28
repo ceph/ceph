@@ -99,6 +99,11 @@ breathe_projects_source = {
              ["rados_types.h", "librados.h"])
 }
 breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp': 'cxx'}
+breathe_doxygen_config_options = {
+    'EXPAND_ONLY_PREDEF': 'YES',
+    'MACRO_EXPANSION': 'YES',
+    'PREDEFINED': 'CEPH_RADOS_API= '
+}
 
 # the docs are rendered with github links pointing to master. the javascript
 # snippet in _static/ceph.js rewrites the edit links when a page is loaded, to
