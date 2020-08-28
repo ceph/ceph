@@ -138,6 +138,7 @@ void handle_connection(boost::asio::io_context& context,
                        boost::system::error_code& ec,
                        spawn::yield_context yield)
 {
+  init_jager();
   // limit header to 4k, since we read it all into a single flat_buffer
   static constexpr size_t header_limit = 4096;
   // don't impose a limit on the body, since we read it in pieces

@@ -5,7 +5,7 @@
  * All operations via the rados gateway are carried out by
  * small classes known as RGWOps. This class contains a req_state
  * and each possible command is a subclass of this with a defined
- * execute() method that does whatever the subclass name implies.
+ * execute(const Span& parent_span = nullptr) method that does whatever the subclass name implies.
  * These subclasses must be further subclassed (by interface type)
  * to provide additional virtual methods such as send_response or get_params.
  */
@@ -85,8 +85,8 @@ protected:
   rgw::sal::RGWRadosStore* store{nullptr};
   struct req_state *s{nullptr};
 
-  int do_init_permissions();
-  int do_read_permissions(RGWOp* op, bool only_bucket);
+  int do_init_permissions(const Span& parent_span = nullptr);
+  int do_read_permissions(RGWOp* op, bool only_bucket, const Span& parent_span = nullptr);
 
 public:
   RGWHandler() {}
@@ -96,7 +96,7 @@ public:
                    struct req_state* _s,
                    rgw::io::BasicClient* cio);
 
-  virtual int init_permissions(RGWOp*) {
+  virtual int init_permissions(RGWOp*, const Span& parent_span = nullptr) {
     return 0;
   }
 
@@ -105,7 +105,7 @@ public:
     return 0;
   }
 
-  virtual int read_permissions(RGWOp* op) = 0;
+  virtual int read_permissions(RGWOp* op, const Span& parent_span = nullptr) = 0;
   virtual int authorize(const DoutPrefixProvider* dpp) = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
@@ -137,7 +137,7 @@ protected:
   int op_ret;
   int do_aws4_auth_completion();
 
-  virtual int init_quota();
+  virtual int init_quota(const Span& parent_span = nullptr);
 
 public:
   RGWOp()
@@ -152,9 +152,10 @@ public:
 
   int get_ret() const { return op_ret; }
 
-  virtual int init_processing() {
+  virtual int init_processing(const Span& parent_span = nullptr) {
+    Span span = child_span(__PRETTY_FUNCTION__, parent_span);
     if (dialect_handler->supports_quota()) {
-      op_ret = init_quota();
+      op_ret = init_quota(span);
       if (op_ret < 0)
         return op_ret;
     }
@@ -167,11 +168,11 @@ public:
     this->s = s;
     this->dialect_handler = dialect_handler;
   }
-  int read_bucket_cors();
+  int read_bucket_cors(const Span& parent_span = nullptr);
   bool generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age);
 
   virtual int verify_params() { return 0; }
-  virtual bool prefetch_data() { return false; }
+  virtual bool prefetch_data(const Span& parent_span = nullptr) { return false; }
 
   /* Authenticate requester -- verify its identity.
    *
@@ -186,13 +187,13 @@ public:
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
     return dialect_handler->authorize(this);
   }
-  virtual int verify_permission() = 0;
-  virtual int verify_op_mask();
-  virtual void pre_exec() {}
-  virtual void execute() = 0;
-  virtual void send_response() {}
-  virtual void complete() {
-    send_response();
+  virtual int verify_permission(const Span& parent_span = nullptr) = 0;
+  virtual int verify_op_mask(const Span& parent_span = nullptr);
+  virtual void pre_exec(const Span& parent_span = nullptr) {}
+  virtual void execute(const Span& parent_span = nullptr) = 0;
+  virtual void send_response(const Span& parent_span = nullptr) {}
+  virtual void complete(const Span& parent_span = nullptr) {
+    send_response(parent_span);
   }
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
@@ -212,7 +213,7 @@ public:
 
 class RGWDefaultResponseOp : public RGWOp {
 public:
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWGetObj_Filter : public RGWGetDataCB
@@ -228,9 +229,9 @@ public:
    * Filter can modify content of bl.
    * When bl_len == 0 , it means 'flush
    */
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override {
     if (next) {
-      return next->handle_data(bl, bl_ofs, bl_len);
+      return next->handle_data(bl, bl_ofs, bl_len, parent_span);
     }
     return 0;
   }
@@ -299,7 +300,7 @@ protected:
   bool get_retention;
   bool get_legal_hold;
 
-  int init_common();
+  int init_common(const Span& parent_span = nullptr);
 public:
   RGWGetObj() {
     range_str = NULL;
@@ -330,15 +331,15 @@ public:
     get_legal_hold = false;
  }
 
-  bool prefetch_data() override;
+  bool prefetch_data(const Span& parent_span = nullptr) override;
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   int parse_range();
   int read_user_manifest_part(
     rgw::sal::RGWBucket* bucket,
@@ -347,15 +348,15 @@ public:
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
     const off_t start_ofs,
     const off_t end_ofs,
-    bool swift_slo);
-  int handle_user_manifest(const char *prefix);
-  int handle_slo_manifest(bufferlist& bl);
+    bool swift_slo, const Span& parent_span = nullptr);
+  int handle_user_manifest(const char *prefix, const Span& parent_span = nullptr);
+  int handle_slo_manifest(bufferlist& bl, const Span& parent_span = nullptr);
 
-  int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
+  int get_data_cb(bufferlist& bl, off_t ofs, off_t len, const Span& parent_span = nullptr);
 
-  virtual int get_params() = 0;
-  virtual int send_response_data_error() = 0;
-  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  virtual int send_response_data_error(const Span& parent_span = nullptr) = 0;
+  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len, const Span& parent_span = nullptr) = 0;
 
   const char* name() const override { return "get_obj"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ; }
@@ -378,8 +379,8 @@ public:
   explicit RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
   ~RGWGetObj_CB() override {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
-    return op->get_data_cb(bl, bl_ofs, bl_len);
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override {
+    return op->get_data_cb(bl, bl_ofs, bl_len, parent_span);
   }
 };
 
@@ -388,11 +389,11 @@ class RGWGetObjTags : public RGWOp {
   bufferlist tags_bl;
   bool has_tags{false};
  public:
-  int verify_permission() override;
-  void execute() override;
-  void pre_exec() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
 
-  virtual void send_response_data(bufferlist& bl) = 0;
+  virtual void send_response_data(bufferlist& bl, const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "get_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_TAGGING; }
@@ -403,11 +404,11 @@ class RGWPutObjTags : public RGWOp {
  protected:
   bufferlist tags_bl;
  public:
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual void send_response() override = 0;
-  virtual int get_params() = 0;
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "put_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
@@ -416,9 +417,9 @@ class RGWPutObjTags : public RGWOp {
 
 class RGWDeleteObjTags: public RGWOp {
  public:
-  void pre_exec() override;
-  int verify_permission() override;
-  void execute() override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "delete_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -430,11 +431,11 @@ protected:
   bufferlist tags_bl;
   bool has_tags{false};
 public:
-  int verify_permission() override;
-  void execute() override;
-  void pre_exec() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
 
-  virtual void send_response_data(bufferlist& bl) = 0;
+  virtual void send_response_data(bufferlist& bl, const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "get_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_TAGGING; }
@@ -445,11 +446,11 @@ protected:
   bufferlist tags_bl;
   bufferlist in_data;
 public:
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual void send_response() override = 0;
-  virtual int get_params() = 0;
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "put_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_TAGGING; }
@@ -457,9 +458,9 @@ public:
 
 class RGWDeleteBucketTags : public RGWOp {
 public:
-  void pre_exec() override;
-  int verify_permission() override;
-  void execute() override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "delete_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -470,11 +471,11 @@ struct rgw_sync_policy_group;
 
 class RGWGetBucketReplication : public RGWOp {
 public:
-  int verify_permission() override;
-  void execute() override;
-  void pre_exec() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
 
-  virtual void send_response_data() = 0;
+  virtual void send_response_data(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "get_bucket_replication"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_REPLICATION; }
@@ -485,11 +486,11 @@ protected:
   bufferlist in_data;
   std::vector<rgw_sync_policy_group> sync_policy_groups;
 public:
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual void send_response() override = 0;
-  virtual int get_params() = 0;
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "put_bucket_replication"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_REPLICATION; }
@@ -499,9 +500,9 @@ class RGWDeleteBucketReplication : public RGWOp {
 protected:
   virtual void update_sync_policy(rgw_sync_policy_info *policy) = 0;
 public:
-  void pre_exec() override;
-  int verify_permission() override;
-  void execute() override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "delete_bucket_replication"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -569,13 +570,13 @@ public:
     : deleter(nullptr) {
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   virtual int get_data(std::list<acct_path_t>& items,
                        bool * is_truncated) = 0;
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
 
   const char* name() const override { return "bulk_delete"; }
   RGWOpType get_type() override { return RGW_OP_BULK_DELETE; }
@@ -616,7 +617,7 @@ protected:
   class AlignedStreamGetter;
 
   virtual std::unique_ptr<StreamGetter> create_stream() = 0;
-  virtual void send_response() override = 0;
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const std::string_view& path);
@@ -644,9 +645,9 @@ public:
             struct req_state* const s,
             RGWHandler* const h) override;
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "bulk_upload"; }
 
@@ -752,21 +753,21 @@ public:
       is_truncated(false) {
   }
 
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  virtual void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) {
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  virtual void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets, const Span& parent_span = nullptr) {
     /* The default implementation, used by e.g. S3, just generates a new
      * part of listing and sends it client immediately. Swift can behave
      * differently: when the reverse option is requested, all incoming
      * instances of RGWBucketList are buffered and finally reversed. */
     return send_response_data(buckets);
   }
-  virtual void send_response_begin(bool has_buckets) = 0;
-  virtual void send_response_data(rgw::sal::RGWBucketList& buckets) = 0;
-  virtual void send_response_end() = 0;
-  void send_response() override {}
+  virtual void send_response_begin(bool has_buckets, const Span& parent_span = nullptr) = 0;
+  virtual void send_response_data(rgw::sal::RGWBucketList& buckets, const Span& parent_span = nullptr) = 0;
+  virtual void send_response_end(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override {}
 
   virtual bool should_get_stats() { return false; }
   virtual bool supports_account_metadata() { return false; }
@@ -793,11 +794,11 @@ public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
   }
 
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override {}
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override {}
 
   virtual bool should_get_stats() { return false; }
 
@@ -813,10 +814,10 @@ protected:
 public:
   RGWStatAccount() = default;
 
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "stat_account"; }
   RGWOpType get_type() override { return RGW_OP_STAT_ACCOUNT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -842,21 +843,21 @@ protected:
 
   int shard_id;
 
-  int parse_max_keys();
+  int parse_max_keys(const Span& parent_span = nullptr);
 
 public:
   RGWListBucket() : list_versions(false), max(0),
                     default_max(0), is_truncated(false),
 		    allow_unordered(false), shard_id(-1) {}
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
   }
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "list_bucket"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -866,10 +867,10 @@ public:
 class RGWGetBucketLogging : public RGWOp {
 public:
   RGWGetBucketLogging() {}
-  int verify_permission() override;
-  void execute() override { }
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override { }
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_bucket_logging"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -879,10 +880,10 @@ class RGWGetBucketLocation : public RGWOp {
 public:
   RGWGetBucketLocation() {}
   ~RGWGetBucketLocation() override {}
-  int verify_permission() override;
-  void execute() override { }
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override { }
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_bucket_location"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOCATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -896,11 +897,11 @@ protected:
 public:
   RGWGetBucketVersioning() = default;
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_bucket_versioning"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -922,13 +923,13 @@ protected:
 public:
   RGWSetBucketVersioning() : versioning_status(VersioningNotChanged) {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() { return 0; }
+  virtual int get_params(const Span& parent_span = nullptr) { return 0; }
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "set_bucket_versioning"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -938,11 +939,11 @@ class RGWGetBucketWebsite : public RGWOp {
 public:
   RGWGetBucketWebsite() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -955,13 +956,13 @@ protected:
 public:
   RGWSetBucketWebsite() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() { return 0; }
+  virtual int get_params(const Span& parent_span = nullptr) { return 0; }
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "set_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -971,11 +972,11 @@ class RGWDeleteBucketWebsite : public RGWOp {
 public:
   RGWDeleteBucketWebsite() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "delete_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -986,11 +987,11 @@ protected:
   std::unique_ptr<rgw::sal::RGWBucket> bucket;
 
 public:
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "stat_bucket"; }
   RGWOpType get_type() override { return RGW_OP_STAT_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1022,17 +1023,17 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
     relaxed_region_enforcement =
 	s->cct->_conf.get_val<bool>("rgw_relaxed_region_enforcement");
   }
-  virtual int get_params() { return 0; }
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) { return 0; }
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "create_bucket"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1045,11 +1046,11 @@ protected:
 public:
   RGWDeleteBucket() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "delete_bucket"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -1187,29 +1188,29 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   /* this is for cases when copying data from other object */
   virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                                  RGWGetObj_Filter* cb,
                                  map<string, bufferlist>& attrs,
-                                 bufferlist* manifest_bl) {
+                                 bufferlist* manifest_bl, const Span& parent_span = nullptr) {
     *filter = nullptr;
     return 0;
   }
   virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-                                 rgw::putobj::DataProcessor *cb) {
+                                 rgw::putobj::DataProcessor *cb, const Span& parent_span = nullptr) {
     return 0;
   }
 
-  int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
-  int get_data(const off_t fst, const off_t lst, bufferlist& bl);
+  int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr);
+  int get_data(const off_t fst, const off_t lst, bufferlist& bl, const Span& parent_span = nullptr);
 
-  virtual int get_params() = 0;
-  virtual int get_data(bufferlist& bl) = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  virtual int get_data(bufferlist& bl, const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "put_obj"; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1253,17 +1254,17 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
                                  rgw::putobj::DataProcessor *cb) {
     return 0;
   }
-  virtual int get_params() = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   virtual int get_data(ceph::bufferlist& bl, bool& again) = 0;
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "post_obj"; }
   RGWOpType get_type() override { return RGW_OP_POST_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1293,13 +1294,13 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
-  int init_processing() override;
-  int verify_permission() override;
-  void pre_exec() override { }
-  void execute() override;
+  int init_processing(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override { }
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                    const set<string>& rmattr_names,
                                    map<int, string>& temp_url_keys);
@@ -1333,12 +1334,12 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "put_bucket_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1359,12 +1360,12 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "put_obj_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_OBJECT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1392,13 +1393,13 @@ public:
       bypass_governance_mode(false) {
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  int handle_slo_manifest(bufferlist& bl);
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  int handle_slo_manifest(bufferlist& bl, const Span& parent_span = nullptr);
 
-  virtual int get_params() { return 0; }
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) { return 0; }
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "delete_obj"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -1448,7 +1449,7 @@ protected:
 
   bool need_to_check_storage_class = false;
 
-  int init_common();
+  int init_common(const Span& parent_span = nullptr);
 
 public:
   RGWCopyObj() {
@@ -1479,19 +1480,19 @@ public:
     RGWOp::init(store, s, h);
     dest_policy.set_ctx(s->cct);
   }
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
   void progress_cb(off_t ofs);
 
   virtual int check_storage_class(const rgw_placement_rule& src_placement) {
     return 0;
   }
 
-  virtual int init_dest_policy() { return 0; }
-  virtual int get_params() = 0;
-  virtual void send_partial_response(off_t ofs) {}
-  void send_response() override = 0;
+  virtual int init_dest_policy(const Span& parent_span = nullptr) { return 0; }
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  virtual void send_partial_response(off_t ofs, const Span& parent_span = nullptr) {}
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "copy_obj"; }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1505,11 +1506,11 @@ protected:
 public:
   RGWGetACLs() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_acls"; }
   RGWOpType get_type() override { return RGW_OP_GET_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1524,13 +1525,13 @@ public:
   RGWPutACLs() {}
   ~RGWPutACLs() override {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   virtual int get_policy_from_state(rgw::sal::RGWRadosStore *store, struct req_state *s, stringstream& ss) { return 0; }
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "put_acls"; }
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1543,11 +1544,11 @@ public:
   RGWGetLC() { }
   ~RGWGetLC() override { }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override = 0;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_GET_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1574,13 +1575,13 @@ public:
     cookie = buf;
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
 //  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "put_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_PUT_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1589,11 +1590,11 @@ public:
 class RGWDeleteLC : public RGWOp {
 public:
   RGWDeleteLC() = default;
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "delete_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1605,10 +1606,10 @@ protected:
 public:
   RGWGetCORS() {}
 
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_cors"; }
   RGWOpType get_type() override { return RGW_OP_GET_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1623,11 +1624,11 @@ public:
   RGWPutCORS() {}
   ~RGWPutCORS() override {}
 
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "put_cors"; }
   RGWOpType get_type() override { return RGW_OP_PUT_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1639,10 +1640,10 @@ protected:
 public:
   RGWDeleteCORS() {}
 
-  int verify_permission() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "delete_cors"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1658,11 +1659,11 @@ public:
                      req_hdrs(NULL), req_meth(NULL) {
   }
 
-  int verify_permission() override {return 0;}
+  int verify_permission(const Span& parent_span = nullptr) override {return 0;}
   int validate_cors_request(RGWCORSConfiguration *cc);
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "options_cors"; }
   RGWOpType get_type() override { return RGW_OP_OPTIONS_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1675,11 +1676,11 @@ protected:
 public:
   RGWGetRequestPayment() : requester_pays(0) {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "get_request_payment"; }
   RGWOpType get_type() override { return RGW_OP_GET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1692,13 +1693,13 @@ protected:
 public:
  RGWSetRequestPayment() : requester_pays(false) {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() { return 0; }
+  virtual int get_params(const Span& parent_span = nullptr) { return 0; }
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "set_request_payment"; }
   RGWOpType get_type() override { return RGW_OP_SET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1717,16 +1718,16 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "init_multipart"; }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
+  virtual int prepare_encryption(map<string, bufferlist>& attrs, const Span& parent_span = nullptr) { return 0; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
@@ -1761,13 +1762,13 @@ public:
   RGWCompleteMultipart() {}
   ~RGWCompleteMultipart() override {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  void complete() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  void complete(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "complete_multipart"; }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1777,11 +1778,11 @@ class RGWAbortMultipart : public RGWOp {
 public:
   RGWAbortMultipart() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  void send_response() override = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "abort_multipart"; }
   RGWOpType get_type() override { return RGW_OP_ABORT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -1807,12 +1808,12 @@ public:
     RGWOp::init(store, s, h);
     policy = RGWAccessControlPolicy(s->cct);
   }
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "list_multipart"; }
   RGWOpType get_type() override { return RGW_OP_LIST_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1855,12 +1856,12 @@ public:
     max_uploads = default_max;
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "list_bucket_multiparts"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET_MULTIPARTS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1872,11 +1873,11 @@ public:
   RGWGetCrossDomainPolicy() = default;
   ~RGWGetCrossDomainPolicy() override = default;
 
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
 
-  void execute() override {
+  void execute(const Span& parent_span = nullptr) override {
     op_ret = 0;
   }
 
@@ -1897,11 +1898,11 @@ public:
   RGWGetHealthCheck() = default;
   ~RGWGetHealthCheck() override = default;
 
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return 0;
   }
 
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_health_check"; }
 
@@ -1928,11 +1929,11 @@ public:
     quiet = false;
     status_dumped = false;
   }
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   virtual void send_status() = 0;
   virtual void begin_response() = 0;
   virtual void send_partial_response(rgw_obj_key& key, bool delete_marker,
@@ -1948,15 +1949,15 @@ public:
   RGWInfo() = default;
   ~RGWInfo() override = default;
 
-  int verify_permission() override { return 0; }
+  int verify_permission(const Span& parent_span = nullptr) override { return 0; }
   const char* name() const override { return "get info"; }
   RGWOpType get_type() override { return RGW_OP_GET_INFO; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s);
+extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, const Span& parent_span = nullptr);
 extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-				     bool prefetch_data);
+				     bool prefetch_data, const Span& parent_span = nullptr);
 extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
 extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
@@ -2151,12 +2152,12 @@ public:
     attrs.emplace(std::move(key), std::move(bl));
   }
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
-  void send_response() override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void send_response(const Span& parent_span = nullptr) override = 0;
   const char* name() const override { return "set_attrs"; }
   RGWOpType get_type() override { return RGW_OP_SET_ATTRS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -2174,11 +2175,11 @@ public:
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
-  int verify_permission() override {
+  int verify_permission(const Span& parent_span = nullptr) override {
     return check_caps(s->user->get_info().caps);
   }
-  void pre_exec() override;
-  void execute() override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "get_obj_layout"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_OBJ_LAYOUT; }
@@ -2191,13 +2192,13 @@ public:
   RGWPutBucketPolicy() = default;
   ~RGWPutBucketPolicy() {
   }
-  void send_response() override;
-  int verify_permission() override;
+  void send_response(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
-  void execute() override;
-  int get_params();
+  void execute(const Span& parent_span = nullptr) override;
+  int get_params(const Span& parent_span = nullptr);
   const char* name() const override { return "put_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_PUT_BUCKET_POLICY;
@@ -2208,12 +2209,12 @@ class RGWGetBucketPolicy : public RGWOp {
   buffer::list policy;
 public:
   RGWGetBucketPolicy() = default;
-  void send_response() override;
-  int verify_permission() override;
+  void send_response(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   uint32_t op_mask() override {
     return RGW_OP_TYPE_READ;
   }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_GET_BUCKET_POLICY;
@@ -2223,13 +2224,13 @@ public:
 class RGWDeleteBucketPolicy : public RGWOp {
 public:
   RGWDeleteBucketPolicy() = default;
-  void send_response() override;
-  int verify_permission() override;
+  void send_response(const Span& parent_span = nullptr) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
-  void execute() override;
-  int get_params();
+  void execute(const Span& parent_span = nullptr) override;
+  int get_params(const Span& parent_span = nullptr);
   const char* name() const override { return "delete_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_DELETE_BUCKET_POLICY;
@@ -2244,11 +2245,11 @@ protected:
 public:
   RGWPutBucketObjectLock() = default;
   ~RGWPutBucketObjectLock() {}
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  virtual void send_response() = 0;
-  virtual int get_params() = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  virtual void send_response(const Span& parent_span = nullptr) = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "put_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -2256,10 +2257,10 @@ public:
 
 class RGWGetBucketObjectLock : public RGWOp {
 public:
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  virtual void send_response() = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  virtual void send_response(const Span& parent_span = nullptr) = 0;
   const char* name() const override {return "get_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2273,11 +2274,11 @@ protected:
   bool bypass_governance_mode;
 public:
   RGWPutObjRetention():bypass_perm(true), bypass_governance_mode(false) {}
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  virtual void send_response() override = 0;
-  virtual int get_params() = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "put_obj_retention"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_RETENTION; }
@@ -2287,10 +2288,10 @@ class RGWGetObjRetention : public RGWOp {
 protected:
   RGWObjectRetention obj_retention;
 public:
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  virtual void send_response() = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  virtual void send_response(const Span& parent_span = nullptr) = 0;
   const char* name() const override {return "get_obj_retention"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2301,11 +2302,11 @@ protected:
   bufferlist data;
   RGWObjectLegalHold obj_legal_hold;
 public:
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  virtual void send_response() override = 0;
-  virtual int get_params() = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "put_obj_legal_hold"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_LEGAL_HOLD; }
@@ -2315,10 +2316,10 @@ class RGWGetObjLegalHold : public RGWOp {
 protected:
   RGWObjectLegalHold obj_legal_hold;
 public:
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-  virtual void send_response() = 0;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
+  virtual void send_response(const Span& parent_span = nullptr) = 0;
   const char* name() const override {return "get_obj_legal_hold"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2331,11 +2332,11 @@ protected:
 public:
   RGWConfigBucketMetaSearch() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
-  virtual int get_params() = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
   const char* name() const override { return "config_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -2345,9 +2346,9 @@ class RGWGetBucketMetaSearch : public RGWOp {
 public:
   RGWGetBucketMetaSearch() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override {}
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override {}
 
   const char* name() const override { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_META_SEARCH; }
@@ -2358,9 +2359,9 @@ class RGWDelBucketMetaSearch : public RGWOp {
 public:
   RGWDelBucketMetaSearch() {}
 
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  void pre_exec(const Span& parent_span = nullptr) override;
+  void execute(const Span& parent_span = nullptr) override;
 
   const char* name() const override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
@@ -2376,10 +2377,10 @@ public:
   void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
   }
-  int verify_permission() override {return 0;}
-  virtual void send_response() override = 0;
-  virtual int get_params() = 0;
-  void execute() override;
+  int verify_permission(const Span& parent_span = nullptr) override {return 0;}
+  virtual void send_response(const Span& parent_span = nullptr) override = 0;
+  virtual int get_params(const Span& parent_span = nullptr) = 0;
+  void execute(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_cluster_stat"; }
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
@@ -2388,11 +2389,11 @@ class RGWGetBucketPolicyStatus : public RGWOp {
 protected:
   bool isPublic {false};
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_policy_status"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_POLICY_STATUS; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-  void execute() override;
+  void execute(const Span& parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2401,12 +2402,12 @@ protected:
   bufferlist data;
   PublicAccessBlockConfiguration access_conf;
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   const char* name() const override { return "put_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  int get_params();
-  void execute() override;
+  int get_params(const Span& parent_span = nullptr);
+  void execute(const Span& parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2414,12 +2415,12 @@ class RGWGetBucketPublicAccessBlock : public RGWOp {
 protected:
   PublicAccessBlockConfiguration access_conf;
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   const char* name() const override { return "get_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-  int get_params();
-  void execute() override;
+  int get_params(const Span& parent_span = nullptr);
+  void execute(const Span& parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2427,13 +2428,13 @@ class RGWDeleteBucketPublicAccessBlock : public RGWOp {
 protected:
   PublicAccessBlockConfiguration access_conf;
 public:
-  int verify_permission() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
   const char* name() const override { return "delete_bucket_public_access_block";}
   virtual RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  int get_params();
-  void execute() override;
-  void send_response() override;
+  int get_params(const Span& parent_span = nullptr);
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 

@@ -91,8 +91,14 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               req_state * const s,
                               const bool skip_retarget)
 {
+  RGWOpType type = op->get_type();
+  Span span = new_span(op->name());
+  if(type>0)
+    set_span_tag(span, "operation_type", op->name());
+  s->root_span = std::move(span);
+
   ldpp_dout(op, 2) << "init permissions" << dendl;
-  int ret = handler->init_permissions(op);
+  int ret = handler->init_permissions(op, s->root_span);
   if (ret < 0) {
     return ret;
   }
@@ -114,19 +120,19 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 
   /* If necessary extract object ACL and put them into req_state. */
   ldpp_dout(op, 2) << "reading permissions" << dendl;
-  ret = handler->read_permissions(op);
+  ret = handler->read_permissions(op, s->root_span);
   if (ret < 0) {
     return ret;
   }
 
   ldpp_dout(op, 2) << "init op" << dendl;
-  ret = op->init_processing();
+  ret = op->init_processing(s->root_span);
   if (ret < 0) {
     return ret;
   }
 
   ldpp_dout(op, 2) << "verifying op mask" << dendl;
-  ret = op->verify_op_mask();
+  ret = op->verify_op_mask(s->root_span);
   if (ret < 0) {
     return ret;
   }
@@ -140,7 +146,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
-  ret = op->verify_permission();
+  ret = op->verify_permission(s->root_span);
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
@@ -158,13 +164,13 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "pre-executing" << dendl;
-  op->pre_exec();
+  op->pre_exec(s->root_span);
 
   ldpp_dout(op, 2) << "executing" << dendl;
-  op->execute();
+  op->execute(s->root_span);
 
   ldpp_dout(op, 2) << "completing" << dendl;
-  op->complete();
+  op->complete(s->root_span);
 
   return 0;
 }
