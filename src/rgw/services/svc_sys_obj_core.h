@@ -86,12 +86,16 @@ protected:
                             std::map<string, bufferlist> *m,
                             bool *pmore,
                             optional_yield y);
+  virtual int omap_get_header(const rgw_raw_obj& obj,
+                              bufferlist *bl, optional_yield y);
   virtual int omap_set(const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
                        optional_yield y);
   virtual int omap_set(const rgw_raw_obj& obj,
                        const map<std::string, bufferlist>& m, bool must_exist,
                        optional_yield y);
+  virtual int omap_set_header(const rgw_raw_obj& obj, const bufferlist& bl,
+                              bool must_exist, optional_yield y);
   virtual int omap_del(const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
 

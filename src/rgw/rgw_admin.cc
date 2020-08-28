@@ -58,6 +58,7 @@ extern "C" {
 #include "rgw_pubsub.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_account.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -123,6 +124,12 @@ void usage()
   cout << "  subuser rm                 remove subuser\n";
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
+  cout << "  account create             create an account\n";
+  cout << "  account get                get account info\n";
+  cout << "  account rm                 remove an account\n";
+  cout << "  account user add           add a user to an account\n";
+  cout << "  account user rm            remove a user from an account\n";
+  cout << "  account user list          list users in an account\n";
   cout << "  bucket list                list buckets (specify --allow-unordered for\n";
   cout << "                             faster, unsorted listing)\n";
   cout << "  bucket limit check         show bucket sharding stats\n";
@@ -283,6 +290,7 @@ void usage()
   cout << "   --uid=<id>                user id\n";
   cout << "   --new-uid=<id>            new user id\n";
   cout << "   --subuser=<name>          subuser name\n";
+  cout << "   --account=<id>            account id\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>           user's email address\n";
   cout << "   --secret/--secret-key=<key>\n";
@@ -756,6 +764,12 @@ enum class OPT {
   PUBSUB_SUB_RM,
   PUBSUB_SUB_PULL,
   PUBSUB_EVENT_RM,
+  ACCOUNT_CREATE,
+  ACCOUNT_GET,
+  ACCOUNT_RM,
+  ACCOUNT_USER_ADD,
+  ACCOUNT_USER_RM,
+  ACCOUNT_USER_LIST,
 };
 
 }
@@ -968,6 +982,12 @@ static SimpleCmd::Commands all_cmds = {
   { "subscription rm", OPT::PUBSUB_SUB_RM },
   { "subscription pull", OPT::PUBSUB_SUB_PULL },
   { "subscription ack", OPT::PUBSUB_EVENT_RM },
+  { "account create", OPT::ACCOUNT_CREATE },
+  { "account get", OPT::ACCOUNT_GET },
+  { "account rm", OPT::ACCOUNT_RM },
+  { "account user add", OPT::ACCOUNT_USER_ADD },
+  { "account user rm", OPT::ACCOUNT_USER_RM },
+  { "account user list", OPT::ACCOUNT_USER_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3048,6 +3068,7 @@ int main(int argc, const char **argv)
 
   rgw_user user_id;
   string tenant;
+  string account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -3253,6 +3274,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
       opt_tenant = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account", (char*)NULL)) {
+      account_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -3725,7 +3748,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_DELETE
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
-                          && opt_cmd != OPT::RESHARD_STATUS) {
+                          && opt_cmd != OPT::RESHARD_STATUS
+	                  && opt_cmd != OPT::ACCOUNT_USER_ADD
+	                  && opt_cmd != OPT::ACCOUNT_USER_RM) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -9187,6 +9212,85 @@ next:
       return -ret;
     }
   }
+
+
+ if (opt_cmd == OPT::ACCOUNT_CREATE ||
+     opt_cmd == OPT::ACCOUNT_GET ||
+     opt_cmd == OPT::ACCOUNT_RM ||
+     opt_cmd == OPT::ACCOUNT_USER_ADD ||
+     opt_cmd == OPT::ACCOUNT_USER_RM ||
+     opt_cmd == OPT::ACCOUNT_USER_LIST) {
+   if (account_id.empty()) {
+     cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
+   }
+   RGWObjVersionTracker objv_tracker;
+   RGWAccountAdminOpState acc_op_state(account_id, tenant);
+
+   if (opt_cmd == OPT::ACCOUNT_CREATE) {
+
+     ret = RGWAdminOp_Account::add(store, acc_op_state, f, null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+   }
+
+   if (opt_cmd == OPT::ACCOUNT_GET) {
+     ret = RGWAdminOp_Account::info(store, acc_op_state, f, null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not get account " << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+   }
+
+   if (opt_cmd == OPT::ACCOUNT_RM) {
+     ret = RGWAdminOp_Account::remove(store, acc_op_state, f, null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not remove account " << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+   }
+
+   if (opt_cmd == OPT::ACCOUNT_USER_ADD) {
+     ret = store->ctl()->user->link_account(user_id, account_id,
+					    RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
+					    null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not add user" << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+   }
+
+   if (opt_cmd == OPT::ACCOUNT_USER_RM) {
+     ret = store->ctl()->user->unlink_account(user_id, account_id,
+					      RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
+					      null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not rm user" << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+   }
+
+   if (opt_cmd == OPT::ACCOUNT_USER_LIST) {
+     std::string marker;
+     vector <rgw_user> users;
+     bool more;
+     ret = store->ctl()->account->list_users(account_id,
+                                             marker,
+                                             &more,
+                                             users,
+                                             null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not list users" << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+     encode_json("account_user_list", users, formatter.get());
+     formatter->flush(cout);
+   }
+ }
 
   return 0;
 }

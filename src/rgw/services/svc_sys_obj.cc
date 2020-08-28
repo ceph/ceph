@@ -168,6 +168,24 @@ int RGWSI_SysObj::Obj::OmapOp::set(const map<std::string, bufferlist>& m,
   return svc->omap_set(obj, m, must_exist, y);
 }
 
+int RGWSI_SysObj::Obj::OmapOp::set_header(const bufferlist& bl,
+					  optional_yield y)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.obj;
+
+  return svc->omap_set_header(obj, bl, must_exist, y);
+}
+
+int RGWSI_SysObj::Obj::OmapOp::get_header(bufferlist* bl,
+                                          optional_yield y)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.obj;
+
+  return svc->omap_get_header(obj, bl, y);
+}
+
 int RGWSI_SysObj::Obj::OmapOp::del(const std::string& key, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;

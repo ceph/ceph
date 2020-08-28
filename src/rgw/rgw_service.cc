@@ -27,6 +27,7 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_sys_obj_core.h"
 #include "services/svc_user_rados.h"
+#include "services/svc_account_rados.h"
 
 #include "common/errno.h"
 
@@ -34,6 +35,7 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_otp.h"
+#include "rgw_account.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -71,6 +73,7 @@ int RGWServices_Def::init(CephContext *cct,
   sysobj = std::make_unique<RGWSI_SysObj>(cct);
   sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
   user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
+  account_rados = std::make_unique<RGWSI_Account_RADOS>(cct);
 
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(cct);
@@ -111,6 +114,7 @@ int RGWServices_Def::init(CephContext *cct,
   }
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
+  account_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
 
   can_shutdown = true;
 
@@ -240,6 +244,13 @@ int RGWServices_Def::init(CephContext *cct,
       ldout(cct, 0) << "ERROR: failed to start otp service (" << cpp_strerror(-r) << dendl;
       return r;
     }
+
+    r = account_rados->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start account service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
   }
 
   /* cache or core services will be started by sysobj */
@@ -311,6 +322,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   cache = _svc.sysobj_cache.get();
   core = _svc.sysobj_core.get();
   user = _svc.user_rados.get();
+  account = _svc.account_rados.get();
 
   return 0;
 }
@@ -344,7 +356,11 @@ int RGWCtlDef::init(RGWServices& svc)
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
-  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user));
+  meta.account = std::make_unique<RGWAccountMetadataHandler>(svc.account);
+  account = std::make_unique<RGWAccountCtl>(svc.zone, svc.account,
+					    (RGWAccountMetadataHandler *)meta.account.get());
+
+  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user, account.get()));
 
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
@@ -373,7 +389,7 @@ int RGWCtlDef::init(RGWServices& svc)
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
 
-  user->init(bucket.get());
+  user->init(bucket.get(), account.get());
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
                (RGWBucketInstanceMetadataHandler *)bi_meta_handler,
@@ -400,10 +416,12 @@ int RGWCtl::init(RGWServices *_svc)
   meta.bucket = _ctl.meta.bucket.get();
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
   meta.otp = _ctl.meta.otp.get();
+  meta.account = _ctl.meta.account.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
   otp = _ctl.otp.get();
+  account = _ctl.account.get();
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {
@@ -426,6 +444,12 @@ int RGWCtl::init(RGWServices *_svc)
   r = meta.otp->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = meta.account->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init account ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 

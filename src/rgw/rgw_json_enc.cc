@@ -16,6 +16,7 @@
 #include "rgw_orphan.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_tools.h"
+#include "rgw_account.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -516,6 +517,7 @@ void RGWUserInfo::dump(Formatter *f) const
   }
   encode_json("type", user_source_type, f);
   encode_json("mfa_ids", mfa_ids, f);
+  encode_json("account_id", account_id, f);
 }
 
 
@@ -589,6 +591,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
     type = TYPE_NONE;
   }
   JSONDecoder::decode_json("mfa_ids", mfa_ids, obj);
+  JSONDecoder::decode_json("account_id", account_id, obj);
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
@@ -1255,6 +1258,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_swift_pool", user_swift_pool, f);
   encode_json("user_uid_pool", user_uid_pool, f);
   encode_json("otp_pool", otp_pool, f);
+  encode_json("account_pool", account_pool, f);
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
   encode_json("tier_config", tier_config, f);
@@ -1351,6 +1355,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("user_swift_pool", user_swift_pool, obj);
   JSONDecoder::decode_json("user_uid_pool", user_uid_pool, obj);
   JSONDecoder::decode_json("otp_pool", otp_pool, obj);
+  JSONDecoder::decode_json("account_pool", account_pool, obj);
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
@@ -2093,4 +2098,32 @@ void objexp_hint_entry::dump(Formatter *f) const
 void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
+}
+
+void AccountQuota::dump(Formatter * const f) const
+{
+  f->open_object_section("AccountQuota");
+  f->dump_unsigned("max_users", max_users);
+  f->dump_unsigned("max_roles", max_roles);
+  f->close_section();
+}
+
+void AccountQuota::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("max_users", max_users, obj);
+  JSONDecoder::decode_json("max_roles", max_roles, obj);
+}
+
+void RGWAccountInfo::dump(Formatter * const f) const
+{
+  encode_json("id", id, f);
+  encode_json("tenant", tenant, f);
+  account_quota.dump(f);
+}
+
+void RGWAccountInfo::decode_json(JSONObj* obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("quota", account_quota, obj);
 }

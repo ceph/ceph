@@ -10,6 +10,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_data_sync.h"
 #include "rgw_multi.h"
+#include "rgw_account.h"
 
 #include "common/Formatter.h"
 
@@ -614,4 +615,11 @@ void obj_version::generate_test_instances(list<obj_version*>& o)
 
   o.push_back(v);
   o.push_back(new obj_version);
+}
+
+void RGWAccountInfo::generate_test_instances(list<RGWAccountInfo*>& o)
+{
+  RGWAccountInfo* acc = new RGWAccountInfo("account1", "tenant1");
+  o.push_back(acc);
+  o.push_back(new RGWAccountInfo);
 }

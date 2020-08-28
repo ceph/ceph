@@ -279,5 +279,21 @@ public:
   virtual void encode_obj(bufferlist *bl) {}
 };
 
+template <typename T>
+struct CompleteInfo {
+  T info;
+  map <std::string, bufferlist> attrs;
+  bool has_attrs {false};
+
+  void dump(Formatter * const f) const {
+    info.dump(f);
+    encode_json("attrs", attrs, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    decode_json_obj(info, obj);
+    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+  }
+};
 
 #endif

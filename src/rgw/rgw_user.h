@@ -28,6 +28,7 @@
 
 class RGWUserCtl;
 class RGWBucketCtl;
+class RGWAccountCtl;
 class RGWUserBuckets;
 
 class RGWGetUserStats_CB;
@@ -161,6 +162,7 @@ struct RGWUserAdminOpState {
   RGWObjVersionTracker objv;
   uint32_t op_mask;
   map<int, string> temp_url_keys;
+  std::string account_id;
 
   // subuser attributes
   std::string subuser;
@@ -203,7 +205,8 @@ struct RGWUserAdminOpState {
   bool found_by_email;  
   bool found_by_key;
   bool mfa_ids_specified;
- 
+  bool account_id_specified;
+
   // req parameters
   bool populated;
   bool initialized;
@@ -417,6 +420,11 @@ struct RGWUserAdminOpState {
     placement_tags_specified = true;
   }
 
+  void set_account_id(std::string_view _account_id) {
+    account_id = _account_id;
+    account_id_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -429,6 +437,7 @@ struct RGWUserAdminOpState {
   bool has_suspension_op() { return suspension_op; }
   bool has_subuser_perm() { return perm_specified; }
   bool has_op_mask() { return op_mask_specified; }
+  bool has_account_id() { return account_id_specified; }
   bool will_gen_access() { return gen_access; }
   bool will_gen_secret() { return gen_secret; }
   bool will_gen_subuser() { return gen_subuser; }
@@ -462,6 +471,7 @@ struct RGWUserAdminOpState {
   std::string get_caps() { return caps; }
   std::string get_user_email() { return user_email; }
   std::string get_display_name() { return display_name; }
+  std::string get_account_id () { return account_id; }
   rgw_user& get_new_uid() { return new_user_id; }
   bool get_overwrite_new_user() const { return overwrite_new_user; }
   map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
@@ -733,6 +743,12 @@ public:
   /* list the existing users */
   int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
+  int link_account(RGWUserAdminOpState& op_state, optional_yield y,
+                   std::string *err_msg = nullptr);
+
+  int unlink_account(RGWUserAdminOpState& op_state, optional_yield y,
+                     std::string *err_msg = nullptr);
+
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
@@ -757,6 +773,17 @@ public:
 
   static int remove(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
+
+  static int link_account(rgw::sal::RGWRadosStore *store,
+                          RGWUserAdminOpState& op_state,
+                          RGWFormatterFlusher& flusher,
+                          optional_yield y);
+
+  static int unlink_account(rgw::sal::RGWRadosStore *store,
+                            RGWUserAdminOpState& op_state,
+                            RGWFormatterFlusher& flusher,
+                            optional_yield y);
+
 };
 
 class RGWUserAdminOp_Subuser
@@ -792,21 +819,7 @@ public:
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
-struct RGWUserCompleteInfo {
-  RGWUserInfo info;
-  map<string, bufferlist> attrs;
-  bool has_attrs{false};
-
-  void dump(Formatter * const f) const {
-    info.dump(f);
-    encode_json("attrs", attrs, f);
-  }
-
-  void decode_json(JSONObj *obj) {
-    decode_json_obj(info, obj);
-    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
-  }
-};
+using RGWUserCompleteInfo = CompleteInfo<RGWUserInfo>;
 
 class RGWUserMetadataObject : public RGWMetadataObject {
   RGWUserCompleteInfo uci;
@@ -838,6 +851,7 @@ class RGWUserCtl
 
   struct Ctl {
     RGWBucketCtl *bucket{nullptr};
+    RGWAccountCtl *account{nullptr};
   } ctl;
 
   RGWUserMetadataHandler *umhandler;
@@ -848,8 +862,9 @@ public:
              RGWSI_User *user_svc,
              RGWUserMetadataHandler *_umhandler);
 
-  void init(RGWBucketCtl *bucket_ctl) {
+  void init(RGWBucketCtl *bucket_ctl, RGWAccountCtl *account_ctl) {
     ctl.bucket = bucket_ctl;
+    ctl.account = account_ctl;
   }
 
   RGWBucketCtl *get_bucket_ctl() {
@@ -972,11 +987,27 @@ public:
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
   int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
+  int link_account(const rgw_user& user_id,
+		   const string& account_id,
+		   const PutParams& put_params,
+		   optional_yield y);
+  int link_account(RGWUserInfo& uinfo,
+		   const string& account_id,
+		   const PutParams& put_params,
+		   optional_yield y);
+  int unlink_account(const rgw_user& user_id,
+                     const string& account_id,
+                     const PutParams& put_params,
+                     optional_yield y);
+  int unlink_account(RGWUserInfo& uinfo,
+                     const string& account_id,
+                     const PutParams& put_params,
+                     optional_yield y);
 };
 
 class RGWUserMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_User *user_svc);
+  static RGWMetadataHandler *alloc(RGWSI_User *user_svc, RGWAccountCtl *account_ctl);
 };
 
 
