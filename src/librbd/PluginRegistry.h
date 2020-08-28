@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_PLUGIN_REGISTRY_H
 
 #include "librbd/plugin/Types.h"
+#include <memory>
 #include <string>
 #include <list>
 
@@ -14,10 +15,13 @@ namespace librbd {
 
 struct ImageCtx;
 
+namespace plugin { template <typename> struct Api; }
+
 template <typename ImageCtxT>
 class PluginRegistry {
 public:
   PluginRegistry(ImageCtxT* image_ctx);
+  ~PluginRegistry();
 
   void init(const std::string& plugins, Context* on_finish);
 
@@ -25,6 +29,8 @@ private:
   typedef std::list<plugin::HookPoints> PluginHookPoints;
 
   ImageCtxT* m_image_ctx;
+  std::unique_ptr<plugin::Api<ImageCtxT>> m_plugin_api;
+
   std::string m_plugins;
 
   PluginHookPoints m_plugin_hook_points;

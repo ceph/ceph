@@ -12,6 +12,8 @@ struct Context;
 namespace librbd {
 namespace plugin {
 
+template <typename> struct Api;
+
 struct HookPoints {
   // TODO later commits will add support for exclusive-lock hook points
 };
@@ -21,8 +23,8 @@ struct Interface : public ceph::Plugin {
   Interface(CephContext* cct) : Plugin(cct) {
   }
 
-  virtual void init(ImageCtxT* image_ctx, HookPoints* hook_points,
-                    Context* on_finish) = 0;
+  virtual void init(ImageCtxT* image_ctx, Api<ImageCtxT>& api,
+                    HookPoints* hook_points, Context* on_finish) = 0;
 };
 
 } // namespace plugin

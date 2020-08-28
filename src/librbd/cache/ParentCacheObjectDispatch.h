@@ -14,6 +14,8 @@ namespace librbd {
 
 class ImageCtx;
 
+namespace plugin { template <typename> struct Api; }
+
 namespace cache {
 
 template <typename ImageCtxT = ImageCtx>
@@ -23,11 +25,13 @@ class ParentCacheObjectDispatch : public io::ObjectDispatchInterface {
   typedef typename TypeTraits::CacheClient CacheClient;
 
 public:
-  static ParentCacheObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new ParentCacheObjectDispatch(image_ctx);
+  static ParentCacheObjectDispatch* create(ImageCtxT* image_ctx,
+                                           plugin::Api<ImageCtxT>& plugin_api) {
+    return new ParentCacheObjectDispatch(image_ctx, plugin_api);
   }
 
-  ParentCacheObjectDispatch(ImageCtxT* image_ctx);
+  ParentCacheObjectDispatch(ImageCtxT* image_ctx,
+                            plugin::Api<ImageCtxT>& plugin_api);
   ~ParentCacheObjectDispatch() override;
 
   io::ObjectDispatchLayer get_dispatch_layer() const override {
@@ -129,6 +133,7 @@ private:
   void create_cache_session(Context* on_finish, bool is_reconnect);
 
   ImageCtxT* m_image_ctx;
+  plugin::Api<ImageCtxT>& m_plugin_api;
 
   ceph::mutex m_lock;
   CacheClient *m_cache_client = nullptr;
