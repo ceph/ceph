@@ -554,18 +554,23 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
 
   FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
-  dout(10) << __func__ << ": " << op->tid << dendl;
+  dout(10) << __func__ << ": tid " << op->tid
+           << " waiting_for_commit_size " << op->waiting_for_commit.size() << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
     op->op->pg_trace.event("op commit");
   }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
+  op->primary_committed = true;
 
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
     op->on_commit = 0;
     in_progress_ops.erase(op->tid);
+  }
+  else if (op->waiting_for_commit.size() == op->tolerated_uncommit_size) {
+    op->on_commit->quorum_complete(op->tolerated_uncommit_size);
   }
 }
 
@@ -592,11 +597,15 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
+        << " waiting_for_commit_size " << ip_op.waiting_for_commit.size()
+        << " primary_committed " << ip_op.primary_committed
 	      << dendl;
     else
       dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
+        << " waiting_for_commit_size " << ip_op.waiting_for_commit.size()
+        << " primary_committed " << ip_op.primary_committed
 	      << dendl;
 
     // oh, good.
@@ -621,6 +630,11 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.on_commit->complete(0);
       ip_op.on_commit = 0;
       in_progress_ops.erase(iter);
+    }
+    else if (ip_op.on_commit &&
+             ip_op.primary_committed &&
+             ip_op.waiting_for_commit.size() == ip_op.tolerated_uncommit_size) {
+      ip_op.on_commit->quorum_complete(ip_op.tolerated_uncommit_size);
     }
   }
 }
@@ -1053,6 +1067,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   dout(10) << __func__ << " " << soid
            << " v " << m->version
+           << " tid " << m->get_tid()
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
 	   << dendl;

@@ -10543,15 +10543,28 @@ class C_OSD_RepopCommit : public Context {
 public:
   C_OSD_RepopCommit(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
     : pg(pg), repop(repop) {}
-  void finish(int) override {
-    pg->repop_all_committed(repop.get());
+  void finish(int r) override {
+    if (r)
+      pg->repop_quorum_committed(repop.get());
+    else
+      pg->repop_all_committed(repop.get());
   }
 };
 
+void PrimaryLogPG::repop_quorum_committed(RepGather *repop)
+{
+  dout(10) << __func__ << ": repop tid " << repop->rep_tid
+           << " quorum committed " << dendl;
+
+  repop->quorum_committed = true;
+  if (!repop->rep_aborted)
+    eval_repop(repop);
+}
+
 void PrimaryLogPG::repop_all_committed(RepGather *repop)
 {
-  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
-	   << dendl;
+  dout(10) << __func__ << ": repop tid " << repop->rep_tid
+           << " all committed " << dendl;
   repop->all_committed = true;
   if (!repop->rep_aborted) {
     if (repop->v != eversion_t()) {
@@ -10581,20 +10594,42 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
-  dout(10) << "eval_repop " << *repop
-    << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)") << dendl;
+  dout(10) << __func__ << " " << *repop
+           << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)")
+           << dendl;
+
+  if (repop->quorum_committed != repop->all_committed) {
+    dout(10) << " commit: " << *repop << dendl;
+    for (auto p = repop->on_committed.begin();
+         p != repop->on_committed.end();
+         repop->on_committed.erase(p++)) {
+      (*p)();
+    }
+
+    auto it = waiting_for_ondisk.find(repop->v);
+    if (it != waiting_for_ondisk.end()) {
+      dout(10) << __func__ << " waiting_for_ondisk " << waiting_for_ondisk.begin()->first
+               << " repop->v " << repop->v << dendl;
+      if (waiting_for_ondisk.begin()->first == repop->v) {
+        for (auto& i : it->second) {
+          int return_code = repop->r;
+          if (return_code >= 0) {
+            return_code = std::get<2>(i);
+          }
+          osd->reply_op_error(std::get<0>(i), return_code, repop->v,
+                              std::get<1>(i), std::get<3>(i));
+        }
+        waiting_for_ondisk.erase(it);
+      }
+    }
+  }
 
   // ondisk?
   if (repop->all_committed) {
-    dout(10) << " commit: " << *repop << dendl;
-    for (auto p = repop->on_committed.begin();
-	 p != repop->on_committed.end();
-	 repop->on_committed.erase(p++)) {
-      (*p)();
-    }
-    // send dup commits, in order
     auto it = waiting_for_ondisk.find(repop->v);
     if (it != waiting_for_ondisk.end()) {
+      dout(10) << __func__ << " waiting_for_ondisk " << waiting_for_ondisk.begin()->first
+               << " repop->v " << repop->v << dendl;
       ceph_assert(waiting_for_ondisk.begin()->first == repop->v);
       for (auto& i : it->second) {
         int return_code = repop->r;
@@ -14670,7 +14705,7 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 	       << " (*i)->v past v" << dendl;
       break;
     }
-    if (!(*i)->all_committed) {
+    if (!((*i)->quorum_committed || (*i)->all_committed)) {
       dout(20) << __func__ << ": " << **i
 	       << " not committed, returning false"
 	       << dendl;

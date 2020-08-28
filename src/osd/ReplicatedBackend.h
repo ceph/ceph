@@ -16,6 +16,7 @@
 #define REPBACKEND_H
 
 #include "PGBackend.h"
+#include "global/global_context.h"
 
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
@@ -336,9 +337,11 @@ private:
   struct InProgressOp : public RefCountedObject {
     ceph_tid_t tid;
     std::set<pg_shard_t> waiting_for_commit;
+    size_t tolerated_uncommit_size;
     Context *on_commit;
     OpRequestRef op;
     eversion_t v;
+    bool primary_committed;
     bool done() const {
       return waiting_for_commit.empty();
     }
@@ -347,7 +350,12 @@ private:
     InProgressOp(ceph_tid_t tid, Context *on_commit, OpRequestRef op, eversion_t v)
       :
 	tid(tid), on_commit(on_commit),
-	op(op), v(v) {}
+	op(op), v(v), primary_committed(false) {
+    auto pool_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+    auto min_size = g_conf().get_osd_pool_default_min_size(pool_size);
+    tolerated_uncommit_size = pool_size - (pool_size / 2 + 1);
+    tolerated_uncommit_size = std::min(tolerated_uncommit_size, static_cast<size_t>(min_size));
+  }
   };
   std::map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
 public:

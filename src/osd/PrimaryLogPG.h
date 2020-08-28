@@ -781,6 +781,7 @@ public:
     ceph_tid_t rep_tid;
 
     bool rep_aborted;
+    bool quorum_committed;
     bool all_committed;
     
     utime_t   start;
@@ -802,6 +803,7 @@ public:
       nref(1),
       rep_tid(rt), 
       rep_aborted(false),
+      quorum_committed(false),
       all_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(c->lock_manager)),
@@ -822,6 +824,7 @@ public:
       r(r),
       rep_tid(rt),
       rep_aborted(false),
+      quorum_committed(false),
       all_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(manager)) {
@@ -951,6 +954,7 @@ protected:
   xlist<RepGather*> repop_queue;
 
   friend class C_OSD_RepopCommit;
+  void repop_quorum_committed(RepGather *repop);
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, OpContext *ctx);
@@ -1991,7 +1995,8 @@ inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
   out << "repgather(" << &repop
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
-      << " committed?=" << repop.all_committed
+      << " quorum_committed?=" << repop.quorum_committed
+      << " all_committed?=" << repop.all_committed
       << " r=" << repop.r
       << ")";
   return out;
