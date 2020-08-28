@@ -100,9 +100,8 @@ void MetadataUpdate::finish(int r)
         }
       }
 
-      DaemonStatePtr state;
       if (daemon_state.exists(key)) {
-        state = daemon_state.get(key);
+        DaemonStatePtr state = daemon_state.get(key);
         state->hostname = daemon_meta.at("hostname").get_str();
 
         if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
@@ -117,7 +116,7 @@ void MetadataUpdate::finish(int r)
 	}
 	daemon_state.update_metadata(state, m);
       } else {
-        state = std::make_shared<DaemonState>(daemon_state.types);
+        auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
         state->hostname = daemon_meta.at("hostname").get_str();
 
