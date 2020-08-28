@@ -85,12 +85,25 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
 int KernelDevice::_lock()
 {
   dout(10) << __func__ << " " << fd_directs[WRITE_LIFE_NOT_SET] << dendl;
-  int r = ::flock(fd_directs[WRITE_LIFE_NOT_SET], LOCK_EX | LOCK_NB);
-  if (r < 0) {
-    derr << __func__ << " flock failed on " << path << dendl;
-    return -errno;
+  utime_t sleeptime;
+  sleeptime.set_from_double(cct->_conf->bdev_flock_retry_interval);
+
+  // When the block changes, systemd-udevd will open the block,
+  // read some information and close it. Then a failure occurs here.
+  // So we need to try again here.
+  for (int i = 0; i < cct->_conf->bdev_flock_retry + 1; i++) {
+    int r = ::flock(fd_directs[WRITE_LIFE_NOT_SET], LOCK_EX | LOCK_NB);
+    if (r < 0 && errno == EAGAIN) {
+      dout(1) << __func__ << " flock busy on " << path << dendl;    
+      sleeptime.sleep();
+    } else if (r < 0) {
+      derr << __func__ << " flock failed on " << path << dendl;    
+      break;
+    } else {
+      return 0;
+    }
   }
-  return 0;
+  return -errno;
 }
 
 int KernelDevice::open(const string& p)
