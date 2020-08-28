@@ -3079,16 +3079,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
     completion->release();
   }
   // set-chunk
-  {
-    ObjectReadOperation op;
-    op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 2, "bar-chunk", "foo-chunk");
+
   // promote
   {
     ObjectWriteOperation op;
@@ -7211,16 +7203,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
   cluster.wait_for_latest_osdmap();
 
   // set_chunk
-  {
-    ObjectReadOperation op;
-    op.set_chunk(0, 4, cache_ioctx, "bar", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 4, "bar", "foo");
 
   // promote
   {
@@ -7293,16 +7276,7 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
     completion->release();
   }
   // set-chunk
-  {
-    ObjectReadOperation op;
-    op.set_chunk(0, 10, cache_ioctx, "bar-chunk", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op,
-	      librados::OPERATION_IGNORE_CACHE, NULL));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "bar-chunk", "foo-chunk");
   // promote
   {
     ObjectWriteOperation op;
