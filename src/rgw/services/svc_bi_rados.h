@@ -39,10 +39,10 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 
   int open_pool(const rgw_pool& pool,
                 RGWSI_RADOS::Pool *index_pool,
-                bool mostly_omap);
+                bool mostly_omap, const Span& parent_span = nullptr);
 
   int open_bucket_index_pool(const RGWBucketInfo& bucket_info,
-                            RGWSI_RADOS::Pool *index_pool);
+                            RGWSI_RADOS::Pool *index_pool, const Span& parent_span = nullptr);
   int open_bucket_index_base(const RGWBucketInfo& bucket_info,
                              RGWSI_RADOS::Pool *index_pool,
                              string *bucket_oid_base);
@@ -93,7 +93,7 @@ public:
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  int init_index(RGWBucketInfo& bucket_info);
+  int init_index(RGWBucketInfo& bucket_info, const Span& parent_span = nullptr);
   int clean_index(RGWBucketInfo& bucket_info);
 
 
@@ -127,7 +127,7 @@ public:
                         std::optional<int> shard_id,
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,
-                        map<int, string> *bucket_instance_ids);
+                        map<int, string> *bucket_instance_ids, const Span& parent_span = nullptr);
 };
 
 
