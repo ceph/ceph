@@ -305,11 +305,18 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
             << " != " << mon->monmap->fsid << dendl;
     return true;
   }
+  const auto& pool = statfs->data_pool;
+  if (pool && !mon->osdmon()->osdmap.have_pg_pool(*pool)) {
+    // There's no error field for MStatfsReply so just ignore the request.
+    // This is known to happen when a client is still accessing a removed fs.
+    dout(1) << __func__ << " on removed pool " << *pool << dendl;
+    return true;
+  }
   dout(10) << __func__ << " " << *statfs
            << " from " << statfs->get_orig_source() << dendl;
   epoch_t ver = get_last_committed();
   auto reply = new MStatfsReply(statfs->fsid, statfs->get_tid(), ver);
-  reply->h.st = get_statfs(mon->osdmon()->osdmap, statfs->data_pool);
+  reply->h.st = get_statfs(mon->osdmon()->osdmap, pool);
   mon->send_reply(op, reply);
   return true;
 }
