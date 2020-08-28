@@ -206,7 +206,7 @@ static int parse_map_options(const std::string &options_string,
 }
 
 static int parse_unmap_options(const std::string &options_string,
-                               MapOptions* map_options)
+                               MapOptions* unmap_options)
 {
   char *options = strdup(options_string.c_str());
   BOOST_SCOPE_EXIT(options) {
@@ -222,7 +222,7 @@ static int parse_unmap_options(const std::string &options_string,
       *value_char++ = '\0';
 
     if (!strcmp(this_char, "force")) {
-      put_map_option("force", this_char, map_options);
+      put_map_option("force", this_char, unmap_options);
     } else {
       std::cerr << "rbd: unknown unmap option '" << this_char << "'"
                 << std::endl;
@@ -416,7 +416,7 @@ out:
 
 static int do_kernel_unmap(const char *dev, const char *poolname,
                            const char *nspace_name, const char *imgname,
-                           const char *snapname, MapOptions&& map_options)
+                           const char *snapname, MapOptions&& unmap_options)
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
@@ -427,8 +427,8 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
   if (r < 0)
     return r;
 
-  for (auto it = map_options.cbegin(); it != map_options.cend(); ++it) {
-    if (it != map_options.cbegin())
+  for (auto it = unmap_options.cbegin(); it != unmap_options.cend(); ++it) {
+    if (it != unmap_options.cbegin())
       oss << ",";
     oss << it->second;
   }
@@ -505,15 +505,16 @@ int execute_map(const po::variables_map &vm,
     }
   }
 
+  // connect to the cluster to get the default pool and the default map
+  // options
   librados::Rados rados;
-  librados::IoCtx ioctx;
-  r = utils::init(pool_name, nspace_name, &rados, &ioctx);
+  r = utils::init_rados(&rados);
   if (r < 0) {
     return r;
   }
 
-  // delay processing default options until after global option overrides have
-  // been received
+  utils::normalize_pool_name(&pool_name);
+
   MapOptions default_map_options;
   r = parse_map_options(
       g_conf().get_val<std::string>("rbd_default_map_options"),
@@ -522,7 +523,6 @@ int execute_map(const po::variables_map &vm,
     std::cerr << "rbd: couldn't parse default map options" << std::endl;
     return r;
   }
-
   for (auto& [key, value] : default_map_options) {
     if (map_options.count(key) == 0) {
       map_options[key] = value;
@@ -568,10 +568,10 @@ int execute_unmap(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  MapOptions map_options;
+  MapOptions unmap_options;
   if (vm.count("options")) {
     for (auto &options : vm["options"].as<std::vector<std::string>>()) {
-      r = parse_unmap_options(options, &map_options);
+      r = parse_unmap_options(options, &unmap_options);
       if (r < 0) {
         std::cerr << "rbd: couldn't parse unmap options" << std::endl;
         return r;
@@ -579,12 +579,21 @@ int execute_unmap(const po::variables_map &vm,
     }
   }
 
-  utils::init_context();
+  if (device_name.empty() && pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
 
   r = do_kernel_unmap(device_name.empty() ? nullptr : device_name.c_str(),
                       pool_name.c_str(), nspace_name.c_str(),
                       image_name.c_str(), snap_name.c_str(),
-                      std::move(map_options));
+                      std::move(unmap_options));
   if (r < 0) {
     std::cerr << "rbd: unmap failed: " << cpp_strerror(r) << std::endl;
     return r;
