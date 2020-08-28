@@ -54,6 +54,8 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
+    'sphinx-prompt',
+    'sphinx_substitution_extensions',
     'breathe',
     'edit_on_github',
     'ceph_releases',
@@ -72,7 +74,14 @@ build_with_rtd = os.environ.get('READTHEDOCS') == 'True'
 if build_with_rtd:
     extensions += ['sphinx_search.extension']
 
+# sphinx.ext.todo
 todo_include_todos = True
+
+# sphinx_substitution_extensions
+# TODO: read from doc/releases/releases.yml
+rst_prolog = """
+.. |stable-release| replace:: octopus
+"""
 
 top_level = os.path.dirname(
     os.path.dirname(
