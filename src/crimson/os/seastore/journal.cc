@@ -96,7 +96,8 @@ Journal::write_record_ret Journal::write_record(
   ceph::bufferlist to_write = encode_record(
     rsize, std::move(record));
   auto target = written_to;
-  written_to += p2roundup(to_write.length(), (unsigned)block_size);
+  assert((to_write.length() % block_size) == 0);
+  written_to += to_write.length();
   logger().debug(
     "write_record, mdlength {}, dlength {}, target {}",
     rsize.mdlength,
