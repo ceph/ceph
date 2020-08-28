@@ -16,6 +16,7 @@
      --mark-out <osdid>      mark an osd as out (but do not persist)
      --with-default-pool     include default pool when creating map
      --clear-temp            clear pg_temp and primary_temp
+     --clean-temps           clean pg_temps
      --test-random           do random placements
      --test-map-pg <pgid>    map a pgid to osds
      --test-map-object <objectname> [--pool <poolid>] map an object to osds
