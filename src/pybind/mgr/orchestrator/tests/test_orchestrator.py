@@ -8,6 +8,7 @@ import yaml
 
 from ceph.deployment.service_spec import ServiceSpec
 from ceph.deployment import inventory
+from mgr_module import HandleCommandResult
 
 from test_orchestrator import TestOrchestrator as _TestOrchestrator
 from tests import mock
@@ -15,7 +16,7 @@ from tests import mock
 from orchestrator import raise_if_exception, Completion, ProgressReference
 from orchestrator import InventoryHost, DaemonDescription, ServiceDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator.module import to_format
+from orchestrator.module import to_format, OrchestratorCli
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -295,3 +296,15 @@ def test_event_multiline():
     e = OrchestratorEvent(datetime.datetime.utcnow(), 'service',
                           'subject', 'ERROR', 'multiline\nmessage')
     assert OrchestratorEvent.from_json(e.to_json()) == e
+
+
+def test_handle_command():
+    cmd = {
+        'prefix': 'orch daemon add',
+        'daemon_type': 'mon',
+        'placement': 'smithi044:[v2:172.21.15.44:3301,v1:172.21.15.44:6790]=c',
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    assert r == HandleCommandResult(
+        retval=-2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
