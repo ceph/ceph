@@ -153,7 +153,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
 
   std::lock_guard l(metadata->lock);
   PyFormatter f;
-  for (const auto &[daemon, status] : metadataz->service_status) {
+  for (const auto &[daemon, status] : metadata->service_status) {
     f.dump_string(daemon, status);
   }
   return f.get();
