@@ -30,7 +30,7 @@ public:
                        RGWGetObj_Filter* next);
   ~RGWGetObj_Decompress() override {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span = nullptr) override;
   int fixup_range(off_t& ofs, off_t& end) override;
 
 };

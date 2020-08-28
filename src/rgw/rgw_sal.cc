@@ -38,15 +38,18 @@
 namespace rgw::sal {
 
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets)
+			       uint64_t max, bool need_stats, RGWBucketList &buckets, const Span& parent_span)
 {
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
   RGWUserBuckets ulist;
   bool is_truncated = false;
   int ret;
 
   buckets.clear();
+  Span span_2 = child_span("rgw_user.cc : RGWUSerCtl::list_buckets", span_1);
   ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
 					 need_stats, &ulist, &is_truncated);
+  finish_trace(span_2);
   if (ret < 0)
     return ret;
 
@@ -81,12 +84,12 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
   return nullptr;
 }
 
-int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y)
+int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y, const Span& parent_span)
 {
-  int ret;
-
-  // Refresh info
-  ret = get_bucket_info(y);
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  Span span_2 = child_span("RGWRadosBucket::get_bucket_info", span_1);
+  int ret = get_bucket_info(y);
+  finish_trace(span_2);
   if (ret < 0)
     return ret;
 
@@ -99,10 +102,9 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
   bool is_truncated = false;
   do {
     results.objs.clear();
-
-      ret = list(params, 1000, results, y);
-      if (ret < 0)
-	return ret;
+    ret = list(params, 1000, results, y, span_1);
+    if (ret < 0)
+      return ret;
 
     if (!results.objs.empty() && !delete_children) {
       lderr(store->ctx()) << "ERROR: could not remove non-empty bucket " << info.bucket.name <<
@@ -113,22 +115,21 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
       /* xxx dang */
-      ret = rgw_remove_object(store, info, info.bucket, key);
+      ret = rgw_remove_object(store, info, info.bucket, key, span_1);
       if (ret < 0 && ret != -ENOENT) {
 	return ret;
       }
     }
   } while(is_truncated);
 
-  /* If there's a prefix, then we are aborting multiparts as well */
-  if (!prefix.empty()) {
-    ret = abort_bucket_multiparts(store, store->ctx(), info, prefix, delimiter);
-    if (ret < 0) {
-      return ret;
-    }
+  ret = abort_bucket_multiparts(store, store->ctx(), info, prefix, delimiter, span_1);
+  if (ret < 0) {
+    return ret;
   }
-
+  Span span_4 = child_span("rgw_bucket.cc : RGWBucketCtl::sync_user_stats", span_1);
   ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
+  finish_trace(span_4);
+
   if ( ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -137,14 +138,15 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
 
   // if we deleted children above we will force delete, as any that
   // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, ot, null_yield, !delete_children);
+  ret = store->getRados()->delete_bucket(info, ot, null_yield, !delete_children, span_1);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
     return ret;
   }
-
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false);
+  Span span_5 = child_span("rgw_bucket.cc : RGWBucketCtl::unlink_bucket", span_1);
+  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, null_yield, false, span_1);
+  finish_trace(span_5);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
@@ -217,8 +219,9 @@ int RGWRadosBucket::sync_user_stats()
       return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, &ent);
 }
 
-int RGWRadosBucket::update_container_stats(void)
-{
+int RGWRadosBucket::update_container_stats(const Span& parent_span)
+{  
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
   int ret;
   map<std::string, RGWBucketEnt> m;
 
@@ -275,10 +278,10 @@ int RGWRadosBucket::chown(RGWUser* new_user, RGWUser* old_user, optional_yield y
 			   old_user->get_display_name(), obj_marker, y);
 }
 
-int RGWRadosBucket::put_instance_info(bool exclusive, ceph::real_time _mtime)
+int RGWRadosBucket::put_instance_info(bool exclusive, ceph::real_time _mtime, const Span& parent_span)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs.attrs);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs.attrs, parent_span);
 }
 
 /* Make sure to call get_bucket_info() if you need it first */
@@ -287,9 +290,9 @@ bool RGWRadosBucket::is_owner(RGWUser* user)
   return (info.owner.compare(user->get_user()) == 0);
 }
 
-int RGWRadosBucket::check_empty(optional_yield y)
+int RGWRadosBucket::check_empty(optional_yield y, const Span& parent_span)
 {
-  return store->getRados()->check_bucket_empty(info, y);
+  return store->getRados()->check_bucket_empty(info, y, parent_span);
 }
 
 int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
@@ -298,10 +301,10 @@ int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_q
 					  user_quota, bucket_quota, obj_size, check_size_only);
 }
 
-int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y)
+int RGWRadosBucket::set_instance_attrs(RGWAttrs& attrs, optional_yield y, const Span& parent_span)
 {
     return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				attrs.attrs, &get_info().objv_tracker, y);
+				attrs.attrs, &get_info().objv_tracker, y, parent_span);
 }
 
 int RGWRadosBucket::try_refresh_info(ceph::real_time *pmtime)
@@ -324,7 +327,7 @@ std::unique_ptr<RGWObject> RGWRadosBucket::get_object(const rgw_obj_key& k)
   return std::unique_ptr<RGWObject>(new RGWRadosObject(this->store, k, this));
 }
 
-int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, optional_yield y)
+int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, optional_yield y, const Span& parent_span)
 {
   RGWRados::Bucket target(store->getRados(), get_info());
   if (params.shard_id >= 0) {
@@ -339,7 +342,7 @@ int RGWRadosBucket::list(ListParams& params, int max, ListResults& results, opti
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
-  int ret = list_op.list_objects(max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
+  int ret = list_op.list_objects(max, &results.objs, &results.common_prefixes, &results.is_truncated, y, parent_span);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
   }
@@ -396,14 +399,14 @@ int RGWRadosObject::get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjS
   return store->getRados()->get_obj_state(rctx, bucket.get_info(), obj, state, follow_olh, y);
 }
 
-int RGWRadosObject::read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj)
+int RGWRadosObject::read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj, const Span& parent_span)
 {
   read_op.params.attrs = &attrs.attrs;
   read_op.params.target_obj = target_obj;
   read_op.params.obj_size = &obj_size;
   read_op.params.lastmod = &mtime;
 
-  return read_op.prepare(y);
+  return read_op.prepare(y,parent_span);
 }
 
 int RGWRadosObject::set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj)
@@ -422,34 +425,31 @@ int RGWRadosObject::set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAtt
 			y);
 }
 
-int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj* target_obj)
+int RGWRadosObject::get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj, const Span& parent_span)
 {
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rctx, get_obj());
   RGWRados::Object::Read read_op(&op_target);
 
-  return read_attrs(read_op, y, target_obj);
+  return read_attrs(read_op, y, target_obj, parent_span);
 }
 
-int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y)
+int RGWRadosObject::modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const Span& parent_span)
 {
-  rgw_obj target = get_obj();
-  int r = get_obj_attrs(rctx, y, &target);
+   
+    
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
+
+  rgw_obj target_obj;
+  Span span_2 = child_span("RGWRadosObject::get_obj_attrs", parent_span);
+  int r = get_obj_attrs(rctx, y, &target_obj);
+  finish_trace(span_2);
   if (r < 0) {
     return r;
   }
   set_atomic(rctx);
   attrs.attrs[attr_name] = attr_val;
-  return set_obj_attrs(rctx, &attrs, nullptr, y, &target);
-}
-
-int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y)
-{
-  RGWAttrs rmattr;
-  bufferlist bl;
-
-  set_atomic(rctx);
-  rmattr.attrs[attr_name] = bl;
-  return set_obj_attrs(rctx, nullptr, &rmattr, y);
+  return store->getRados()->set_attrs(rctx, bucket->get_info(), target_obj, attrs.attrs, NULL, y, span_1);
 }
 
 int RGWRadosObject::copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket,
@@ -473,9 +473,21 @@ int RGWRadosObject::copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket,
   attrset.erase(RGW_ATTR_TAIL_TAG);
 
   return store->getRados()->copy_obj_data(rctx, dest_bucket,
-					  dest_bucket->get_info().placement_rule, read_op,
-					  obj_size - 1, dest_obj, NULL, mtime, attrset, 0,
-					  real_time(), NULL, dpp, y);
+					   dest_bucket->get_info().placement_rule, read_op,
+					   obj_size - 1, dest_obj, NULL, mtime, attrset, 0, real_time(), NULL,
+					   dpp, y);
+}
+
+int RGWRadosObject::delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y, const Span& parent_span)
+{
+  map <string, bufferlist> attrs;
+  map <string, bufferlist> rmattr;
+  bufferlist bl;
+
+  set_atomic(rctx);
+  rmattr[attr_name] = bl;
+  rgw_obj obj = get_obj();
+  return store->getRados()->set_attrs(rctx, bucket->get_info(), obj, attrs, &rmattr, y, parent_span);
 }
 
 void RGWRadosObject::set_atomic(RGWObjectCtx *rctx) const
@@ -548,7 +560,7 @@ RGWRadosObject::RadosReadOp::RadosReadOp(RGWRadosObject *_source, RGWObjectCtx *
 	parent_op(&op_target)
 { }
 
-int RGWRadosObject::RadosReadOp::prepare(optional_yield y)
+int RGWRadosObject::RadosReadOp::prepare(optional_yield y, const Span& parent_span)
 {
   uint64_t obj_size;
 
@@ -564,7 +576,7 @@ int RGWRadosObject::RadosReadOp::prepare(optional_yield y)
   parent_op.params.obj_size = &obj_size;
   parent_op.params.attrs = &source->get_attrs().attrs;
 
-  int ret = parent_op.prepare(y);
+  int ret = parent_op.prepare(y, parent_span);
   if (ret < 0)
     return ret;
 
@@ -586,7 +598,7 @@ int RGWRadosObject::RadosReadOp::get_manifest(RGWObjManifest **pmanifest,
   return op_target.get_manifest(pmanifest, y);
 }
 
-int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACLOwner bucket_owner, ceph::real_time unmod_since, bool high_precision_time, uint64_t epoch, string& version_id, optional_yield y)
+int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACLOwner bucket_owner, ceph::real_time unmod_since, bool high_precision_time, uint64_t epoch, string& version_id, optional_yield y, const Span& parent_span)
 {
   int ret = 0;
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *obj_ctx, get_obj());
@@ -600,7 +612,7 @@ int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACL
   del_op.params.unmod_since = unmod_since;
   del_op.params.high_precision_time = high_precision_time;
 
-  ret = del_op.delete_obj(y);
+  ret = del_op.delete_obj(y, parent_span);
   if (ret >= 0) {
     delete_marker = del_op.result.delete_marker;
     version_id = del_op.result.version_id;
@@ -610,9 +622,9 @@ int RGWRadosObject::delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner, ACL
 }
 
 
-int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y)
+int RGWRadosObject::RadosReadOp::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y, const Span& parent_span)
 {
-  return parent_op.iterate(ofs, end, cb, y);
+  return parent_op.iterate(ofs, end, cb, y, parent_span);
 }
 
 int RGWRadosStore::get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket)
@@ -745,8 +757,13 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 bool obj_lock_enabled,
 				 bool *existed,
 				 req_info& req_info,
-				 std::unique_ptr<RGWBucket>* bucket_out)
+				 std::unique_ptr<RGWBucket>* bucket_out, const Span& parent_span)
 {
+   
+      
+  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  
+
   int ret;
   bufferlist in_data;
   RGWBucketInfo master_info;
@@ -764,12 +781,10 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (ret != -ENOENT) {
     *existed = true;
-    if (swift_ver_location.empty()) {
-      swift_ver_location = bucket->get_info().swift_ver_location;
-    }
-    placement_rule.inherit_from(bucket->get_info().placement_rule);
+    Span span_2 = child_span("rgw_sal.cc : rgw_op_get_bucket_policy_from_attr", span_1);
     int r = rgw_op_get_bucket_policy_from_attr(this, u, bucket->get_attrs().attrs,
 					       &old_policy);
+    finish_trace(span_2);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(u.get_id()) != 0) {
 	bucket_out->swap(bucket);
@@ -817,9 +832,11 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
+    Span span_3 = child_span("svc_zone.cc : RGWSI_Zone::select_bucket_placement", span_1);
     ret = svc()->zone->select_bucket_placement(u.get_info(),
 					    zid, placement_rule,
 					    &selected_placement_rule, nullptr);
+    finish_trace(span_3);
     if (selected_placement_rule != info.placement_rule) {
       ret = -EEXIST;
       bucket_out->swap(bucket);
@@ -831,7 +848,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				    zid, placement_rule, swift_ver_location,
 				    pquota_info, attrs,
 				    info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, pmaster_num_shards, exclusive);
+				    pmaster_bucket, pmaster_num_shards, exclusive, span_1);
     if (ret == -EEXIST) {
       *existed = true;
     } else if (ret != 0) {

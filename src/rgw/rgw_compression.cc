@@ -87,7 +87,7 @@ RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_,
     lderr(cct) << "Cannot load compressor of type " << cs_info->compression_type << dendl;
 }
 
-int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span)
 {
   ldout(cct, 10) << "Compression for rgw is enabled, decompress part "
       << "bl_ofs="<< bl_ofs << bl_len << dendl;

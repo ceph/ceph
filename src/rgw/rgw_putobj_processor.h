@@ -32,7 +32,7 @@ namespace putobj {
 class ObjectProcessor : public DataProcessor {
  public:
   // prepare to start processing object data
-  virtual int prepare(optional_yield y) = 0;
+  virtual int prepare(optional_yield y, const Span& parent_span = nullptr) = 0;
 
   // complete the operation and make its result visible to clients
   virtual int complete(size_t accounted_size, const std::string& etag,
@@ -42,7 +42,7 @@ class ObjectProcessor : public DataProcessor {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       optional_yield y, const Span& parent_span = nullptr) = 0;
 };
 
 // an object processor with special handling for the first chunk of the head.
@@ -191,7 +191,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a trivial manifest
-  int prepare(optional_yield y) override;
+  int prepare(optional_yield y, const Span& parent_span = nullptr) override;
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,
                ceph::real_time *mtime, ceph::real_time set_mtime,
@@ -200,7 +200,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+               optional_yield y, const Span& parent_span = nullptr) override;
 
 };
 
@@ -219,7 +219,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // on EEXIST, retry with random prefix
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
   // prepare the head stripe and manifest
-  int prepare_head();
+  int prepare_head(const Span& parent_span = nullptr);
  public:
   MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
 			   rgw::sal::RGWBucket* bucket,
@@ -237,7 +237,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a multipart manifest
-  int prepare(optional_yield y) override;
+  int prepare(optional_yield y, const Span& parent_span = nullptr) override;
   // write the head object attributes in a bucket index transaction, then
   // register the completed part with the multipart meta object
   int complete(size_t accounted_size, const std::string& etag,
@@ -247,7 +247,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+               optional_yield y, const Span& parent_span = nullptr) override;
 
 };
 
@@ -277,13 +277,13 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}
-    int prepare(optional_yield y) override;
+    int prepare(optional_yield y, const Span& parent_span = nullptr) override;
     int complete(size_t accounted_size, const string& etag,
                  ceph::real_time *mtime, ceph::real_time set_mtime,
                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
                  const char *if_match, const char *if_nomatch, const string *user_data,
                  rgw_zone_set *zones_trace, bool *canceled,
-                 optional_yield y) override;
+                 optional_yield y, const Span& parent_span = nullptr) override;
   };
 
 } // namespace putobj
