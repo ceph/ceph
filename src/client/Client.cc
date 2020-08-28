@@ -11728,7 +11728,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     if (vxattr->flags & VXATTR_RSTAT) {
       flags |= CEPH_STAT_RSTAT;
     }
-    r = _getattr(in, flags, perms, true);
+    r = _getattr(in, flags | CEPH_STAT_CAP_XATTR, perms, true);
     if (r != 0) {
       // Error from getattr!
       return r;
