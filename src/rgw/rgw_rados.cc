@@ -7902,7 +7902,6 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 				      .set_mtime(pmtime)
 				      .set_attrs(pattrs)
 				      .set_refresh_version(rv));
-            
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,

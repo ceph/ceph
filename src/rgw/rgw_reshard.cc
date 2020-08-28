@@ -603,7 +603,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  // place the multipart .meta object on the same shard as its head object
 	  obj.index_hash_source = mp.get_key();
 	}
-	int ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal, obj.get_hash_object(), &target_shard_id);
+	ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal,
+						     obj.get_hash_object(), &target_shard_id);
 	if (ret < 0) {
 	  ldpp_dout(dpp, -1) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
 	  return ret;
@@ -1037,37 +1038,37 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	}
 
 	{
-	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
-	ret = br.execute(entry.new_num_shards, max_entries, dpp, false, nullptr,
-			 nullptr, this);
-	if (ret < 0) {
-	  ldpp_dout(dpp, 0) <<  __func__ <<
-	    ": Error during resharding bucket " << entry.bucket_name << ":" <<
-	    cpp_strerror(-ret)<< dendl;
-	  return ret;
-	}
+    RGWBucketReshard br(store, bucket_info, attrs, nullptr);
+    ret = br.execute(entry.new_num_shards, max_entries, dpp, false, nullptr,
+        nullptr, this);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) <<  __func__ <<
+        ": Error during resharding bucket " << entry.bucket_name << ":" <<
+        cpp_strerror(-ret)<< dendl;
+      return ret;
+    }
 
-	ldpp_dout(dpp, 20) << __func__ <<
-	  " removing reshard queue entry for bucket " << entry.bucket_name <<
-	  dendl;
+    ldpp_dout(dpp, 20) << __func__ <<
+      " removing reshard queue entry for bucket " << entry.bucket_name <<
+      dendl;
 
-      	ret = remove(dpp, entry);
-	if (ret < 0) {
-	  ldpp_dout(dpp, 0) << __func__ << ": Error removing bucket " <<
-	    entry.bucket_name << " from resharding queue: " <<
-	    cpp_strerror(-ret) << dendl;
-	  return ret;
-	  }
+    ret = remove(dpp, entry);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": Error removing bucket " <<
+	entry.bucket_name << " from resharding queue: " <<
+	cpp_strerror(-ret) << dendl;
+      return ret;
+    }
 	}
 
     finished_entry:
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
-	ret = logshard_lock.renew(now);
-	if (ret < 0) {
-	  return ret;
-	}
+	      ret = logshard_lock.renew(now);
+	      if (ret < 0) {
+	        return ret;
+	      }
       }
 
       entry.get_key(&marker);
