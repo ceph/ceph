@@ -61,7 +61,7 @@ function munge_debian_control {
 	    ;;
     esac
     if $with_jaeger; then
-	    sed -i -e 's/^# Crimson[[:space:]]//g' $control
+	    sed -i -e 's/^# with_jaeger[[:space:]]//g' $control
     fi
     if $with_seastar; then
 	sed -i -e 's/^# Crimson[[:space:]]//g' $control
