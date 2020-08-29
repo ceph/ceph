@@ -29,7 +29,8 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
                  network: Optional[str] = None,
                  keyring: Optional[str] = None,
                  extra_args: Optional[List[str]] = None,
-                 extra_config: Optional[Dict[str, Any]] = None,
+                 ceph_conf: str = '',
+                 extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
                  ports: Optional[List[int]] = None,):
         """
@@ -56,13 +57,22 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         # For run_cephadm. Would be great to have more expressive names.
         self.extra_args: List[str] = extra_args or []
-        self.extra_config: Dict[str, Any] = extra_config or {}
+
+        self.ceph_conf = ceph_conf
+        self.extra_files = extra_files or {}
 
         # TCP ports used by the daemon
         self.ports:  List[int] = ports or []
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def config_get_files(self):
+        files = self.extra_files
+        if self.ceph_conf:
+            files['config'] = self.ceph_conf
+
+        return files
 
 
 class CephadmService(metaclass=ABCMeta):
@@ -235,10 +245,10 @@ class CephService(CephadmService):
             daemon_spec.daemon_id,
             host=daemon_spec.host,
             keyring=daemon_spec.keyring,
-            extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
+            extra_ceph_config=daemon_spec.ceph_conf)
 
-        if daemon_spec.extra_config:
-            cephadm_config.update({'files': daemon_spec.extra_config})
+        if daemon_spec.config_get_files():
+            cephadm_config.update({'files': daemon_spec.config_get_files()})
 
         return cephadm_config, []
 
@@ -353,7 +363,7 @@ class MonService(CephService):
                     'public_network is set but does not look like a CIDR network: \'%s\'' % network)
             extra_config += 'public network = %s\n' % network
 
-        daemon_spec.extra_config = {'config': extra_config}
+        daemon_spec.ceph_conf = extra_config
         daemon_spec.keyring = keyring
 
         return daemon_spec
