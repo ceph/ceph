@@ -163,7 +163,7 @@ class CephadmUpgrade:
             if not r.retval:
                 logger.info(f'Upgrade: {r.stdout}')
                 return True
-            logger.error('Upgrade: {r.stderr}')
+            logger.error(f'Upgrade: {r.stderr}')
 
             time.sleep(15)
             tries -= 1
@@ -261,8 +261,7 @@ class CephadmUpgrade:
                     daemon_type, d.daemon_id,
                     d.container_image_name, d.container_image_id, d.version))
 
-                if daemon_type == 'mgr' and \
-                   d.daemon_id == self.mgr.get_mgr_id():
+                if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                 self.mgr.get_mgr_id())
                     need_upgrade_self = True
@@ -317,12 +316,12 @@ class CephadmUpgrade:
                 return
 
             if need_upgrade_self:
-                mgr_map = self.mgr.get('mgr_map')
-                num = len(mgr_map.get('standbys'))
-                if not num:
+                try:
+                    self.mgr.mgr_service.fail_over()
+                except OrchestratorError as e:
                     self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
                         'severity': 'warning',
-                        'summary': 'Upgrade: Need standby mgr daemon',
+                        'summary': f'Upgrade: {e}',
                         'count': 1,
                         'detail': [
                             'The upgrade process needs to upgrade the mgr, '
@@ -331,17 +330,7 @@ class CephadmUpgrade:
                     })
                     return
 
-                logger.info('Upgrade: there are %d other already-upgraded '
-                            'standby mgrs, failing over' % num)
-
-                self._update_upgrade_progress(done / len(daemons))
-
-                # fail over
-                ret, out, err = self.mgr.check_mon_command({
-                    'prefix': 'mgr fail',
-                    'who': self.mgr.get_mgr_id(),
-                })
-                return
+                return  # unreachable code, as fail_over never returns
             elif daemon_type == 'mgr':
                 if 'UPGRADE_NO_STANDBY_MGR' in self.mgr.health_checks:
                     del self.mgr.health_checks['UPGRADE_NO_STANDBY_MGR']
