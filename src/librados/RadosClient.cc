@@ -33,17 +33,10 @@
 #include "include/stringify.h"
 #include "include/util.h"
 
-#include "messages/MLog.h"
 #include "msg/Messenger.h"
 
 // needed for static_cast
-#include "messages/PaxosServiceMessage.h"
-#include "messages/MPoolOpReply.h"
-#include "messages/MStatfsReply.h"
-#include "messages/MGetPoolStatsReply.h"
-#include "messages/MOSDOpReply.h"
-#include "messages/MOSDMap.h"
-#include "messages/MCommandReply.h"
+#include "messages/MLog.h"
 
 #include "AioCompletionImpl.h"
 #include "IoCtxImpl.h"
