@@ -233,7 +233,6 @@ private:
   void process();
   void wakeup_from(uint64_t id);
   void tick(uint64_t id);
-  void local_deliver();
   void stop(bool queue_reset);
   void cleanup();
   PerfCounters *get_perf_counter() {
