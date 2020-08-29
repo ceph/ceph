@@ -1522,9 +1522,7 @@ To check that the host is reachable:
         return None
 
     def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
-        ret, config, err = self.check_mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
+        config = self.get_minimal_ceph_conf()
 
         try:
             with self._remote_connection(host) as tpl:
@@ -1546,6 +1544,13 @@ To check that the host is reachable:
         except OrchestratorError as e:
             return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
+
+    def get_minimal_ceph_conf(self) -> str:
+        _, config, _ = self.check_mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        return config
+
 
     def _invalidate_daemons_and_kick_serve(self, filter_host=None):
         if filter_host:

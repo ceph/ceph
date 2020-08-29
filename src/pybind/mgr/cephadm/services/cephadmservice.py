@@ -288,10 +288,8 @@ class CephService(CephadmService):
                 'entity': entity,
             })
 
-        # generate config
-        ret, config, err = self.mgr.check_mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
+        config = self.mgr.get_minimal_ceph_conf()
+
         if extra_ceph_config:
             config += extra_ceph_config
 
