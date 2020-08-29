@@ -3,7 +3,8 @@ from datetime import datetime
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from cephadm import CephadmOrchestrator
-from cephadm.inventory import SPEC_STORE_PREFIX, DATEFMT
+from cephadm.inventory import SPEC_STORE_PREFIX
+from cephadm.utils import DATEFMT
 from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
 from tests import mock
 
