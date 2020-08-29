@@ -8,14 +8,13 @@ from ceph.deployment.drive_selection import DriveSelection
 
 from datetime import datetime
 import orchestrator
-from cephadm.utils import forall_hosts
+from cephadm.utils import forall_hosts, datetime_to_str, str_to_datetime
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
 from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
 
 logger = logging.getLogger(__name__)
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 
 class OSDService(CephService):
@@ -610,7 +609,7 @@ class OSD:
         return 'n/a' if self.get_pg_count() < 0 else str(self.get_pg_count())
 
     def to_json(self) -> dict:
-        out = dict()
+        out: Dict[str, Any] = dict()
         out['osd_id'] = self.osd_id
         out['started'] = self.started
         out['draining'] = self.draining
@@ -621,7 +620,7 @@ class OSD:
 
         for k in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if getattr(self, k):
-                out[k] = getattr(self, k).strftime(DATEFMT)
+                out[k] = datetime_to_str(getattr(self, k))
             else:
                 out[k] = getattr(self, k)
         return out
@@ -632,7 +631,7 @@ class OSD:
             return None
         for date_field in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if inp.get(date_field):
-                inp.update({date_field: datetime.strptime(inp.get(date_field, ''), DATEFMT)})
+                inp.update({date_field: str_to_datetime(inp.get(date_field, ''))})
         inp.update({'remove_util': ctx})
         if 'nodename' in inp:
             hostname = inp.pop('nodename')

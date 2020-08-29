@@ -9,6 +9,7 @@ import six
 import orchestrator
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec
+from cephadm.utils import str_to_datetime, datetime_to_str
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent
 
 if TYPE_CHECKING:
@@ -19,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 
 class Inventory:
@@ -118,7 +118,7 @@ class SpecStore():
             try:
                 v = json.loads(v)
                 spec = ServiceSpec.from_json(v['spec'])
-                created = datetime.datetime.strptime(v['created'], DATEFMT)
+                created = str_to_datetime(v['created'])
                 self.specs[service_name] = spec
                 self.spec_created[service_name] = created
                 self.mgr.log.debug('SpecStore: loaded spec for %s' % (
@@ -139,7 +139,7 @@ class SpecStore():
             SPEC_STORE_PREFIX + spec.service_name(),
             json.dumps({
                 'spec': spec.to_json(),
-                'created': self.spec_created[spec.service_name()].strftime(DATEFMT),
+                'created': datetime_to_str(self.spec_created[spec.service_name()]),
             }, sort_keys=True),
         )
         self.mgr.events.for_service(spec, OrchestratorEvent.INFO, 'service was created')
@@ -199,8 +199,7 @@ class HostCache():
             try:
                 j = json.loads(v)
                 if 'last_device_update' in j:
-                    self.last_device_update[host] = datetime.datetime.strptime(
-                        j['last_device_update'], DATEFMT)
+                    self.last_device_update[host] = str_to_datetime(j['last_device_update'])
                 else:
                     self.device_refresh_queue.append(host)
                 # for services, we ignore the persisted last_*_update
@@ -222,15 +221,13 @@ class HostCache():
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
-                        'last_config': datetime.datetime.strptime(
-                            d['last_config'], DATEFMT),
+                        'last_config': str_to_datetime(d['last_config']),
                     }
                 if 'last_host_check' in j:
-                    self.last_host_check[host] = datetime.datetime.strptime(
-                        j['last_host_check'], DATEFMT)
+                    self.last_host_check[host] = str_to_datetime(j['last_host_check'])
                 if 'last_etc_ceph_ceph_conf' in j:
-                    self.last_etc_ceph_ceph_conf[host] = datetime.datetime.strptime(
-                        j['last_etc_ceph_ceph_conf'], DATEFMT)
+                    self.last_etc_ceph_ceph_conf[host] = str_to_datetime(
+                        j['last_etc_ceph_ceph_conf'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
 
@@ -305,11 +302,9 @@ class HostCache():
             'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
-            j['last_daemon_update'] = self.last_daemon_update[host].strftime(
-                DATEFMT)
+            j['last_daemon_update'] = datetime_to_str(self.last_daemon_update[host])
         if host in self.last_device_update:
-            j['last_device_update'] = self.last_device_update[host].strftime(
-                DATEFMT)
+            j['last_device_update'] = datetime_to_str(self.last_device_update[host])
         for name, dd in self.daemons[host].items():
             j['daemons'][name] = dd.to_json()
         for d in self.devices[host]:
@@ -318,16 +313,16 @@ class HostCache():
         for name, depi in self.daemon_config_deps[host].items():
             j['daemon_config_deps'][name] = {
                 'deps': depi.get('deps', []),
-                'last_config': depi['last_config'].strftime(DATEFMT),
+                'last_config': datetime_to_str(depi['last_config']),
             }
         if self.osdspec_previews[host]:
             j['osdspec_previews'] = self.osdspec_previews[host]
 
         if host in self.last_host_check:
-            j['last_host_check'] = self.last_host_check[host].strftime(DATEFMT)
+            j['last_host_check'] = datetime_to_str(self.last_host_check[host])
 
         if host in self.last_etc_ceph_ceph_conf:
-            j['last_etc_ceph_ceph_conf'] = self.last_etc_ceph_ceph_conf[host].strftime(DATEFMT)
+            j['last_etc_ceph_ceph_conf'] = datetime_to_str(self.last_etc_ceph_ceph_conf[host])
         if self.scheduled_daemon_actions.get(host, {}):
             j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
 
