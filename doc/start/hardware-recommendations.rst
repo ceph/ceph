@@ -187,37 +187,38 @@ performance of sequential reads and writes.
    SSD in a test configuration in order to gauge performance. 
 
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
-Acceptable IOPS are not the only factor to consider when selecting an SSD for
-use with Ceph. 
+Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
+are a few important performance considerations for journals and SSDs:
 
-SSDs have historically been cost prohibitive for object storage, but emerging
-QLC drives are closing the gap, offering greater density with lower power
-consumption and less power spent on cooling. HDD OSDs may see a significant
-performance improvement by offloading WAL+DB onto an SSD.
+- **Write-intensive semantics:** Journaling involves write-intensive semantics, 
+  so you should ensure that the SSD you choose to deploy will perform equal to
+  or better than a hard disk drive when writing data. Inexpensive SSDs may 
+  introduce write latency even as they accelerate access time, because 
+  sometimes high performance hard drives can write as fast or faster than 
+  some of the more economical SSDs available on the market!
+  
+- **Sequential Writes:** When you store multiple journals on an SSD you must 
+  consider the sequential write limitations of the SSD too, since they may be 
+  handling requests to write to multiple OSD journals simultaneously.
 
-To get a better sense of the factors that determine the cost of storage, you
-might use the `Storage Networking Industry Association's Total Cost of
-Ownership calculator`_
+- **Partition Alignment:** A common problem with SSD performance is that 
+  people like to partition drives as a best practice, but they often overlook
+  proper partition alignment with SSDs, which can cause SSDs to transfer data 
+  much more slowly. Ensure that SSD partitions are properly aligned.
 
-Partition Alignment
-~~~~~~~~~~~~~~~~~~~
+While SSDs are cost prohibitive for object storage, OSDs may see a significant
+performance improvement by storing an OSD's journal on an SSD and the OSD's
+object data on a separate hard disk drive. The ``osd journal`` configuration
+setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
+this path to an SSD or to an SSD partition so that it is not merely a file on
+the same disk as the object data.
 
-When using SSDs with Ceph, make sure that your partitions are properly aligned.
-Improperly aligned partitions suffer slower data transfer speeds than do
-properly aligned partitions. For more information about proper partition
-alignment and example commands that show how to align partitions properly, see
-`Werner Fischer's blog post on partition alignment`_.
-
-CephFS Metadata Segregation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-One way that Ceph accelerates CephFS file system performance is by segregating
-the storage of CephFS metadata from the storage of the CephFS file contents.
-Ceph provides a default ``metadata`` pool for CephFS metadata. You will never
-have to create a pool for CephFS metadata, but you can create a CRUSH map
-hierarchy for your CephFS metadata pool that points only to SSD storage media.
-See :ref:`CRUSH Device Class<crush-map-device-class>` for details.
-
+One way Ceph accelerates CephFS file system performance is to segregate the
+storage of CephFS metadata from the storage of the CephFS file contents. Ceph
+provides a default ``metadata`` pool for CephFS metadata. You will never have to
+create a pool for CephFS metadata, but you can create a CRUSH map hierarchy for
+your CephFS metadata pool that points only to a host's SSD storage media. See
+:ref:`CRUSH Device Class<crush-map-device-class>` for details.
 
 Controllers
 -----------
