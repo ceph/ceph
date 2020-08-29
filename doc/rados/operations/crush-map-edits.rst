@@ -116,6 +116,8 @@ a ``name``, normally ``osd.N`` where ``N`` is the device id.
 
 .. _crush-map-device-class:
 
+.. _crush-map-device-class:
+
 Devices may also have a *device class* associated with them (e.g.,
 ``hdd`` or ``ssd``), allowing them to be conveniently targeted by a
 crush rule.
