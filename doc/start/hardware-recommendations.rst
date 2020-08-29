@@ -208,7 +208,7 @@ storage of CephFS metadata from the storage of the CephFS file contents. Ceph
 provides a default ``metadata`` pool for CephFS metadata. You will never have to
 create a pool for CephFS metadata, but you can create a CRUSH map hierarchy for
 your CephFS metadata pool that points only to a host's SSD storage media. See
-`Mapping Pools to Different Types of OSDs`_ for details.
+:ref:`CRUSH Device Class<crush-map-device-class>` for details.
 
 
 Controllers
