@@ -51,10 +51,11 @@ sys.path.insert(0, os.path.abspath('_ext'))
 
 extensions = [
     'sphinx.ext.autodoc',
-    'sphinx_autodoc_typehints',
     'sphinx.ext.graphviz',
+    'sphinx.ext.mathjax',
     'sphinx.ext.todo',
     'sphinx-prompt',
+    'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
     'breathe',
     'edit_on_github',
