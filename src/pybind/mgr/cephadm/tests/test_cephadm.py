@@ -184,11 +184,13 @@ class TestCephadm(object):
             with with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), CephadmOrchestrator.add_rgw, 'test') as daemon_id:
 
                 c = cephadm_module.daemon_action('redeploy', 'rgw.' + daemon_id)
-                assert wait(cephadm_module, c) == f"Deployed rgw.{daemon_id} on host 'test'"
+                assert wait(cephadm_module,
+                            c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
                 for what in ('start', 'stop', 'restart'):
                     c = cephadm_module.daemon_action(what, 'rgw.' + daemon_id)
-                    assert wait(cephadm_module, c) == what + f" rgw.{daemon_id} from host 'test'"
+                    assert wait(cephadm_module,
+                                c) == F"Scheduled to {what} rgw.{daemon_id} on host 'test'"
 
                 # Make sure, _check_daemons does a redeploy due to monmap change:
                 cephadm_module._store['_ceph_get/mon_map'] = {
@@ -222,6 +224,31 @@ class TestCephadm(object):
                         f'rgw.{daemon_id}')]
 
                     assert 'myerror' in ''.join(evs)
+
+    @pytest.mark.parametrize(
+        "action",
+        [
+            'start',
+            'stop',
+            'restart',
+            'reconfig',
+            'redeploy'
+        ]
+    )
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_daemon_check(self, cephadm_module: CephadmOrchestrator, action):
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
+                [daemon_name] = d_names
+
+                cephadm_module._schedule_daemon_action(daemon_name, action)
+
+                assert cephadm_module.cache.get_scheduled_daemon_action(
+                    'test', daemon_name) == action
+
+                cephadm_module._check_daemons()
+
+                assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
