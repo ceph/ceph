@@ -410,7 +410,7 @@ class HostCache():
                 r.append(name)
         return r
 
-    def get_daemon_last_config_deps(self, host, name):
+    def get_daemon_last_config_deps(self, host, name) -> Tuple[Optional[List[str]], Optional[datetime.datetime]]:
         if host in self.daemon_config_deps:
             if name in self.daemon_config_deps[host]:
                 return self.daemon_config_deps[host][name].get('deps', []), \
@@ -485,13 +485,15 @@ class HostCache():
             return True
         if self.mgr.last_monmap > self.last_etc_ceph_ceph_conf[host]:
             return True
+        if self.mgr.extra_ceph_conf_is_newer(self.last_etc_ceph_ceph_conf[host]):
+            return True
         # already up to date:
         return False
 
     def update_last_etc_ceph_ceph_conf(self, host: str):
         if not self.mgr.last_monmap:
             return
-        self.last_etc_ceph_ceph_conf[host] = self.mgr.last_monmap
+        self.last_etc_ceph_ceph_conf[host] = datetime.datetime.utcnow()
 
     def host_needs_registry_login(self, host: str) -> bool:
         if host in self.mgr.offline_hosts:
