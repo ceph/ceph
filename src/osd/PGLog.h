@@ -1245,7 +1245,7 @@ public:
                             bool &dirty_big_info);
 
   void merge_log(pg_info_t &oinfo,
-		 pg_log_t &olog,
+		 pg_log_t&& olog,
 		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
