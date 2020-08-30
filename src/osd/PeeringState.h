@@ -1577,14 +1577,14 @@ public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   void merge_log(
     ObjectStore::Transaction& t, pg_info_t &oinfo,
-    pg_log_t &olog, pg_shard_t from);
+    pg_log_t&& olog, pg_shard_t from);
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
-		       pg_log_t &olog, pg_missing_t& omissing,
+		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
   void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from);
+			pg_missing_t&& omissing, pg_shard_t from);
 
   void calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
