@@ -152,7 +152,7 @@ PGBackend::mutate_object(
     // object_info_t
     {
       ceph::bufferlist osv;
-      encode(obc->obs.oi, osv, 0);
+      encode(obc->obs.oi, osv, CEPH_FEATURES_ALL);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
     }
