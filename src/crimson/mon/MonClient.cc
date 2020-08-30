@@ -952,7 +952,7 @@ seastar::future<> Client::reopen_session(int rank)
   }
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
-#warning fixme
+    // TODO: connect to multiple addrs
     auto peer = monmap.get_addrs(rank).pick_addr(msgr.get_myaddr().get_type());
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
