@@ -98,12 +98,10 @@ seastar::future<> ClientRequest::start()
 	return seastar::stop_iteration::yes;
       }).handle_exception_type([](crimson::common::actingset_changed& e) {
 	if (e.is_primary()) {
-	  crimson::get_logger(ceph_subsys_osd).debug(
-	      "operation restart, acting set changed");
+	  logger().debug("operation restart, acting set changed");
 	  return seastar::stop_iteration::no;
 	} else {
-	  crimson::get_logger(ceph_subsys_osd).debug(
-	      "operation abort, up primary changed");
+	  logger().debug("operation abort, up primary changed");
 	  return seastar::stop_iteration::yes;
 	}
       });
