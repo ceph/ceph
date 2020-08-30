@@ -3295,7 +3295,7 @@ void PrimaryLogPG::get_adjacent_clones(const object_info_t& oi, OpContext* ctx,
 }
 
 bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_chunk,
-				       RefCountCallback* fin)
+				       OSDOp& osd_op)
 {
   object_ref_delta_t refs;
   ObjectContextRef obc_l, obc_g;
@@ -3315,6 +3315,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
        * the reference the targe object has prior to update object_manifest in object_info_t.
        * So, call directly refcount_manifest.
        */
+      RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
       refcount_manifest(ctx->obs->oi.soid, p->first,
 	  refcount_t::INCREMENT_REF, fin);
       return true;
@@ -3323,7 +3324,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
       hobject_t tgt = p->first;
       ctx->register_on_commit(
 	  [src, tgt, this](){
-	  refcount_manifest(src, tgt, refcount_t::DECREMENT_REF, NULL);
+	    refcount_manifest(src, tgt, refcount_t::DECREMENT_REF, NULL);
 	  });
       return false;
     }
@@ -6906,11 +6907,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
-	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
 	  object_manifest_t set_chunk;
 	  bool need_inc_ref = false;
 	  set_chunk.chunk_map[src_offset] = chunk_info;
-	  need_inc_ref = inc_refcount_by_set(ctx, set_chunk, fin);
+	  need_inc_ref = inc_refcount_by_set(ctx, set_chunk, osd_op);
 	  if (need_inc_ref) {
 	    result = -EINPROGRESS;
 	    break;
