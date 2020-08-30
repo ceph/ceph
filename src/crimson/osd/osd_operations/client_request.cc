@@ -142,6 +142,12 @@ seastar::future<> ClientRequest::process_op(
     } else if (is_misdirected(pg)) {
       logger().trace("process_op: dropping misdirected op");
       return seastar::now();
+    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
+      auto reply = make_message<MOSDOpReply>(
+        m.get(), -EAGAIN, pg.get_osdmap_epoch(),
+        m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
+        !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+      return conn->send(reply);
     }
     return pg.with_locked_obc(
       m,
