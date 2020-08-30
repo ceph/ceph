@@ -104,16 +104,15 @@ public:
 
 class TestOp {
 public:
-  int num;
+  const int num;
   RadosTestContext *context;
   TestOpStat *stat;
-  bool done;
+  bool done = false;
   TestOp(int n, RadosTestContext *context,
 	 TestOpStat *stat = 0)
     : num(n),
       context(context),
-      stat(stat),
-      done(false)
+      stat(stat)
   {}
 
   virtual ~TestOp() {};
@@ -162,6 +161,7 @@ class RadosTestContext {
 public:
   ceph::mutex state_lock = ceph::make_mutex("Context Lock");
   ceph::condition_variable wait_cond;
+  // snap => {oid => desc}
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
@@ -388,8 +388,7 @@ public:
       new_obj.attrs.erase(*i);
     }
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void remove_object_header(const string &oid)
@@ -397,8 +396,7 @@ public:
     ObjectDesc new_obj = get_most_recent(oid);
     new_obj.header = bufferlist();
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
 
@@ -408,8 +406,7 @@ public:
     new_obj.header = bl;
     new_obj.exists = true;
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object_attrs(const string &oid, const map<string, ContDesc> &attrs)
@@ -422,8 +419,7 @@ public:
     }
     new_obj.exists = true;
     new_obj.dirty = true;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object(ContentsGenerator *cont_gen,
@@ -434,14 +430,12 @@ public:
     new_obj.dirty = true;
     new_obj.update(cont_gen,
 		   contents);
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object_full(const string &oid, const ObjectDesc &contents)
   {
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont[current_snap].insert_or_assign(oid, contents);
     pool_obj_cont[current_snap][oid].dirty = true;
   }
 
@@ -449,8 +443,7 @@ public:
   {
     ObjectDesc new_obj = get_most_recent(oid);
     new_obj.dirty = false;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   void update_object_version(const string &oid, uint64_t version,
@@ -480,8 +473,7 @@ public:
   {
     ceph_assert(!get_watch_context(oid));
     ObjectDesc new_obj;
-    pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+    pool_obj_cont[current_snap].insert_or_assign(oid, new_obj);
   }
 
   bool find_object(const string &oid, ObjectDesc *contents, int snap = -1) const
@@ -560,14 +552,15 @@ public:
     ObjectDesc contents;
     find_object(oid, &contents, snap);
     contents.dirty = true;
-    pool_obj_cont.rbegin()->second.erase(oid);
-    pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
   }
 };
 
 void read_callback(librados::completion_t comp, void *arg);
 void write_callback(librados::completion_t comp, void *arg);
 
+/// remove random xattrs from given object, and optionally remove omap
+/// entries if @c no_omap is not specified in context
 class RemoveAttrsOp : public TestOp {
 public:
   string oid;
@@ -660,6 +653,8 @@ public:
   }
 };
 
+/// add random xattrs to given object, and optionally add omap
+/// entries if @c no_omap is not specified in context
 class SetAttrsOp : public TestOp {
 public:
   string oid;
@@ -756,19 +751,20 @@ public:
 
 class WriteOp : public TestOp {
 public:
-  string oid;
+  const string oid;
   ContDesc cont;
   set<librados::AioCompletion *> waiting;
-  librados::AioCompletion *rcompletion;
-  uint64_t waiting_on;
-  uint64_t last_acked_tid;
+  librados::AioCompletion *rcompletion = nullptr;
+  // numbers of async ops submitted
+  uint64_t waiting_on = 0;
+  uint64_t last_acked_tid = 0;
 
   librados::ObjectReadOperation read_op;
   librados::ObjectWriteOperation write_op;
   bufferlist rbuffer;
 
-  bool do_append;
-  bool do_excl;
+  const bool do_append;
+  const bool do_excl;
 
   WriteOp(int n,
 	  RadosTestContext *context,
@@ -777,16 +773,16 @@ public:
 	  bool do_excl,
 	  TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(oid), rcompletion(NULL), waiting_on(0), 
-      last_acked_tid(0), do_append(do_append),
+      oid(oid),
+      do_append(do_append),
       do_excl(do_excl)
   {}
 		
   void _begin() override
   {
-    std::lock_guard state_locker{context->state_lock};
-    done = 0;
+    assert(!done);
     stringstream acc;
+    std::lock_guard state_locker{context->state_lock};
     acc << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
     string prefix = acc.str();
 
@@ -799,11 +795,11 @@ public:
       uint64_t prev_length = found && old_value.has_contents() ?
 	old_value.most_recent_gen()->get_length(old_value.most_recent()) :
 	0;
-      bool requires;
-      int r = context->io_ctx.pool_requires_alignment2(&requires);
+      bool requires_alignment;
+      int r = context->io_ctx.pool_requires_alignment2(&requires_alignment);
       ceph_assert(r == 0);
       uint64_t alignment = 0;
-      if (requires) {
+      if (requires_alignment) {
         r = context->io_ctx.pool_required_alignment2(&alignment);
         ceph_assert(r == 0);
         ceph_assert(alignment != 0);
@@ -831,20 +827,19 @@ public:
 
     waiting_on = ranges.size();
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
-    uint64_t tid = 1;
-    for (map<uint64_t, uint64_t>::iterator i = ranges.begin(); 
-	 i != ranges.end();
-	 ++i, ++tid) {
-      gen_pos.seek(i->first);
-      bufferlist to_write = gen_pos.gen_bl_advance(i->second);
-      ceph_assert(to_write.length() == i->second);
+    // assure that tid is greater than last_acked_tid
+    uint64_t tid = last_acked_tid + 1;
+    for (auto [offset, len] : ranges) {
+      gen_pos.seek(offset);
+      bufferlist to_write = gen_pos.gen_bl_advance(len);
+      ceph_assert(to_write.length() == len);
       ceph_assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
-		<< " from " << i->first
-		<< " to " << i->first + i->second << " tid " << tid << std::endl;
-      pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+		<< " from " << offset
+		<< " to " << len + offset << " tid " << tid << std::endl;
+      auto cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
-						 new TestOp::CallbackInfo(tid));
+						 new TestOp::CallbackInfo(tid++));
       librados::AioCompletion *completion =
 	context->rados.aio_create_completion((void*) cb_arg, &write_callback);
       waiting.insert(completion);
@@ -852,9 +847,9 @@ public:
       if (do_append) {
 	op.append(to_write);
       } else {
-	op.write(i->first, to_write);
+	op.write(offset, to_write);
       }
-      if (do_excl && tid == 1)
+      if (do_excl && cb_arg->second->id == last_acked_tid + 1)
 	op.assert_exists();
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
@@ -866,7 +861,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     librados::AioCompletion *completion = context->rados.aio_create_completion(
       (void*) cb_arg, &write_callback);
     waiting.insert(completion);
@@ -881,7 +876,7 @@ public:
     cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     rcompletion = context->rados.aio_create_completion(
          (void*) cb_arg, &write_callback);
     waiting_on++;
@@ -1011,27 +1006,26 @@ public:
 
     waiting_on = ranges.size();
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
-    uint64_t tid = 1;
-    for (map<uint64_t, uint64_t>::iterator i = ranges.begin();
-	 i != ranges.end();
-	 ++i, ++tid) {
-      gen_pos.seek(i->first);
-      bufferlist to_write = gen_pos.gen_bl_advance(i->second);
-      ceph_assert(to_write.length() == i->second);
+    // assure that tid is greater than last_acked_tid
+    uint64_t tid = last_acked_tid + 1;
+    for (auto [offset, len] : ranges) {
+      gen_pos.seek(offset);
+      bufferlist to_write = gen_pos.gen_bl_advance(len);
+      ceph_assert(to_write.length() == len);
       ceph_assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
-		<< " from " << i->first
-		<< " to " << i->first + i->second << " tid " << tid << std::endl;
-      pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+		<< " from " << offset
+		<< " to " << offset + len << " tid " << tid << std::endl;
+      auto cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
-						 new TestOp::CallbackInfo(tid));
+						 new TestOp::CallbackInfo(tid++));
       librados::AioCompletion *completion =
 	context->rados.aio_create_completion((void*) cb_arg,
 					     &write_callback);
       waiting.insert(completion);
       librados::ObjectWriteOperation op;
       /* no writesame multiplication factor for now */
-      op.writesame(i->first, to_write.length(), to_write);
+      op.writesame(offset, to_write.length(), to_write);
 
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
@@ -1043,7 +1037,7 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     librados::AioCompletion *completion = context->rados.aio_create_completion(
       (void*) cb_arg, &write_callback);
     waiting.insert(completion);
@@ -1056,7 +1050,7 @@ public:
     cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
-	new TestOp::CallbackInfo(++tid));
+	new TestOp::CallbackInfo(tid++));
     rcompletion = context->rados.aio_create_completion(
          (void*) cb_arg, &write_callback);
     waiting_on++;
@@ -1102,12 +1096,15 @@ public:
       }
 
       context->update_object_version(oid, version);
+      ceph_assert(rcompletion->is_complete());
+      ceph_assert(rcompletion->get_return_value() == 1);
       if (rcompletion->get_version64() != version) {
 	cerr << "Error: racing read on " << oid << " returned version "
 	     << rcompletion->get_version64() << " rather than version "
 	     << version << std::endl;
 	ceph_abort_msg("racing read got wrong version");
       }
+      rcompletion->release();
 
       {
 	ObjectDesc old_value;
@@ -1119,7 +1116,6 @@ public:
 		    << old_value.most_recent() << std::endl;
       }
 
-      rcompletion->release();
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
