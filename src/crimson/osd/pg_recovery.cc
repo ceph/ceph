@@ -190,20 +190,18 @@ size_t PGRecovery::start_replica_recovery_ops(
   auto recovery_order = get_replica_recovery_order();
   for (auto &peer : recovery_order) {
     assert(peer != pg->get_peering_state().get_primary());
-    auto pm = pg->get_peering_state().get_peer_missing().find(peer);
-    assert(pm != pg->get_peering_state().get_peer_missing().end());
+    const auto& pm = pg->get_peering_state().get_peer_missing(peer);
 
     crimson::get_logger(ceph_subsys_osd).debug(
 	"{}: peer osd.{} missing {} objects", __func__,
-	peer, pm->second.num_missing());
+	peer, pm.num_missing());
     crimson::get_logger(ceph_subsys_osd).trace(
 	"{}: peer osd.{} missing {}", __func__,
-	peer, pm->second.get_items());
+	peer, pm.get_items());
 
     // recover oldest first
-    const pg_missing_t &m(pm->second);
-    for (auto p = m.get_rmissing().begin();
-	 p != m.get_rmissing().end() && started < max_to_start;
+    for (auto p = pm.get_rmissing().begin();
+	 p != pm.get_rmissing().end() && started < max_to_start;
 	 ++p) {
       const auto &soid = p->second;
 
@@ -237,7 +235,7 @@ size_t PGRecovery::start_replica_recovery_ops(
 	crimson::get_logger(ceph_subsys_osd).debug(
 	    "{}: soid {} is a delete, removing", __func__, soid);
 	map<hobject_t,pg_missing_item>::const_iterator r =
-	  m.get_items().find(soid);
+	  pm.get_items().find(soid);
 	started += prep_object_replica_deletes(
 	  soid, r->second.need, out);
 	continue;
@@ -262,7 +260,7 @@ size_t PGRecovery::start_replica_recovery_ops(
 	"{}: recover_object_replicas({})",
 	__func__,
 	soid);
-      map<hobject_t,pg_missing_item>::const_iterator r = m.get_items().find(
+      map<hobject_t,pg_missing_item>::const_iterator r = pm.get_items().find(
 	soid);
       started += prep_object_replica_pushes(
 	soid, r->second.need, out);
