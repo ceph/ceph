@@ -137,7 +137,9 @@ seastar::future<> ClientRequest::process_op(
     return with_blocking_future(handle.enter(pp(pg).get_obc));
   }).then([this, &pg]() -> PG::load_obc_ertr::future<> {
     op_info.set_from_op(&*m, *pg.get_osdmap());
-    if (is_misdirected(pg)) {
+    if (pg.is_primary()) {
+      // primary can handle both normal ops and balanced reads
+    } else if (is_misdirected(pg)) {
       logger().trace("process_op: dropping misdirected op");
       return seastar::now();
     }
@@ -163,10 +165,6 @@ seastar::future<> ClientRequest::process_op(
 
 bool ClientRequest::is_misdirected(const PG& pg) const
 {
-  // primary can handle both normal ops and balanced reads
-  if (pg.is_primary()) {
-    return false;
-  }
   // otherwise take a closer look
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
