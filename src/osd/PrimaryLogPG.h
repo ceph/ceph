@@ -1500,7 +1500,7 @@ protected:
   void get_adjacent_clones(const object_info_t& oi, OpContext* ctx, 
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
-			   RefCountCallback* fin = NULL);
+			   OSDOp& osd_op);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
