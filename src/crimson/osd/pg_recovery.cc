@@ -193,13 +193,9 @@ size_t PGRecovery::start_replica_recovery_ops(
     auto pm = pg->get_peering_state().get_peer_missing().find(peer);
     assert(pm != pg->get_peering_state().get_peer_missing().end());
 
-    size_t m_sz = pm->second.num_missing();
-
     crimson::get_logger(ceph_subsys_osd).debug(
-	"{}: peer osd.{} missing {} objects",
-	__func__,
-	peer,
-	m_sz);
+	"{}: peer osd.{} missing {} objects", __func__,
+	peer, pm->second.num_missing());
     crimson::get_logger(ceph_subsys_osd).trace(
 	"{}: peer osd.{} missing {}", __func__,
 	peer, pm->second.get_items());
