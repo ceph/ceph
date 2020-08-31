@@ -3,19 +3,9 @@
 
 #include "config_proxy.h"
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-#else
-#include <experimental/filesystem>
-#endif
 
 #include "crimson/common/buffer_io.h"
-
-#if defined(__cpp_lib_filesystem)
-namespace fs = std::filesystem;
-#elif defined(__cpp_lib_experimental_filesystem)
-namespace fs = std::experimental::filesystem;
-#endif
 
 namespace crimson::common {
 
@@ -76,7 +66,11 @@ seastar::future<> ConfigProxy::parse_config_files(const std::string& conf_files)
       }
       return crimson::read_file(*path++).then([this](auto&& buf) {
         return do_change([buf=std::move(buf), this](ConfigValues& values) {
-          if (get_config().parse_buffer(values, obs_mgr, buf.get(), buf.size(), &std::cerr)) {
+          if (get_config().parse_buffer(values, obs_mgr,
+                                        buf.get(), buf.size(),
+                                        &std::cerr) == 0) {
+            get_config().update_legacy_vals(values);
+          } else {
             throw std::invalid_argument("parse error");
           }
         }).then([] {
@@ -84,7 +78,7 @@ seastar::future<> ConfigProxy::parse_config_files(const std::string& conf_files)
 	  return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         });
-      }).handle_exception_type([] (const fs::filesystem_error&) {
+      }).handle_exception_type([] (const std::filesystem::filesystem_error&) {
         return seastar::make_ready_future<seastar::stop_iteration>(
           seastar::stop_iteration::no);
       }).handle_exception_type([] (const std::invalid_argument&) {
