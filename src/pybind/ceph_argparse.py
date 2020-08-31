@@ -651,15 +651,17 @@ class argdesc(object):
     valid() will later be called with input to validate against it,
     and will store the validated value in self.instance.val for extraction.
     """
-    def __init__(self, t, name=None, n=1, req=True, **kwargs):
+    def __init__(self, t, name=None, n=1, req=True, kw=False, **kwargs):
         if isinstance(t, basestring):
             self.t = CephPrefix
             self.typeargs = {'prefix': t}
             self.req = True
+            self.kw = False
         else:
             self.t = t
             self.typeargs = kwargs
             self.req = req in (True, 'True', 'true')
+            self.kw = kw in (True, 'True', 'true')
 
         self.name = name
         self.N = (n in ['n', 'N'])

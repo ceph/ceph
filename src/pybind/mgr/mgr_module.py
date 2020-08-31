@@ -311,18 +311,24 @@ class CLICommand(object):
         for a, d in self.args_dict.items():
             if 'req' in d and d['req'] == "false" and a not in cmd_dict:
                 continue
-
-            if isinstance(cmd_dict[a], str) and '=' in cmd_dict[a]:
-                k, arg = cmd_dict[a].split('=', 1)
-                if k in self.args_dict:
+            if 'kw' in d and d['kw'] == 'true':
+                # parse the next arg as a kwarg, but only if it contains an '='
+                if not kwargs_switch and isinstance(cmd_dict[a], str) and '=' in cmd_dict[a]:
+                    # We consider this a kwarg. Set the switch so that all
+                    # future args are parsed as kwargs too.
+                    mgr.log.debug('Seen a kwarg, assuming all following args are kw style')
                     kwargs_switch = True
-
             if kwargs_switch:
                 try:
                     k, arg = cmd_dict[a].split('=', 1)
-                except ValueError as e:
-                    mgr.log.error('found positional arg after switching to kwarg parsing')
-                    return -errno.EINVAL, '', 'Error EINVAL: postitional arg not allowed after kwarg'
+                except ValueError:
+                    mgr.log.error('found positional arg when kwarg was expected')
+                    return -errno.EINVAL, '', 'Error EINVAL: expected kwarg'
+                if k not in self.args_dict:
+                    err = (f'Attempted to parse {cmd_dict[a]} as kwarg '
+                           'but {k} does not seem to be a kw.')
+                    mgr.log.error(err)
+                    return -errno.EINVAL, '', f'Error EINVAL: {err}'
                 kwargs[k.replace("-", "_")] = arg
             else:
                 kwargs[a.replace("-", "_")] = cmd_dict[a]
