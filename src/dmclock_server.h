@@ -284,6 +284,7 @@ namespace crimson {
     class PriorityQueueBase {
       // we don't want to include gtest.h just for FRIEND_TEST
       friend class dmclock_server_client_idle_erase_Test;
+      friend class dmclock_server_add_req_pushprio_queue_Test;
 
       // types used for tag dispatch to select between implementations
       using TagCalc = std::integral_constant<bool, IsDelayed>;
@@ -1381,7 +1382,7 @@ namespace crimson {
 		      const C& client_id,
 		      const ReqParams& req_params,
 		      const Cost cost = 1u) {
-	return add_request(request, req_params, client_id, get_time(), cost);
+	return add_request(std::move(request), client_id, req_params, get_time(), cost);
       }
 
 
@@ -1389,7 +1390,7 @@ namespace crimson {
 		      const C& client_id,
 		      const Cost cost = 1u) {
 	static const ReqParams null_req_params;
-	return add_request(request, null_req_params, client_id, get_time(), cost);
+	return add_request(std::move(request), client_id, null_req_params, get_time(), cost);
       }
 
 
@@ -1606,7 +1607,7 @@ namespace crimson {
 		      const C& client_id,
 		      const ReqParams& req_params,
 		      const Cost cost = 1u) {
-	return add_request(request, req_params, client_id, get_time(), cost);
+	return add_request(std::move(request), client_id, req_params, get_time(), cost);
       }
 
 
