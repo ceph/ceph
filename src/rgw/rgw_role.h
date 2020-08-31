@@ -9,6 +9,7 @@
 #include "common/ceph_context.h"
 
 class RGWCtl;
+class RGWRados;
 
 class RGWRole
 {
