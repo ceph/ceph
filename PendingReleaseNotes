@@ -1,6 +1,9 @@
 >=16.0.0
 --------
 
+* The default value for the option ``osd_async_recovery_min_cost`` is now 10
+  as compared to 100.
+
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
 * Monitors now have config option ``mon_allow_pool_size_one``, which is disabled

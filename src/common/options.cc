@@ -3389,7 +3389,7 @@ std::vector<Option> get_global_options() {
     .set_description("Approximate missing objects above which to force auth_log_shard to be primary temporarily"),
 
     Option("osd_async_recovery_min_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(100)
+    .set_default(10)
     .set_description("A mixture measure of number of current log entries difference "
                      "and historical missing objects,  above which we switch to use "
                      "asynchronous recovery when appropriate"),
