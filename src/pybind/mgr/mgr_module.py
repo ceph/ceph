@@ -290,6 +290,7 @@ class CLICommand(object):
         if not self.args:
             return
         args = self.args.split(" ")
+        kwargs_switch = False
         for arg in args:
             arg_desc = arg.strip().split(",")
             arg_d = {}
@@ -299,6 +300,12 @@ class CLICommand(object):
                     arg_d[k] = v
                 else:
                     self.args_dict[v] = arg_d
+                if k == 'kw' and v == 'true':
+                    kwargs_switch = True
+                else:
+                    if kwargs_switch:
+                        # we saw a kwarg earlier and now a positional
+                        logging.warn('Found positional argument after kwarg')
 
     def __call__(self, func):
         self.func = func
