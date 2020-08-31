@@ -7,8 +7,9 @@ from cephadm.inventory import SPEC_STORE_PREFIX, DATEFMT
 from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
 from tests import mock
 
+
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
-@mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _,__,___: None)
+@mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
 def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         with with_host(cephadm_module, 'host2'):
@@ -42,24 +43,25 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             cephadm_module.migration.migrate()
             assert cephadm_module.migration_current == 2
 
-            out = [o.spec.placement for o in wait(cephadm_module, cephadm_module.describe_service())]
-            assert out == [PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])]
+            out = [o.spec.placement for o in wait(
+                cephadm_module, cephadm_module.describe_service())]
+            assert out == [PlacementSpec(count=2, hosts=[HostPlacementSpec(
+                hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])]
 
 
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
 def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
-        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon.wrong',
-            json.dumps({
-                'spec': {
-                    'service_type': 'mon',
-                    'service_id': 'wrong',
-                    'placement': {
-                        'hosts': ['host1']
-                    }
-                },
-                'created': datetime.utcnow().strftime(DATEFMT),
-            }, sort_keys=True),
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon.wrong', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'service_id': 'wrong',
+                'placement': {
+                    'hosts': ['host1']
+                }
+            },
+            'created': datetime.utcnow().strftime(DATEFMT),
+        }, sort_keys=True),
         )
 
         cephadm_module.spec_store.load()
@@ -78,31 +80,30 @@ def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
             placement=PlacementSpec(hosts=['host1'])
         )
 
+
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
 def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
-        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon',
-            json.dumps({
-                'spec': {
-                    'service_type': 'mon',
-                    'placement': {
-                        'count': 5,
-                    }
-                },
-                'created': datetime.utcnow().strftime(DATEFMT),
-            }, sort_keys=True),
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'placement': {
+                    'count': 5,
+                }
+            },
+            'created': datetime.utcnow().strftime(DATEFMT),
+        }, sort_keys=True),
         )
-        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon.wrong',
-            json.dumps({
-                'spec': {
-                    'service_type': 'mon',
-                    'service_id': 'wrong',
-                    'placement': {
-                        'hosts': ['host1']
-                    }
-                },
-                'created': datetime.utcnow().strftime(DATEFMT),
-            }, sort_keys=True),
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon.wrong', json.dumps({
+            'spec': {
+                'service_type': 'mon',
+                'service_id': 'wrong',
+                'placement': {
+                    'hosts': ['host1']
+                }
+            },
+            'created': datetime.utcnow().strftime(DATEFMT),
+        }, sort_keys=True),
         )
 
         cephadm_module.spec_store.load()
@@ -122,23 +123,22 @@ def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
             placement=PlacementSpec(count=5)
         )
 
+
 @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
 def test_migrate_service_id_mds_one(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
-        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mds',
-            json.dumps({
-                'spec': {
-                    'service_type': 'mds',
-                    'placement': {
-                        'hosts': ['host1']
-                    }
-                },
-                'created': datetime.utcnow().strftime(DATEFMT),
-            }, sort_keys=True),
+        cephadm_module.set_store(SPEC_STORE_PREFIX + 'mds', json.dumps({
+            'spec': {
+                'service_type': 'mds',
+                'placement': {
+                    'hosts': ['host1']
+                }
+            },
+            'created': datetime.utcnow().strftime(DATEFMT),
+        }, sort_keys=True),
         )
 
         cephadm_module.spec_store.load()
 
         # there is nothing to migrate, as the spec is gone now.
         assert len(cephadm_module.spec_store.specs) == 0
-
