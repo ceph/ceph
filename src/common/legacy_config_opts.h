@@ -497,6 +497,8 @@ OPTION(mds_max_purge_files, OPT_U32)
 OPTION(mds_max_purge_ops, OPT_U32)
 // Maximum number of concurrent RADOS ops to issue in purging, scaled by PG count
 OPTION(mds_max_purge_ops_per_pg, OPT_FLOAT)
+// Maximum number of concurrent RADOS ops to issue in truncating
+OPTION(mds_max_truncate_ops, OPT_U32)
 
 OPTION(mds_purge_queue_busy_flush_period, OPT_FLOAT)
 

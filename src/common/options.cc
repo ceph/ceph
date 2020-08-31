@@ -8295,6 +8295,10 @@ std::vector<Option> get_mds_options() {
     .set_default(0.5)
     .set_description("number of parallel purge operations performed per PG"),
 
+    Option("mds_max_truncate_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(8192)
+    .set_description(""),
+
     Option("mds_purge_queue_busy_flush_period", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1.0)
     .set_description(""),

@@ -15,6 +15,8 @@
 
 #include <mutex>
 #include <algorithm>
+#include <unistd.h>
+
 #include "Filer.h"
 #include "osd/OSDMap.h"
 #include "Striper.h"
@@ -29,6 +31,7 @@
 
 #include "common/Finisher.h"
 #include "common/config.h"
+#include "common/Throttle.h"
 
 #define dout_subsys ceph_subsys_filer
 #undef dout_prefix
@@ -440,8 +443,96 @@ struct C_TruncRange : public Context {
   TruncRange *tr;
   C_TruncRange(Filer *f, TruncRange *t) : filer(f), tr(t) {}
   void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
     filer->_do_truncate_range(tr, 1);
   }
+};
+
+bool TruncWorkQueue::queue_job_to_finisher(C_TruncRange* c_tr) {
+  throttle.get(1);
+  ldout(cct, 10) << "TruncWorkQueue::queue_job_to_finisher get " << 1 << " from throttle" << dendl;
+  if (finisher->is_started()) {
+    finisher->queue(c_tr);
+    return true;
+  } else {
+    c_tr->complete(-ECANCELED);
+    return false;
+  }
+}
+
+void TruncWorkQueue::enqueue(C_TruncRange *ctr) {
+  if (stopping) {
+    ctr->complete(-ECANCELED);
+    return;
+  }
+  {
+    lock_guard l(lock);
+    queue.push(ctr);
+  }
+  cv.notify_one();
+}
+
+const char** TruncWorkQueue::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mds_max_truncate_ops",
+    NULL
+  };
+  return KEYS;
+}
+
+void TruncWorkQueue::handle_conf_change(const md_config_t *conf,
+				                                const std::set<std::string> &changed)
+{
+  if (changed.count("mds_max_truncate_ops")) {
+    u_int64_t old_max = throttle.get_max();
+    if (old_max != conf->mds_max_truncate_ops) {
+      throttle.reset_max(conf->mds_max_truncate_ops);
+      ldout(cct, 5) << "TruncWorkQueue::handle_conf_change set throttle max from " << old_max
+                    << " to " << conf->mds_max_truncate_ops << dendl;
+    }
+  }
+}
+
+void TruncWorkQueue::run() {
+  while (!stopping) {
+    C_TruncRange *c_trunc_range = dequeue();
+    if (!stopping)
+      queue_job_to_finisher(c_trunc_range);
+    else if ( c_trunc_range != nullptr )
+      c_trunc_range->complete(-ECANCELED);
+  }
+  lock_guard lk(lock);
+  while (!queue.empty()) {
+    queue.front()->complete(-ECANCELED);
+    queue.pop();
+  }
+}
+
+class C_OnTruncWorkQueue : public Context {
+  TruncWorkQueue *trunc_work_q;
+  bool put_slot;
+  C_TruncRange *c_trunc_range;
+  public:
+    C_OnTruncWorkQueue(TruncWorkQueue *twq, bool p, C_TruncRange *c) : trunc_work_q(twq), put_slot(p), c_trunc_range(c) {
+      assert(trunc_work_q != nullptr);
+      assert(c_trunc_range != nullptr);
+    }
+    ~C_OnTruncWorkQueue() override {
+      assert(c_trunc_range == nullptr);
+    }
+    void finish(int r) override {
+      int64_t put = put_slot ? 1 : 0;
+      trunc_work_q->put_slots(put);
+      if (r == -ECANCELED) {
+        c_trunc_range->complete(-ECANCELED);
+        c_trunc_range = nullptr;
+        return;
+      }
+      trunc_work_q->enqueue(c_trunc_range);
+      c_trunc_range = nullptr;
+    }
 };
 
 void Filer::_do_truncate_range(TruncRange *tr, int fin)
@@ -453,6 +544,10 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 		 << dendl;
 
   if (tr->length == 0 && tr->uncommitted == 0) {
+    if (fin) {
+      trunc_work_queue.put_slots(1);
+      ldout(cct, 10) << "_do_truncate_range put " << 1 << " slot to throttle" << dendl;
+    }
     tr->oncommit->complete(0);
     trl.unlock();
     delete tr;
@@ -475,6 +570,11 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 
   trl.unlock();
 
+  if (fin && extents.size() == 0) {
+    trunc_work_queue.put_slots(1);
+    ldout(cct, 10) << "_do_truncate_range put " << 1 << " slot to throttle" << dendl;
+  }
+
   // Issue objecter ops outside tr->lock to avoid lock dependency loop
   for (const auto& p : extents) {
     osdc_opvec ops(1);
@@ -482,6 +582,6 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
     ops[0].op.extent.truncate_size = p.offset;
     ops[0].op.extent.truncate_seq = tr->truncate_seq;
     objecter->_modify(p.oid, p.oloc, ops, tr->mtime, tr->snapc, tr->flags,
-		      new C_OnFinisher(new C_TruncRange(this, tr), finisher));
+		      new C_OnTruncWorkQueue(&trunc_work_queue, (bool)fin, new C_TruncRange(this, tr)));
   }
 }
