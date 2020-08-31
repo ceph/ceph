@@ -1,7 +1,7 @@
 import copy
 from typing import Optional
 
-from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined
+from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined, Template
 from jinja2 import exceptions as j2_exceptions
 
 
@@ -43,6 +43,17 @@ class Jinja2Engine(TemplateEngine):
         except j2_exceptions.TemplateNotFound as e:
             raise TemplateNotFoundError(e.message)
 
+    def render_plain(self, source, context):
+        try:
+            template = self.env.from_string(source)
+            if context is None:
+                return template.render()
+            return template.render(context)
+        except j2_exceptions.UndefinedError as e:
+            raise UndefinedError(e.message)
+        except j2_exceptions.TemplateNotFound as e:
+            raise TemplateNotFoundError(e.message)
+
 
 class TemplateMgr:
     def __init__(self):
@@ -71,3 +82,4 @@ class TemplateMgr:
         if context is not None:
             ctx = {**ctx, **context}
         return self.engine.render(name, ctx)
+
