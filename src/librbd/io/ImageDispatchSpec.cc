@@ -38,16 +38,11 @@ void ImageDispatchSpec::C_Dispatcher::complete(int r) {
 }
 
 void ImageDispatchSpec::C_Dispatcher::finish(int r) {
-  image_dispatch_spec->finish(r);
+  delete image_dispatch_spec;
 }
 
 void ImageDispatchSpec::send() {
   image_dispatcher->send(this);
-}
-
-void ImageDispatchSpec::finish(int r) {
-  image_dispatcher->finish(r, dispatch_layer, tid);
-  delete this;
 }
 
 void ImageDispatchSpec::fail(int r) {

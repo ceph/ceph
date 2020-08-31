@@ -25,7 +25,8 @@ public:
       ReadResult &&read_result, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override {
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 
@@ -33,7 +34,8 @@ public:
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
       int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override {
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 
@@ -42,7 +44,8 @@ public:
       uint32_t discard_granularity_bytes,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override {
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 
@@ -50,7 +53,8 @@ public:
       AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
       int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override {
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 
@@ -59,7 +63,8 @@ public:
       bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override {
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 
@@ -67,7 +72,8 @@ public:
       AioCompletion* aio_comp, FlushSource flush_source,
       const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
-      DispatchResult* dispatch_result, Context* on_dispatched) override {
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
     return false;
   }
 
