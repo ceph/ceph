@@ -238,15 +238,21 @@ object_t OpenFileTable::get_object_name(unsigned idx) const
   return object_t(s);
 }
 
-void OpenFileTable::_encode_header(bufferlist &bl, int j_state)
+void OpenFileTable::_encode_header(bufferlist &bl, version_t& _omap_version,
+                                   unsigned _omap_num_objs, int j_state)
 {
   std::string_view magic = CEPH_FS_ONDISK_MAGIC;
   encode(magic, bl);
   ENCODE_START(1, 1, bl);
-  encode(omap_version, bl);
-  encode(omap_num_objs, bl);
+  encode(_omap_version, bl);
+  encode(_omap_num_objs, bl);
   encode((__u8)j_state, bl);
   ENCODE_FINISH(bl);
+}
+
+void OpenFileTable::_encode_header(bufferlist &bl, int j_state)
+{
+  _encode_header(bl, omap_version, omap_num_objs, j_state);
 }
 
 class C_IO_OFT_Save : public MDSIOContextBase {
@@ -268,7 +274,7 @@ public:
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " r " << r << dendl;
   if (r < 0) {
     mds->handle_write_error(r);
     return;
@@ -281,60 +287,208 @@ void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
 
   if (fin)
     fin->complete(r);
+
+  journal_state = JOURNAL_NONE;
 }
 
-class C_IO_OFT_Journal : public MDSIOContextBase {
-protected:
-  OpenFileTable *oft;
-  uint64_t log_seq;
-  MDSContext *fin;
-  std::map<unsigned, std::vector<ObjectOperation> > ops_map;
-  MDSRank *get_mds() override { return oft->mds; }
-public:
-  C_IO_OFT_Journal(OpenFileTable *t, uint64_t s, MDSContext *c,
-		   std::map<unsigned, std::vector<ObjectOperation> >& ops) :
-    oft(t), log_seq(s), fin(c) {
-    ops_map.swap(ops);
-  }
-  void finish(int r) {
-    oft->_journal_finish(r, log_seq, fin, ops_map);
-  }
-  void print(ostream& out) const override {
-    out << "openfiles_journal";
-  }
-};
-
-void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
-				    std::map<unsigned, std::vector<ObjectOperation> >& ops_map)
+void OpenFileTable::_journal_commit(int r, uint64_t log_seq, MDSContext *c,
+				    int op_prio, version_t& _omap_version,
+                                    unsigned _old_num_objs, unsigned _omap_num_objs,
+                                    std::vector<struct omap_update_ctl>& omap_updates)
 {
-  dout(10) << __func__ << " log_seq " << log_seq << dendl;
+  dout(10) << __func__ << " log_seq " << log_seq << " omap_version "
+           << omap_version << " r " << r << dendl;
   if (r < 0) {
-    mds->handle_write_error(r);
+    mds->handle_write_error_with_lock(r);
     return;
   }
 
   C_GatherBuilder gather(g_ceph_context,
-			 new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
-			 mds->finisher));
+                         new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
+                         mds->finisher));
+
+  std::map<unsigned, std::vector<ObjectOperation>> ops_map;
+
+  auto create_journal_ops_func = [&](unsigned idx) {
+    auto& ctl = omap_updates.at(idx);
+    auto& op_vec = ops_map[idx];
+    unsigned op_idx = op_vec.size();
+    op_vec.resize(op_vec.size() + ctl.metas.size());
+    bool first = true;
+
+    unsigned journal_idx = 0;
+    for (auto& meta : ctl.metas) {
+      ObjectOperation& op = op_vec.at(op_idx++);
+      op.priority = op_prio;
+
+      if (ctl.clear) {
+        ctl.clear = false;
+        op.omap_clear();
+        op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+      }
+
+      if (first) {
+        bufferlist header;
+        _encode_header(header, _omap_version, _omap_num_objs, JOURNAL_START);
+        op.omap_set_header(header);
+      }
+
+      bufferlist bl;
+      encode(_omap_version, bl);
+      encode(meta.to_update, bl);
+      encode(meta.to_remove, bl);
+
+      char key[32];
+      snprintf(key, sizeof(key), "_journal.%x", journal_idx++);
+      std::map<string, bufferlist> tmp_map;
+      tmp_map[key].swap(bl);
+      op.omap_set(tmp_map);
+    }
+
+    return ctl.metas.size();
+  };
+
+  auto create_ops_func = [&](unsigned idx, bool journaled=false) {
+    auto& ctl = omap_updates.at(idx);
+    auto& op_vec = ops_map[idx];
+    unsigned op_idx = op_vec.size();
+
+    op_vec.resize(op_vec.size() + ctl.metas.size());
+
+    bool first = true;
+    for (auto& meta : ctl.metas) {
+      ObjectOperation& op = op_vec.at(op_idx++);
+      op.priority = op_prio;
+
+      if (ctl.clear) {
+        ctl.clear = false;
+        op.omap_clear();
+        op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+      }
+
+      if (first) {
+        bufferlist header;
+        int j_state = journaled ? JOURNAL_FINISH : JOURNAL_NONE;
+        _encode_header(header, _omap_version, _omap_num_objs, j_state);
+        op.omap_set_header(header);
+      }
+
+      if (!meta.to_update.empty()) {
+        op.omap_set(meta.to_update);
+      }
+      if (!meta.to_remove.empty()) {
+        op.omap_rm_keys(meta.to_remove);
+      }
+    }
+
+    // create the object with updating the header
+    if (ctl.clear) {
+      op_vec.resize(op_vec.size() + 1);
+      ObjectOperation& op = op_vec.back();
+      op.priority = op_prio;
+
+      ctl.clear = false;
+      op.omap_clear();
+      op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+
+      bufferlist header;
+      _encode_header(header, _omap_version, _omap_num_objs, JOURNAL_NONE);
+      op.omap_set_header(header);
+
+      return;
+    }
+
+    if (!journaled)
+      return;
+
+    // remove the journals
+    op_vec.resize(op_vec.size() + 1);
+    ObjectOperation& op = op_vec.back();
+    op.priority = op_prio;
+    std::set<string> to_remove;
+
+    for (unsigned i = 0; i < ctl.metas.size(); ++i) {
+      char key[32];
+      snprintf(key, sizeof(key), "_journal.%x", i);
+      to_remove.emplace(key);
+    }
+
+    if (!to_remove.empty()) {
+      op.omap_rm_keys(to_remove);
+    }
+  };
+
+  // skip journal if only one osd request is required and
+  // object count does not change.
+  unsigned total_ops = 0;
+  unsigned omap_idx = 0;
+  for (unsigned idx = 0; idx < omap_updates.size(); idx++) {
+    auto& ctl = omap_updates.at(idx);
+    if (ctl.metas.size()) {
+      total_ops += ctl.metas.size();
+      omap_idx = idx;
+    }
+  }
+
+  // skip journal if only one osd request is required and object count
+  // does not change.
+  if (total_ops == 1 && _old_num_objs != _omap_num_objs) {
+    create_ops_func(omap_idx, false);
+  } else {
+    // commit journal
+    unsigned total_journal_ops = 0;
+    for (unsigned idx = 0; idx < omap_updates.size(); idx++) {
+      total_journal_ops += create_journal_ops_func(idx);
+    }
+
+    // commit openfiles table
+    for (unsigned idx = 0; idx < omap_updates.size(); idx++) {
+      create_ops_func(idx, !!total_journal_ops);
+    }
+  }
+
   SnapContext snapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  for (auto& [idx, vops] : ops_map) {
-    object_t oid = get_object_name(idx);
-    for (auto& op : vops) {
+  for (auto& it : ops_map) {
+    object_t oid = get_object_name(it.first);
+    for (auto& op : it.second) {
       mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(),
 			    0, gather.new_sub());
     }
   }
   gather.activate();
-
-  journal_state = JOURNAL_NONE;
-  return;
 }
+
+class C_IO_OFT_Journal : public Context {
+protected:
+  OpenFileTable *oft;
+  uint64_t log_seq;
+  MDSContext *fin;
+  int op_prio;
+  version_t omap_version;
+  unsigned old_num_objs;
+  unsigned omap_num_objs;
+  std::vector<OpenFileTable::omap_update_ctl> omap_updates;
+public:
+  C_IO_OFT_Journal(OpenFileTable *t, uint64_t s, MDSContext *c, int prio,
+		   version_t& v, unsigned old, unsigned _new,
+                   std::vector<OpenFileTable::omap_update_ctl>&& updates) :
+    oft(t), log_seq(s), fin(c), op_prio(prio), omap_version(v),
+    old_num_objs(old), omap_num_objs(_new) {
+    omap_updates.swap(updates);
+  }
+  void finish(int r) override {
+    oft->_journal_commit(r, log_seq, fin, op_prio, omap_version, old_num_objs,
+                         omap_num_objs, omap_updates);
+  }
+};
 
 void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 {
   dout(10) << __func__ << " log_seq " << log_seq << dendl;
 
+  uint64_t total_updates = 0;
+  uint64_t total_removes = 0;
   ceph_assert(num_pending_commit == 0);
   num_pending_commit++;
   ceph_assert(log_seq >= committing_log_seq);
@@ -342,117 +496,33 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 
   omap_version++;
 
-  C_GatherBuilder gather(g_ceph_context);
-
   SnapContext snapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
   const unsigned max_write_size = mds->mdcache->max_dir_commit_size;
 
-  struct omap_update_ctl {
-    unsigned write_size = 0;
-    unsigned journal_idx = 0;
-    bool clear = false;
-    std::map<string, bufferlist> to_update, journaled_update;
-    std::set<string> to_remove, journaled_remove;
-  };
-  std::vector<omap_update_ctl> omap_updates(omap_num_objs);
+  std::vector<struct omap_update_ctl> omap_updates(omap_num_objs);
 
-  using ceph::encode;
-  auto journal_func = [&](unsigned idx) {
-    auto& ctl = omap_updates.at(idx);
-
-    ObjectOperation op;
-    op.priority = op_prio;
-
-    if (ctl.clear) {
-      ctl.clear = false;
-      op.omap_clear();
-      op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+  auto ctl_update_func = [&](struct omap_update_ctl& ctl, char* key, bufferlist& bl) {
+    if (ctl.meta_idx == -1) {
+      ctl.meta_idx = 0;
+      ctl.metas.resize(1);
     }
-
-    if (ctl.journal_idx == 0) {
-      if (journal_state == JOURNAL_NONE)
-	journal_state = JOURNAL_START;
-      else
-	ceph_assert(journal_state == JOURNAL_START);
-
-      bufferlist header;
-      _encode_header(header, journal_state);
-      op.omap_set_header(header);
-    }
-
-    bufferlist bl;
-    encode(omap_version, bl);
-    encode(ctl.to_update, bl);
-    encode(ctl.to_remove, bl);
-
-    char key[32];
-    snprintf(key, sizeof(key), "_journal.%x", ctl.journal_idx++);
-    std::map<string, bufferlist> tmp_map;
-    tmp_map[key].swap(bl);
-    op.omap_set(tmp_map);
-
-    object_t oid = get_object_name(idx);
-    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
-			  gather.new_sub());
-
-#ifdef HAVE_STDLIB_MAP_SPLICING
-    ctl.journaled_update.merge(ctl.to_update);
-    ctl.journaled_remove.merge(ctl.to_remove);
-#else
-    ctl.journaled_update.insert(make_move_iterator(begin(ctl.to_update)),
-				make_move_iterator(end(ctl.to_update)));
-    ctl.journaled_remove.insert(make_move_iterator(begin(ctl.to_remove)),
-				make_move_iterator(end(ctl.to_remove)));
-#endif
-    ctl.to_update.clear();
-    ctl.to_remove.clear();
+    ctl.metas[ctl.meta_idx].to_update[key].swap(bl);
   };
 
-  std::map<unsigned, std::vector<ObjectOperation> > ops_map;
-
-  auto create_op_func = [&](unsigned idx, bool update_header) {
-    auto& ctl = omap_updates.at(idx);
-
-    auto& op_vec = ops_map[idx];
-    op_vec.resize(op_vec.size() + 1);
-    ObjectOperation& op = op_vec.back();
-    op.priority = op_prio;
-
-    if (ctl.clear) {
-      ctl.clear = false;
-      op.omap_clear();
-      op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+  auto ctl_remove_func = [&](struct omap_update_ctl& ctl, char* key) {
+    if (ctl.meta_idx == -1) {
+      ctl.meta_idx = 0;
+      ctl.metas.resize(1);
     }
-
-    if (update_header) {
-      bufferlist header;
-      _encode_header(header, journal_state);
-      op.omap_set_header(header);
-    }
-
-    if (!ctl.to_update.empty()) {
-      op.omap_set(ctl.to_update);
-      ctl.to_update.clear();
-    }
-    if (!ctl.to_remove.empty()) {
-      op.omap_rm_keys(ctl.to_remove);
-      ctl.to_remove.clear();
-    }
+    ctl.metas[ctl.meta_idx].to_remove.emplace(key);
   };
 
-  auto submit_ops_func = [&]() {
-    gather.set_finisher(new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
-					 mds->finisher));
-    for (auto& [idx, vops] : ops_map) {
-      object_t oid = get_object_name(idx);
-      for (auto& op : vops) {
-	mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(),
-			      0, gather.new_sub());
-      }
-    }
-    gather.activate();
+  auto ctl_inc_metas_func = [&](struct omap_update_ctl& ctl) {
+    ctl.meta_idx++;
+    ctl.metas.resize(ctl.meta_idx);
+    ctl.write_size = 0;
   };
 
   bool first_commit = !loaded_anchor_map.empty();
@@ -465,6 +535,13 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     omap_updates.resize(omap_num_objs);
     omap_updates.back().clear = true;
   }
+
+  auto submit_func = [&]() {
+    ceph_assert(!omap_updates.empty());
+    auto _c = new C_IO_OFT_Journal(this, log_seq, c, op_prio, omap_version,
+                                   old_num_objs, omap_num_objs, std::move(omap_updates));
+    mds->finisher->queue(_c);
+  };
 
   for (auto& [ino, state] : dirty_items) {
     auto p = anchor_map.find(ino);
@@ -518,20 +595,22 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	first_free_idx = omap_idx;
     }
     auto& ctl = omap_updates.at(omap_idx);
-    if (ctl.write_size >= max_write_size) {
-      journal_func(omap_idx);
-      ctl.write_size = 0;
-    }
+    if (ctl.write_size >= max_write_size)
+      ctl_inc_metas_func(ctl);
+
     if (p != anchor_map.end()) {
       bufferlist bl;
+      using ceph::encode;
       encode(p->second, bl);
       encode((__u32)0, bl); // frags set was encoded here
 
       ctl.write_size += bl.length() + len + 2 * sizeof(__u32);
-      ctl.to_update[key].swap(bl);
+      ctl_update_func(ctl, key, bl);
+      total_updates++;
     } else {
       ctl.write_size += len + sizeof(__u32);
-      ctl.to_remove.emplace(key);
+      ctl_remove_func(ctl, key);
+      total_removes++;
     }
   }
 
@@ -548,12 +627,12 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       --count;
 
       auto& ctl = omap_updates.at(omap_idx);
-      if (ctl.write_size >= max_write_size) {
-        journal_func(omap_idx);
-        ctl.write_size = 0;
-      }
+      if (ctl.write_size >= max_write_size)
+        ctl_inc_metas_func(ctl);
+
       ctl.write_size += len + sizeof(__u32);
-      ctl.to_remove.emplace(key);
+      ctl_remove_func(ctl, key);
+      total_removes++;
     }
     loaded_anchor_map.clear();
   }
@@ -562,14 +641,8 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   {
     unsigned used_objs = 1;
     std::vector<unsigned> objs_to_write;
-    bool journaled = false;
     for (unsigned i = 0; i < omap_num_objs; i++) {
       total_items += omap_num_items[i];
-      if (omap_updates[i].journal_idx)
-	journaled = true;
-      else if (omap_updates[i].write_size)
-	objs_to_write.push_back(i);
-
       if (omap_num_items[i] > 0)
 	used_objs = i + 1;
     }
@@ -579,91 +652,13 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       omap_num_objs = used_objs;
       omap_num_items.resize(omap_num_objs);
     }
-    // skip journal if only one osd request is required and object count
-    // does not change.
-    if (!journaled && old_num_objs == omap_num_objs &&
-	objs_to_write.size() <= 1) {
-      ceph_assert(journal_state == JOURNAL_NONE);
-      ceph_assert(!gather.has_subs());
-
-      unsigned omap_idx = objs_to_write.empty() ? 0 : objs_to_write.front();
-      create_op_func(omap_idx, true);
-      submit_ops_func();
-      return;
-    }
   }
 
-  for (unsigned omap_idx = 0; omap_idx < omap_updates.size(); omap_idx++) {
-    auto& ctl = omap_updates[omap_idx];
-    if (ctl.write_size > 0) {
-      journal_func(omap_idx);
-      ctl.write_size = 0;
-    }
-  }
+  ceph_assert(journal_state == JOURNAL_NONE);
+  journal_state = JOURNAL_FINISH;
 
-  if (journal_state == JOURNAL_START) {
-    ceph_assert(gather.has_subs());
-    journal_state = JOURNAL_FINISH;
-  } else {
-    // only object count changes
-    ceph_assert(journal_state == JOURNAL_NONE);
-    ceph_assert(!gather.has_subs());
-  }
+  submit_func();
 
-  uint64_t total_updates = 0;
-  uint64_t total_removes = 0;
-
-  for (unsigned omap_idx = 0; omap_idx < omap_updates.size(); omap_idx++) {
-    auto& ctl = omap_updates[omap_idx];
-    ceph_assert(ctl.to_update.empty() && ctl.to_remove.empty());
-    if (ctl.journal_idx == 0)
-      ceph_assert(ctl.journaled_update.empty() && ctl.journaled_remove.empty());
-
-    bool first = true;
-    for (auto& it : ctl.journaled_update) {
-      if (ctl.write_size >= max_write_size) {
-        create_op_func(omap_idx, first);
-        ctl.write_size = 0;
-        first = false;
-      }
-      ctl.write_size += it.first.length() + it.second.length() + 2 * sizeof(__u32);
-      ctl.to_update[it.first].swap(it.second);
-      total_updates++;
-    }
-
-    for (auto& key : ctl.journaled_remove) {
-      if (ctl.write_size >= max_write_size) {
-        create_op_func(omap_idx, first);
-        ctl.write_size = 0;
-        first = false;
-      }
-
-      ctl.write_size += key.length() + sizeof(__u32);
-      ctl.to_remove.emplace(key);
-      total_removes++;
-    }
-
-    for (unsigned i = 0; i < ctl.journal_idx; ++i) {
-      char key[32];
-      snprintf(key, sizeof(key), "_journal.%x", i);
-      ctl.to_remove.emplace(key);
-    }
-
-    // update first object's omap header if object count changes
-    if (ctl.clear ||
-	ctl.journal_idx > 0 ||
-	(omap_idx == 0 && old_num_objs != omap_num_objs))
-      create_op_func(omap_idx, first);
-  }
-
-  ceph_assert(!ops_map.empty());
-  if (journal_state == JOURNAL_FINISH) {
-    gather.set_finisher(new C_OnFinisher(new C_IO_OFT_Journal(this, log_seq, c, ops_map),
-					 mds->finisher));
-    gather.activate();
-  } else {
-    submit_ops_func();
-  }
   logger->set(l_oft_omap_total_objs, omap_num_objs);
   logger->set(l_oft_omap_total_kv_pairs, total_items);
   logger->inc(l_oft_omap_total_updates, total_updates);
