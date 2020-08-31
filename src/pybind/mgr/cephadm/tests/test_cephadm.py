@@ -605,6 +605,16 @@ class TestCephadm(object):
             _run_cephadm.assert_called_with('test', 'osd', 'shell', [
                                             '--', 'lsmcli', f'local-disk-{fault_ident}-led-{on_off}', '--path', 'dev'], error_ok=True)
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_blink_device_light_custom(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.set_store('lsmcli_blink_lights_cmd', 'echo hello')
+            c = cephadm_module.blink_device_light('ident', True, [('test', '', 'dev')])
+            assert wait(cephadm_module, c) == ['Set ident light for test: on']
+            _run_cephadm.assert_called_with('test', 'osd', 'shell', [
+                                            '--', 'echo', 'hello'], error_ok=True)
+
     @pytest.mark.parametrize(
         "spec, meth",
         [
