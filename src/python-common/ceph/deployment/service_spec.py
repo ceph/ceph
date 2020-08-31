@@ -60,14 +60,12 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
     @classmethod
     @handle_type_error
     def from_json(cls, data):
+        if isinstance(data, str):
+            return cls.parse(data)
         return cls(**data)
 
-    def to_json(self):
-        return {
-            'hostname': self.hostname,
-            'network': self.network,
-            'name': self.name
-        }
+    def to_json(self) -> str:
+        return str(self)
 
     @classmethod
     def parse(cls, host, require_network=True):
@@ -214,16 +212,21 @@ class PlacementSpec(object):
         return len(self.filter_matching_hostspecs(hostspecs))
 
     def pretty_str(self):
+        """
+        >>> #doctest: +SKIP
+        ... ps = PlacementSpec(...)  # For all placement specs:
+        ... PlacementSpec.from_string(ps.pretty_str()) == ps
+        """
         kv = []
+        if self.hosts:
+            kv.append(';'.join([str(h) for h in self.hosts]))
         if self.count:
             kv.append('count:%d' % self.count)
         if self.label:
             kv.append('label:%s' % self.label)
-        if self.hosts:
-            kv.append('%s' % ','.join([str(h) for h in self.hosts]))
         if self.host_pattern:
             kv.append(self.host_pattern)
-        return ' '.join(kv)
+        return ';'.join(kv)
 
     def __repr__(self):
         kv = []
@@ -245,9 +248,7 @@ class PlacementSpec(object):
         if hosts:
             c['hosts'] = []
             for host in hosts:
-                c['hosts'].append(HostPlacementSpec.parse(host) if
-                                  isinstance(host, str) else
-                                  HostPlacementSpec.from_json(host))
+                c['hosts'].append(HostPlacementSpec.from_json(host))
         _cls = cls(**c)
         _cls.validate()
         return _cls

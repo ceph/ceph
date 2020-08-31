@@ -124,7 +124,7 @@ class TestCephadm(object):
                     out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
                     expected = [
                         {
-                            'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
+                            'placement': {'hosts': ['test']},
                             'service_id': 'name',
                             'service_name': 'mds.name',
                             'service_type': 'mds',
@@ -134,7 +134,7 @@ class TestCephadm(object):
                         {
                             'placement': {
                                 'count': 1,
-                                'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
+                                'hosts': ["test"]
                             },
                             'spec': {
                                 'rgw_realm': 'r',
