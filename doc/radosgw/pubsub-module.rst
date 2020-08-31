@@ -42,7 +42,7 @@ be accessed directly, but need to be pulled and acked using the new REST API.
 PubSub Zone Configuration
 -------------------------
 
-The pubsub sync module requires the creation of a new zone in a `Multisite`_ environment.
+The pubsub sync module requires the creation of a new zone in a :ref:`multisite` environment...
 First, a master zone must exist (see: :ref:`master-zone-label`), 
 then a secondary zone should be created (see :ref:`secondary-zone-label`).
 In the creation of the secondary zone, its tier type must be set to ``pubsub``:
@@ -637,6 +637,5 @@ Request parameters:
 
 - event-id: id of event to be acked
 
-.. _Multisite : ../multisite
 .. _Bucket Notification : ../notifications
 .. _Bucket Operations: ../s3/bucketops
