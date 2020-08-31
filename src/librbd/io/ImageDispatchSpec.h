@@ -204,8 +204,6 @@ private:
     aio_comp->image_dispatcher_ctx = &dispatcher_ctx;
     aio_comp->get();
   }
-
-  void finish(int r);
 };
 
 } // namespace io

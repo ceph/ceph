@@ -125,27 +125,16 @@ void WriteBlockImageDispatch<I>::wait_on_writes_unblocked(
 }
 
 template <typename I>
-bool WriteBlockImageDispatch<I>::read(
-    AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "tid=" << tid << dendl;
-
-  return process_io(true, tid, dispatch_result, on_dispatched);
-}
-
-template <typename I>
 bool WriteBlockImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
     int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return process_io(false, tid, dispatch_result, on_dispatched);
+  return process_io(tid, dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
@@ -153,11 +142,12 @@ bool WriteBlockImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
     uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return process_io(false, tid, dispatch_result, on_dispatched);
+  return process_io(tid, dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
@@ -165,11 +155,12 @@ bool WriteBlockImageDispatch<I>::write_same(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
     int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return process_io(false, tid, dispatch_result, on_dispatched);
+  return process_io(tid, dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
@@ -178,11 +169,12 @@ bool WriteBlockImageDispatch<I>::compare_and_write(
     bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
     const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return process_io(false, tid, dispatch_result, on_dispatched);
+  return process_io(tid, dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
@@ -190,7 +182,8 @@ bool WriteBlockImageDispatch<I>::flush(
     AioCompletion* aio_comp, FlushSource flush_source,
     const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context* on_dispatched) {
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
@@ -198,7 +191,7 @@ bool WriteBlockImageDispatch<I>::flush(
     return false;
   }
 
-  return process_io(false, tid, dispatch_result, on_dispatched);
+  return process_io(tid, dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
@@ -208,10 +201,7 @@ void WriteBlockImageDispatch<I>::handle_finished(int r, uint64_t tid) {
 
   std::unique_lock locker{m_lock};
   auto it = m_in_flight_write_tids.find(tid);
-  if (it == m_in_flight_write_tids.end()) {
-    // assumed to be a read op
-    return;
-  }
+  ceph_assert(it != m_in_flight_write_tids.end());
   m_in_flight_write_tids.erase(it);
 
   bool writes_blocked = false;
@@ -228,19 +218,20 @@ void WriteBlockImageDispatch<I>::handle_finished(int r, uint64_t tid) {
 
 template <typename I>
 bool WriteBlockImageDispatch<I>::process_io(
-    bool read_op, uint64_t tid, DispatchResult* dispatch_result,
+    uint64_t tid, DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   std::unique_lock locker{m_lock};
-  if (!read_op) {
-    if (m_write_blockers > 0 || !m_on_dispatches.empty()) {
-      *dispatch_result = DISPATCH_RESULT_RESTART;
-      m_on_dispatches.push_back(on_dispatched);
-      return true;
-    }
-
-    m_in_flight_write_tids.insert(tid);
+  if (m_write_blockers > 0 || !m_on_dispatches.empty()) {
+    *dispatch_result = DISPATCH_RESULT_RESTART;
+    m_on_dispatches.push_back(on_dispatched);
+    return true;
   }
 
+  *on_finish = new LambdaContext([this, tid, on_finish=*on_finish](int r) {
+      handle_finished(r, tid);
+      on_finish->complete(r);
+    });
+  m_in_flight_write_tids.insert(tid);
   return false;
 }
 
