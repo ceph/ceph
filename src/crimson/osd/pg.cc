@@ -542,6 +542,10 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
 
   epoch_t map_epoch = get_osdmap_epoch();
 
+  if (__builtin_expect(osd_op_p.at_version.epoch != map_epoch, false)) {
+    throw crimson::common::actingset_changed(is_primary());
+  }
+
   std::vector<pg_log_entry_t> log_entries;
   log_entries.emplace_back(obc->obs.exists ?
 		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
