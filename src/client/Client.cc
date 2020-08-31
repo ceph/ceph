@@ -12183,6 +12183,10 @@ size_t Client::_vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rsubdirs);
 }
+size_t Client::_vxattrcb_dir_rsnaps(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rsnaps);
+}
 size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rbytes);
@@ -12268,6 +12272,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_NAME_CEPH2(dir, rentries, VXATTR_RSTAT),
   XATTR_NAME_CEPH2(dir, rfiles, VXATTR_RSTAT),
   XATTR_NAME_CEPH2(dir, rsubdirs, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rsnaps, VXATTR_RSTAT),
   XATTR_NAME_CEPH2(dir, rbytes, VXATTR_RSTAT),
   XATTR_NAME_CEPH2(dir, rctime, VXATTR_RSTAT),
   {
