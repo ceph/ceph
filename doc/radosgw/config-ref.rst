@@ -456,6 +456,17 @@ configuration parameters.
 :Default: ``10``
 
 
+:Tuning Garbage Collection for Delete Heavy Workloads:
+
+As an initial step towards tuning Ceph Garbage Collection to be more aggressive the following options are suggested to be increased from their default configuration values:
+
+``rgw gc max concurrent io = 20``
+``rgw gc max trim chunk = 64``
+
+:NOTE: Modifying these values requires a restart of the RGW service.
+
+Once these values have been increased from default please monitor for performance of the cluster during Garbage Collection to verify no adverse performance issues due to the increased values.
+
 Multisite Settings
 ==================
 
