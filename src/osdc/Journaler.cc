@@ -704,7 +704,8 @@ void Journaler::wait_for_flush(Context *onsafe)
 {
   lock_guard l(lock);
   if (is_stopping()) {
-    onsafe->complete(-EAGAIN);
+    if (onsafe)
+      onsafe->complete(-EAGAIN);
     return;
   }
   _wait_for_flush(onsafe);
@@ -737,7 +738,8 @@ void Journaler::flush(Context *onsafe)
 {
   lock_guard l(lock);
   if (is_stopping()) {
-    onsafe->complete(-EAGAIN);
+    if (onsafe)
+      onsafe->complete(-EAGAIN);
     return;
   }
   _flush(wrap_finisher(onsafe));
