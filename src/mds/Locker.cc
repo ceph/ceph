@@ -2686,9 +2686,7 @@ uint64_t Locker::calc_new_max_size(const CInode::inode_const_ptr &pi, uint64_t s
   return round_up_to(new_max, pi->get_layout_size_increment());
 }
 
-void Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool update,
-				    CInode::mempool_inode::client_range_map *new_ranges,
-				    bool *max_increased)
+bool Locker::check_client_ranges(CInode *in, uint64_t size)
 {
   const auto& latest = in->get_projected_inode();
   uint64_t ms;
@@ -2699,31 +2697,79 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool update,
     ms = 0;
   }
 
-  // increase ranges as appropriate.
-  // shrink to 0 if no WR|BUFFER caps issued.
+  auto it = latest->client_ranges.begin();
   for (auto &p : in->client_caps) {
     if ((p.second.issued() | p.second.wanted()) & CEPH_CAP_ANY_FILE_WR) {
-      client_writeable_range_t& nr = (*new_ranges)[p.first];
-      nr.range.first = 0;
-      auto it = latest->client_ranges.find(p.first);
-      if (it != latest->client_ranges.end()) {
-	const client_writeable_range_t& oldr = it->second;
-	if (ms > oldr.range.last)
-	  *max_increased = true;
-	nr.range.last = std::max(ms, oldr.range.last);
-	nr.follows = oldr.follows;
-      } else {
-	*max_increased = true;
-	nr.range.last = ms;
-	nr.follows = in->first - 1;
-      }
-      if (update)
-	p.second.mark_clientwriteable();
-    } else {
-      if (update)
-	p.second.clear_clientwriteable();
+      if (it == latest->client_ranges.end())
+	return true;
+      if (it->first != p.first)
+	return true;
+      if (ms > it->second.range.last)
+	return true;
+      ++it;
     }
   }
+  return it != latest->client_ranges.end();
+}
+
+bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increased)
+{
+  const auto& latest = in->get_projected_inode();
+  uint64_t ms;
+  if (latest->has_layout()) {
+    ms = calc_new_max_size(latest, size);
+  } else {
+    // Layout-less directories like ~mds0/, have zero size
+    ms = 0;
+  }
+
+  auto pi = in->_get_projected_inode();
+  bool updated = false;
+
+  // increase ranges as appropriate.
+  // shrink to 0 if no WR|BUFFER caps issued.
+  auto it = pi->client_ranges.begin();
+  for (auto &p : in->client_caps) {
+    if ((p.second.issued() | p.second.wanted()) & CEPH_CAP_ANY_FILE_WR) {
+      while (it != pi->client_ranges.end() && it->first < p.first) {
+	it = pi->client_ranges.erase(it);
+	updated = true;
+      }
+
+      if (it != pi->client_ranges.end() && it->first == p.first) {
+	if (ms > it->second.range.last) {
+	  it->second.range.last = ms;
+	  updated = true;
+	  if (max_increased)
+	    *max_increased = true;
+	}
+      } else {
+	it = pi->client_ranges.emplace_hint(it, std::piecewise_construct,
+					    std::forward_as_tuple(p.first),
+					    std::forward_as_tuple());
+	it->second.range.last = ms;
+	it->second.follows = in->first - 1;
+	updated = true;
+	if (max_increased)
+	  *max_increased = true;
+      }
+      p.second.mark_clientwriteable();
+      ++it;
+    } else {
+      p.second.clear_clientwriteable();
+    }
+  }
+  while (it != pi->client_ranges.end()) {
+    it = pi->client_ranges.erase(it);
+    updated = true;
+  }
+  if (updated) {
+    if (pi->client_ranges.empty())
+      in->clear_clientwriteable();
+    else
+      in->mark_clientwriteable();
+  }
+  return updated;
 }
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
@@ -2734,11 +2780,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   ceph_assert(in->is_file());
 
   const auto& latest = in->get_projected_inode();
-  CInode::mempool_inode::client_range_map new_ranges;
   uint64_t size = latest->size;
   bool update_size = new_size > 0;
-  bool update_max = false;
-  bool max_increased = false;
 
   if (update_size) {
     new_size = size = std::max(size, new_size);
@@ -2747,28 +2790,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       update_size = false;
   }
 
-  int can_update = 1;
-  if (in->is_frozen()) {
-    can_update = -1;
-  } else if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
-    // lock?
-    if (in->filelock.is_stable()) {
-      if (in->get_target_loner() >= 0)
-	file_excl(&in->filelock);
-      else
-	simple_lock(&in->filelock);
-    }
-    if (!in->filelock.can_wrlock(in->get_loner()))
-      can_update = -2;
-  }
-
-  calc_new_client_ranges(in, std::max(new_max_size, size), can_update > 0,
-			 &new_ranges, &max_increased);
-
-  if (max_increased || latest->client_ranges != new_ranges)
-    update_max = true;
-
-  if (!update_size && !update_max) {
+  bool new_ranges = check_client_ranges(in, std::max(new_max_size, size));
+  if (!update_size && !new_ranges) {
     dout(20) << "check_inode_max_size no-op on " << *in << dendl;
     return false;
   }
@@ -2777,16 +2800,25 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 	   << " update_size " << update_size
 	   << " on " << *in << dendl;
 
-  if (can_update < 0) {
-    auto cms = new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime);
-    if (can_update == -1) {
-      dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
-      in->add_waiter(CInode::WAIT_UNFREEZE, cms);
-    } else {
-      in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
-      dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
-    }
+  if (in->is_frozen()) {
+    dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE,
+		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
     return false;
+  } else if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
+    // lock?
+    if (in->filelock.is_stable()) {
+      if (in->get_target_loner() >= 0)
+	file_excl(&in->filelock);
+      else
+	simple_lock(&in->filelock);
+    }
+    if (!in->filelock.can_wrlock(in->get_loner())) {
+      dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
+      in->filelock.add_waiter(SimpleLock::WAIT_STABLE,
+			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+      return false;
+    }
   }
 
   MutationRef mut(new MutationImpl());
@@ -2795,9 +2827,12 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   auto pi = in->project_inode(mut);
   pi.inode->version = in->pre_dirty();
 
-  if (update_max) {
-    dout(10) << "check_inode_max_size client_ranges " << pi.inode->client_ranges << " -> " << new_ranges << dendl;
-    pi.inode->client_ranges = new_ranges;
+  bool max_increased = false;
+  if (new_ranges &&
+      calc_new_client_ranges(in, std::max(new_max_size, size), &max_increased)) {
+    dout(10) << "check_inode_max_size client_ranges "
+	     << in->get_previous_projected_inode()->client_ranges
+	     <<  " -> " << pi.inode->client_ranges << dendl;
   }
 
   if (update_size) {
@@ -3704,11 +3739,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   // increase or zero max_size?
   uint64_t size = m->get_size();
   bool change_max = false;
-  uint64_t old_max;
-  {
-    auto it = latest->client_ranges.find(client);
-    old_max = it != latest->client_ranges.end() ? it->second.range.last: 0;
-  }
+  uint64_t old_max = latest->get_client_range(client);
   uint64_t new_max = old_max;
   
   if (in->is_file()) {
@@ -3825,10 +3856,13 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       cr.range.first = 0;
       cr.range.last = new_max;
       cr.follows = in->first - 1;
+      in->mark_clientwriteable();
       if (cap)
 	cap->mark_clientwriteable();
     } else {
       pi.inode->client_ranges.erase(client);
+      if (pi.inode->client_ranges.empty())
+	in->clear_clientwriteable();
       if (cap)
 	cap->clear_clientwriteable();
     }
@@ -5386,6 +5420,9 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
     dout(7) << "file_eval stable, bump to sync " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock, need_issue);
+  }
+  else if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+    mds->mdcache->queue_file_recover(in);
   }
 }
 
