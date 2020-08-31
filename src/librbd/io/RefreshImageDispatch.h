@@ -73,8 +73,6 @@ public:
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override {}
-
 private:
   ImageCtxT* m_image_ctx;
 

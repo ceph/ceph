@@ -70,8 +70,6 @@ struct ImageDispatchInterface {
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) = 0;
 
-  virtual void handle_finished(int r, uint64_t tid) = 0;
-
 };
 
 } // namespace io

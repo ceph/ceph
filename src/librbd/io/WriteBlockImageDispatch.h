@@ -89,8 +89,6 @@ public:
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override;
-
 private:
   struct C_BlockedWrites;
 
@@ -106,6 +104,8 @@ private:
   uint32_t m_write_blockers = 0;
   Contexts m_write_blocker_contexts;
   Contexts m_unblocked_write_waiter_contexts;
+
+  void handle_finished(int r, uint64_t tid);
 
   bool process_io(uint64_t tid, DispatchResult* dispatch_result,
                   Context** on_finish, Context* on_dispatched);

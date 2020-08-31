@@ -77,12 +77,12 @@ public:
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override;
-
 private:
   ImageCtxT* m_image_ctx;
 
   FlushTracker<ImageCtxT>* m_flush_tracker;
+
+  void handle_finished(int r, uint64_t tid);
 
   bool enqueue(bool read_op, uint64_t tid, DispatchResult* dispatch_result,
                Context** on_finish, Context* on_dispatched);

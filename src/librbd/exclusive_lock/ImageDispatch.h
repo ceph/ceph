@@ -89,9 +89,6 @@ public:
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override {
-  }
-
 private:
   typedef std::list<Context*> Contexts;
   typedef std::unordered_set<uint64_t> Tids;

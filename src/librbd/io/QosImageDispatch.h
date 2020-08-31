@@ -90,8 +90,6 @@ public:
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override;
-
 private:
   ImageCtxT* m_image_ctx;
 
@@ -99,6 +97,8 @@ private:
   uint64_t m_qos_enabled_flag = 0;
 
   FlushTracker<ImageCtxT>* m_flush_tracker;
+
+  void handle_finished(int r, uint64_t tid);
 
   bool set_throttle_flag(std::atomic<uint32_t>* image_dispatch_flags,
                          uint32_t flag);

@@ -77,8 +77,6 @@ public:
     return false;
   }
 
-  void handle_finished(int r, uint64_t tid) override {};
-
 };
 
 } // namespace io
