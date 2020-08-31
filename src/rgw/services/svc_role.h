@@ -16,6 +16,7 @@
 #pragma once
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_role.h"
 #include "svc_meta_be.h"
 
 class RGWRole;
@@ -27,50 +28,61 @@ class RGWSI_Role: public RGWServiceInstance
   virtual ~RGWSI_Role() {}
 
   virtual RGWSI_MetaBackend_Handler* get_be_handler() = 0;
+  static std::string get_role_meta_key(const std::string& role_id);
+  static std::string get_role_name_meta_key(const std::string& role_name, const std::string& tenant);
+  static std::string get_role_path_meta_key(const std::string& path, const std::string& role_id, const std::string& tenant);
 
   virtual int store_info(RGWSI_MetaBackend::Context *ctx,
-			 const RGWRole& role,
+			 const rgw::sal::RGWRole& role,
 			 RGWObjVersionTracker * const objv_tracker,
 			 const real_time& mtime,
 			 bool exclusive,
 			 std::map<std::string, bufferlist> * pattrs,
-			 optional_yield y) = 0;
+			 optional_yield y,
+             const DoutPrefixProvider *dpp) = 0;
 
   virtual int store_name(RGWSI_MetaBackend::Context *ctx,
 			 const std::string& name,
 			 RGWObjVersionTracker * const objv_tracker,
 			 real_time * const pmtime,
 			 bool exclusive,
-			 optional_yield y) = 0;
+			 optional_yield y,
+             const DoutPrefixProvider *dpp) = 0;
 
   virtual int store_path(RGWSI_MetaBackend::Context *ctx,
 			 const std::string& path,
 			 RGWObjVersionTracker * const objv_tracker,
 			 real_time * const pmtime,
 			 bool exclusive,
-			 optional_yield y) = 0;
+			 optional_yield y,
+             const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_info(RGWSI_MetaBackend::Context *ctx,
-			RGWRole *role,
+			const std::string& role_id,
+			rgw::sal::RGWRole *role,
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
 			std::map<std::string, bufferlist> * pattrs,
-			optional_yield y) = 0;
+			optional_yield y,
+            const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_name(RGWSI_MetaBackend::Context *ctx,
 			std::string& name,
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
-			optional_yield y) = 0;
+			optional_yield y,
+            const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_path(RGWSI_MetaBackend::Context *ctx,
 			std::string& path,
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
-			optional_yield y) = 0;
+			optional_yield y,
+            const DoutPrefixProvider *dpp) = 0;
 
   virtual int delete_info(RGWSI_MetaBackend::Context *ctx,
 			  const std::string& name,
 			  RGWObjVersionTracker * const objv_tracker,
-			  optional_yield y) = 0;
+			  optional_yield y,
+              const DoutPrefixProvider *dpp) = 0;
 };

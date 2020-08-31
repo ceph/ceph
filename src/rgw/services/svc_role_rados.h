@@ -21,56 +21,76 @@
 class RGWSI_Role_RADOS: public RGWSI_Role
 {
  public:
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+  } svc;
+
   RGWSI_Role_RADOS(CephContext *cct) : RGWSI_Role(cct) {}
   ~RGWSI_Role_RADOS() {}
+
+  void init(RGWSI_Zone *_zone_svc,
+	    RGWSI_Meta *_meta_svc,
+	    RGWSI_MetaBackend *_meta_be_svc,
+	    RGWSI_SysObj *_sysobj_svc);
 
   RGWSI_MetaBackend_Handler * get_be_handler() override;
 
   int store_info(RGWSI_MetaBackend::Context *ctx,
-  		 const RGWRole& role,
+		 const rgw::sal::RGWRole& role,
   		 RGWObjVersionTracker * const objv_tracker,
-  		 real_time * const pmtime,
+  		 const real_time& pmtime,
   		 bool exclusive,
 		 std::map<std::string, bufferlist> * pattrs,
-  		 optional_yield y) override;
+		 optional_yield y,
+		 const DoutPrefixProvider *dpp) override;
 
   int store_name(RGWSI_MetaBackend::Context *ctx,
   		 const std::string& name,
   		 RGWObjVersionTracker * const objv_tracker,
   		 real_time * const pmtime,
   		 bool exclusive,
-  		 optional_yield y) override;
+		 optional_yield y,
+		 const DoutPrefixProvider *dpp) override;
 
   int store_path(RGWSI_MetaBackend::Context *ctx,
   		 const std::string& path,
   		 RGWObjVersionTracker * const objv_tracker,
   		 real_time * const pmtime,
   		 bool exclusive,
-  		 optional_yield y) override;
+		 optional_yield y,
+		 const DoutPrefixProvider *dpp) override;
 
   int read_info(RGWSI_MetaBackend::Context *ctx,
-  		RGWRole *role,
+		const std::string& role_id,
+		rgw::sal::RGWRole *role,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
 		std::map<std::string, bufferlist> * pattrs,
-  		optional_yield y) override;
+		optional_yield y,
+		const DoutPrefixProvider *dpp) override;
 
   int read_name(RGWSI_MetaBackend::Context *ctx,
   		std::string& name,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
-  		optional_yield y) override;
+		optional_yield y,
+		const DoutPrefixProvider *dpp) override;
 
   int read_path(RGWSI_MetaBackend::Context *ctx,
   		std::string& path,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
-  		optional_yield y) override;
+		optional_yield y,
+		const DoutPrefixProvider *dpp) override;
 
   int delete_info(RGWSI_MetaBackend::Context *ctx,
 		  const std::string& name,
 		  RGWObjVersionTracker * const objv_tracker,
-		  optional_yield y) override;
+		  optional_yield y,
+		  const DoutPrefixProvider *dpp) override;
 
 
 private:
