@@ -13,7 +13,7 @@ from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 
-from mgr_util import format_bytes, to_pretty_timedelta
+from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -366,9 +366,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         'orch device ls',
         "name=hostname,type=CephString,n=N,req=false "
         "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false "
-        "name=refresh,type=CephBool,req=false",
+        "name=refresh,type=CephBool,req=false "
+        "name=wide,type=CephBool,req=false",
         'List devices on a host')
-    def _list_devices(self, hostname=None, format='plain', refresh=False):
+    def _list_devices(self, hostname=None, format='plain', refresh=False, wide=False):
         # type: (Optional[List[str]], str, bool) -> HandleCommandResult
         """
         Provide information about storage devices present in cluster hosts
@@ -387,32 +388,71 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         if format != 'plain':
             return HandleCommandResult(stdout=to_format(completion.result, format, many=True, cls=InventoryHost))
         else:
-            out = []
+            display_map = {
+                "Unsupported": "N/A",
+                "N/A": "N/A",
+                "On": "On",
+                "Off": "Off",
+                True: "Yes",
+                False: "No",
+            }
 
-            table = PrettyTable(
-                ['HOST', 'PATH', 'TYPE', 'SIZE', 'DEVICE_ID', 'MODEL', 'VENDOR', 'ROTATIONAL', 'AVAIL',
-                 'REJECT REASONS'],
-                border=False)
+            out = []
+            if wide:
+                table = PrettyTable(
+                    ['Hostname', 'Path', 'Type', 'Transport', 'RPM', 'Vendor', 'Model', 'Serial', 'Size', 'Health',
+                     'Ident', 'Fault', 'Available', 'Reject Reasons'],
+                    border=False)
+            else:
+                table = PrettyTable(
+                    ['Hostname', 'Path', 'Type', 'Serial', 'Size', 'Health', 'Ident', 'Fault', 'Available'],
+                    border=False)
             table.align = 'l'
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for host_ in completion.result:  # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
-                    table.add_row(
-                        (
-                            host_.name,
-                            d.path,
-                            d.human_readable_type,
-                            format_bytes(d.sys_api.get('size', 0), 5),
-                            d.device_id,
-                            d.sys_api.get('model') or 'n/a',
-                            d.sys_api.get('vendor') or 'n/a',
-                            d.sys_api.get('rotational') or 'n/a',
-                            d.available,
-                            ', '.join(d.rejected_reasons)
+
+                    led_ident = 'N/A'
+                    led_fail = 'N/A'
+                    if d.lsm_data.get('ledSupport', None):
+                        led_ident = d.lsm_data['ledSupport']['IDENTstatus']
+                        led_fail = d.lsm_data['ledSupport']['FAILstatus']
+
+                    if wide:
+                        table.add_row(
+                            (
+                                host_.name,
+                                d.path,
+                                d.human_readable_type,
+                                d.lsm_data.get('transport', 'Unknown'),
+                                d.lsm_data.get('rpm', 'Unknown'),
+                                d.sys_api.get('vendor') or 'N/A',
+                                d.sys_api.get('model') or 'N/A',
+                                d.lsm_data.get('serialNum', d.device_id.split('_')[-1]),
+                                format_dimless(d.sys_api.get('size', 0), 5),
+                                d.lsm_data.get('health', 'Unknown'),
+                                display_map[led_ident],
+                                display_map[led_fail],
+                                display_map[d.available],
+                                ', '.join(d.rejected_reasons)
+                            )
                         )
-                    )
+                    else:
+                        table.add_row(
+                            (
+                                host_.name,
+                                d.path,
+                                d.human_readable_type,
+                                d.lsm_data.get('serialNum', d.device_id.split('_')[-1]),
+                                format_dimless(d.sys_api.get('size', 0), 5),
+                                d.lsm_data.get('health', 'Unknown'),
+                                display_map[led_ident],
+                                display_map[led_fail],
+                                display_map[d.available]
+                            )
+                        )
             out.append(table.get_string())
             return HandleCommandResult(stdout='\n'.join(out))
 
