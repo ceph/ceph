@@ -512,20 +512,17 @@ class CephFSMount(object):
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, wait=True, stdin=None, check_status=True,
-                  cwd=None, omit_sudo=True, timeout=900):
+    def run_shell(self, args, omit_sudo=True, timeout=900, **kwargs):
         args = args.split() if isinstance(args, str) else args
         # XXX: all commands ran with CephFS mount as CWD must be executed with
         #  superuser privileges when tests are being run using teuthology.
         if args[0] != 'sudo':
             args.insert(0, 'sudo')
-        if not cwd and self.mountpoint:
-            cwd = self.mountpoint
+        cwd = kwargs.pop('cwd', self.mountpoint)
+        stdout = kwargs.pop('stdout', StringIO())
+        stderr = kwargs.pop('stderr', StringIO())
 
-        return self.client_remote.run(args=args, stdin=stdin, wait=wait,
-                                      stdout=StringIO(), stderr=StringIO(),
-                                      cwd=cwd, check_status=check_status,
-                                      timeout=timeout)
+        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout, stdout=stdout, stderr=stderr, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
