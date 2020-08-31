@@ -421,7 +421,7 @@ void AdminSocket::do_tell_queue()
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
 #ifdef WITH_SEASTAR
-#warning "fix message send with crimson"
+        // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
 #endif
@@ -437,7 +437,7 @@ void AdminSocket::do_tell_queue()
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
 #ifdef WITH_SEASTAR
-#warning "fix message send with crimson"
+        // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
 #endif
@@ -452,7 +452,7 @@ int AdminSocket::execute_command(
   bufferlist *outbl)
 {
 #ifdef WITH_SEASTAR
-#warning "must implement admin socket blocking execute_command() for crimson"
+   // TODO: crimson: blocking execute_command() in alien thread
   return -ENOSYS;
 #else
   bool done = false;
