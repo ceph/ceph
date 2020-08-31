@@ -28,15 +28,15 @@ namespace io {
 template <typename I>
 struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   ImageDispatchInterface* image_dispatch;
-  ImageDispatchSpec<I>* image_dispatch_spec;
+  ImageDispatchSpec* image_dispatch_spec;
 
   SendVisitor(ImageDispatchInterface* image_dispatch,
-              ImageDispatchSpec<I>* image_dispatch_spec)
+              ImageDispatchSpec* image_dispatch_spec)
     : image_dispatch(image_dispatch),
       image_dispatch_spec(image_dispatch_spec) {
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Read& read) const {
+  bool operator()(ImageDispatchSpec::Read& read) const {
     return image_dispatch->read(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
@@ -47,7 +47,7 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Discard& discard) const {
+  bool operator()(ImageDispatchSpec::Discard& discard) const {
     return image_dispatch->discard(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
@@ -58,7 +58,7 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Write& write) const {
+  bool operator()(ImageDispatchSpec::Write& write) const {
     return image_dispatch->write(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents), std::move(write.bl),
@@ -68,7 +68,7 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool  operator()(typename ImageDispatchSpec<I>::WriteSame& write_same) const {
+  bool  operator()(ImageDispatchSpec::WriteSame& write_same) const {
     return image_dispatch->write_same(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents), std::move(write_same.bl),
@@ -79,7 +79,7 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   }
 
   bool  operator()(
-      typename ImageDispatchSpec<I>::CompareAndWrite& compare_and_write) const {
+      ImageDispatchSpec::CompareAndWrite& compare_and_write) const {
     return image_dispatch->compare_and_write(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
@@ -91,7 +91,7 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool operator()(typename ImageDispatchSpec<I>::Flush& flush) const {
+  bool operator()(ImageDispatchSpec::Flush& flush) const {
     return image_dispatch->flush(
       image_dispatch_spec->aio_comp, flush.flush_source,
       image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
@@ -211,7 +211,7 @@ void ImageDispatcher<I>::finish(int r, ImageDispatchLayer image_dispatch_layer,
 template <typename I>
 bool ImageDispatcher<I>::send_dispatch(
     ImageDispatchInterface* image_dispatch,
-    ImageDispatchSpec<I>* image_dispatch_spec) {
+    ImageDispatchSpec* image_dispatch_spec) {
   if (image_dispatch_spec->tid == 0) {
     image_dispatch_spec->tid = ++m_next_tid;
   }

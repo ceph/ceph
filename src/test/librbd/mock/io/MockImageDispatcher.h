@@ -24,7 +24,7 @@ public:
   MOCK_METHOD1(register_dispatch, void(ImageDispatchInterface*));
   MOCK_METHOD2(shut_down_dispatch, void(ImageDispatchLayer, Context*));
 
-  MOCK_METHOD1(send, void(ImageDispatchSpec<>*));
+  MOCK_METHOD1(send, void(ImageDispatchSpec*));
   MOCK_METHOD3(finish, void(int r, ImageDispatchLayer, uint64_t));
 
   MOCK_METHOD1(apply_qos_schedule_tick_min, void(uint64_t));

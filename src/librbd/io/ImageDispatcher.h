@@ -49,7 +49,7 @@ public:
 protected:
   bool send_dispatch(
     ImageDispatchInterface* image_dispatch,
-    ImageDispatchSpec<ImageCtxT>* image_dispatch_spec) override;
+    ImageDispatchSpec* image_dispatch_spec) override;
 
 private:
   struct SendVisitor;
