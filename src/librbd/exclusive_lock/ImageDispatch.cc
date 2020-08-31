@@ -70,7 +70,7 @@ void ImageDispatch<I>::set_require_lock(io::Direction direction,
   // push through a flush for any in-flight writes at lower levels
   auto aio_comp = io::AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(m_image_ctx), io::AIO_TYPE_FLUSH);
-  auto req = io::ImageDispatchSpec<I>::create_flush(
+  auto req = io::ImageDispatchSpec::create_flush(
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK, aio_comp,
     io::FLUSH_SOURCE_INTERNAL, {});
   req->send();

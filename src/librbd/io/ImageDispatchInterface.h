@@ -17,11 +17,11 @@ namespace librbd {
 namespace io {
 
 struct AioCompletion;
-template <typename> struct ImageDispatchSpec;
+struct ImageDispatchSpec;
 
 struct ImageDispatchInterface {
   typedef ImageDispatchLayer DispatchLayer;
-  typedef ImageDispatchSpec<librbd::ImageCtx> DispatchSpec;
+  typedef ImageDispatchSpec DispatchSpec;
 
   virtual ~ImageDispatchInterface() {
   }
