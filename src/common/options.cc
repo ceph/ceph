@@ -8123,6 +8123,11 @@ std::vector<Option> get_mds_options() {
     .set_default(10.0)
     .set_description("rate of decay for export targets communicated to clients"),
 
+    Option("mds_oft_prefetch_dirfrags", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("prefetch dirfrags recorded in open file table on startup")
+    .set_flag(Option::FLAG_STARTUP),
+
     Option("mds_replay_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.0)
     .set_description("time in seconds between replay of updates to journal by standby replay MDS"),

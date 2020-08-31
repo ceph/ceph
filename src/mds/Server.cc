@@ -4399,6 +4399,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     _inode->client_ranges[client].range.first = 0;
     _inode->client_ranges[client].range.last = _inode->layout.stripe_unit;
     _inode->client_ranges[client].follows = follows;
+    newi->mark_clientwriteable();
     cap->mark_clientwriteable();
   }
   
@@ -5000,12 +5001,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     pi.inode->mtime = mdr->get_op_stamp();
 
     // adjust client's max_size?
-    CInode::mempool_inode::client_range_map new_ranges;
-    bool max_increased = false;
-    mds->locker->calc_new_client_ranges(cur, pi.inode->size, true, &new_ranges, &max_increased);
-    if (pi.inode->client_ranges != new_ranges) {
-      dout(10) << " client_ranges " << pi.inode->client_ranges << " -> " << new_ranges << dendl;
-      pi.inode->client_ranges = new_ranges;
+    if (mds->locker->calc_new_client_ranges(cur, pi.inode->size)) {
+      dout(10) << " client_ranges "  << cur->get_previous_projected_inode()->client_ranges
+	       << " -> " << pi.inode->client_ranges << dendl;
       changed_ranges = true;
     }
   }
@@ -5066,6 +5064,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
     pi.inode->client_ranges[client].range.last = pi.inode->get_layout_size_increment();
     pi.inode->client_ranges[client].follows = realm->get_newest_seq();
     changed_ranges = true;
+    in->mark_clientwriteable();
     cap->mark_clientwriteable();
   }
   
@@ -6084,6 +6083,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
       _inode->client_ranges[client].range.first = 0;
       _inode->client_ranges[client].range.last = _inode->layout.stripe_unit;
       _inode->client_ranges[client].follows = follows;
+      newi->mark_clientwriteable();
       cap->mark_clientwriteable();
     }
   }

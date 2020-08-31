@@ -358,6 +358,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_DELAYEDEXPORTPIN	= (1<<19);
   static const int STATE_DISTEPHEMERALPIN       = (1<<20);
   static const int STATE_RANDEPHEMERALPIN       = (1<<21);
+  static const int STATE_CLIENTWRITEABLE	= (1<<22);
+
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -400,7 +402,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     close_snaprealm();
     clear_file_locks();
     ceph_assert(num_projected_srnodes == 0);
-    ceph_assert(num_caps_wanted == 0);
+    ceph_assert(num_caps_notable == 0);
     ceph_assert(num_subtree_roots == 0);
     ceph_assert(num_exporting_dirs == 0);
     ceph_assert(batch_ops.empty());
@@ -904,8 +906,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     }
   }
 
-  int get_num_caps_wanted() const { return num_caps_wanted; }
-  void adjust_num_caps_wanted(int d);
+  int get_num_caps_notable() const { return num_caps_notable; }
+  void adjust_num_caps_notable(int d);
 
   Capability *add_client_cap(client_t client, Session *session,
 			     SnapRealm *conrealm=nullptr, bool new_inode=false);
@@ -931,6 +933,11 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_any_caps_wanted() const;
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
   bool issued_caps_need_gather(SimpleLock *lock);
+
+  // client writeable
+  bool is_clientwriteable() const { return state & STATE_CLIENTWRITEABLE; }
+  void mark_clientwriteable();
+  void clear_clientwriteable();
 
   // -- authority --
   mds_authority_t authority() const override;
@@ -1207,7 +1214,7 @@ protected:
   mempool_cap_map client_caps; // client -> caps
   mempool::mds_co::compact_map<int32_t, int32_t> mds_caps_wanted;     // [auth] mds -> caps wanted
   int replica_caps_wanted = 0; // [replica] what i've requested from auth
-  int num_caps_wanted = 0;
+  int num_caps_notable = 0;
 
   ceph_lock_state_t *fcntl_locks = nullptr;
   ceph_lock_state_t *flock_locks = nullptr;
