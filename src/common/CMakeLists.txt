@@ -21,6 +21,7 @@ set(common_srcs
   FastCDC.cc
   Finisher.cc
   FixedCDC.cc
+  formatter_filter.cc
   Formatter.cc
   Graylog.cc
   HTMLFormatter.cc
