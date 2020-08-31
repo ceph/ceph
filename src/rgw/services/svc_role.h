@@ -31,7 +31,7 @@ class RGWSI_Role: public RGWServiceInstance
   virtual int store_info(RGWSI_MetaBackend::Context *ctx,
 			 const RGWRole& role,
 			 RGWObjVersionTracker * const objv_tracker,
-			 real_time * const pmtime,
+			 const real_time& mtime,
 			 bool exclusive,
 			 std::map<std::string, bufferlist> * pattrs,
 			 optional_yield y) = 0;
