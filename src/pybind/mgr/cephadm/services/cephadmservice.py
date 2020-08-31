@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Option
 from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
+from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 
@@ -250,6 +251,8 @@ class MonService(CephadmService):
                 extra_config += 'public network = %s\n' % network
             elif network.startswith('[v') and network.endswith(']'):
                 extra_config += 'public addrv = %s\n' % network
+            elif is_ipv6(network):
+                extra_config += 'public addr = %s\n' % unwrap_ipv6(network)
             elif ':' not in network:
                 extra_config += 'public addr = %s\n' % network
             else:
