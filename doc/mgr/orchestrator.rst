@@ -313,13 +313,17 @@ error if it doesn't know how to do this transition.
 
 Update the number of monitor hosts::
 
-    ceph orch apply mon <num> [host, host:network...] [--dry-run]
+    ceph orch apply mon --placement=<placement> [--dry-run]
+    
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager hosts::
 
-    ceph orch apply mgr <num> [host...] [--dry-run]
+    ceph orch apply mgr --placement=<placement> [--dry-run]
+    
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
 ..
     .. note::
@@ -504,7 +508,7 @@ Explicit placements
 
 Daemons can be explicitly placed on hosts by simply specifying them::
 
-    orch apply prometheus "host1 host2 host3"
+    orch apply prometheus --placement="host1 host2 host3"
 
 Or in YAML:
 
@@ -519,7 +523,7 @@ Or in YAML:
 
 MONs and other services may require some enhanced network specifications::
 
-  orch daemon add mon myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name
+  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
 
 where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
@@ -529,7 +533,7 @@ Placement by labels
 
 Daemons can be explictly placed on hosts that match a specific label::
 
-    orch apply prometheus label:mylabel
+    orch apply prometheus --placement="label:mylabel"
 
 Or in YAML:
 
@@ -545,7 +549,7 @@ Placement by pattern matching
 
 Daemons can be placed on hosts as well::
 
-    orch apply prometheus 'myhost[1-3]'
+    orch apply prometheus --placement='myhost[1-3]'
 
 Or in YAML:
 
@@ -557,7 +561,7 @@ Or in YAML:
 
 To place a service on *all* hosts, use ``"*"``::
 
-    orch apply crash '*'
+    orch apply crash --placement='*'
 
 Or in YAML:
 
@@ -573,15 +577,15 @@ Setting a limit
 
 By specifying ``count``, only that number of daemons will be created::
 
-    orch apply prometheus 3
+    orch apply prometheus --placement=3
 
 To deploy *daemons* on a subset of hosts, also specify the count::
 
-    orch apply prometheus "2 host1 host2 host3"
+    orch apply prometheus --placement="2 host1 host2 host3"
 
 If the count is bigger than the amount of hosts, cephadm deploys one per host::
 
-    orch apply prometheus "3 host1 host2"
+    orch apply prometheus --placement="3 host1 host2"
 
 results in two Prometheus daemons.
 
