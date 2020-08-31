@@ -24,7 +24,7 @@ target_link_libraries(
 add_executable(unittest_seastore_journal
   test_seastore_journal.cc)
 add_ceph_test(unittest_seastore_journal
-  unittest_seastore_cache)
+  unittest_seastore_journal)
 target_link_libraries(
   unittest_seastore_journal
   crimson::gtest
