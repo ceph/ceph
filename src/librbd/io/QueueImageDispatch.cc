@@ -107,10 +107,6 @@ bool QueueImageDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  if (flush_source != FLUSH_SOURCE_USER) {
-    return false;
-  }
-
   *dispatch_result = DISPATCH_RESULT_CONTINUE;
   m_flush_tracker->flush(on_dispatched);
   return true;
