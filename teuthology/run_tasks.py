@@ -111,10 +111,11 @@ def run_tasks(tasks, ctx):
                 'task': taskname,
                 'owner': ctx.owner,
             }
-            if 'teuthology_branch' in config:
-                tags['teuthology_branch'] = config['teuthology_branch']
-            if 'branch' in config:
-                tags['branch'] = config['branch']
+            optional_tags = ('teuthology_branch', 'branch', 'suite',
+                             'machine_type', 'os_type', 'os_version')
+            for tag in optional_tags:
+                if tag in config:
+                    tags[tag] = config[tag]
 
             # Remove ssh keys from reported config
             if 'targets' in config:
@@ -133,7 +134,7 @@ def run_tasks(tasks, ctx):
                 tags=tags,
                 extra=extra,
             ))
-            event_url = "{server}/?q={id}".format(
+            event_url = "{server}/?query={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
             ctx.summary['sentry_event'] = event_url
