@@ -21,15 +21,27 @@
 class RGWSI_Role_RADOS: public RGWSI_Role
 {
  public:
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+  } svc;
+
   RGWSI_Role_RADOS(CephContext *cct) : RGWSI_Role(cct) {}
   ~RGWSI_Role_RADOS() {}
+
+  void init(RGWSI_Zone *_zone_svc,
+	    RGWSI_Meta *_meta_svc,
+	    RGWSI_MetaBackend *_meta_be_svc,
+	    RGWSI_SysObj *_sysobj_svc);
 
   RGWSI_MetaBackend_Handler * get_be_handler() override;
 
   int store_info(RGWSI_MetaBackend::Context *ctx,
   		 const RGWRole& role,
   		 RGWObjVersionTracker * const objv_tracker,
-  		 real_time * const pmtime,
+  		 const real_time& pmtime,
   		 bool exclusive,
   		 map<std::string, bufferlist> * pattrs,
   		 optional_yield y) override;
@@ -49,6 +61,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   		 optional_yield y) override;
 
   int read_info(RGWSI_MetaBackend::Context *ctx,
+		const std::string& role_id,
   		RGWRole *role,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,

@@ -27,6 +27,9 @@ class RGWSI_Role: public RGWServiceInstance
   virtual ~RGWSI_Role() {}
 
   virtual RGWSI_MetaBackend_Handler* get_be_handler() = 0;
+  static std::string get_role_meta_key(const std::string& role_id);
+  static std::string get_role_name_meta_key(const std::string& role_name, const std::string& tenant);
+  static std::string get_role_path_meta_key(const std::string& path, const std::string& role_id, const std::string& tenant);
 
   virtual int store_info(RGWSI_MetaBackend::Context *ctx,
 			 const RGWRole& role,
@@ -51,6 +54,7 @@ class RGWSI_Role: public RGWServiceInstance
 			 optional_yield y) = 0;
 
   virtual int read_info(RGWSI_MetaBackend::Context *ctx,
+			const std::string& role_id,
 			RGWRole *role,
 			RGWObjVersionTracker * const objv_tracker,
 			real_time * const pmtime,
