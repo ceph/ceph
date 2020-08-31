@@ -34,7 +34,7 @@ std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args)
  */
 class OsdStatusHook : public AdminSocketHook {
 public:
-  explicit OsdStatusHook(crimson::osd::OSD& osd) :
+  explicit OsdStatusHook(const crimson::osd::OSD& osd) :
     AdminSocketHook{"status", "", "OSD status"},
     osd(osd)
   {}
@@ -49,10 +49,10 @@ public:
     return seastar::make_ready_future<tell_result_t>(f.get());
   }
 private:
-  crimson::osd::OSD& osd;
+  const crimson::osd::OSD& osd;
 };
 template std::unique_ptr<AdminSocketHook>
-make_asok_hook<OsdStatusHook>(crimson::osd::OSD& osd);
+make_asok_hook<OsdStatusHook>(const crimson::osd::OSD& osd);
 
 /**
  * An OSD admin hook: send beacon
@@ -104,6 +104,32 @@ private:
   crimson::osd::OSD& osd;
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<FlushPgStatsHook>(crimson::osd::OSD& osd);
+
+/// dump the history of PGs' peering state
+class DumpPGStateHistory final: public AdminSocketHook {
+public:
+  explicit DumpPGStateHistory(const crimson::osd::OSD &osd) :
+    AdminSocketHook{"dump_pgstate_history",
+                    "",
+                    "dump history of PGs' peering state"},
+    osd{osd}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    std::unique_ptr<Formatter> f{Formatter::create(format,
+                                                   "json-pretty",
+                                                   "json-pretty")};
+    f->open_object_section("pgstate_history");
+    osd.dump_pg_state_history(f.get());
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(f.get());
+  }
+private:
+  const crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpPGStateHistory>(const crimson::osd::OSD& osd);
 
 /**
  * A CephContext admin hook: calling assert (if allowed by
