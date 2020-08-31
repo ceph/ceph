@@ -76,7 +76,8 @@ class RDMADispatcher {
     ceph::make_mutex("RDMADispatcher::for worker pending list");
   // fixme: lockfree
   std::list<RDMAWorker*> pending_workers;
-  void enqueue_dead_qp(uint32_t qp);
+  void enqueue_dead_qp_lockless(uint32_t qp);
+  void enqueue_dead_qp(uint32_t qpn);
 
  public:
   PerfCounters *perf_logger;
