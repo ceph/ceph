@@ -534,10 +534,9 @@ def check_ip_port(ip, port):
     # type: (str, int) -> None
     if not args.skip_ping_check:
         logger.info('Verifying IP %s port %d ...' % (ip, port))
-        if ip.startswith('[') or '::' in ip:
+        if is_ipv6(ip):
             s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            if ip.startswith('[') and ip.endswith(']'):
-                ip = ip[1:-1]
+            ip = unwrap_ipv6(ip)
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -2488,10 +2487,26 @@ def command_inspect_image():
 
 ##################################
 
+
 def unwrap_ipv6(address):
     # type: (str) -> str
     if address.startswith('[') and address.endswith(']'):
         return address[1:-1]
+    return address
+
+
+def wrap_ipv6(address):
+    # type: (str) -> str
+
+    # We cannot assume it's already wrapped or even an IPv6 address if
+    # it's already wrapped it'll not pass (like if it's a hostname) and trigger
+    # the ValueError
+    try:
+        if ipaddress.ip_address(unicode(address)).version == 6:
+            return f"[{address}]"
+    except ValueError:
+        pass
+
     return address
 
 
@@ -2550,6 +2565,8 @@ def command_bootstrap():
     base_ip = ''
     if args.mon_ip:
         ipv6 = is_ipv6(args.mon_ip)
+        if ipv6:
+            args.mon_ip = wrap_ipv6(args.mon_ip)
         hasport = r.findall(args.mon_ip)
         if hasport:
             port = int(hasport[0])
