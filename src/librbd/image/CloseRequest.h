@@ -33,14 +33,15 @@ private:
    * BLOCK_IMAGE_WATCHER (skip if R/O)
    *    |
    *    v
-   * SHUT_DOWN_UPDATE_WATCHERS  . .
-   *    |                         . (exclusive lock disabled)
-   *    v                         v
-   * SHUT_DOWN_EXCLUSIVE_LOCK   FLUSH
-   *    |                         .
-   *    |     . . . . . . . . . . .
-   *    |     .
-   *    v     v
+   * SHUT_DOWN_UPDATE_WATCHERS
+   *    |
+   *    v
+   * FLUSH
+   *    |
+   *    v (skip if disabled)
+   * SHUT_DOWN_EXCLUSIVE_LOCK
+   *    |
+   *    v
    * UNREGISTER_IMAGE_WATCHER (skip if R/O)
    *    |
    *    v
@@ -82,11 +83,11 @@ private:
   void send_shut_down_update_watchers();
   void handle_shut_down_update_watchers(int r);
 
-  void send_shut_down_exclusive_lock();
-  void handle_shut_down_exclusive_lock(int r);
-
   void send_flush();
   void handle_flush(int r);
+
+  void send_shut_down_exclusive_lock();
+  void handle_shut_down_exclusive_lock(int r);
 
   void send_unregister_image_watcher();
   void handle_unregister_image_watcher(int r);
