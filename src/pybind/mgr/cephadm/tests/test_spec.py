@@ -7,7 +7,7 @@ import json
 import pytest
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, AlertManagerSpec
+    IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec
 
 from orchestrator import DaemonDescription, OrchestratorError
 
@@ -105,6 +105,16 @@ def test_spec_octopus(spec_json):
         if 'spec' in j_c:
             spec = j_c.pop('spec')
             j_c.update(spec)
+        if 'placement' in j_c:
+            if 'hosts' in j_c['placement']:
+                j_c['placement']['hosts'] = [
+                    {
+                        'hostname': HostPlacementSpec.parse(h).hostname,
+                        'network': HostPlacementSpec.parse(h).network,
+                        'name': HostPlacementSpec.parse(h).name
+                    }
+                    for h in j_c['placement']['hosts']
+                ]
         j_c.pop('objectstore', None)
         j_c.pop('filter_logic', None)
         return j_c
