@@ -13,7 +13,6 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 #include <list>
-#include <set>
 
 struct Context;
 
@@ -93,17 +92,16 @@ private:
   struct C_BlockedWrites;
 
   typedef std::list<Context*> Contexts;
-  typedef std::set<uint64_t> Tids;
 
   ImageCtxT* m_image_ctx;
 
   mutable ceph::shared_mutex m_lock;
   Contexts m_on_dispatches;
-  Tids m_in_flight_write_tids;
 
   uint32_t m_write_blockers = 0;
   Contexts m_write_blocker_contexts;
   Contexts m_unblocked_write_waiter_contexts;
+  uint64_t m_in_flight_writes = 0;
 
   void handle_finished(int r, uint64_t tid);
 

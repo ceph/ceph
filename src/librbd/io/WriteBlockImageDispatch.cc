@@ -66,9 +66,9 @@ void WriteBlockImageDispatch<I>::block_writes(Context *on_blocked) {
     ++m_write_blockers;
     ldout(cct, 5) << m_image_ctx << ", "
                   << "num=" << m_write_blockers << dendl;
-    if (!m_write_blocker_contexts.empty() || !m_in_flight_write_tids.empty()) {
+    if (!m_write_blocker_contexts.empty() || m_in_flight_writes > 0) {
       ldout(cct, 5) << "waiting for in-flight writes to complete: "
-                    << "write_tids=" << m_in_flight_write_tids << dendl;
+                    << "in_flight_writes=" << m_in_flight_writes << dendl;
       m_write_blocker_contexts.push_back(on_blocked);
       return;
     }
@@ -200,12 +200,11 @@ void WriteBlockImageDispatch<I>::handle_finished(int r, uint64_t tid) {
   ldout(cct, 20) << "r=" << r << ", tid=" << tid << dendl;
 
   std::unique_lock locker{m_lock};
-  auto it = m_in_flight_write_tids.find(tid);
-  ceph_assert(it != m_in_flight_write_tids.end());
-  m_in_flight_write_tids.erase(it);
+  ceph_assert(m_in_flight_writes > 0);
+  --m_in_flight_writes;
 
   bool writes_blocked = false;
-  if (m_write_blockers > 0 && m_in_flight_write_tids.empty()) {
+  if (m_write_blockers > 0 && m_in_flight_writes == 0) {
     ldout(cct, 10) << "flushing all in-flight IO for blocked writes" << dendl;
     writes_blocked = true;
   }
@@ -227,11 +226,11 @@ bool WriteBlockImageDispatch<I>::process_io(
     return true;
   }
 
+  ++m_in_flight_writes;
   *on_finish = new LambdaContext([this, tid, on_finish=*on_finish](int r) {
       handle_finished(r, tid);
       on_finish->complete(r);
     });
-  m_in_flight_write_tids.insert(tid);
   return false;
 }
 
