@@ -47,10 +47,10 @@ class Module(MgrModule):
         return -errno.EINVAL, "", "Unknown command"
 
     @CLIReadCommand('fs snap-schedule status',
-                    'name=path,type=CephString,req=false '
-                    'name=subvol,type=CephString,req=false '
-                    'name=fs,type=CephString,req=false '
-                    'name=format,type=CephString,req=false',
+                    'name=path,type=CephString,req=false,kw=true '
+                    'name=subvol,type=CephString,req=false,kw=true '
+                    'name=fs,type=CephString,req=false,kw=true '
+                    'name=format,type=CephString,req=false,kw=true',
                     'List current snapshot schedules')
     def snap_schedule_get(self, path='/', subvol=None, fs=None, format='plain'):
         use_fs = fs if fs else self.default_fs
@@ -65,10 +65,10 @@ class Module(MgrModule):
 
     @CLIReadCommand('fs snap-schedule list',
                     'name=path,type=CephString '
-                    'name=recursive,type=CephString,req=false '
-                    'name=subvol,type=CephString,req=false '
-                    'name=fs,type=CephString,req=false '
-                    'name=format,type=CephString,req=false',
+                    'name=recursive,type=CephString,req=false,kw=true '
+                    'name=subvol,type=CephString,req=false,kw=true '
+                    'name=fs,type=CephString,req=false,kw=true '
+                    'name=format,type=CephString,req=false,kw=true',
                     'Get current snapshot schedule for <path>')
     def snap_schedule_list(self, path, subvol=None, recursive=False, fs=None,
                            format='plain'):
@@ -88,9 +88,9 @@ class Module(MgrModule):
     @CLIWriteCommand('fs snap-schedule add',
                      'name=path,type=CephString '
                      'name=snap-schedule,type=CephString '
-                     'name=start,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false',
+                     'name=start,type=CephString,req=false,kw=true '
+                     'name=fs,type=CephString,req=false,kw=true '
+                     'name=subvol,type=CephString,req=false,kw=true',
                      'Set a snapshot schedule for <path>')
     def snap_schedule_add(self,
                           path,
@@ -120,10 +120,10 @@ class Module(MgrModule):
 
     @CLIWriteCommand('fs snap-schedule remove',
                      'name=path,type=CephString '
-                     'name=repeat,type=CephString,req=false '
-                     'name=start,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false',
+                     'name=repeat,type=CephString,req=false,kw=true '
+                     'name=start,type=CephString,req=false,kw=true '
+                     'name=subvol,type=CephString,req=false,kw=true '
+                     'name=fs,type=CephString,req=false,kw=true',
                      'Remove a snapshot schedule for <path>')
     def snap_schedule_rm(self,
                          path,
@@ -144,9 +144,9 @@ class Module(MgrModule):
     @CLIWriteCommand('fs snap-schedule retention add',
                      'name=path,type=CephString '
                      'name=retention-spec-or-period,type=CephString '
-                     'name=retention-count,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false',
+                     'name=retention-count,type=CephString,req=false,kw=true '
+                     'name=fs,type=CephString,req=false,kw=true '
+                     'name=subvol,type=CephString,req=false,kw=true',
                      'Set a retention specification for <path>')
     def snap_schedule_retention_add(self,
                                     path,
@@ -169,9 +169,9 @@ class Module(MgrModule):
     @CLIWriteCommand('fs snap-schedule retention remove',
                      'name=path,type=CephString '
                      'name=retention-spec-or-period,type=CephString '
-                     'name=retention-count,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false',
+                     'name=retention-count,type=CephString,req=false,kw=true '
+                     'name=fs,type=CephString,req=false,kw=true '
+                     'name=subvol,type=CephString,req=false,kw=true',
                      'Remove a retention specification for <path>')
     def snap_schedule_retention_rm(self,
                                    path,
@@ -193,10 +193,10 @@ class Module(MgrModule):
 
     @CLIWriteCommand('fs snap-schedule activate',
                      'name=path,type=CephString '
-                     'name=repeat,type=CephString,req=false '
-                     'name=start,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false',
+                     'name=repeat,type=CephString,req=false,kw=true '
+                     'name=start,type=CephString,req=false,kw=true '
+                     'name=subvol,type=CephString,req=false,kw=true '
+                     'name=fs,type=CephString,req=false,kw=true',
                      'Activate a snapshot schedule for <path>')
     def snap_schedule_activate(self,
                                path,
@@ -216,10 +216,10 @@ class Module(MgrModule):
 
     @CLIWriteCommand('fs snap-schedule deactivate',
                      'name=path,type=CephString '
-                     'name=repeat,type=CephString,req=false '
-                     'name=start,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false',
+                     'name=repeat,type=CephString,req=false,kw=true '
+                     'name=start,type=CephString,req=false,kw=true '
+                     'name=subvol,type=CephString,req=false,kw=true '
+                     'name=fs,type=CephString,req=false,kw=true',
                      'Deactivate a snapshot schedule for <path>')
     def snap_schedule_deactivate(self,
                                  path,
