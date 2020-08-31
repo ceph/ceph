@@ -98,12 +98,10 @@ seastar::future<> ClientRequest::start()
 	return seastar::stop_iteration::yes;
       }).handle_exception_type([](crimson::common::actingset_changed& e) {
 	if (e.is_primary()) {
-	  crimson::get_logger(ceph_subsys_osd).debug(
-	      "operation restart, acting set changed");
+	  logger().debug("operation restart, acting set changed");
 	  return seastar::stop_iteration::no;
 	} else {
-	  crimson::get_logger(ceph_subsys_osd).debug(
-	      "operation abort, up primary changed");
+	  logger().debug("operation abort, up primary changed");
 	  return seastar::stop_iteration::yes;
 	}
       });
@@ -139,9 +137,17 @@ seastar::future<> ClientRequest::process_op(
     return with_blocking_future(handle.enter(pp(pg).get_obc));
   }).then([this, &pg]() -> PG::load_obc_ertr::future<> {
     op_info.set_from_op(&*m, *pg.get_osdmap());
-    if (is_misdirected(pg)) {
+    if (pg.is_primary()) {
+      // primary can handle both normal ops and balanced reads
+    } else if (is_misdirected(pg)) {
       logger().trace("process_op: dropping misdirected op");
       return seastar::now();
+    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
+      auto reply = make_message<MOSDOpReply>(
+        m.get(), -EAGAIN, pg.get_osdmap_epoch(),
+        m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
+        !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+      return conn->send(reply);
     }
     return pg.with_locked_obc(
       m,
@@ -165,10 +171,6 @@ seastar::future<> ClientRequest::process_op(
 
 bool ClientRequest::is_misdirected(const PG& pg) const
 {
-  // primary can handle both normal ops and balanced reads
-  if (pg.is_primary()) {
-    return false;
-  }
   // otherwise take a closer look
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
