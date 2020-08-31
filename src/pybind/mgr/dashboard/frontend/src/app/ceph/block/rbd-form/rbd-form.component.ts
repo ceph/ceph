@@ -33,6 +33,12 @@ import { RbdFormEditRequestModel } from './rbd-form-edit-request.model';
 import { RbdFormMode } from './rbd-form-mode.enum';
 import { RbdFormResponseModel } from './rbd-form-response.model';
 
+class ExternalData {
+  rbd: RbdFormResponseModel;
+  defaultFeatures: string[];
+  pools: Pool[];
+}
+
 @Component({
   selector: 'cd-rbd-form',
   templateUrl: './rbd-form.component.html',
@@ -50,8 +56,8 @@ export class RbdFormComponent extends CdForm implements OnInit {
   namespacesByPoolCache = {};
   pools: Array<Pool> = null;
   allPools: Array<Pool> = null;
-  dataPools: Array<string> = null;
-  allDataPools: Array<string> = null;
+  dataPools: Array<Pool> = null;
+  allDataPools: Array<Pool> = [];
   features: { [key: string]: RbdImageFeature };
   featuresList: RbdImageFeature[] = [];
   initializeConfigData = new EventEmitter<{
@@ -220,98 +226,108 @@ export class RbdFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    if (this.router.url.startsWith('/block/rbd/edit')) {
+    this.prepareFormForAction();
+    this.gatherNeededData().subscribe(this.handleExternalData.bind(this));
+  }
+
+  private prepareFormForAction() {
+    const url = this.router.url;
+    if (url.startsWith('/block/rbd/edit')) {
       this.mode = this.rbdFormMode.editing;
       this.action = this.actionLabels.EDIT;
       this.disableForEdit();
-    } else if (this.router.url.startsWith('/block/rbd/clone')) {
+    } else if (url.startsWith('/block/rbd/clone')) {
       this.mode = this.rbdFormMode.cloning;
       this.disableForClone();
       this.action = this.actionLabels.CLONE;
-    } else if (this.router.url.startsWith('/block/rbd/copy')) {
+    } else if (url.startsWith('/block/rbd/copy')) {
       this.mode = this.rbdFormMode.copying;
       this.action = this.actionLabels.COPY;
       this.disableForCopy();
     } else {
       this.action = this.actionLabels.CREATE;
     }
-    enum Promisse {
-      RbdServiceGet = 'rbdService.get',
-      PoolServiceList = 'poolService.list'
-    }
-    const promisses = {};
-    if (
-      this.mode === this.rbdFormMode.editing ||
-      this.mode === this.rbdFormMode.cloning ||
-      this.mode === this.rbdFormMode.copying
-    ) {
-      this.route.params.subscribe((params: { image_spec: string; snap: string }) => {
-        const imageSpec = ImageSpec.fromString(decodeURIComponent(params.image_spec));
-        if (params.snap) {
-          this.snapName = decodeURIComponent(params.snap);
-        }
-        promisses[Promisse.RbdServiceGet] = this.rbdService.get(imageSpec);
-      });
-    } else {
-      // New image
-      this.rbdService.defaultFeatures().subscribe((defaultFeatures: Array<string>) => {
-        this.setFeatures(defaultFeatures);
-      });
-    }
-    if (this.mode !== this.rbdFormMode.editing && this.poolPermission.read) {
-      promisses[Promisse.PoolServiceList] = this.poolService.list([
-        'pool_name',
-        'type',
-        'flags_names',
-        'application_metadata'
-      ]);
-    }
-
-    forkJoin(promisses).subscribe((data: object) => {
-      // poolService.list
-      if (data[Promisse.PoolServiceList]) {
-        const pools: Pool[] = [];
-        const dataPools = [];
-        for (const pool of data[Promisse.PoolServiceList]) {
-          if (this.rbdService.isRBDPool(pool)) {
-            if (pool.type === 'replicated') {
-              pools.push(pool);
-              dataPools.push(pool);
-            } else if (
-              pool.type === 'erasure' &&
-              pool.flags_names.indexOf('ec_overwrites') !== -1
-            ) {
-              dataPools.push(pool);
-            }
-          }
-        }
-        this.pools = pools;
-        this.allPools = pools;
-        this.dataPools = dataPools;
-        this.allDataPools = dataPools;
-        if (this.pools.length === 1) {
-          const poolName = this.pools[0].pool_name;
-          this.rbdForm.get('pool').setValue(poolName);
-          this.onPoolChange(poolName);
-        }
-      }
-
-      // rbdService.get
-      if (data[Promisse.RbdServiceGet]) {
-        const resp: RbdFormResponseModel = data[Promisse.RbdServiceGet];
-        this.setResponse(resp, this.snapName);
-        this.rbdImage.next(resp);
-      }
-
-      this.loadingReady();
-    });
-
     _.each(this.features, (feature) => {
       this.rbdForm
         .get('features')
         .get(feature.key)
         .valueChanges.subscribe((value) => this.featureFormUpdate(feature.key, value));
     });
+  }
+
+  private gatherNeededData(): Observable<object> {
+    const promises = {};
+    if (this.mode) {
+      // Mode is not set for creation
+      this.route.params.subscribe((params: { image_spec: string; snap: string }) => {
+        const imageSpec = ImageSpec.fromString(decodeURIComponent(params.image_spec));
+        if (params.snap) {
+          this.snapName = decodeURIComponent(params.snap);
+        }
+        promises['rbd'] = this.rbdService.get(imageSpec);
+      });
+    } else {
+      // New image
+      promises['defaultFeatures'] = this.rbdService.defaultFeatures();
+    }
+    if (this.mode !== this.rbdFormMode.editing && this.poolPermission.read) {
+      promises['pools'] = this.poolService.list([
+        'pool_name',
+        'type',
+        'flags_names',
+        'application_metadata'
+      ]);
+    }
+    return forkJoin(promises);
+  }
+
+  private handleExternalData(data: ExternalData) {
+    this.handlePoolData(data.pools);
+
+    if (data.defaultFeatures) {
+      // Fetched only during creation
+      this.setFeatures(data.defaultFeatures);
+    }
+
+    if (data.rbd) {
+      // Not fetched for creation
+      const resp = data.rbd;
+      this.setResponse(resp, this.snapName);
+      this.rbdImage.next(resp);
+    }
+
+    this.loadingReady();
+  }
+
+  private handlePoolData(data: Pool[]) {
+    if (!data) {
+      // Not fetched while editing
+      return;
+    }
+    const pools: Pool[] = [];
+    const dataPools = [];
+    for (const pool of data) {
+      if (this.rbdService.isRBDPool(pool)) {
+        if (pool.type === 'replicated') {
+          pools.push(pool);
+          dataPools.push(pool);
+        } else if (pool.type === 'erasure' && pool.flags_names.indexOf('ec_overwrites') !== -1) {
+          dataPools.push(pool);
+        }
+      }
+    }
+    this.pools = pools;
+    this.allPools = pools;
+    this.dataPools = dataPools;
+    this.allDataPools = dataPools;
+    if (this.pools.length === 1) {
+      const poolName = this.pools[0].pool_name;
+      this.rbdForm.get('pool').setValue(poolName);
+      this.onPoolChange(poolName);
+    }
+    if (this.allDataPools.length <= 1) {
+      this.rbdForm.get('useDataPool').disable();
+    }
   }
 
   onPoolChange(selectedPoolName: string) {

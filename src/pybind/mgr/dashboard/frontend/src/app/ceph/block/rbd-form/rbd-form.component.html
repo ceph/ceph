@@ -141,6 +141,9 @@
               <label class="custom-control-label"
                      for="useDataPool"
                      i18n>Use a dedicated data pool</label>
+              <cd-helper *ngIf="allDataPools.length <= 1">
+                <span i18n>You need more than one pool with the rbd application label use to use a dedicated data pool.</span>
+              </cd-helper>
             </div>
           </div>
         </div>

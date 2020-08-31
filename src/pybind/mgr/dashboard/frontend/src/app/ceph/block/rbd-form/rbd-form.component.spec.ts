@@ -123,6 +123,36 @@ describe('RbdFormComponent', () => {
       tick(DELAY);
     }));
 
+    describe('disable data pools', () => {
+      beforeEach(() => {
+        component.ngOnInit();
+      });
+
+      it('should be enabled with more than 1 pool', () => {
+        component['handleExternalData'](mock);
+        expect(component.allDataPools.length).toBe(3);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(false);
+
+        mock.pools.pop();
+        component['handleExternalData'](mock);
+        expect(component.allDataPools.length).toBe(2);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(false);
+      });
+
+      it('should be disabled with 1 pool', () => {
+        mock.pools = [mock.pools[0]];
+        component['handleExternalData'](mock);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(true);
+      });
+
+      // Reason for 2 tests - useDataPool is not re-enabled anywhere else
+      it('should be disabled without any pool', () => {
+        mock.pools = [];
+        component['handleExternalData'](mock);
+        expect(component.rbdForm.get('useDataPool').disabled).toBe(true);
+      });
+    });
+
     it('should edit image after image data is received', () => {
       component.mode = RbdFormMode.editing;
       component.ngOnInit();
