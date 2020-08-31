@@ -56,6 +56,87 @@ void PGScrub::run(
   pg->unlock();
 }
 
+void PGScrubResched::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->scrub_send_scrub_resched(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubPushesUpdate::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->scrub_send_pushes_update(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubAppliedUpdate::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->scrub_send_applied_update(epoch_queued, handle);
+   // should the unlock stay? RRR
+  pg->unlock();
+}
+
+void PGScrubUnblocked::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->scrub_send_unblocking(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubDigestUpdate::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->scrub_send_digest_update(handle);
+  pg->unlock();
+}
+
+void PGScrubGotReplMaps::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->scrub_send_replmaps_ready(handle);
+  pg->unlock();
+}
+
+void PGRepScrub::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->replica_scrub(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGRepScrubResched::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  pg->replica_scrub_resched(epoch_queued, handle);
+  pg->unlock();
+}
+
 void PGRecovery::run(
   OSD *osd,
   OSDShard *sdata,

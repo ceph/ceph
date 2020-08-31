@@ -58,6 +58,7 @@ struct inconsistent_snapset_wrapper;
 class PrimaryLogPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
+  friend class PrimaryLogScrub;
 
 public:
   MEMPOOL_CLASS_HELPERS();
@@ -905,49 +906,10 @@ protected:
    * Releases locks
    *
    * @param manager [in] manager with locks to release
+   * 
+   * (moved to .cc due to scrubber access)
    */
-  void release_object_locks(
-    ObcLockManager &lock_manager) {
-    std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > to_req;
-    bool requeue_recovery = false;
-    bool requeue_snaptrim = false;
-    lock_manager.put_locks(
-      &to_req,
-      &requeue_recovery,
-      &requeue_snaptrim);
-    if (requeue_recovery)
-      queue_recovery();
-    if (requeue_snaptrim)
-      snap_trimmer_machine.process_event(TrimWriteUnblocked());
-
-    if (!to_req.empty()) {
-      // requeue at front of scrub blocking queue if we are blocked by scrub
-      for (auto &&p: to_req) {
-	if (write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
-          for (auto& op : p.second) {
-            op->mark_delayed("waiting for scrub");
-          }
-
-	  waiting_for_scrub.splice(
-	    waiting_for_scrub.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else if (is_laggy()) {
-          for (auto& op : p.second) {
-            op->mark_delayed("waiting for readable");
-          }
-	  waiting_for_readable.splice(
-	    waiting_for_readable.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else {
-	  requeue_ops(p.second);
-	}
-      }
-    }
-  }
+  void release_object_locks(ObcLockManager &lock_manager);
 
   // replica ops
   // [primary|tail]
@@ -1418,14 +1380,6 @@ protected:
   // -- scrub --
   bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
-  void scrub_snapshot_metadata(
-    ScrubMap &map,
-    const std::map<hobject_t,
-                   std::pair<std::optional<uint32_t>,
-                        std::optional<uint32_t>>> &missing_digest) override;
-  void _scrub_clear_state() override;
-  void _scrub_finish() override;
-  object_stat_collection_t scrub_cstat;
 
   void _split_into(pg_t child_pgid, PG *child,
                    unsigned split_bits) override;
@@ -1574,22 +1528,6 @@ private:
     pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
   }
-  void log_missing(unsigned missing,
-			const std::optional<hobject_t> &head,
-			LogChannelRef clog,
-			const spg_t &pgid,
-			const char *func,
-			const char *mode,
-			bool allow_incomplete_clones);
-  unsigned process_clones_to(const std::optional<hobject_t> &head,
-    const std::optional<SnapSet> &snapset,
-    LogChannelRef clog,
-    const spg_t &pgid,
-    const char *mode,
-    bool allow_incomplete_clones,
-    std::optional<snapid_t> target,
-    std::vector<snapid_t>::reverse_iterator *curclone,
-    inconsistent_snapset_wrapper &snap_error);
 
 public:
   coll_t get_coll() {
@@ -1643,12 +1581,7 @@ private:
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
-    bool permit_trim() {
-      return
-	pg->is_clean() &&
-	!pg->scrubber.active &&
-	!pg->snap_trimq.empty();
-    }
+    bool permit_trim();
     bool can_trim() {
       return
 	permit_trim() &&
@@ -1950,9 +1883,7 @@ public:
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
   bool check_failsafe_full() override;
-  bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
-    return write_blocked_by_scrub(oid);
-  }
+  bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
   int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling

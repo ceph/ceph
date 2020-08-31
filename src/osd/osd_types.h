@@ -6486,5 +6486,9 @@ public:
               const ceph::buffer::list& xattr_data) const override;
 };
 
+// alias name for this structure:
+using missing_map_t = std::map<hobject_t,
+  std::pair<std::optional<uint32_t>,
+    std::optional<uint32_t>>>;
 
 #endif

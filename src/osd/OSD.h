@@ -293,18 +293,8 @@ public:
 
   /// @returns the scrub_reg_stamp used for unregister the scrub job
   utime_t reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
-		       double pool_scrub_max_interval, bool must) {
-    ScrubJob scrub(cct, pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
-		   must);
-    std::lock_guard l(sched_scrub_lock);
-    sched_scrub_pg.insert(scrub);
-    return scrub.sched_time;
-  }
-  void unreg_pg_scrub(spg_t pgid, utime_t t) {
-    std::lock_guard l(sched_scrub_lock);
-    size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
-    ceph_assert(removed);
-  }
+		       double pool_scrub_max_interval, bool must);
+  void unreg_pg_scrub(spg_t pgid, utime_t t);
   bool first_scrub_stamp(ScrubJob *out) {
     std::lock_guard l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
@@ -328,21 +318,7 @@ public:
     return true;
   }
 
-  void dumps_scrub(ceph::Formatter *f) {
-    ceph_assert(f != nullptr);
-    std::lock_guard l(sched_scrub_lock);
-
-    f->open_array_section("scrubs");
-    for (const auto &i: sched_scrub_pg) {
-      f->open_object_section("scrub");
-      f->dump_stream("pgid") << i.pgid;
-      f->dump_stream("sched_time") << i.sched_time;
-      f->dump_stream("deadline") << i.deadline;
-      f->dump_bool("forced", i.sched_time == PG::Scrubber::scrub_must_stamp());
-      f->close_section();
-    }
-    f->close_section();
-  }
+  void dumps_scrub(ceph::Formatter *f);
 
   bool can_inc_scrubs();
   bool inc_scrubs_local();
@@ -602,7 +578,15 @@ public:
   AsyncReserver<spg_t, Finisher> snap_reserver;
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
-  void queue_for_scrub(PG *pg, bool with_high_priority);
+  void queue_for_scrub(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_for_scrub_resched(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_pushes_update(PG *pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_applied_update(PG *pg, bool is_high_priority);
+  void queue_scrub_unblocking(PG *pg, bool is_high_priority);
+  void queue_scrub_digest_update(PG *pg, bool is_high_priority);
+  void queue_scrub_got_repl_maps(PG *pg, bool is_high_priority);
+  void queue_for_rep_scrub(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority);
+  void queue_for_rep_scrub_resched(PG *pg, Scrub::scrub_prio_t with_high_priority, unsigned int qu_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
@@ -1666,6 +1650,7 @@ protected:
   friend class PG;
   friend struct OSDShard;
   friend class PrimaryLogPG;
+  friend class PgScrubber;
 
 
  protected:

@@ -17,7 +17,14 @@ You can run them in a git checkout + build directory as well:
 
 ../qa/run-standalone.sh misc.sh osd/osd-dup.sh
 
-  * Add support for specifying arguments to selected tests by simply adding
-    list of tests to each argument.
+  * To run selected tests, simply add the list of tests to each argument:
 
 ../qa/run-standalone.sh "test-ceph-helpers.sh test_get_last_scrub_stamp"
+
+Whenever a test fails, the logs of all involved components are collected
+and appended to the output. To simplify the matching of test commands to
+components logs, it may be helpful to timestamp the output. On Linux, for
+example, one may use 'moreutils's ts(1):
+
+../qa/run-standalone.sh -x -v some-test.sh 2>&1 | ts "%H:%M:%.S" > out_file
+
