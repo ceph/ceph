@@ -309,11 +309,11 @@ void ImageDispatch<I>::handle_acquire_lock(int r) {
                << dendl;
     failed_dispatch = m_on_dispatches.front();
     m_on_dispatches.pop_front();
-  } else {
-    // re-test is lock is still required (i.e. it wasn't acquired) via a restart
-    // dispatch
-    std::swap(on_dispatches, m_on_dispatches);
   }
+
+  // re-test if lock is still required (i.e. it wasn't acquired/lost) via a
+  // restart dispatch
+  std::swap(on_dispatches, m_on_dispatches);
   locker.unlock();
 
   if (failed_dispatch != nullptr) {
