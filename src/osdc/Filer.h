@@ -82,15 +82,15 @@ public:
                  throttle(o->cct, "trunc_op_throttle", o->cct->_conf->mds_max_truncate_ops),
                  thread(&TruncWorkQueue::run, this), stopping(false) { cct->_conf->add_observer(this); }
   ~TruncWorkQueue() {
-    if (!stopping)
-      set_stopping();
-    thread.join();
     cct->_conf->remove_observer(this);
   };
   void set_stopping() {
-    lock_guard lk(lock);
-    stopping = true;
-    cv.notify_one();
+    {
+      lock_guard lk(lock);
+      stopping = true;
+      cv.notify_one();
+    }
+    thread.join();
   }
   bool is_stopping() { return stopping; }
   void enqueue(C_TruncRange *ctr);
@@ -108,7 +108,7 @@ class Filer {
   CephContext *cct;
   Objecter   *objecter;
   Finisher   *finisher;
-  TruncWorkQueue trunc_work_queue;
+  TruncWorkQueue *trunc_work_queue;
 
   // probes
   struct Probe {
@@ -167,7 +167,8 @@ class Filer {
   Filer(const Filer& other);
   const Filer operator=(const Filer& other);
 
-  Filer(Objecter *o, Finisher *f) : cct(o->cct), objecter(o), finisher(f), trunc_work_queue(o, f) {}
+  Filer(Objecter *o, Finisher *f, TruncWorkQueue *twq = nullptr)
+        : cct(o->cct), objecter(o), finisher(f), trunc_work_queue(twq) {}
   ~Filer() {}
 
   bool is_active() {

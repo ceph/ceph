@@ -443,7 +443,7 @@ struct C_TruncRange : public Context {
   TruncRange *tr;
   C_TruncRange(Filer *f, TruncRange *t) : filer(f), tr(t) {}
   void finish(int r) override {
-    if (r == -ECANCELED)
+    if (r == -ECANCELED || filer->is_stopping())
       return;
     filer->_do_truncate_range(tr, 1);
   }
@@ -467,8 +467,15 @@ void TruncWorkQueue::enqueue(C_TruncRange *ctr) {
     return;
   }
   {
+    ldout(cct, 10) << "TruncWorkQueue::enqueue start to push a C_TruncRange" << dendl;
     lock_guard l(lock);
+    if (stopping) {
+      ctr->complete(-ECANCELED);
+      ldout(cct, 10) << "TruncWorkQueue::enqueue C_TruncRange is canceled" << dendl;
+      return;
+    }
     queue.push(ctr);
+    ldout(cct, 10) << "TruncWorkQueue::enqueue C_TruncRange is pushed" << dendl;
   }
   cv.notify_one();
 }
@@ -500,14 +507,16 @@ void TruncWorkQueue::run() {
     C_TruncRange *c_trunc_range = dequeue();
     if (!stopping)
       queue_job_to_finisher(c_trunc_range);
-    else if ( c_trunc_range != nullptr )
+    else if (c_trunc_range != nullptr)
       c_trunc_range->complete(-ECANCELED);
   }
+  ldout(cct, 5) << "TruncWorkQueue::run start to clear queue" << dendl;
   lock_guard lk(lock);
   while (!queue.empty()) {
     queue.front()->complete(-ECANCELED);
     queue.pop();
   }
+  ldout(cct, 5) << "TruncWorkQueue::run queue is cleared" << dendl;
 }
 
 class C_OnTruncWorkQueue : public Context {
@@ -525,7 +534,7 @@ class C_OnTruncWorkQueue : public Context {
     void finish(int r) override {
       int64_t put = put_slot ? 1 : 0;
       trunc_work_q->put_slots(put);
-      if (r == -ECANCELED) {
+      if (r == -ECANCELED || trunc_work_q->is_stopping()) {
         c_trunc_range->complete(-ECANCELED);
         c_trunc_range = nullptr;
         return;
@@ -544,8 +553,8 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 		 << dendl;
 
   if (tr->length == 0 && tr->uncommitted == 0) {
-    if (fin) {
-      trunc_work_queue.put_slots(1);
+    if (trunc_work_queue && fin) {
+      trunc_work_queue->put_slots(1);
       ldout(cct, 10) << "_do_truncate_range put " << 1 << " slot to throttle" << dendl;
     }
     tr->oncommit->complete(0);
@@ -570,18 +579,21 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 
   trl.unlock();
 
-  if (fin && extents.size() == 0) {
-    trunc_work_queue.put_slots(1);
+  if (trunc_work_queue && fin && extents.size() == 0) {
+    trunc_work_queue->put_slots(1);
     ldout(cct, 10) << "_do_truncate_range put " << 1 << " slot to throttle" << dendl;
   }
 
   // Issue objecter ops outside tr->lock to avoid lock dependency loop
   for (const auto& p : extents) {
+    if (trunc_work_queue)
+      oncommit = new C_OnTruncWorkQueue(trunc_work_queue, (bool)fin, new C_TruncRange(this, tr));
+    else
+      oncommit = new C_OnFinisher(new C_TruncRange(this, tr), finisher);
     osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
     ops[0].op.extent.truncate_size = p.offset;
     ops[0].op.extent.truncate_seq = tr->truncate_seq;
-    objecter->_modify(p.oid, p.oloc, ops, tr->mtime, tr->snapc, tr->flags,
-		      new C_OnTruncWorkQueue(&trunc_work_queue, (bool)fin, new C_TruncRange(this, tr)));
+    objecter->_modify(p.oid, p.oloc, ops, tr->mtime, tr->snapc, tr->flags, oncommit);
   }
 }

@@ -1139,6 +1139,7 @@ class MDCache {
 
   std::unique_ptr<PerfCounters> logger;
 
+  TruncWorkQueue trunc_work_queue;
   Filer filer;
   bool exceeded_size_limit = false;
   std::array<xlist<ClientLease*>, client_lease_pools> client_leases{};
