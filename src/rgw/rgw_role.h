@@ -13,8 +13,9 @@
 
 #include "rgw/rgw_rados.h"
 
-namespace rgw { namespace sal {
+class RGWRados;
 
+namespace rgw { namespace sal {
 class RGWRole
 {
 public:
