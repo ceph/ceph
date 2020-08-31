@@ -130,9 +130,6 @@ PGBackend::mutate_object(
   epoch_t map_epoch,
   std::vector<pg_log_entry_t>&& log_entries)
 {
-  if (__builtin_expect((bool)peering, false)) {
-    throw crimson::common::actingset_changed(peering->is_primary);
-  }
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (obc->obs.exists) {
 #if 0
