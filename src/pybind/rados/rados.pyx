@@ -793,7 +793,6 @@ Rados object in state %s." % self.state)
         Configure the cluster handle using a Ceph config file.
 
         :param path: path to the config file
-        :type path: str
         """
         self.require_state("configuring", "connected")
         path_raw = cstr(path, 'path', opt=True)
@@ -860,7 +859,6 @@ Rados object in state %s." % self.state)
         Get the value of a configuration option
 
         :param option: which option to read
-        :type option: str
 
         :returns: str - value of the option or None
         :raises: :class:`TypeError`
@@ -893,9 +891,7 @@ Rados object in state %s." % self.state)
         Set the value of a configuration option
 
         :param option: which option to set
-        :type option: str
         :param option: value of the option
-        :type option: str
 
         :raises: :class:`TypeError`, :class:`ObjectNotFound`
         """
@@ -920,7 +916,6 @@ Rados object in state %s." % self.state)
         absence of quorum.
 
         :param mon_id: the ID portion of the monitor's name (i.e., mon.<ID>)
-        :type mon_id: str
         :returns: the string reply from the monitor
         """
 
@@ -1004,7 +999,6 @@ Rados object in state %s." % self.state)
         Checks if a given pool exists.
 
         :param pool_name: name of the pool to check
-        :type pool_name: str
 
         :raises: :class:`TypeError`, :class:`Error`
         :returns: bool - whether the pool exists, false otherwise.
@@ -1029,7 +1023,6 @@ Rados object in state %s." % self.state)
         Returns a pool's ID based on its name.
 
         :param pool_name: name of the pool to look up
-        :type pool_name: str
 
         :raises: :class:`TypeError`, :class:`Error`
         :returns: int - pool ID, or None if it doesn't exist
@@ -1053,7 +1046,6 @@ Rados object in state %s." % self.state)
         Returns a pool's name based on its ID.
 
         :param pool_id: ID of the pool to look up
-        :type pool_id: int
 
         :raises: :class:`TypeError`, :class:`Error`
         :returns: string - pool name, or None if it doesn't exist
@@ -1094,11 +1086,8 @@ Rados object in state %s." % self.state)
         - with a specific CRUSH rule and auid: crush_rule and auid given       
  
         :param pool_name: name of the pool to create
-        :type pool_name: str
         :param crush_rule: rule to use for placement in the new pool
-        :type crush_rule: int
         :param auid: id of the owner of the new pool
-        :type auid: int
 
         :raises: :class:`TypeError`, :class:`Error`
         """
@@ -1154,7 +1143,6 @@ Rados object in state %s." % self.state)
         but the actual data is deleted in the background.
 
         :param pool_name: name of the pool to delete
-        :type pool_name: str
 
         :raises: :class:`TypeError`, :class:`Error`
         """
@@ -1174,7 +1162,6 @@ Rados object in state %s." % self.state)
         List inconsistent placement groups in the given pool
 
         :param pool_id: ID of the pool in which PGs are listed
-        :type pool_id: int
         :returns: list - inconsistent placement groups
         """
         self.require_state("connected")
@@ -1259,7 +1246,6 @@ Rados object in state %s." % self.state)
         pool.
 
         :param ioctx_name: name of the pool
-        :type ioctx_name: str
 
         :raises: :class:`TypeError`, :class:`Error`
         :returns: Ioctx - Rados Ioctx object
@@ -1285,7 +1271,6 @@ Rados object in state %s." % self.state)
         pool.
 
         :param pool_id: ID of the pool
-        :type pool_id: int
 
         :raises: :class:`TypeError`, :class:`Error`
         :returns: Ioctx - Rados Ioctx object
@@ -1541,9 +1526,7 @@ Rados object in state %s." % self.state)
         Blocklist a client from the OSDs
 
         :param client_address: client address
-        :type client_address: str
         :param expire_seconds: number of seconds to blocklist
-        :type expire_seconds: int
 
         :raises: :class:`Error`
         """
@@ -2047,7 +2030,6 @@ cdef class WriteOp(object):
         """
         Set flags for the last operation added to this write_op.
         :para flags: flags to apply to the last operation
-        :type flags: int
         """
 
         cdef:
@@ -2060,9 +2042,7 @@ cdef class WriteOp(object):
         """
         Set an extended attribute on an object.
         :param xattr_name: name of the xattr
-        :type xattr_name: str
         :param xattr_value: buffer to set xattr to
-        :type xattr_value: bytes
         """
         xattr_name_raw = cstr(xattr_name, 'xattr_name')
         cdef:
@@ -2076,7 +2056,6 @@ cdef class WriteOp(object):
         """  
         Removes an extended attribute on from an object.
         :param xattr_name: name of the xattr to remove
-        :type xattr_name: str
         """
         xattr_name_raw = cstr(xattr_name, 'xattr_name')
         cdef:
@@ -2088,7 +2067,6 @@ cdef class WriteOp(object):
         """
         Append data to an object synchronously
         :param to_write: data to write
-        :type to_write: bytes
         """
 
         cdef:
@@ -2102,7 +2080,6 @@ cdef class WriteOp(object):
         """
         Write whole object, atomically replacing it.
         :param to_write: data to write
-        :type to_write: bytes
         """
 
         cdef:
@@ -2116,9 +2093,7 @@ cdef class WriteOp(object):
         """
         Write to offset.
         :param to_write: data to write
-        :type to_write: bytes
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
         """
 
         cdef:
@@ -2145,9 +2120,7 @@ cdef class WriteOp(object):
         """
         Zero part of an object.
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
         :param offset: number of zero to write
-        :type offset: int
         """
 
         cdef:
@@ -2161,7 +2134,6 @@ cdef class WriteOp(object):
         """
         Truncate an object.
         :param offset: byte offset in the object to begin truncating at
-        :type offset: int
         """
 
         cdef:
@@ -2175,11 +2147,8 @@ cdef class WriteOp(object):
         Execute an OSD class method on an object
         
         :param cls: name of the object class
-        :type cls: str
         :param method: name of the method
-        :type method: str
         :param data: input data
-        :type data: bytes
         """
 
         cls_raw = cstr(cls, 'cls')
@@ -2197,11 +2166,8 @@ cdef class WriteOp(object):
         """
         Write the same buffer multiple times
         :param to_write: data to write
-        :type to_write: bytes
         :param write_len: total number of bytes to write
-        :type len: int
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
         """
         cdef:
             char *_to_write = to_write
@@ -2231,7 +2197,6 @@ cdef class ReadOp(object):
         """
         Set flags for the last operation added to this read_op.
         :para flags: flags to apply to the last operation
-        :type flags: int
         """
 
         cdef:
@@ -2439,10 +2404,8 @@ cdef class Ioctx(object):
 
         :param oncomplete: what to do when the write is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the write is safe and complete on storage
             on all replicas
-        :type onsafe: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2488,9 +2451,7 @@ cdef class Ioctx(object):
         oncomplete(completion, size, mtime)
 
         :param object_name: the name of the object to get stats from
-        :type object_name: str
         :param oncomplete: what to do when the stat is complete
-        :type oncomplete: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2532,17 +2493,12 @@ cdef class Ioctx(object):
         Queues the write and returns.
 
         :param object_name: name of the object
-        :type object_name: str
         :param to_write: data to write
-        :type to_write: bytes
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
         :param oncomplete: what to do when the write is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the write is safe and complete on storage
             on all replicas
-        :type onsafe: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2578,15 +2534,11 @@ cdef class Ioctx(object):
         Queues the write and returns.
 
         :param object_name: name of the object
-        :type object_name: str
         :param to_write: data to write
-        :type to_write: str
         :param oncomplete: what to do when the write is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the write is safe and complete on storage
             on all replicas
-        :type onsafe: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2618,16 +2570,11 @@ cdef class Ioctx(object):
         Asynchronously write the same buffer multiple times
 
         :param object_name: name of the object
-        :type object_name: str
         :param to_write: data to write
-        :type to_write: bytes
         :param write_len: total number of bytes to write
-        :type write_len: int
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
         :param oncomplete: what to do when the writesame is safe and 
             complete in memory on all replicas
-        :type oncomplete: completion
         :raises: :class:`Error`
         :returns: completion object
         """
@@ -2662,17 +2609,12 @@ cdef class Ioctx(object):
         Queues the write and returns.
 
         :param object_name: name of the object
-        :type object_name: str
         :param to_append: data to append
-        :type to_append: str
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
         :param oncomplete: what to do when the write is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the write is safe and complete on storage
             on all replicas
-        :type onsafe: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2712,14 +2654,10 @@ cdef class Ioctx(object):
         """
         Asynchronously compare an on-disk object range with a buffer
         :param object_name: the name of the object
-        :type object_name: str
         :param cmp_buf: buffer containing bytes to be compared with object contents
-        :type cmp_buf: bytes
         :param offset: object byte offset at which to start the comparison
-        :type offset: int
         :param oncomplete: what to do when the write is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
 
         :raises: :class:`TypeError`
         returns: 0 - on success, negative error code on failure,
@@ -2757,13 +2695,9 @@ cdef class Ioctx(object):
         oncomplete(completion, data_read)
 
         :param object_name: name of the object to read from
-        :type object_name: str
         :param length: the number of bytes to read
-        :type length: int
         :param offset: byte offset in the object to begin reading from
-        :type offset: int
         :param oncomplete: what to do when the read is complete
-        :type oncomplete: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2812,19 +2746,12 @@ cdef class Ioctx(object):
         onsafe(completion, data)
 
         :param object_name: name of the object
-        :type object_name: str
         :param cls: name of the object class
-        :type cls: str
         :param method: name of the method
-        :type method: str
         :param data: input data
-        :type data: bytes
         :param length: size of output buffer in bytes (default=8192)
-        :type length: int
         :param oncomplete: what to do when the execution is complete
-        :type oncomplete: completion
         :param onsafe:  what to do when the execution is safe and complete
-        :type onsafe: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2875,13 +2802,10 @@ cdef class Ioctx(object):
         Asynchronously remove an object
 
         :param object_name: name of the object to remove
-        :type object_name: str
         :param oncomplete: what to do when the remove is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the remove is safe and complete on storage
             on all replicas
-        :type onsafe: completion
 
         :raises: :class:`Error`
         :returns: completion object
@@ -2922,7 +2846,6 @@ cdef class Ioctx(object):
 
         :param loc_key: the key to use as the object locator, or NULL to discard
             any previously set key
-        :type loc_key: str
 
         :raises: :class:`TypeError`
         """
@@ -2948,7 +2871,6 @@ cdef class Ioctx(object):
         To stop to read from snapshot, use set_read(LIBRADOS_SNAP_HEAD)
 
         :param snap_id: the snapshot Id
-        :type snap_id: int
 
         :raises: :class:`TypeError`
         """
@@ -2967,7 +2889,6 @@ cdef class Ioctx(object):
         will be placed in the same namespace.
 
         :param nspace: the namespace to use, or None/"" for the default namespace
-        :type nspace: str
 
         :raises: :class:`TypeError`
         """
@@ -3009,11 +2930,8 @@ cdef class Ioctx(object):
         Write data to an object synchronously
 
         :param key: name of the object
-        :type key: str
         :param data: data to write
-        :type data: bytes
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
 
         :raises: :class:`TypeError`
         :raises: :class:`LogicError`
@@ -3047,9 +2965,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         it is atomically truncated and then written.
 
         :param key: name of the object
-        :type key: str
         :param data: data to write
-        :type data: bytes
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3077,13 +2993,9 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         Write the same buffer multiple times
         :param key: name of the object
-        :type key: str
         :param data: data to write
-        :type data: bytes
         :param write_len: total number of bytes to write
-        :type write_len: int
         :param offset: byte offset in the object to begin writing at
-        :type offset: int
 
         :raises: :class:`TypeError`
         :raises: :class:`LogicError`
@@ -3110,9 +3022,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         Append data to an object synchronously
 
         :param key: name of the object
-        :type key: str
         :param data: data to write
-        :type data: bytes
 
         :raises: :class:`TypeError`
         :raises: :class:`LogicError`
@@ -3141,11 +3051,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         Read data from an object synchronously
 
         :param key: name of the object
-        :type key: str
         :param length: the number of bytes to read (default=8192)
-        :type length: int
         :param offset: byte offset in the object to begin reading at
-        :type offset: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3184,15 +3091,10 @@ returned %d, but should return zero on success." % (self.name, ret))
         Execute an OSD class method on an object.
 
         :param key: name of the object
-        :type key: str
         :param cls: name of the object class
-        :type cls: str
         :param method: name of the method
-        :type method: str
         :param data: input data
-        :type data: bytes
         :param length: size of output buffer in bytes (default=8192)
-        :type length: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3291,7 +3193,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         This does not delete any snapshots of the object.
 
         :param key: the name of the object to delete
-        :type key: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3316,9 +3217,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         zeroes. If this shrinks the object, the excess data is removed.
 
         :param key: the name of the object to resize
-        :type key: str
         :param size: the new size of the object in bytes
-        :type size: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3341,11 +3240,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         '''
         Compare an on-disk object range with a buffer
         :param key: the name of the object
-        :type key: str
         :param cmp_buf: buffer containing bytes to be compared with object contents
-        :type cmp_buf: bytes 
         :param offset: object byte offset at which to start the comparison
-        :type offset: int
         
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3369,7 +3265,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         Get object stats (size/mtime)
 
         :param key: the name of the object to get stats from
-        :type key: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3394,9 +3289,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         Get the value of an extended attribute on an object.
 
         :param key: the name of the object to get xattr from
-        :type key: str
         :param xattr_name: which extended attribute to read
-        :type xattr_name: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3432,7 +3325,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         Start iterating over xattrs on an object.
 
         :param oid: the name of the object to get xattrs from
-        :type oid: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3446,11 +3338,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         Set an extended attribute on an object.
 
         :param key: the name of the object to set xattr to
-        :type key: str
         :param xattr_name: which extended attribute to set
-        :type xattr_name: str
         :param xattr_value: the value of the  extended attribute
-        :type xattr_value: bytes
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3478,9 +3367,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         Removes an extended attribute on from an object.
 
         :param key: the name of the object to remove xattr from
-        :type key: str
         :param xattr_name: which extended attribute to remove
-        :type xattr_name: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3506,11 +3393,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         Send a rados notification to an object.
 
         :param obj: the name of the object to notify
-        :type obj: str
         :param msg: optional message to send in the notification
-        :type msg: str
         :param timeout_ms: notify timeout (in ms)
-        :type timeout_ms: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3542,13 +3426,9 @@ returned %d, but should return zero on success." % (self.name, ret))
         Register an interest in an object.
 
         :param obj: the name of the object to notify
-        :type obj: str
         :param callback: what to do when a notify is received on this object
-        :type callback: callable
         :param error_callback: what to do when the watch session encounters an error
-        :type error_callback: callable
         :param timeout: how many seconds the connection will keep after disconnection
-        :type timeout: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3618,7 +3498,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         Create a pool-wide snapshot
 
         :param snap_name: the name of the snapshot
-        :type snap_name: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3637,7 +3516,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         Removes a pool-wide snapshot
 
         :param snap_name: the name of the snapshot
-        :type snap_name: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3656,7 +3534,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         Get the id of a pool snapshot
 
         :param snap_name: the name of the snapshot to lookop
-        :type snap_name: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3679,9 +3556,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         Rollback an object to a snapshot
 
         :param oid: the name of the object
-        :type oid: str
         :param snap_name: the name of the snapshot
-        :type snap_name: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3720,7 +3595,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         Removes a self-managed snapshot
 
         :param snap_id: the name of the snapshot
-        :type snap_id: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3733,13 +3607,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret != 0:
             raise make_ex(ret, "Failed to remove self-managed snapshot")
 
-    def set_self_managed_snap_write(self, snaps):
+    def set_self_managed_snap_write(self, snaps: Sequence[Union[int, str]]):
         """
         Updates the write context to the specified self-managed
         snapshot ids.
 
         :param snaps: all associated self-managed snapshot ids
-        :type snaps: list
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3774,9 +3647,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         Rolls an specific object back to a self-managed snapshot revision
 
         :param oid: the name of the object
-        :type oid: str
         :param snap_id: the name of the snapshot
-        :type snap_id: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -3825,11 +3696,10 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         write_op.release()
 
-    def release_read_op(self, read_op):
+    def release_read_op(self, read_op: ReadOp):
         """
         release memory alloc by create_read_op
         :para read_op: read_op object
-        :type: int
         """
         read_op.release()
 
@@ -3837,11 +3707,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         set keys values to write_op
         :para write_op: write_operation object
-        :type write_op: WriteOp
         :para keys: a tuple of keys
-        :type keys: tuple
         :para values: a tuple of values
-        :type values: tuple
         """
 
         if len(keys) != len(values):
@@ -3876,13 +3743,9 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         execute the real write operation
         :para write_op: write operation object
-        :type write_op: WriteOp
         :para oid: object name
-        :type oid: str
         :para mtime: the time to set the mtime to, 0 for the current time
-        :type mtime: int
         :para flags: flags to apply to the entire operation
-        :type flags: int
         """
 
         oid_raw = cstr(oid, 'oid')
@@ -3905,19 +3768,13 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         execute the real write operation asynchronously
         :para write_op: write operation object
-        :type write_op: WriteOp
         :para oid: object name
-        :type oid: str
         :param oncomplete: what to do when the remove is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the remove is safe and complete on storage
             on all replicas
-        :type onsafe: completion
         :para mtime: the time to set the mtime to, 0 for the current time
-        :type mtime: int
         :para flags: flags to apply to the entire operation
-        :type flags: int
 
         :raises: :class:`Error`
         :returns: completion object
@@ -3946,11 +3803,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         execute the real read operation
         :para read_op: read operation object
-        :type read_op: ReadOp
         :para oid: object name
-        :type oid: str
         :para flag: flags to apply to the entire operation
-        :type flag: int
         """
         oid_raw = cstr(oid, 'oid')
         cdef:
@@ -3970,17 +3824,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         execute the real read operation
         :para read_op: read operation object
-        :type read_op: ReadOp
         :para oid: object name
-        :type oid: str
         :param oncomplete: what to do when the remove is safe and complete in memory
             on all replicas
-        :type oncomplete: completion
         :param onsafe:  what to do when the remove is safe and complete on storage
             on all replicas
-        :type onsafe: completion
         :para flag: flags to apply to the entire operation
-        :type flag: int
         """
         oid_raw = cstr(oid, 'oid')
         cdef:
@@ -4007,13 +3856,9 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         get the omap values
         :para read_op: read operation object
-        :type read_op: ReadOp
         :para start_after: list keys starting after start_after
-        :type start_after: str
         :para filter_prefix: list only keys beginning with filter_prefix
-        :type filter_prefix: str
         :para max_return: list no more than max_return key/value pairs
-        :type max_return: int
         :returns: an iterator over the requested omap values, return value from this action
         """
 
@@ -4037,11 +3882,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         get the omap keys
         :para read_op: read operation object
-        :type read_op: ReadOp
         :para start_after: list keys starting after start_after
-        :type start_after: str
         :para max_return: list no more than max_return key/value pairs
-        :type max_return: int
         :returns: an iterator over the requested omap values, return value from this action
         """
         start_after = cstr(start_after, 'start_after') if start_after else None
@@ -4062,9 +3904,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         get the omap values by keys
         :para read_op: read operation object
-        :type read_op: ReadOp
         :para keys: input key tuple
-        :type keys: tuple
         :returns: an iterator over the requested omap values, return value from this action
         """
         keys = cstr_list(keys, 'keys')
@@ -4089,9 +3929,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         remove omap keys specifiled
         :para write_op: write operation object
-        :type write_op: WriteOp
         :para keys: input key tuple
-        :type keys: tuple
         """
 
         keys = cstr_list(keys, 'keys')
@@ -4110,7 +3948,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         Remove all key/value pairs from an object
         :para write_op: write operation object
-        :type write_op: WriteOp
         """
 
         cdef:
@@ -4127,17 +3964,11 @@ returned %d, but should return zero on success." % (self.name, ret))
         Take an exclusive lock on an object
 
         :param key: name of the object
-        :type key: str
         :param name: name of the lock
-        :type name: str
         :param cookie: cookie of the lock
-        :type cookie: str
         :param desc: description of the lock
-        :type desc: str
         :param duration: duration of the lock in seconds
-        :type duration: int
         :param flags: flags
-        :type flags: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -4178,19 +4009,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         Take a shared lock on an object
 
         :param key: name of the object
-        :type key: str
         :param name: name of the lock
-        :type name: str
         :param cookie: cookie of the lock
-        :type cookie: str
         :param tag: tag of the lock
-        :type tag: str
         :param desc: description of the lock
-        :type desc: str
         :param duration: duration of the lock in seconds
-        :type duration: int
         :param flags: flags
-        :type flags: int
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -4230,11 +4054,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         Release a shared or exclusive lock on an object
 
         :param key: name of the object
-        :type key: str
         :param name: name of the lock
-        :type name: str
         :param cookie: cookie of the lock
-        :type cookie: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
