@@ -721,7 +721,7 @@ namespace rgw {
 
     void invalidate();
 
-    bool reclaim() override;
+    bool reclaim(const cohort::lru::ObjectFactory* newobj_fac) override;
 
     typedef cohort::lru::LRU<std::mutex> FhLRU;
 
