@@ -286,6 +286,11 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 Journal::read_record_metadata_ret Journal::read_record_metadata(
   paddr_t start)
 {
+  if (start.offset + block_size > (int64_t)segment_manager.get_segment_size()) {
+    return read_record_metadata_ret(
+      read_record_metadata_ertr::ready_future_marker{},
+      std::nullopt);
+  }
   return segment_manager.read(start, block_size
   ).safe_then(
     [this, start](bufferptr bptr) mutable
@@ -303,6 +308,10 @@ Journal::read_record_metadata_ret Journal::read_record_metadata(
 	  std::nullopt);
       }
       if (header.mdlength > block_size) {
+	if (start.offset + header.mdlength >
+	    (int64_t)segment_manager.get_segment_size()) {
+	  return crimson::ct_error::input_output_error::make();
+	}
 	return segment_manager.read(
 	  {start.segment, start.offset + (segment_off_t)block_size},
 	  header.mdlength - block_size).safe_then(
