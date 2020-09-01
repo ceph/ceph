@@ -435,11 +435,9 @@ If you have more than 50 OSDs, we recommend approximately 50-100
 placement groups per OSD to balance out resource usage, data
 durability and distribution. If you have less than 50 OSDs, choosing
 among the `preselection`_ above is best. For a single pool of objects,
-you can use the following formula to get a baseline::
+you can use the following formula to get a baseline
 
-                (OSDs * 100)
-   Total PGs =  ------------
-                 pool size
+  Total PGs = :math:`\frac{OSDs \times 100}{pool \: size}`
 
 Where **pool size** is either the number of replicas for replicated
 pools or the K+M sum for erasure coded pools (as returned by **ceph
@@ -457,11 +455,9 @@ data across your OSDs. Their use should be limited to incrementally
 stepping from one power of two to another.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
-replicas, you would estimate your number of PGs as follows::
+replicas, you would estimate your number of PGs as follows
 
-   (200 * 100)
-   ----------- = 6667. Nearest power of 2: 8192
-        3
+  :math:`\frac{200 \times 100}{3} = 6667`. Nearest power of 2: 8192
 
 When using multiple data pools for storing objects, you need to ensure
 that you balance the number of placement groups per pool with the
