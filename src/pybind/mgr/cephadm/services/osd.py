@@ -12,13 +12,13 @@ from cephadm.utils import forall_hosts
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
+from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
 
 logger = logging.getLogger(__name__)
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 
-class OSDService(CephadmService):
+class OSDService(CephService):
     TYPE = 'osd'
 
     def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
