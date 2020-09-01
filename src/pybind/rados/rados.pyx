@@ -565,7 +565,7 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return None
     if isinstance(val, bytes):
         return val
-    elif isinstance(val, unicode):
+    elif isinstance(val, str):
         return val.encode(encoding)
     else:
         raise TypeError('%s must be a string' % name)
@@ -580,7 +580,7 @@ def decode_cstr(val, encoding="utf-8"):
     Decode a byte string into a Python string.
 
     :param bytes val: byte string
-    :rtype: unicode or None
+    :rtype: str or None
     """
     if val is None:
         return None
