@@ -90,7 +90,7 @@ information about the cluster.
 
 	cluster = rados.Rados(conffile='ceph.conf')
 	print "\nlibrados version: " + str(cluster.version())
-	print "Will attempt to connect to: " + str(cluster.conf_get('mon initial members'))
+	print "Will attempt to connect to: " + str(cluster.conf_get('mon host'))
 
 	cluster.connect()
 	print "\nCluster ID: " + cluster.get_fsid()
