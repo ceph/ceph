@@ -71,6 +71,14 @@ struct ImageDispatchInterface {
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) = 0;
 
+  virtual bool list_snaps(
+      AioCompletion* aio_comp, Extents&& image_extents, SnapIds&& snap_ids,
+      int list_snaps_flags, SnapshotDelta* snapshot_delta,
+      const ZTracer::Trace &parent_trace, uint64_t tid,
+      std::atomic<uint32_t>* image_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) = 0;
+
 };
 
 } // namespace io

@@ -89,6 +89,16 @@ public:
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
+  bool list_snaps(
+      io::AioCompletion* aio_comp, io::Extents&& image_extents,
+      io::SnapIds&& snap_ids, int list_snaps_flags,
+      io::SnapshotDelta* snapshot_delta, const ZTracer::Trace &parent_trace,
+      uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+      io::DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
+    return false;
+  }
+
 private:
   typedef std::list<Context*> Contexts;
   typedef std::unordered_set<uint64_t> Tids;
