@@ -51,9 +51,6 @@ def monkey_with_compiler(customize):
 distutils.sysconfig.customize_compiler = \
     monkey_with_compiler(distutils.sysconfig.customize_compiler)
 
-distutils.sysconfig.customize_compiler = \
-    monkey_with_compiler(distutils.sysconfig.customize_compiler)
-
 # PEP 440 versioning of the Rados package on PyPI
 # Bump this version, after every changeset
 __version__ = '2.0.0'
