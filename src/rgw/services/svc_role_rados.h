@@ -47,16 +47,20 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   		 optional_yield y) override;
 
   int store_name(RGWSI_MetaBackend::Context *ctx,
+		 const std::string& role_id,
   		 const std::string& name,
+		 const std::string& tenant,
   		 RGWObjVersionTracker * const objv_tracker,
-  		 real_time * const pmtime,
+  		 const real_time& mtime,
   		 bool exclusive,
   		 optional_yield y) override;
 
   int store_path(RGWSI_MetaBackend::Context *ctx,
-  		 const std::string& path,
+		 const std::string& role_id,
+		 const std::string& path,
+		 const std::string& tenant,
   		 RGWObjVersionTracker * const objv_tracker,
-  		 real_time * const pmtime,
+  		 const real_time& mtime,
   		 bool exclusive,
   		 optional_yield y) override;
 
@@ -69,7 +73,9 @@ class RGWSI_Role_RADOS: public RGWSI_Role
   		optional_yield y) override;
 
   int read_name(RGWSI_MetaBackend::Context *ctx,
-  		std::string& name,
+		const std::string& name,
+		const std::string& tenant,
+		std::string& role_id,
   		RGWObjVersionTracker * const objv_tracker,
   		real_time * const pmtime,
   		optional_yield y) override;
