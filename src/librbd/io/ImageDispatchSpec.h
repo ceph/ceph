@@ -104,7 +104,7 @@ public:
   Request request;
   int op_flags;
   ZTracer::Trace parent_trace;
-  uint64_t tid;
+  uint64_t tid = 0;
 
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_read(
@@ -116,43 +116,40 @@ public:
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents),
                                  Read{std::move(read_result)},
-                                 op_flags, parent_trace, 0);
+                                 op_flags, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_discard(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
-      uint64_t tid) {
+      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp, {{off, len}},
                                  Discard{discard_granularity_bytes},
-                                 0, parent_trace, tid);
+                                 0, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace,
-      uint64_t tid) {
+      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents), Write{std::move(bl)},
-                                 op_flags, parent_trace, tid);
+                                 op_flags, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
   static ImageDispatchSpec* create_write_same(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace,
-      uint64_t tid) {
+      bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  {{off, len}}, WriteSame{std::move(bl)},
-                                 op_flags, parent_trace, tid);
+                                 op_flags, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
@@ -160,14 +157,14 @@ public:
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
+      int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents),
                                  CompareAndWrite{std::move(cmp_bl),
                                                  std::move(bl),
                                                  mismatch_offset},
-                                 op_flags, parent_trace, tid);
+                                 op_flags, parent_trace);
   }
 
   template <typename ImageCtxT = ImageCtx>
@@ -177,7 +174,7 @@ public:
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp, {},
-                                 Flush{flush_source}, 0, parent_trace, 0);
+                                 Flush{flush_source}, 0, parent_trace);
   }
 
   ~ImageDispatchSpec() {
@@ -196,11 +193,11 @@ private:
                     ImageDispatchLayer image_dispatch_layer,
                     AioCompletion* aio_comp, Extents&& image_extents,
                     Request&& request, int op_flags,
-                    const ZTracer::Trace& parent_trace, uint64_t tid)
+                    const ZTracer::Trace& parent_trace)
     : dispatcher_ctx(this), image_dispatcher(image_dispatcher),
       dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
       image_extents(std::move(image_extents)), request(std::move(request)),
-      op_flags(op_flags), parent_trace(parent_trace), tid(tid) {
+      op_flags(op_flags), parent_trace(parent_trace) {
     aio_comp->image_dispatcher_ctx = &dispatcher_ctx;
     aio_comp->get();
   }
