@@ -99,6 +99,10 @@
   an OSD compaction on start. Setting this option to ``true`` and restarting an OSD
   will result in an offline compaction of the OSD prior to booting.
 
+* OSD: the option named ``bdev_nvme_retry_count`` has been removed. Because
+  in SPDK v20.07, there is no easy access to bdev_nvme options, and this
+  option is hardly used, so it was removed.
+
 * Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
   scheduled scrubs of the type disabled will be aborted. All user initiated
   scrubs are NOT interrupted.
