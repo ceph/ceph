@@ -1050,7 +1050,7 @@ project "node_exporter" module. The dashboards are designed to be
 integrated with the Ceph Manager Dashboard web UI.
 
 %package prometheus-alerts
-Summary:        Prometheus alerts for a Ceph deplyoment
+Summary:        Prometheus alerts for a Ceph deployment
 BuildArch:      noarch
 Group:          System/Monitoring
 %description prometheus-alerts
