@@ -1869,6 +1869,8 @@ cdef class Snap(object):
             raise make_ex(ret, "rados_ioctx_snap_get_stamp error")
         return datetime.fromtimestamp(snap_time)
 
+# https://github.com/cython/cython/issues/1370
+unicode = str
 
 cdef class Completion(object):
     """completion object"""
