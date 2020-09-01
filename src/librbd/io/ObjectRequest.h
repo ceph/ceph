@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
@@ -439,6 +440,48 @@ private:
   int m_op_flags;
 };
 
+template <typename ImageCtxT = ImageCtx>
+class ObjectListSnapsRequest : public ObjectRequest<ImageCtxT> {
+public:
+  static ObjectListSnapsRequest* create(
+      ImageCtxT *ictx, uint64_t objectno, Extents&& object_extents,
+      SnapIds&& snap_ids, int list_snaps_flags,
+      const ZTracer::Trace &parent_trace, SnapshotDelta* snapshot_delta,
+      Context *completion) {
+    return new ObjectListSnapsRequest(ictx, objectno,
+                                      std::move(object_extents),
+                                      std::move(snap_ids), list_snaps_flags,
+                                      parent_trace, snapshot_delta, completion);
+  }
+
+  ObjectListSnapsRequest(
+      ImageCtxT *ictx, uint64_t objectno, Extents&& object_extents,
+      SnapIds&& snap_ids, int list_snaps_flags,
+      const ZTracer::Trace &parent_trace, SnapshotDelta* snapshot_delta,
+      Context *completion);
+
+  void send() override;
+
+  const char *get_op_type() const override {
+    return "snap_list";
+  }
+
+private:
+  Extents m_object_extents;
+  SnapIds m_snap_ids;
+  int m_list_snaps_flags;
+  SnapshotDelta* m_snapshot_delta;
+
+  neorados::SnapSet m_snap_set;
+  boost::system::error_code m_ec;
+
+  void list_snaps();
+  void handle_list_snaps(int r);
+
+  void zero_initial_extent(bool dne);
+
+};
+
 } // namespace io
 } // namespace librbd
 
@@ -449,5 +492,6 @@ extern template class librbd::io::ObjectWriteRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectDiscardRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectWriteSameRequest<librbd::ImageCtx>;
 extern template class librbd::io::ObjectCompareAndWriteRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectListSnapsRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_OBJECT_REQUEST_H

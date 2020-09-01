@@ -110,6 +110,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   typedef ObjectDiscardRequest<librbd::MockTestImageCtx> MockObjectDiscardRequest;
   typedef ObjectWriteSameRequest<librbd::MockTestImageCtx> MockObjectWriteSameRequest;
   typedef ObjectCompareAndWriteRequest<librbd::MockTestImageCtx> MockObjectCompareAndWriteRequest;
+  typedef ObjectListSnapsRequest<librbd::MockTestImageCtx> MockObjectListSnapsRequest;
   typedef AbstractObjectWriteRequest<librbd::MockTestImageCtx> MockAbstractObjectWriteRequest;
   typedef CopyupRequest<librbd::MockTestImageCtx> MockCopyupRequest;
   typedef util::Mock MockUtils;
@@ -333,6 +334,20 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     } else {
       expect.WillOnce(DoDefault());
     }
+  }
+
+  void expect_list_snaps(MockTestImageCtx &mock_image_ctx,
+                        const librados::snap_set_t& snap_set, int r) {
+    auto io_context = *mock_image_ctx.get_data_io_context();
+    io_context.read_snap(CEPH_SNAPDIR);
+    auto& mock_io_ctx = librados::get_mock_io_ctx(mock_image_ctx.rados_api,
+                                                  io_context);
+    EXPECT_CALL(mock_io_ctx, list_snaps(_, _))
+      .WillOnce(WithArg<1>(Invoke(
+        [snap_set, r](librados::snap_set_t* out_snap_set) {
+          *out_snap_set = snap_set;
+          return r;
+        })));
   }
 };
 
@@ -1590,6 +1605,139 @@ TEST_F(TestMockIoObjectRequest, ObjectMapError) {
     0, 0, std::nullopt, {}, &ctx);
   req->send();
   ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnaps) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.snaps = {3, 4, 5, 6, 7};
+
+  librados::snap_set_t snap_set;
+  snap_set.seq = 6;
+  librados::clone_info_t clone_info;
+
+  clone_info.cloneid = 3;
+  clone_info.snaps = {3};
+  clone_info.overlap = std::vector<std::pair<uint64_t,uint64_t>>{
+    {0, 4194304}};
+  clone_info.size = 4194304;
+  snap_set.clones.push_back(clone_info);
+
+  clone_info.cloneid = 4;
+  clone_info.snaps = {4};
+  clone_info.overlap = std::vector<std::pair<uint64_t,uint64_t>>{
+    {278528, 4096}, {442368, 4096}, {1859584, 4096}, {2224128, 4096},
+    {2756608, 4096}, {3227648, 4096}, {3739648, 4096}, {3903488, 4096}};
+  clone_info.size = 4194304;
+  snap_set.clones.push_back(clone_info);
+
+  clone_info.cloneid = 6;
+  clone_info.snaps = {5, 6};
+  clone_info.overlap = std::vector<std::pair<uint64_t,uint64_t>>{
+    {425984, 4096}, {440320, 1024}, {1925120, 4096}, {2125824, 4096},
+    {2215936, 5120}, {3067904, 4096}};
+  clone_info.size = 3072000;
+  snap_set.clones.push_back(clone_info);
+
+  clone_info.cloneid = CEPH_NOSNAP;
+  clone_info.snaps = {};
+  clone_info.overlap = {};
+  clone_info.size = 4194304;
+  snap_set.clones.push_back(clone_info);
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0,
+    {{440320, 1024}, {2122728, 1024}, {2220032, 2048}, {3072000, 4096}},
+    {3, 4, 5, 6, 7, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{5,6}].insert(
+    440320, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+  expected_snapshot_delta[{5,6}].insert(
+    2122728, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+  expected_snapshot_delta[{5,6}].insert(
+    2220032, 2048, {SNAPSHOT_EXTENT_STATE_DATA, 2048});
+  expected_snapshot_delta[{7,CEPH_NOSNAP}].insert(
+    2122728, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+  expected_snapshot_delta[{7,CEPH_NOSNAP}].insert(
+    2221056, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+  expected_snapshot_delta[{7,CEPH_NOSNAP}].insert(
+    3072000, 4096, {SNAPSHOT_EXTENT_STATE_DATA, 4096});
+  expected_snapshot_delta[{5,5}].insert(
+    3072000, 4096, {SNAPSHOT_EXTENT_STATE_ZEROED, 4096});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsDNE) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  expect_list_snaps(mock_image_ctx, {}, -ENOENT);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0,
+    {{440320, 1024}},
+    {0, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{0,0}].insert(
+    440320, 1024, {SNAPSHOT_EXTENT_STATE_DNE, 1024});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsEmpty) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  expect_list_snaps(mock_image_ctx, {}, 0);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0,
+    {{440320, 1024}},
+    {0, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{0,0}].insert(
+    440320, 1024, {SNAPSHOT_EXTENT_STATE_ZEROED, 1024});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsError) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  expect_list_snaps(mock_image_ctx, {}, -EPERM);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0,
+    {{440320, 1024}, {2122728, 1024}, {2220032, 2048}, {3072000, 4096}},
+    {3, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
 }
 
 } // namespace io

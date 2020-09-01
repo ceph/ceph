@@ -5,7 +5,10 @@
 #define CEPH_LIBRBD_IO_TYPES_H
 
 #include "include/int_types.h"
+#include "include/rados/rados_types.hpp"
+#include "common/interval_map.h"
 #include "osdc/StriperTypes.h"
+#include <iosfwd>
 #include <map>
 #include <vector>
 
@@ -116,6 +119,65 @@ enum {
   OBJECT_DISPATCH_FLAG_FLUSH                    = 1UL << 0,
   OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR      = 1UL << 1
 };
+
+enum SnapshotExtentState {
+  SNAPSHOT_EXTENT_STATE_DNE,    /* does not exist */
+  SNAPSHOT_EXTENT_STATE_ZEROED,
+  SNAPSHOT_EXTENT_STATE_DATA
+};
+
+std::ostream& operator<<(std::ostream& os, SnapshotExtentState state);
+
+struct SnapshotExtent {
+  SnapshotExtentState state;
+  size_t length;
+
+  SnapshotExtent(SnapshotExtentState state, size_t length)
+    : state(state), length(length) {
+  }
+
+  operator SnapshotExtentState() const {
+    return state;
+  }
+
+  bool operator==(const SnapshotExtent& rhs) const {
+    return state == rhs.state && length == rhs.length;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const SnapshotExtent& state);
+
+struct SnapshotExtentSplitMerge {
+  SnapshotExtent split(uint64_t offset, uint64_t length,
+                       SnapshotExtent &se) const {
+    return SnapshotExtent(se.state, se.length);
+  }
+
+  bool can_merge(const SnapshotExtent& left,
+                 const SnapshotExtent& right) const {
+    return left.state == right.state;
+  }
+
+  SnapshotExtent merge(SnapshotExtent&& left, SnapshotExtent&& right) const {
+    SnapshotExtent se(left);
+    se.length += right.length;
+    return se;
+  }
+
+  uint64_t length(const SnapshotExtent& se) const {
+    return se.length;
+  }
+};
+
+typedef std::vector<uint64_t> SnapIds;
+
+typedef std::pair<librados::snap_t, librados::snap_t> WriteReadSnapIds;
+extern const WriteReadSnapIds INITIAL_WRITE_READ_SNAP_IDS;
+
+typedef std::map<WriteReadSnapIds,
+                 interval_map<uint64_t,
+                              SnapshotExtent,
+                              SnapshotExtentSplitMerge>> SnapshotDelta;
 
 using striper::LightweightBufferExtents;
 using striper::LightweightObjectExtent;
