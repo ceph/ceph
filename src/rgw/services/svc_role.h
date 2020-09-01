@@ -90,5 +90,21 @@ class RGWSI_Role: public RGWServiceInstance
 			  const std::string& name,
 			  RGWObjVersionTracker * const objv_tracker,
 			  optional_yield y,
-              const DoutPrefixProvider *dpp) = 0;
+			  const DoutPrefixProvider *dpp) = 0;
+
+  virtual int delete_name(RGWSI_MetaBackend::Context *ctx,
+			  const std::string& name,
+			  const std::string& tenant,
+			  RGWObjVersionTracker * const objv_tracker,
+			  optional_yield y,
+			  const DoutPrefixProvider *dpp) = 0;
+
+  virtual int delete_path(RGWSI_MetaBackend::Context *ctx,
+			  const std::string& role_id,
+			  const std::string& path,
+			  const std::string& tenant,
+			  RGWObjVersionTracker * const objv_tracker,
+			  optional_yield y,
+			  const DoutPrefixProvider *dpp) = 0;
+
 };
