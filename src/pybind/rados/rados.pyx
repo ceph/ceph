@@ -1444,7 +1444,7 @@ Rados object in state %s." % self.state)
         cdef:
             int _osdid = osdid
             char **_cmd = to_bytes_array(cmds)
-            size_t _cmdlen = len(cmd)
+            size_t _cmdlen = len(cmds)
 
             char *_inbuf = inbuf
             size_t _inbuf_len = len(inbuf)
@@ -1535,14 +1535,14 @@ Rados object in state %s." % self.state)
         # timeout argument, but we keep it for backward compat with old python binding
         self.require_state("connected")
 
-        pgid = cstr(pgid, 'pgid')
-        cmd = cstr_list(cmd, 'cmd')
+        pgid_raw = cstr(pgid, 'pgid')
+        cmds = [cstr(cmd, 'cmd')]
         inbuf = cstr(inbuf, 'inbuf')
 
         cdef:
-            char *_pgid = pgid
-            char **_cmd = to_bytes_array(cmd)
-            size_t _cmdlen = len(cmd)
+            char *_pgid = pgid_raw
+            char **_cmd = to_bytes_array(cmds)
+            size_t _cmdlen = len(cmds)
 
             char *_inbuf = inbuf
             size_t _inbuf_len = len(inbuf)
