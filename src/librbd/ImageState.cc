@@ -299,27 +299,28 @@ public:
     notify(UNQUIESCE, on_finish);
   }
 
-  void quiesce_complete(int r) {
+  void quiesce_complete(uint64_t handle, int r) {
     Context *on_notify = nullptr;
     {
       std::lock_guard locker{m_lock};
       ceph_assert(m_on_notify != nullptr);
       ceph_assert(m_handle_quiesce_cnt > 0);
-      ceph_assert(m_blocked);
 
       m_handle_quiesce_cnt--;
 
+      if (r < 0) {
+        ldout(m_cct, 10) << "QuiesceWatchers::" << __func__ << ": watcher "
+                         << handle << " failed" << dendl;
+        m_failed_watchers.insert(handle);
+        m_ret_val = r;
+      }
+
       if (m_handle_quiesce_cnt > 0) {
-        // TOFO: r should be saved
         return;
       }
 
-      if (r < 0) {
-        // TODO: fix for multiple watchers case
-        m_blocked = false;
-      }
-
       std::swap(on_notify, m_on_notify);
+      r = m_ret_val;
     }
 
     on_notify->complete(r);
@@ -338,7 +339,9 @@ private:
   std::list<Context *> m_pending_notify;
   std::map<uint64_t, Context*> m_pending_unregister;
   uint64_t m_handle_quiesce_cnt = 0;
+  std::set<uint64_t> m_failed_watchers;
   bool m_blocked = false;
+  int m_ret_val = 0;
 
   void notify(EventType event_type, Context *on_finish) {
     ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -354,7 +357,12 @@ private:
     Context *ctx = nullptr;
     if (event_type == QUIESCE) {
       ceph_assert(!m_blocked);
+      ceph_assert(m_handle_quiesce_cnt == 0);
+
       m_blocked = true;
+      m_handle_quiesce_cnt = m_watchers.size();
+      m_failed_watchers.clear();
+      m_ret_val = 0;
     } else {
       ceph_assert(event_type == UNQUIESCE);
       ceph_assert(m_blocked);
@@ -366,12 +374,11 @@ private:
     auto gather_ctx = new C_Gather(m_cct, ctx);
 
     ceph_assert(m_on_notify == nullptr);
-    ceph_assert(m_handle_quiesce_cnt == 0);
 
     m_on_notify = on_finish;
 
-    for (auto it : m_watchers) {
-      send_notify(it.first, it.second, event_type, gather_ctx->new_sub());
+    for (auto &[handle, watcher] : m_watchers) {
+      send_notify(handle, watcher, event_type, gather_ctx->new_sub());
     }
 
     gather_ctx->activate();
@@ -385,10 +392,18 @@ private:
                          << handle << ", event_type=" << event_type << dendl;
         switch (event_type) {
         case QUIESCE:
-          m_handle_quiesce_cnt++;
           watcher->handle_quiesce();
           break;
         case UNQUIESCE:
+          {
+            std::lock_guard locker{m_lock};
+
+            if (m_failed_watchers.count(handle)) {
+              ldout(m_cct, 20) << "QuiesceWatchers::" << __func__
+                               << ": skip for failed watcher" << dendl;
+              break;
+            }
+          }
           watcher->handle_unquiesce();
           break;
         default:
@@ -1010,10 +1025,10 @@ void ImageState<I>::notify_unquiesce(Context *on_finish) {
 }
 
 template <typename I>
-void ImageState<I>::quiesce_complete(int r) {
+void ImageState<I>::quiesce_complete(uint64_t handle, int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << __func__ << ": r=" << r << dendl;
-  m_quiesce_watchers->quiesce_complete(r);
+  ldout(cct, 20) << __func__ << ": handle=" << handle << " r=" << r << dendl;
+  m_quiesce_watchers->quiesce_complete(handle, r);
 }
 
 } // namespace librbd
