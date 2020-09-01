@@ -189,6 +189,7 @@ setup(
                 **get_python_flags(['rados'])
             )
         ],
+        # use "3str" when Cython 3.0 is available
         compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None)
     ),
