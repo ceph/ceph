@@ -1381,7 +1381,7 @@ Rados object in state %s." % self.state)
         # timeout argument, but we keep it for backward compat with old python binding
 
         self.require_state("connected")
-        cmd = cstr_list(cmd, 'c')
+        cmd = [cstr(cmd, 'cmd')]
 
         if isinstance(target, int):
         # NOTE(sileht): looks weird but test_monmap_dump pass int
@@ -1439,12 +1439,11 @@ Rados object in state %s." % self.state)
         # timeout argument, but we keep it for backward compat with old python binding
         self.require_state("connected")
 
-        cmd = cstr_list(cmd, 'cmd')
-        inbuf = cstr(inbuf, 'inbuf')
+        cmds = [cstr(cmd, 'cmd')]
 
         cdef:
             int _osdid = osdid
-            char **_cmd = to_bytes_array(cmd)
+            char **_cmd = to_bytes_array(cmds)
             size_t _cmdlen = len(cmd)
 
             char *_inbuf = inbuf
@@ -1481,15 +1480,15 @@ Rados object in state %s." % self.state)
         # timeout argument, but we keep it for backward compat with old python binding
         self.require_state("connected")
 
-        cmd = cstr_list(cmd, 'cmd')
+        cmds = [cstr(cmd, 'cmd')]
         inbuf = cstr(inbuf, 'inbuf')
         target = cstr(target, 'target', opt=True)
 
         cdef:
             char *_target = opt_str(target)
 
-            char **_cmd = to_bytes_array(cmd)
-            size_t _cmdlen = len(cmd)
+            char **_cmd = to_bytes_array(cmds)
+            size_t _cmdlen = len(cmds)
 
             char *_inbuf = inbuf
             size_t _inbuf_len = len(inbuf)
