@@ -1356,6 +1356,7 @@ Rados object in state %s." % self.state)
         io.io = ioctx
         return io
 
+    @requires(('cmd': str), ('inbuf': bytes), ('timeout', opt(int)), ('target', opt(str)))
     def mon_command(self, cmd, inbuf, timeout=0, target=None):
         """
         Send a command to the mon.
