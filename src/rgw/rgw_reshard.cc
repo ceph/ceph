@@ -341,7 +341,7 @@ int RGWBucketReshard::set_target_layout(int new_num_shards)
 {
   int ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::IN_PROGRESS);
   if (ret < 0) {
-    cerr << "ERROR: failed to store updated bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
   }
   return ::set_target_layout(store, new_num_shards,
@@ -583,8 +583,10 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  // place the multipart .meta object on the same shard as its head object
 	  obj.index_hash_source = mp.get_key();
 	}
-	int ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal,
-                                                   obj.get_hash_object(), &target_shard_id);
+	int ret = store->getRados()->get_target_shard_id(
+    bucket_info.layout.target_index->layout.normal,
+    obj.get_hash_object(),
+    &target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
 	  return ret;
@@ -704,7 +706,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   // resharding successful, so remove old bucket index shards; use
   // best effort and don't report out an error; the lock isn't needed
-  // at this point since all we're using a best effor to to remove old
+  // at this point since all we're using a best effort to remove old
   // shard objects
 
   ret = store->svc()->bi->clean_index(bucket_info, prev_index);
@@ -746,7 +748,7 @@ error_out:
 
   ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::NONE);
   if (ret < 0) {
-    cerr << "ERROR: failed to store updated bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
   }
   
