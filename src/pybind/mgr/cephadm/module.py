@@ -37,7 +37,7 @@ from . import remotes
 from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, AuthEntity
+    RbdMirrorService, CrashService, CephadmService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
@@ -1941,31 +1941,6 @@ To check that the host is reachable:
             for dd in self.cache.get_daemons_by_service(dep_type):
                 deps.append(dd.name())
         return sorted(deps)
-
-    def _get_config_and_keyring(self, daemon_type, daemon_id, host,
-                                keyring=None,
-                                extra_ceph_config=None):
-        # type: (str, str, str, Optional[str], Optional[str]) -> Dict[str, Any]
-        # keyring
-        if not keyring:
-            entity: AuthEntity = \
-                self.cephadm_services[daemon_type].get_auth_entity(daemon_id, host=host)
-            ret, keyring, err = self.check_mon_command({
-                'prefix': 'auth get',
-                'entity': entity,
-            })
-
-        # generate config
-        ret, config, err = self.check_mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
-        if extra_ceph_config:
-            config += extra_ceph_config
-
-        return {
-            'config': config,
-            'keyring': keyring,
-        }
 
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonSpec,

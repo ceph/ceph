@@ -90,18 +90,7 @@ class CephadmService(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
-        # Ceph.daemons (mon, mgr, mds, osd, etc)
-        cephadm_config = self.mgr._get_config_and_keyring(
-            daemon_spec.daemon_type,
-            daemon_spec.daemon_id,
-            host=daemon_spec.host,
-            keyring=daemon_spec.keyring,
-            extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
-
-        if daemon_spec.extra_config:
-            cephadm_config.update({'files': daemon_spec.extra_config})
-
-        return cephadm_config, []
+        raise NotImplementedError()
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
@@ -229,6 +218,22 @@ class CephadmService(metaclass=ABCMeta):
         """
         pass
 
+
+class CephService(CephadmService):
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        # Ceph.daemons (mon, mgr, mds, osd, etc)
+        cephadm_config = self.get_config_and_keyring(
+            daemon_spec.daemon_type,
+            daemon_spec.daemon_id,
+            host=daemon_spec.host,
+            keyring=daemon_spec.keyring,
+            extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
+
+        if daemon_spec.extra_config:
+            cephadm_config.update({'files': daemon_spec.extra_config})
+
+        return cephadm_config, []
+
     def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
         """
         Map the daemon id to a cephx keyring entity name
@@ -246,8 +251,35 @@ class CephadmService(metaclass=ABCMeta):
         else:
             raise OrchestratorError("unknown daemon type")
 
+    def get_config_and_keyring(self,
+                               daemon_type: str,
+                               daemon_id: str,
+                               host: str,
+                               keyring: Optional[str] = None,
+                               extra_ceph_config: Optional[str] = None
+                               ) -> Dict[str, Any]:
+        # keyring
+        if not keyring:
+            entity: AuthEntity = self.get_auth_entity(daemon_id, host=host)
+            ret, keyring, err = self.mgr.check_mon_command({
+                'prefix': 'auth get',
+                'entity': entity,
+            })
 
-class MonService(CephadmService):
+        # generate config
+        ret, config, err = self.mgr.check_mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        if extra_ceph_config:
+            config += extra_ceph_config
+
+        return {
+            'config': config,
+            'keyring': keyring,
+        }
+
+
+class MonService(CephService):
     TYPE = 'mon'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
@@ -332,7 +364,7 @@ class MonService(CephadmService):
         })
 
 
-class MgrService(CephadmService):
+class MgrService(CephService):
     TYPE = 'mgr'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
@@ -408,7 +440,7 @@ class MgrService(CephadmService):
         return bool(num)
 
 
-class MdsService(CephadmService):
+class MdsService(CephService):
     TYPE = 'mds'
 
     def config(self, spec: ServiceSpec) -> None:
@@ -455,7 +487,7 @@ class MdsService(CephadmService):
         return DaemonDescription()
 
 
-class RgwService(CephadmService):
+class RgwService(CephService):
     TYPE = 'rgw'
 
     def config(self, spec: RGWSpec, rgw_id: str):
@@ -655,7 +687,7 @@ class RgwService(CephadmService):
             self.mgr.log.info('updated period')
 
 
-class RbdMirrorService(CephadmService):
+class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
@@ -674,7 +706,7 @@ class RbdMirrorService(CephadmService):
         return self.mgr._create_daemon(daemon_spec)
 
 
-class CrashService(CephadmService):
+class CrashService(CephService):
     TYPE = 'crash'
 
     def create(self, daemon_spec: CephadmDaemonSpec) -> str:
