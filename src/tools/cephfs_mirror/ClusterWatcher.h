@@ -12,7 +12,6 @@
 #include "msg/Dispatcher.h"
 #include "Types.h"
 
-class CephContext;
 class MonClient;
 
 namespace cephfs {
