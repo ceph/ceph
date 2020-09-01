@@ -10,7 +10,7 @@
 #include "include/err.h"
 #include "include/neorados/RADOS.hpp"
 #include "osd/osd_types.h"
-
+#include "librados/snap_set_diff.h"
 #include "librbd/AsioEngine.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -46,6 +46,21 @@ inline bool is_copy_on_read(I *ictx, const IOContext& io_context) {
           io_context->read_snap().value_or(CEPH_NOSNAP) == CEPH_NOSNAP &&
           (ictx->exclusive_lock == nullptr ||
            ictx->exclusive_lock->is_lock_owner()));
+}
+
+template <typename S, typename D>
+void convert_snap_set(const S& src_snap_set,
+                      D* dst_snap_set) {
+  dst_snap_set->seq = src_snap_set.seq;
+  dst_snap_set->clones.reserve(src_snap_set.clones.size());
+  for (auto& src_clone : src_snap_set.clones) {
+    dst_snap_set->clones.emplace_back();
+    auto& dst_clone = dst_snap_set->clones.back();
+    dst_clone.cloneid = src_clone.cloneid;
+    dst_clone.snaps = src_clone.snaps;
+    dst_clone.overlap = src_clone.overlap;
+    dst_clone.size = src_clone.size;
+  }
 }
 
 } // anonymous namespace
@@ -726,6 +741,228 @@ int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
   return r;
 }
 
+template <typename I>
+ObjectListSnapsRequest<I>::ObjectListSnapsRequest(
+    I *ictx, uint64_t objectno, Extents&& object_extents, SnapIds&& snap_ids,
+    int list_snaps_flags, const ZTracer::Trace &parent_trace,
+    SnapshotDelta* snapshot_delta, Context *completion)
+  : ObjectRequest<I>(
+      ictx, objectno, ictx->duplicate_data_io_context(), "snap_list",
+      parent_trace, completion),
+    m_object_extents(std::move(object_extents)),
+    m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),
+    m_snapshot_delta(snapshot_delta) {
+  this->m_io_context->read_snap(CEPH_SNAPDIR);
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::send() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << dendl;
+
+  if (m_snap_ids.size() < 2) {
+    lderr(image_ctx->cct) << "invalid snap ids: " << m_snap_ids << dendl;
+    this->async_finish(-EINVAL);
+    return;
+  }
+
+  list_snaps();
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::list_snaps() {
+  I *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << dendl;
+
+  neorados::ReadOp read_op;
+  read_op.list_snaps(&m_snap_set, &m_ec);
+
+  image_ctx->rados_api.execute(
+    {data_object_name(this->m_ictx, this->m_object_no)},
+    *this->m_io_context, std::move(read_op), nullptr,
+    librbd::asio::util::get_callback_adapter(
+      [this](int r) { handle_list_snaps(r); }), nullptr,
+      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
+  I *image_ctx = this->m_ictx;
+  auto cct = image_ctx->cct;
+
+  if (r >= 0) {
+    r = -m_ec.value();
+  }
+
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  m_snapshot_delta->clear();
+  auto& snapshot_delta = *m_snapshot_delta;
+
+  if (r == -ENOENT) {
+    // the object does not exist -- mark the missing extents
+    zero_initial_extent(true);
+    this->finish(0);
+    return;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve object snapshot list: " << cpp_strerror(r)
+               << dendl;
+    this->finish(r);
+    return;
+  }
+
+  // helper function requires the librados legacy data structure
+  librados::snap_set_t snap_set;
+  convert_snap_set(m_snap_set, &snap_set);
+
+  ceph_assert(!m_snap_ids.empty());
+  librados::snap_t start_snap_id = 0;
+  librados::snap_t first_snap_id = *m_snap_ids.begin();
+  librados::snap_t last_snap_id = *m_snap_ids.rbegin();
+
+  // loop through all expected snapshots and build interval sets for
+  // data and zeroed ranges for each snapshot
+  bool prev_exists = false;
+  uint64_t prev_end_size = 0;
+  bool whiteout_detected = false;
+  for (auto end_snap_id : m_snap_ids) {
+    if (start_snap_id == end_snap_id) {
+      continue;
+    } else if (end_snap_id > last_snap_id) {
+      break;
+    }
+
+    interval_set<uint64_t> diff;
+    uint64_t end_size;
+    bool exists;
+    librados::snap_t clone_end_snap_id;
+    bool read_whole_object;
+    calc_snap_set_diff(cct, snap_set, start_snap_id,
+                       end_snap_id, &diff, &end_size, &exists,
+                       &clone_end_snap_id, &read_whole_object);
+
+    if (read_whole_object) {
+      ldout(cct, 1) << "need to read full object" << dendl;
+      diff.insert(0, image_ctx->layout.object_size);
+      end_size = image_ctx->layout.object_size;
+      clone_end_snap_id = end_snap_id;
+    } else if (!exists) {
+      end_size = 0;
+    } else if (exists && end_size == 0 && start_snap_id == 0) {
+      ldout(cct, 20) << "whiteout detected" << dendl;
+      whiteout_detected = true;
+    }
+
+    if (exists) {
+      // reads should be issued against the newest (existing) snapshot within
+      // the associated snapshot object clone. writes should be issued
+      // against the oldest snapshot in the snap_map.
+      ceph_assert(clone_end_snap_id >= end_snap_id);
+      if (clone_end_snap_id > last_snap_id) {
+        // do not read past the copy point snapshot
+        clone_end_snap_id = last_snap_id;
+      }
+    }
+
+    ldout(cct, 20) << "start_snap_id=" << start_snap_id << ", "
+                   << "end_snap_id=" << end_snap_id << ", "
+                   << "clone_end_snap_id=" << clone_end_snap_id << ", "
+                   << "diff=" << diff << ", "
+                   << "end_size=" << end_size << ", "
+                   << "exists=" << exists << dendl;
+    if (end_snap_id <= first_snap_id) {
+      // don't include deltas from the starting snapshots, but we iterate over
+      // it to track its existence and size
+      ldout(cct, 20) << "skipping prior snapshots" << dendl;
+    } else if (exists || prev_exists || !diff.empty()) {
+      // clip diff to size of object (in case it was truncated)
+      if (exists && end_size < prev_end_size) {
+        interval_set<uint64_t> trunc;
+        trunc.insert(end_size, prev_end_size - end_size);
+        trunc.intersection_of(diff);
+        diff.subtract(trunc);
+        ldout(cct, 20) << "clearing truncate diff: " << trunc << dendl;
+      }
+
+      for (auto& object_extent : m_object_extents) {
+        interval_set<uint64_t> object_interval;
+        object_interval.insert(object_extent.first, object_extent.second);
+
+        // clip diff to current object extent
+        interval_set<uint64_t> diff_interval;
+        diff_interval.intersection_of(object_interval, diff);
+
+        interval_set<uint64_t> zero_interval;
+        if (end_size < prev_end_size) {
+          // insert zeroed object extent from truncation
+          auto zero_length = prev_end_size - end_size;
+          zero_interval.insert(end_size, zero_length);
+        }
+
+        if (exists) {
+          ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
+                         << object_extent.second << ", "
+                         << "data_interval=" << diff_interval << dendl;
+          for (auto& interval : diff_interval) {
+            snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
+              interval.first, interval.second,
+              SnapshotExtent(SNAPSHOT_EXTENT_STATE_DATA, interval.second));
+          }
+        } else {
+          zero_interval.union_of(diff_interval);
+        }
+
+        zero_interval.intersection_of(object_interval);
+        if (!zero_interval.empty()) {
+          ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
+                         << object_extent.second << " "
+                         << "zero_interval=" << zero_interval << dendl;
+          for (auto& interval : zero_interval) {
+            snapshot_delta[{end_snap_id, end_snap_id}].insert(
+              interval.first, interval.second,
+              SnapshotExtent(SNAPSHOT_EXTENT_STATE_ZEROED, interval.second));
+          }
+        }
+      }
+    }
+
+    prev_end_size = end_size;
+    prev_exists = exists;
+    start_snap_id = end_snap_id;
+  }
+
+  bool snapshot_delta_empty = snapshot_delta.empty();
+  if (whiteout_detected || snapshot_delta_empty) {
+    zero_initial_extent(false);
+  }
+
+  ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
+
+  this->finish(0);
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::zero_initial_extent(bool dne) {
+  I *image_ctx = this->m_ictx;
+  auto cct = image_ctx->cct;
+
+  ceph_assert(!m_snap_ids.empty());
+  librados::snap_t snap_id_start = *m_snap_ids.begin();
+
+  // the object does not exist -- mark the missing extents
+  if (snap_id_start == 0) {
+    for (auto [object_offset, object_length] : m_object_extents) {
+      ldout(cct, 20) << "zeroing initial extent " << object_offset << "~"
+                     << object_length << dendl;
+      (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS].insert(
+        object_offset, object_length,
+        SnapshotExtent(
+          (dne ? SNAPSHOT_EXTENT_STATE_DNE : SNAPSHOT_EXTENT_STATE_ZEROED),
+          object_length));
+    }
+  }
+}
+
 } // namespace io
 } // namespace librbd
 
@@ -736,3 +973,4 @@ template class librbd::io::ObjectWriteRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectDiscardRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectWriteSameRequest<librbd::ImageCtx>;
 template class librbd::io::ObjectCompareAndWriteRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectListSnapsRequest<librbd::ImageCtx>;

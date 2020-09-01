@@ -3,6 +3,7 @@
 
 #include "librbd/io/SimpleSchedulerObjectDispatch.h"
 #include "include/neorados/RADOS.hpp"
+#include "common/ceph_time.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "librbd/AsioEngine.h"
@@ -27,6 +28,7 @@ namespace librbd {
 namespace io {
 
 using namespace boost::accumulators;
+using ceph::operator<<;
 using librbd::util::data_object_name;
 
 static const int LATENCY_STATS_WINDOW_SIZE = 10;
