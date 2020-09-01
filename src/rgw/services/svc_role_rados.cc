@@ -134,6 +134,22 @@ int RGWSI_Role_RADOS::read_name(RGWSI_MetaBackend::Context *ctx,
   return 0;
 }
 
+static int delete_oid(RGWSI_MetaBackend::Context *ctx,
+                      RGWSI_MetaBackend* meta_be,
+                      const std::string& oid,
+                      RGWObjVersionTracker * const objv_tracker,
+                      optional_yield y,
+                      const DoutPrefixProvider *dpp)
+{
+  RGWSI_MBSObj_RemoveParams params;
+  int r = meta_be->remove(ctx, oid, params, objv_tracker, y, dpp);
+  if (r < 0 && r != -ENOENT && r != -ECANCELED) {
+    ldout(meta_be->ctx(),0) << "ERROR: RGWSI_Role: could not remove oid = "
+                                << oid << " r = "<< r << dendl;
+    return r;
+  }
+  return 0;
+}
 
 int RGWSI_Role_RADOS::delete_info(RGWSI_MetaBackend::Context *ctx,
                                   const std::string& role_id,
@@ -141,13 +157,32 @@ int RGWSI_Role_RADOS::delete_info(RGWSI_MetaBackend::Context *ctx,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp)
 {
-  RGWSI_MBSObj_RemoveParams params;
 
-  int r = svc.meta_be->remove(ctx, get_role_meta_key(role_id), params, objv_tracker, y, dpp);
-  if (r < 0 && r != -ENOENT && r != -ECANCELED) {
-    ldout(svc.meta_be->ctx(),0) << "ERROR: could not remove RGWRole, id = "
-                                << role_id << " r = "<< r << dendl;
-    return r;
-  }
-  return 0;
+  return delete_oid(ctx, svc.meta_be, get_role_meta_key(role_id),
+                    objv_tracker, y, dpp);
+}
+
+int RGWSI_Role_RADOS::delete_name(RGWSI_MetaBackend::Context *ctx,
+                                  const std::string& name,
+                                  const std::string& tenant,
+                                  RGWObjVersionTracker * const objv_tracker,
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp)
+{
+  return delete_oid(ctx, svc.meta_be, get_role_name_meta_key(name, tenant),
+                    objv_tracker, y, dpp);
+
+}
+
+int RGWSI_Role_RADOS::delete_path(RGWSI_MetaBackend::Context *ctx,
+                                  const std::string& role_id,
+                                  const std::string& path,
+                                  const std::string& tenant,
+                                  RGWObjVersionTracker * const objv_tracker,
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp)
+{
+  return delete_oid(ctx, svc.meta_be, get_role_path_meta_key(path, role_id, tenant),
+                    objv_tracker, y, dpp);
+
 }
