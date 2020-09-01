@@ -262,7 +262,7 @@ class MonService(CephadmService):
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get',
-            'entity': 'mon.',
+            'entity': self.get_auth_entity(name),
         })
 
         extra_config = '[mon.%s]\n' % name
@@ -347,7 +347,7 @@ class MgrService(CephadmService):
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % mgr_id,
+            'entity': self.get_auth_entity(mgr_id),
             'caps': ['mon', 'profile mgr',
                      'osd', 'allow *',
                      'mds', 'allow *'],
@@ -432,7 +432,7 @@ class MdsService(CephadmService):
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'mds.' + mds_id,
+            'entity': self.get_auth_entity(mds_id),
             'caps': ['mon', 'profile mds',
                      'osd', 'allow rw tag cephfs *=*',
                      'mds', 'allow'],
@@ -533,7 +533,7 @@ class RgwService(CephadmService):
     def get_keyring(self, rgw_id: str):
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
+            'entity': self.get_auth_entity(rgw_id),
             'caps': ['mon', 'allow *',
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
@@ -666,7 +666,7 @@ class RbdMirrorService(CephadmService):
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'client.rbd-mirror.' + daemon_id,
+            'entity': self.get_auth_entity(daemon_id),
             'caps': ['mon', 'profile rbd-mirror',
                      'osd', 'profile rbd'],
         })
@@ -685,7 +685,7 @@ class CrashService(CephadmService):
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'client.crash.' + host,
+            'entity': self.get_auth_entity(daemon_id, host=host),
             'caps': ['mon', 'profile crash',
                      'mgr', 'profile crash'],
         })

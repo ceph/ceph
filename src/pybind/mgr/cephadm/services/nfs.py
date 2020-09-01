@@ -51,7 +51,7 @@ class NFSService(CephadmService):
 
         # create the keyring
         user = f'{daemon_type}.{daemon_id}'
-        entity = utils.name_to_config_section(user)
+        entity = self.get_auth_entity(daemon_id)
         keyring = self.get_or_create_keyring(entity)
 
         # update the caps after get-or-create, the keyring might already exist!
