@@ -1,6 +1,7 @@
 #include "svc_role_rados.h"
 #include "svc_meta_be_sobj.h"
 #include "rgw_role.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -36,6 +37,46 @@ int RGWSI_Role_RADOS::store_info(RGWSI_MetaBackend::Context *ctx,
   return svc.meta_be->put(ctx, get_role_meta_key(role.get_id()), params, objv_tracker, y, dpp);
 }
 
+int RGWSI_Role_RADOS::store_name(RGWSI_MetaBackend::Context *ctx,
+                                 const std::string& role_id,
+                                 const std::string& name,
+                                 const std::string& tenant,
+                                 RGWObjVersionTracker * const objv_tracker,
+                                 const real_time& mtime,
+                                 bool exclusive,
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp)
+{
+  RGWNameToId nameToId;
+  nameToId.obj_id = role_id;
+
+  bufferlist data_bl;
+  encode(nameToId, data_bl);
+  RGWSI_MBSObj_PutParams params(data_bl, nullptr, mtime, exclusive);
+
+  return svc.meta_be->put(ctx, get_role_name_meta_key(name, tenant),
+                          params, objv_tracker, y, dpp);
+}
+
+
+int RGWSI_Role_RADOS::store_path(RGWSI_MetaBackend::Context *ctx,
+                                 const std::string& role_id,
+                                 const std::string& path,
+                                 const std::string& tenant,
+                                 RGWObjVersionTracker * const objv_tracker,
+                                 const real_time& mtime,
+                                 bool exclusive,
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp)
+{
+  bufferlist data_bl;
+  RGWSI_MBSObj_PutParams params(data_bl, nullptr, mtime, exclusive);
+  return svc.meta_be->put(ctx, get_role_path_meta_key(path, role_id, tenant),
+                          params, objv_tracker, y, dpp);
+
+}
+
+
 int RGWSI_Role_RADOS::read_info(RGWSI_MetaBackend::Context *ctx,
                                 const std::string& role_id,
                                 rgw::sal::RGWRole *role,
@@ -62,6 +103,37 @@ int RGWSI_Role_RADOS::read_info(RGWSI_MetaBackend::Context *ctx,
 
   return 0;
 }
+
+int RGWSI_Role_RADOS::read_name(RGWSI_MetaBackend::Context *ctx,
+                                const std::string& name,
+                                const std::string& tenant,
+                                std::string& role_id,
+                                RGWObjVersionTracker * const objv_tracker,
+                                real_time * const pmtime,
+                                optional_yield y,
+                                const DoutPrefixProvider *dpp)
+{
+  bufferlist data_bl;
+  RGWSI_MBSObj_GetParams params(&data_bl, nullptr, pmtime);
+
+  int r = svc.meta_be->get_entry(ctx, get_role_name_meta_key(name, tenant),
+                                 params, objv_tracker, y, dpp);
+  if (r < 0)
+    return r;
+
+  auto bl_iter = data_bl.cbegin();
+  RGWNameToId nameToId;
+  try  {
+    decode(nameToId, bl_iter);
+  } catch (buffer::error& err) {
+    ldout(svc.meta_be->ctx(),0) << "ERROR: failed to decode RGWRole name, caught buffer::err " << dendl;
+    return -EIO;
+  }
+
+  role_id = nameToId.obj_id;
+  return 0;
+}
+
 
 int RGWSI_Role_RADOS::delete_info(RGWSI_MetaBackend::Context *ctx,
                                   const std::string& role_id,
