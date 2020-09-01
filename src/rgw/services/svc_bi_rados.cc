@@ -116,6 +116,17 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+static char bucket_obj_with_generation(char *buf, size_t len, const string& bucket_oid_base, uint64_t gen_id,
+                                    uint32_t shard_id)
+{
+  return snprintf(buf, len, "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
+}
+
+static char bucket_obj_without_generation(char *buf, size_t len, const string& bucket_oid_base, uint32_t shard_id)
+{
+  return snprintf(buf, len, "%s.%d", bucket_oid_base.c_str(), shard_id);
+}
+
 static void get_bucket_index_objects(const string& bucket_oid_base,
                                      uint32_t num_shards, uint64_t gen_id,
                                      map<int, string> *_bucket_objects,
@@ -129,25 +140,23 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
     if (shard_id < 0) {
       for (uint32_t i = 0; i < num_shards; ++i) {
         if (gen_id) {
-          snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, i);
-          bucket_objects[i] = buf;
-          } else {
-            snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
-            bucket_objects[i] = buf;
-          }
+          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, i);
+        } else {
+          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, i);
+        }
+        bucket_objects[i] = buf;
       }
     } else {
-      if ((uint32_t)shard_id > num_shards) {
+      if (static_cast<uint32_t>(shard_id) > num_shards) {
         return;
       } else {
-		if (gen_id) {
-		  snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
-		  bucket_objects[shard_id] = buf;
-		} else {
-		  // for backward compatibility, gen_id(0) will not be added in the object name
-		  snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
-		  bucket_objects[shard_id] = buf;
-		}
+        if (gen_id) {
+          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
+        } else {
+          // for backward compatibility, gen_id(0) will not be added in the object name
+          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
+        }
+        bucket_objects[shard_id] = buf;
       }
     }
   }
@@ -170,7 +179,7 @@ static void get_bucket_instance_ids(const RGWBucketInfo& bucket_info,
         (*result)[i] = plain_id + buf;
       }
     } else {
-      if ((uint32_t)shard_id > bucket_info.layout.current_index.layout.normal.num_shards) {
+      if (static_cast<uint32_t>(shard_id) > bucket_info.layout.current_index.layout.normal.num_shards) {
         return;
       }
       snprintf(buf, sizeof(buf), ":%d", shard_id);
@@ -217,12 +226,12 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_b
   } else {
     char buf[bucket_oid_base.size() + 64];
     if (gen_id) {
-      snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
+      bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
       (*bucket_obj) = buf;
 	  ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
     } else {
       // for backward compatibility, gen_id(0) will not be added in the object name
-      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
+      bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
       (*bucket_obj) = buf;
     }
   }
@@ -245,9 +254,9 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
         uint32_t sid = bucket_shard_index(obj_key, num_shards);
         char buf[bucket_oid_base.size() + 64];
         if (gen_id) {
-          snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, sid);
+          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, sid);
         } else {
-          snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
+          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, sid);
         }
         (*bucket_obj) = buf;
         if (shard_id) {
