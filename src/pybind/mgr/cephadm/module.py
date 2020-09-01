@@ -135,7 +135,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         {
             'name': 'daemon_cache_timeout',
             'type': 'secs',
-            'default': 10 * 60,
+            'default': 30,  # CHANGEME!
             'desc': 'seconds to cache service (daemon) inventory',
         },
         {
@@ -492,7 +492,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.set_health_checks(self.health_checks)
 
     def _serve_sleep(self):
-        sleep_interval = 600
+        sleep_interval = 30  # CHANGEME
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         ret = self.event.wait(sleep_interval)
         self.event.clear()
@@ -1414,7 +1414,23 @@ To check that the host is reachable:
         if health_changed:
             self.set_health_checks(self.health_checks)
 
+    def _get_ceph_metadata(self) -> Dict[str, Dict[str, str]]:
+        # TODO: Add docstring
+        service_map = {}
+        for server in self.list_servers():
+            for service in server.get('services', []):
+                service_map.update(
+                    {
+                        '{}.{}'.format(service['type'], service['id']): self.get_metadata(service['type'], service['id'])
+                    }
+                )
+        return service_map
+
     def _refresh_host_daemons(self, host) -> Optional[str]:
+        s_timestamp = datetime.datetime.utcnow()
+        ceph_services = self._get_ceph_metadata()
+        self.log.debug("LOOKATME services name: {}".format(", ".join(ceph_services.keys())))
+
         try:
             out, err, code = self._run_cephadm(
                 host, 'mon', 'ls', [], no_fsid=True)
@@ -1423,8 +1439,10 @@ To check that the host is reachable:
                     host, code, err)
         except Exception as e:
             return 'host %s scrape failed: %s' % (host, e)
+
         ls = json.loads(''.join(out))
         dm = {}
+
         for d in ls:
             if not d['style'].startswith('cephadm'):
                 continue
@@ -1432,6 +1450,7 @@ To check that the host is reachable:
                 continue
             if '.' not in d['name']:
                 continue
+            self.log.debug("LOOKATME processing daemon info for {}".format(d['name']))
             sd = orchestrator.DaemonDescription()
             sd.last_refresh = datetime.datetime.utcnow()
             for k in ['created', 'started', 'last_configured', 'last_deployed']:
@@ -1447,7 +1466,18 @@ To check that the host is reachable:
                 sd.container_id = sd.container_id[0:12]
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
-            sd.version = d.get('version')
+
+            if not d.get('version', ''):
+                # add the version from the metadata
+                if d['name'] in ceph_services.keys():
+                    self.log.debug("LOOKATME: setting version from metadata")
+                    sd.version = ceph_services[d['name']]['ceph_version']
+                else:
+                    self.log.debug("LOOKATME: no version returned, and no match for the service")
+                    pass
+            else:
+                sd.version = d.get('version')
+
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
@@ -1462,7 +1492,9 @@ To check that the host is reachable:
                 sd.status_desc = 'unknown'
                 sd.status = None
             dm[sd.name()] = sd
-        self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
+        e_timestamp = datetime.datetime.utcnow()
+        elapsed = e_timestamp - s_timestamp
+        self.log.debug(f'Refreshed host {host}, {len(dm)} daemons in {elapsed.seconds}s')
         self.cache.update_host_daemons(host, dm)
         self.cache.save_host(host)
         return None
