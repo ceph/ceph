@@ -370,7 +370,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         "name=wide,type=CephBool,req=false",
         'List devices on a host')
     def _list_devices(self, hostname=None, format='plain', refresh=False, wide=False):
-        # type: (Optional[List[str]], str, bool) -> HandleCommandResult
+        # type: (Optional[List[str]], str, bool, bool) -> HandleCommandResult
         """
         Provide information about storage devices present in cluster hosts
 
@@ -400,12 +400,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             out = []
             if wide:
                 table = PrettyTable(
-                    ['Hostname', 'Path', 'Type', 'Transport', 'RPM', 'Vendor', 'Model', 'Serial', 'Size', 'Health',
-                     'Ident', 'Fault', 'Available', 'Reject Reasons'],
+                    ['Hostname', 'Path', 'Type', 'Transport', 'RPM', 'Vendor', 'Model',
+                     'Serial', 'Size', 'Health', 'Ident', 'Fault', 'Available',
+                     'Reject Reasons'],
                     border=False)
             else:
                 table = PrettyTable(
-                    ['Hostname', 'Path', 'Type', 'Serial', 'Size', 'Health', 'Ident', 'Fault', 'Available'],
+                    ['Hostname', 'Path', 'Type', 'Serial', 'Size',
+                     'Health', 'Ident', 'Fault', 'Available'],
                     border=False)
             table.align = 'l'
             table._align['SIZE'] = 'r'
@@ -420,6 +422,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                         led_ident = d.lsm_data['ledSupport']['IDENTstatus']
                         led_fail = d.lsm_data['ledSupport']['FAILstatus']
 
+                    if d.device_id is not None:
+                        fallback_serial = d.device_id.split('_')[-1]
+                    else:
+                        fallback_serial = ""
+
                     if wide:
                         table.add_row(
                             (
@@ -430,7 +437,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                                 d.lsm_data.get('rpm', 'Unknown'),
                                 d.sys_api.get('vendor') or 'N/A',
                                 d.sys_api.get('model') or 'N/A',
-                                d.lsm_data.get('serialNum', d.device_id.split('_')[-1]),
+                                d.lsm_data.get('serialNum', fallback_serial),
                                 format_dimless(d.sys_api.get('size', 0), 5),
                                 d.lsm_data.get('health', 'Unknown'),
                                 display_map[led_ident],
@@ -445,7 +452,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                                 host_.name,
                                 d.path,
                                 d.human_readable_type,
-                                d.lsm_data.get('serialNum', d.device_id.split('_')[-1]),
+                                d.lsm_data.get('serialNum', fallback_serial),
                                 format_dimless(d.sys_api.get('size', 0), 5),
                                 d.lsm_data.get('health', 'Unknown'),
                                 display_map[led_ident],
