@@ -7,7 +7,7 @@ import rados
 from orchestrator import OrchestratorError, DaemonDescription
 
 from cephadm import utils
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
+from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class NFSService(CephadmService):
+class NFSService(CephService):
     TYPE = 'nfs'
 
     def config(self, spec: NFSServiceSpec) -> None:
@@ -81,7 +81,7 @@ class NFSService(CephadmService):
                 'ganesha.conf': get_ganesha_conf(),
             }
             config.update(
-                self.mgr._get_config_and_keyring(
+                self.get_config_and_keyring(
                     daemon_type, daemon_id,
                     keyring=keyring,
                     host=host

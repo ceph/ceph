@@ -108,7 +108,7 @@ class TestCephadmService:
             assert "%s.id1" % daemon_type == \
                 cephadm_services[daemon_type].get_auth_entity("id1")
 
-        with pytest.raises(OrchestratorError):
+        with pytest.raises(AttributeError):
             for daemon_type in ['grafana', 'alertmanager', 'prometheus', 'node-exporter']:
                 cephadm_services[daemon_type].get_auth_entity("id1", "host")
                 cephadm_services[daemon_type].get_auth_entity("id1", "")
