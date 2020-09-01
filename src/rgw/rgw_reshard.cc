@@ -344,7 +344,7 @@ int RGWBucketReshard::set_target_layout(int new_num_shards, const DoutPrefixProv
 {
   int ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::InProgress, dpp);
   if (ret < 0) {
-    cerr << "ERROR: failed to store updated bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
   }
   return ::set_target_layout(store, new_num_shards, bucket_info, dpp);
@@ -710,7 +710,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   // resharding successful, so remove old bucket index shards; use
   // best effort and don't report out an error; the lock isn't needed
-  // at this point since all we're using a best effor to to remove old
+  // at this point since all we're using a best effort to remove old
   // shard objects
 
   ret = store->svc()->bi->clean_index(bucket_info, prev_index);
@@ -752,7 +752,7 @@ error_out:
 
   ret = RGWBucketReshard::set_reshard_status(rgw::BucketReshardState::None, dpp);
   if (ret < 0) {
-    cerr << "ERROR: failed to store updated bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
   }
   
