@@ -3,7 +3,8 @@ import re
 import logging
 import subprocess
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
+from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic, \
+    Optional, Dict, Any, Tuple, NewType
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
+AuthEntity = NewType('AuthEntity', str)
 
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
@@ -226,6 +228,25 @@ class CephadmService(metaclass=ABCMeta):
         Called before the daemon is removed.
         """
         pass
+
+    def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
+        """
+        Map the daemon id to a cephx keyring entity name
+        """
+        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
+            return AuthEntity('client.' + self.TYPE + "." + daemon_id)
+        elif self.TYPE == 'crash':
+            if host == "":
+                raise OrchestratorError("Host not provided to generate <crash> auth entity name")
+            return AuthEntity('client.' + self.TYPE + "." + host)
+        elif self.TYPE == 'mon':
+            return AuthEntity('mon.')
+        elif self.TYPE == 'mgr':
+            return AuthEntity(self.TYPE + "." + daemon_id)
+        elif self.TYPE in ['osd', 'mds', 'client']:
+            return AuthEntity(self.TYPE + "." + daemon_id)
+        else:
+            raise OrchestratorError("unknown daemon type")
 
 
 class MonService(CephadmService):

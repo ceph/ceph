@@ -37,7 +37,7 @@ from . import remotes
 from . import utils
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService
+    RbdMirrorService, CrashService, CephadmService, AuthEntity
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
@@ -1948,10 +1948,11 @@ To check that the host is reachable:
         # type: (str, str, str, Optional[str], Optional[str]) -> Dict[str, Any]
         # keyring
         if not keyring:
-            ename = utils.name_to_auth_entity(daemon_type, daemon_id, host=host)
+            entity: AuthEntity = \
+                self.cephadm_services[daemon_type].get_auth_entity(daemon_id, host=host)
             ret, keyring, err = self.check_mon_command({
                 'prefix': 'auth get',
-                'entity': ename,
+                'entity': entity,
             })
 
         # generate config

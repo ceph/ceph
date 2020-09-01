@@ -13,7 +13,6 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 ConfEntity = NewType('ConfEntity', str)
-AuthEntity = NewType('AuthEntity', str)
 
 
 class CephadmNoImage(Enum):
@@ -35,29 +34,6 @@ def name_to_config_section(name: str) -> ConfEntity:
         return ConfEntity(name)
     else:
         return ConfEntity('mon')
-
-
-def name_to_auth_entity(daemon_type: str,
-                        daemon_id: str,
-                        host: str = "",
-                        ) -> AuthEntity:
-    """
-    Map from daemon names/host to ceph entity names (as seen in config)
-    """
-    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
-        return AuthEntity('client.' + daemon_type + "." + daemon_id)
-    elif daemon_type == 'crash':
-        if host == "":
-            raise OrchestratorError("Host not provided to generate <crash> auth entity name")
-        return AuthEntity('client.' + daemon_type + "." + host)
-    elif daemon_type == 'mon':
-        return AuthEntity('mon.')
-    elif daemon_type == 'mgr':
-        return AuthEntity(daemon_type + "." + daemon_id)
-    elif daemon_type in ['osd', 'mds', 'client']:
-        return AuthEntity(daemon_type + "." + daemon_id)
-    else:
-        raise OrchestratorError("unknown auth entity name")
 
 
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:

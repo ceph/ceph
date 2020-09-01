@@ -32,7 +32,7 @@ class IscsiService(CephadmService):
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': utils.name_to_auth_entity('iscsi', igw_id),
+            'entity': self.get_auth_entity(igw_id),
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blacklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
