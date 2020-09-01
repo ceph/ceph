@@ -323,7 +323,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* Extensible */						    \
 	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
-	f(SET_CHUNK,	__CEPH_OSD_OP(WR, DATA, 40),	"set-chunk")	    \
+	f(SET_CHUNK,	__CEPH_OSD_OP(CACHE, DATA, 40),	"set-chunk")	    \
 	f(TIER_PROMOTE,	__CEPH_OSD_OP(WR, DATA, 41),	"tier-promote")	    \
 	f(UNSET_MANIFEST, __CEPH_OSD_OP(WR, DATA, 42),	"unset-manifest")   \
 	f(TIER_FLUSH, __CEPH_OSD_OP(CACHE, DATA, 43),	"tier-flush")	    \
