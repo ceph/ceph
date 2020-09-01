@@ -136,6 +136,26 @@ bool ObjectDispatch<I>::compare_and_write(
   return true;
 }
 
+template <typename I>
+bool ObjectDispatch<I>::list_snaps(
+    uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+    int list_snap_flags, const ZTracer::Trace &parent_trace,
+    SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << "extents=" << extents << ", "
+                 << "snap_ids=" << snap_ids << dendl;
+
+  *dispatch_result = DISPATCH_RESULT_COMPLETE;
+  auto req = ObjectListSnapsRequest<I>::create(
+    m_image_ctx, object_no, std::move(extents), std::move(snap_ids),
+    list_snap_flags, parent_trace, snapshot_delta, on_dispatched);
+  req->send();
+  return true;
+}
+
 } // namespace io
 } // namespace librbd
 

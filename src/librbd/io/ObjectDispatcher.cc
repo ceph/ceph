@@ -173,6 +173,17 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
       &object_dispatch_spec->dispatcher_ctx.on_finish,
       &object_dispatch_spec->dispatcher_ctx);
   }
+
+  bool operator()(ObjectDispatchSpec::ListSnapsRequest& list_snaps) const {
+    return object_dispatch->list_snaps(
+      list_snaps.object_no, std::move(list_snaps.extents),
+      std::move(list_snaps.snap_ids), list_snaps.list_snaps_flags,
+      object_dispatch_spec->parent_trace, list_snaps.snapshot_delta,
+      &object_dispatch_spec->object_dispatch_flags,
+      &object_dispatch_spec->dispatch_result,
+      &object_dispatch_spec->dispatcher_ctx.on_finish,
+      &object_dispatch_spec->dispatcher_ctx);
+  }
 };
 
 template <typename I>
