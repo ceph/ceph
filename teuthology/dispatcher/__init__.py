@@ -15,6 +15,7 @@ from teuthology.lock.ops import block_and_lock_machines
 from teuthology.dispatcher import supervisor
 from teuthology.worker import prep_job
 from teuthology import safepath
+from teuthology.nuke import nuke
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -143,8 +144,18 @@ def main(args):
             yaml.safe_dump(job_config, f, default_flow_style=False)
 
         run_args.extend(["--job-config", job_config_path])
-        job_proc = subprocess.Popen(run_args)
-        log.info('Job supervisor PID: %s', job_proc.pid)
+
+        try:
+            job_proc = subprocess.Popen(run_args)
+            log.info('Job supervisor PID: %s', job_proc.pid)
+        except Exception:
+            error_message = "Saw error while trying to spawn supervisor."
+            log.exception(error_message)
+            if 'targets' in job_config:
+                nuke(supervisor.create_fake_context(job_config), True)
+            report.try_push_job_info(job_config, dict(
+                status='fail',
+                failure_reason=error_message))
 
         # This try/except block is to keep the worker from dying when
         # beanstalkc throws a SocketError
