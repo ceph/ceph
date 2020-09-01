@@ -4537,6 +4537,11 @@ void ObjectCleanRegions::mark_data_region_dirty(uint64_t offset, uint64_t len)
   trim();
 }
 
+bool ObjectCleanRegions::is_clean_region(uint64_t offset, uint64_t len) const
+{
+  return clean_offsets.contains(offset, len);
+}
+
 void ObjectCleanRegions::mark_omap_dirty()
 {
   clean_omap = false;
@@ -5846,6 +5851,89 @@ ostream& operator<<(ostream& out, const chunk_info_t& ci)
 std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci)
 {
   return out << ci.ref_delta << std::endl;
+}
+
+void object_manifest_t::calc_refs_to_inc_on_set(
+  const object_manifest_t* _g,
+  const object_manifest_t* _l,
+  object_ref_delta_t &refs) const
+{
+  /* avoid to increment the same reference on adjacent clones */
+  auto iter = chunk_map.begin();
+  auto find_chunk = [](decltype(iter) &i, const object_manifest_t* cur)
+    -> bool {
+    if (cur) {
+      auto c = cur->chunk_map.find(i->first);
+      if (c != cur->chunk_map.end() && c->second == i->second) {
+	return true;
+
+      }
+    }
+    return false;
+  };
+
+  /* If at least a same chunk exists on either _g or _l, do not increment 
+   * the reference 
+   *
+   * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * 20:   [0, 2) aaa, <- set_chunk
+   * 30:   [0, 2) abc, [6, 2) bbb, [8, 2) ccc
+   * --> incremnt the reference
+   *
+   * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * 20:   [0, 2) ccc, <- set_chunk
+   * 30:   [0, 2) abc, [6, 2) bbb, [8, 2) ccc
+   * --> do not need to increment
+   *
+   * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * 20:   [0, 2) ccc, <- set_chunk
+   * 30:   [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
+   * --> decrement the reference of ccc
+   *
+   */
+  for (; iter != chunk_map.end(); ++iter) {
+    auto found_g = find_chunk(iter, _g);
+    auto found_l = find_chunk(iter, _l);
+    if (!found_g && !found_l) {
+      refs.inc_ref(iter->second.oid);
+    } else if (found_g && found_l) {
+      refs.dec_ref(iter->second.oid);
+    }
+  }
+}
+
+void object_manifest_t::calc_refs_to_drop_on_modify(
+  const object_manifest_t* _l,
+  const ObjectCleanRegions& clean_regions,
+  object_ref_delta_t &refs) const
+{
+  for (auto &p : chunk_map) {
+    if (!clean_regions.is_clean_region(p.first, p.second.length)) {
+      // has previous snapshot
+      if (_l) {
+	/* 
+	* Let's assume that there is a manifest snapshotted object which has three chunks
+	* head: [0, 2) aaa, [6, 2) bbb, [8, 2) ccc
+	* 20:   [0, 2) aaa, [6, 2) bbb, [8, 2) ccc
+	*
+	* If we modify [6, 2) at head, we shouldn't decrement bbb's refcount because
+	* 20 has the reference for bbb. Therefore, we only drop the reference if two chunks 
+	* (head: [6, 2) and 20: [6, 2)) are different. 
+	*
+	*/
+	auto c = _l->chunk_map.find(p.first);
+	if (c != _l->chunk_map.end()) {
+	  if (p.second == c->second) {
+	    continue;
+	  }
+	}
+	refs.dec_ref(p.second.oid);
+      } else {
+	// decrement the reference of the updated chunks if the manifest object has no snapshot 
+	refs.dec_ref(p.second.oid);
+      }
+    }
+  }
 }
 
 void object_manifest_t::calc_refs_to_drop_on_removal(
