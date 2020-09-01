@@ -108,6 +108,18 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
       &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
+
+  bool operator()(ImageDispatchSpec::ListSnaps& list_snaps) const {
+    return image_dispatch->list_snaps(
+      image_dispatch_spec->aio_comp,
+      std::move(image_dispatch_spec->image_extents),
+      std::move(list_snaps.snap_ids), list_snaps.list_snaps_flags,
+      list_snaps.snapshot_delta, image_dispatch_spec->parent_trace,
+      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
+      &image_dispatch_spec->dispatch_result,
+      &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
+      &image_dispatch_spec->dispatcher_ctx);
+  }
 };
 
 template <typename I>
