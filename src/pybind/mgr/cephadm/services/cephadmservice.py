@@ -234,17 +234,15 @@ class CephadmService(metaclass=ABCMeta):
         Map the daemon id to a cephx keyring entity name
         """
         if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
-            return AuthEntity('client.' + self.TYPE + "." + daemon_id)
+            return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":
                 raise OrchestratorError("Host not provided to generate <crash> auth entity name")
-            return AuthEntity('client.' + self.TYPE + "." + host)
+            return AuthEntity(f'client.{self.TYPE}.{host}')
         elif self.TYPE == 'mon':
             return AuthEntity('mon.')
-        elif self.TYPE == 'mgr':
-            return AuthEntity(self.TYPE + "." + daemon_id)
-        elif self.TYPE in ['osd', 'mds', 'client']:
-            return AuthEntity(self.TYPE + "." + daemon_id)
+        elif self.TYPE in ['mgr', 'osd', 'mds']:
+            return AuthEntity(f'{self.TYPE}.{daemon_id}')
         else:
             raise OrchestratorError("unknown daemon type")
 
