@@ -78,6 +78,13 @@ public:
     return false;
   }
 
+  bool list_snaps(
+      uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+      int list_snap_flags, const ZTracer::Trace &parent_trace,
+      SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override;
+
   bool invalidate_cache(Context* on_finish) override {
     return false;
   }

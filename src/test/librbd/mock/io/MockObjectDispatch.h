@@ -111,6 +111,19 @@ public:
                          on_dispatched);
   }
 
+  MOCK_METHOD7(execute_list_snaps, bool(uint64_t, const Extents&,
+                                        const SnapIds&, int, SnapshotDelta*,
+                                        DispatchResult*, Context*));
+  bool list_snaps(
+      uint64_t object_no, io::Extents&& extents, SnapIds&& snap_ids,
+      int list_snaps_flags, const ZTracer::Trace &parent_trace,
+      SnapshotDelta* snapshot_delta, int* object_dispatch_flags,
+      DispatchResult* dispatch_result, Context** on_finish,
+      Context* on_dispatched) override {
+    return execute_list_snaps(object_no, extents, snap_ids, list_snaps_flags,
+                              snapshot_delta, dispatch_result, on_dispatched);
+  }
+
   MOCK_METHOD1(invalidate_cache, bool(Context*));
   MOCK_METHOD1(reset_existence_cache, bool(Context*));
 
