@@ -42,6 +42,7 @@
 #include "Mutation.h"
 
 #include "messages/MClientCaps.h"
+#include "osdc/Objecter.h"
 
 #define dout_context g_ceph_context
 
@@ -52,12 +53,57 @@ class MDCache;
 class LogSegment;
 struct SnapRealm;
 class Session;
-struct ObjectOperation;
 class EMetaBlob;
 
 struct cinode_lock_info_t {
   int lock;
   int wr_caps;
+};
+
+struct CInodeCommitOperation : public ObjectOperation {
+public:
+  CInodeCommitOperation(int prio, object_locator_t &oloc)
+    : _oloc(oloc) {
+      priority = prio;
+  }
+  CInodeCommitOperation(int prio, object_locator_t &oloc,
+                        file_layout_t l, uint64_t f)
+    : _oloc(oloc), _layout(l), _features(f) {
+      priority = prio;
+      update_layout = true;
+  }
+
+  void update(inode_backtrace_t *bt) {
+    using ceph::encode;
+
+    create(false);
+
+    bufferlist parent_bl;
+    encode(*bt, parent_bl);
+    setxattr("parent", parent_bl);
+
+    // for the old pool there is no need to update the layout
+    if (!update_layout)
+      return;
+
+    bufferlist layout_bl;
+    encode(_layout, layout_bl, _features);
+    setxattr("layout", layout_bl);
+  }
+
+  object_locator_t _oloc;
+
+private:
+  bool update_layout = false;
+  file_layout_t _layout;
+  uint64_t _features;
+};
+
+struct CInodeCommitOperations {
+  std::vector<CInodeCommitOperation> ops_vec;
+  inode_backtrace_t bt;
+  version_t version;
+  CInode *in;
 };
 
 /**
@@ -763,7 +809,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void fetch(MDSContext *fin);
   void _fetched(ceph::buffer::list& bl, ceph::buffer::list& bl2, Context *fin);  
 
+  void _commit_ops(int r, version_t version, MDSContext *fin,
+                   std::vector<CInodeCommitOperation> &ops_vec,
+                   inode_backtrace_t *bt);
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
+  void _store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
+                        inode_backtrace_t &bt, int op_prio);
+  void store_backtrace(CInodeCommitOperations &op, int op_prio);
   void store_backtrace(MDSContext *fin, int op_prio=-1);
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, ceph::buffer::list *backtrace);

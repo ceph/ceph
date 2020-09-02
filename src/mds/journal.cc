@@ -62,6 +62,40 @@
 // -----------------------
 // LogSegment
 
+struct BatchStoredBacktrace : public MDSContext {
+  MDSContext *fin;
+  MDSRank *mds;
+
+  BatchStoredBacktrace(MDSContext *f, MDSRank *m) : fin(f), mds(m) {}
+  void finish(int r) override {
+    fin->complete(r);
+  }
+  MDSRank *get_mds() override { return mds; };
+};
+
+struct BatchCommitBacktrace : public Context {
+  std::vector<CInodeCommitOperations> ops_vec;
+  MDSContext *con;
+  MDSRank *mds;
+
+  BatchCommitBacktrace(std::vector<CInodeCommitOperations> &ops, MDSContext *c,
+                       MDSRank *m) : con(c), mds(m) {
+    ops_vec.swap(ops);
+  }
+  void finish(int r) override {
+    MDSGatherBuilder gather(g_ceph_context);
+
+    for (auto &op : ops_vec) {
+      op.in->_commit_ops(r, op.version, gather.new_sub(), op.ops_vec, &op.bt);
+    }
+    if (gather.has_subs()) {
+      gather.set_finisher(new BatchStoredBacktrace(con, mds));
+      std::scoped_lock l(mds->mds_lock);
+      gather.activate();
+    }
+  }
+};
+
 void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio)
 {
   set<CDir*> commit;
@@ -187,18 +221,27 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
 
+  size_t count = 0;
+  for (elist<CInode*>::iterator it = dirty_parent_inodes.begin(); !it.end(); ++it)
+    count++;
+
+  std::vector<CInodeCommitOperations> ops_vec;
+  ops_vec.reserve(count);
   // backtraces to be stored/updated
   for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
     CInode *in = *p;
     ceph_assert(in->is_auth());
     if (in->can_auth_pin()) {
       dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
-      in->store_backtrace(gather_bld.new_sub(), op_prio);
+      ops_vec.resize(ops_vec.size() + 1);
+      in->store_backtrace(ops_vec.back(), op_prio);
     } else {
       dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
       in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
     }
   }
+  if (!ops_vec.empty())
+    mds->finisher->queue(new BatchCommitBacktrace(ops_vec, gather_bld.new_sub(), mds));
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
 
