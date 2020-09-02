@@ -777,9 +777,9 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
       } else {
 	decode(magic, p);
 	if (magic != CEPH_FS_ONDISK_MAGIC) {
-	  std::ostringstream oss;
-	  oss << "invalid magic '" << magic << "'";
-	  throw buffer::malformed_input(oss.str());
+	  CachedStackStringStream css;
+	  *css << "invalid magic '" << magic << "'";
+	  throw buffer::malformed_input(css->str());
 	}
 
 	DECODE_START(1, p);
@@ -790,14 +790,14 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
       }
 
       if (num_objs > MAX_OBJECTS) {
-	  std::ostringstream oss;
-	  oss << "invalid object count '" << num_objs << "'";
-	  throw buffer::malformed_input(oss.str());
+	  CachedStackStringStream css;
+	  *css << "invalid object count '" << num_objs << "'";
+	  throw buffer::malformed_input(css->str());
       }
       if (jstate > JOURNAL_FINISH) {
-	  std::ostringstream oss;
-	  oss << "invalid journal state '" << jstate << "'";
-	  throw buffer::malformed_input(oss.str());
+	  CachedStackStringStream css;
+	  *css << "invalid journal state '" << jstate << "'";
+	  throw buffer::malformed_input(css->str());
       }
 
       if (version > omap_version) {

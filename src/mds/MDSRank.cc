@@ -688,11 +688,11 @@ void MDSRank::set_mdsmap_multimds_snaps_allowed()
   if (already_sent)
     return;
 
-  stringstream ss;
-  ss << "{\"prefix\":\"fs set\", \"fs_name\":\"" <<  mdsmap->get_fs_name() << "\", ";
-  ss << "\"var\":\"allow_multimds_snaps\", \"val\":\"true\", ";
-  ss << "\"confirm\":\"--yes-i-am-really-a-mds\"}";
-  std::vector<std::string> cmd = {ss.str()};
+  CachedStackStringStream css;
+  *css << "{\"prefix\":\"fs set\", \"fs_name\":\"" <<  mdsmap->get_fs_name() << "\", ";
+  *css << "\"var\":\"allow_multimds_snaps\", \"val\":\"true\", ";
+  *css << "\"confirm\":\"--yes-i-am-really-a-mds\"}";
+  std::vector<std::string> cmd = {css->str()};
 
   dout(0) << __func__ << ": sending mon command: " << cmd[0] << dendl;
 
@@ -2169,9 +2169,9 @@ void MDSRank::stopping_start()
 
     C_GatherBuilder gather(g_ceph_context, new C_MDSInternalNoop);
     for (const auto &s : victims) {
-      std::stringstream ss;
+      CachedStackStringStream css;
       evict_client(s->get_client().v, false,
-                   g_conf()->mds_session_blocklist_on_evict, ss, gather.new_sub());
+                   g_conf()->mds_session_blocklist_on_evict, *css, gather.new_sub());
     }
     gather.activate();
   }
@@ -2517,31 +2517,31 @@ void MDSRankDispatcher::handle_asok_command(
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   int r = 0;
-  stringstream ss;
+  CachedStackStringStream css;
   bufferlist outbl;
   if (command == "dump_ops_in_flight" ||
       command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
-      ss << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
   } else if (command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
-      ss << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
   } else if (command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f)) {
-      ss << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
   } else if (command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
-      ss << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
     bool got_val = cmd_getval(cmdmap, "target_epoch", target_epoch);
 
     if (!got_val) {
-      ss << "no target epoch given";
+      *css << "no target epoch given";
       r = -EINVAL;
       goto out;
     }
@@ -2561,7 +2561,7 @@ void MDSRankDispatcher::handle_asok_command(
     cmd_getval(cmdmap, "filters", filter_args);
 
     SessionFilter filter;
-    r = filter.parse(filter_args, &ss);
+    r = filter.parse(filter_args, css.get());
     if (r != 0) {
       goto out;
     }
@@ -2573,7 +2573,7 @@ void MDSRankDispatcher::handle_asok_command(
     cmd_getval(cmdmap, "filters", filter_args);
 
     SessionFilter filter;
-    r = filter.parse(filter_args, &ss);
+    r = filter.parse(filter_args, css.get());
     if (r != 0) {
       r = -EINVAL;
       goto out;
@@ -2583,15 +2583,15 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "session kill") {
     std::string client_id;
     if (!cmd_getval(cmdmap, "client_id", client_id)) {
-      ss << "Invalid client_id specified";
+      *css << "Invalid client_id specified";
       r = -ENOENT;
       goto out;
     }
     std::lock_guard l(mds_lock);
     bool evicted = evict_client(strtol(client_id.c_str(), 0, 10), true,
-        g_conf()->mds_session_blocklist_on_evict, ss);
+        g_conf()->mds_session_blocklist_on_evict, *css);
     if (!evicted) {
-      dout(15) << ss.str() << dendl;
+      dout(15) << css->strv() << dendl;
       r = -ENOENT;
     }
   } else if (command == "session config" ||
@@ -2605,7 +2605,7 @@ void MDSRankDispatcher::handle_asok_command(
     bool got_value = cmd_getval(cmdmap, "value", value);
 
     std::lock_guard l(mds_lock);
-    r = config_client(client_id, !got_value, option, value, ss);
+    r = config_client(client_id, !got_value, option, value, *css);
   } else if (command == "scrub start" ||
 	     command == "scrub_start") {
     string path;
@@ -2617,7 +2617,7 @@ void MDSRankDispatcher::handle_asok_command(
 
     /* Multiple MDS scrub is not currently supported. See also: https://tracker.ceph.com/issues/12274 */
     if (mdsmap->get_max_mds() > 1) {
-      ss << "Scrub is not currently supported for multiple active MDS. Please reduce max_mds to 1 and then scrub.";
+      *css << "Scrub is not currently supported for multiple active MDS. Please reduce max_mds to 1 and then scrub.";
       r = -EINVAL;
       goto out;
     }
@@ -2687,13 +2687,13 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "export dir") {
     string path;
     if(!cmd_getval(cmdmap, "path", path)) {
-      ss << "malformed path";
+      *css << "malformed path";
       r = -EINVAL;
       goto out;
     }
     int64_t rank;
     if(!cmd_getval(cmdmap, "rank", rank)) {
-      ss << "malformed rank";
+      *css << "malformed rank";
       r = -EINVAL;
       goto out;
     }
@@ -2725,7 +2725,7 @@ void MDSRankDispatcher::handle_asok_command(
     std::lock_guard l(mds_lock);
     mdcache->cache_status(f);
   } else if (command == "dump tree") {
-    command_dump_tree(cmdmap, ss, f);
+    command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
     std::lock_guard l(mds_lock);
     r = balancer->dump_loads(f);
@@ -2738,7 +2738,7 @@ void MDSRankDispatcher::handle_asok_command(
 	snapserver->dump(f);
       } else {
 	r = -EXDEV;
-	ss << "Not snapserver";
+	*css << "Not snapserver";
       }
     } else {
       r = snapclient->dump_cache(f);
@@ -2747,15 +2747,15 @@ void MDSRankDispatcher::handle_asok_command(
     std::lock_guard l(mds_lock);
     mdcache->force_readonly();
   } else if (command == "dirfrag split") {
-    command_dirfrag_split(cmdmap, ss);
+    command_dirfrag_split(cmdmap, *css);
   } else if (command == "dirfrag merge") {
-    command_dirfrag_merge(cmdmap, ss);
+    command_dirfrag_merge(cmdmap, *css);
   } else if (command == "dirfrag ls") {
-    command_dirfrag_ls(cmdmap, ss, f);
+    command_dirfrag_ls(cmdmap, *css, f);
   } else if (command == "openfiles ls") {
     command_openfiles_ls(f);
   } else if (command == "dump inode") {
-    command_dump_inode(f, cmdmap, ss);
+    command_dump_inode(f, cmdmap, *css);
   } else if (command == "damage ls") {
     std::lock_guard l(mds_lock);
     damage_table.dump(f);
@@ -2771,7 +2771,7 @@ void MDSRankDispatcher::handle_asok_command(
     r = -ENOSYS;
   }
 out:
-  on_finish(r, ss.str(), outbl);
+  on_finish(r, css->str(), outbl);
 }
 
 /**
@@ -2817,9 +2817,9 @@ void MDSRankDispatcher::evict_clients(
 					     on_finish(r, {}, bl);
 					   }));
   for (const auto s : victims) {
-    std::stringstream ss;
+    CachedStackStringStream css;
     evict_client(s->get_client().v, false,
-                 g_conf()->mds_session_blocklist_on_evict, ss, gather.new_sub());
+                 g_conf()->mds_session_blocklist_on_evict, *css, gather.new_sub());
   }
   gather.activate();
 }
@@ -2919,16 +2919,16 @@ void MDSRank::command_flush_journal(Formatter *f) {
   ceph_assert(f != NULL);
 
   C_SaferCond cond;
-  std::stringstream ss;
+  CachedStackStringStream css;
   {
     std::lock_guard locker(mds_lock);
-    C_Flush_Journal *flush_journal = new C_Flush_Journal(mdcache, mdlog, this, &ss, &cond);
+    C_Flush_Journal *flush_journal = new C_Flush_Journal(mdcache, mdlog, this, css.get(), &cond);
     flush_journal->send();
   }
   int r = cond.wait();
 
   f->open_object_section("result");
-  f->dump_string("message", ss.str());
+  f->dump_string("message", css->strv());
   f->dump_int("return_code", r);
   f->close_section();
 }
@@ -3475,13 +3475,12 @@ bool MDSRank::evict_client(int64_t session_id,
   }
 
   dout(4) << "Preparing blocklist command... (wait=" << wait << ")" << dendl;
-  stringstream ss;
-  ss << "{\"prefix\":\"osd blocklist\", \"blocklistop\":\"add\",";
-  ss << "\"addr\":\"";
-  ss << addr;
-  ss << "\"}";
-  std::string tmp = ss.str();
-  std::vector<std::string> cmd = {tmp};
+  CachedStackStringStream css;
+  *css << "{\"prefix\":\"osd blocklist\", \"blocklistop\":\"add\",";
+  *css << "\"addr\":\"";
+  *css << addr;
+  *css << "\"}";
+  std::vector<std::string> cmd = {css->str()};
 
   auto kill_client_session = [this, session_id, wait, on_killed](){
     ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
