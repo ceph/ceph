@@ -9,7 +9,7 @@ requests directly to Ceph OSD Daemons. Ceph OSD Daemons perform data replication
 on behalf of Ceph Clients, which means replication and other factors impose
 additional loads on Ceph Storage Cluster networks.
 
-Our Quick Start configurations provide a trivial `Ceph configuration file`_ that
+Our Quick Start configurations provide a trivial Ceph configuration file that
 sets monitor IP addresses and daemon host names only. Unless you specify a
 cluster network, Ceph assumes a single "public" network. Ceph functions just
 fine with a public network only, but you may see significant performance
@@ -148,7 +148,7 @@ Ceph Networks
 
 To configure Ceph networks, you must add a network configuration to the
 ``[global]`` section of the configuration file. Our 5-minute Quick Start
-provides a trivial `Ceph configuration file`_ that assumes one public network
+provides a trivial Ceph configuration file that assumes one public network
 with client and server on the same network and subnet. Ceph functions just fine
 with a public network only. However, Ceph allows you to establish much more
 specific criteria, including multiple IP network and subnet masks for your
@@ -407,7 +407,6 @@ Ceph disables TCP buffering by default.
 
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
-.. _Ceph configuration file: ../../../start/quick-ceph-deploy/#create-a-cluster
 .. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures

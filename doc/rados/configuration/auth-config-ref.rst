@@ -21,41 +21,10 @@ Deployment Scenarios
 
 There are two main scenarios for deploying a Ceph cluster, which impact
 how you initially configure Cephx. Most first time Ceph users use
-``ceph-deploy`` to create a cluster (easiest). For clusters using
+``cephadm`` to create a cluster (easiest). For clusters using
 other deployment tools (e.g., Chef, Juju, Puppet, etc.), you will need
 to use the manual procedures or configure your deployment tool to
 bootstrap your monitor(s).
-
-ceph-deploy
------------
-
-When you deploy a cluster with ``ceph-deploy``, you do not have to bootstrap the
-monitor manually or create the ``client.admin`` user or keyring. The steps you
-execute in the `Storage Cluster Quick Start`_ will invoke ``ceph-deploy`` to do
-that for you.
-
-When you execute ``ceph-deploy new {initial-monitor(s)}``, Ceph will create a
-monitor keyring for you (only used to bootstrap monitors), and it will generate
-an  initial Ceph configuration file for you, which contains the following
-authentication settings, indicating that Ceph enables authentication by
-default::
-
-	auth_cluster_required = cephx
-	auth_service_required = cephx
-	auth_client_required = cephx
-
-When you execute ``ceph-deploy mon create-initial``, Ceph will bootstrap the
-initial monitor(s), retrieve a ``ceph.client.admin.keyring`` file containing the
-key for the  ``client.admin`` user. Additionally, it will also retrieve keyrings
-that give ``ceph-deploy`` and ``ceph-volume`` utilities the ability to prepare and
-activate OSDs and metadata servers.
-
-When you execute ``ceph-deploy admin {node-name}`` (**note:** Ceph must be
-installed first), you are pushing a Ceph configuration file and the
-``ceph.client.admin.keyring`` to the ``/etc/ceph``  directory of the node. You
-will be able to execute Ceph administrative functions as ``root`` on the command
-line of that node.
-
 
 Manual Deployment
 -----------------
@@ -202,7 +171,7 @@ and Ceph Clients require authentication keys to access the Ceph Storage Cluster.
 
 The most common way to provide these keys to the ``ceph`` administrative
 commands and clients is to include a Ceph keyring under the ``/etc/ceph``
-directory. For Cuttlefish and later releases using ``ceph-deploy``, the filename
+directory. For Octopus and later releases using ``cephadm``, the filename
 is usually ``ceph.client.admin.keyring`` (or ``$cluster.client.admin.keyring``).
 If you include the keyring under the ``/etc/ceph`` directory, you don't need to
 specify a ``keyring`` entry in your Ceph configuration file.
@@ -210,8 +179,7 @@ specify a ``keyring`` entry in your Ceph configuration file.
 We recommend copying the Ceph Storage Cluster's keyring file to nodes where you
 will run administrative commands, because it contains the ``client.admin`` key.
 
-You may use ``ceph-deploy admin`` to perform this task. See `Create an Admin
-Host`_ for details. To perform this step manually, execute the following::
+To perform this step manually, execute the following::
 
 	sudo scp {user}@{ceph-cluster-host}:/etc/ceph/ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring
 
@@ -249,7 +217,7 @@ setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 Daemon Keyrings
 ---------------
 
-Administrative users or deployment tools  (e.g., ``ceph-deploy``) may generate
+Administrative users or deployment tools  (e.g., ``cephadm``) may generate
 daemon keyrings in the same way as generating user keyrings.  By default, Ceph
 stores daemons keyrings inside their data directory. The default keyring
 locations, and the capabilities necessary for the daemon to function, are shown
@@ -368,11 +336,9 @@ Time to Live
 :Default: ``60*60``
 
 
-.. _Storage Cluster Quick Start: ../../../start/quick-ceph-deploy/
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Ceph configuration: ../ceph-conf
-.. _Create an Admin Host: ../../deployment/ceph-deploy-admin
 .. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
 .. _User Management: ../../operations/user-management
