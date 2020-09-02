@@ -189,7 +189,7 @@ class Host(RESTController):
     @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
     def daemons(self, hostname: str) -> List[dict]:
         orch = OrchClient.instance()
-        daemons = orch.services.list_daemons(None, hostname)
+        daemons = orch.services.list_daemons(hostname=hostname)
         return [d.to_json() for d in daemons]
 
     @handle_orchestrator_error('host')
