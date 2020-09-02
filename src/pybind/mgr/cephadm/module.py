@@ -1474,7 +1474,7 @@ To check that the host is reachable:
                 self.log.debug(f"Attempting to add version to {d['name']} from ceph metadata")
                 service_metadata = ceph_services.get(d['name'], None)
                 if service_metadata:
-                    sd.version = service_metadata.get('ceph_version', '')
+                    sd.version = service_metadata.get('ceph_version_short', '')
                     if sd.version:
                         self.log.debug("version successfully added from local metadata")
                     else:
