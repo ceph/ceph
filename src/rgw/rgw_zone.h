@@ -382,6 +382,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   JSONFormattable tier_config;
 
+  rgw_pool notif_pool;
+
   RGWZoneParams() : RGWSystemMetaObj() {}
   explicit RGWZoneParams(const std::string& name) : RGWSystemMetaObj(name){}
   RGWZoneParams(const rgw_zone_id& id, const std::string& name) : RGWSystemMetaObj(id.id, name) {}
@@ -406,7 +408,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(13, 1, bl);
+    ENCODE_START(14, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -431,11 +433,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(otp_pool, bl);
     encode(tier_config, bl);
     encode(oidc_pool, bl);
+    encode(notif_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(13, bl);
+    DECODE_START(14, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -498,6 +501,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(oidc_pool, bl);
     } else {
       oidc_pool = name + ".rgw.meta:oidc";
+    }
+    if (struct_v >= 14) {
+      decode(notif_pool, bl);
+    } else {
+      notif_pool = log_pool.name + ":notif";
     }
     DECODE_FINISH(bl);
   }
