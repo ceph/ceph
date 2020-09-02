@@ -2108,7 +2108,7 @@ To check that the host is reachable:
                 sd.status = 1
                 sd.status_desc = 'starting'
                 self.cache.add_daemon(daemon_spec.host, sd)
-                if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
+                if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
                     self.requires_post_actions.add(daemon_spec.daemon_type)
             self.cache.invalidate_host_daemons(daemon_spec.host)
             self.cache.update_daemon_config_deps(
