@@ -93,10 +93,9 @@ protected:
 
   uint64_t get_total_length() const;
 
-  virtual bool finish_request_early() {
-    return false;
-  }
   virtual int clip_request();
+  virtual bool finish_request_early();
+
   virtual void update_timestamp();
   virtual void send_request() = 0;
   virtual void send_image_cache_request() = 0;
@@ -117,7 +116,6 @@ public:
 
 protected:
   int clip_request() override;
-  bool finish_request_early() override;
 
   void send_request() override;
   void send_image_cache_request() override;
@@ -152,8 +150,9 @@ protected:
       m_synchronous(false) {
   }
 
-  void send_request() override;
   bool finish_request_early() override;
+
+  void send_request() override;
 
   virtual int prune_object_extents(
       LightweightObjectExtents* object_extents) const {
@@ -272,6 +271,10 @@ protected:
   int clip_request() override {
     return 0;
   }
+  bool finish_request_early() override {
+    return false;
+  }
+
   void update_timestamp() override {
   }
   void send_request() override;
@@ -372,6 +375,36 @@ private:
   int m_op_flags;
 };
 
+template <typename ImageCtxT = ImageCtx>
+class ImageListSnapsRequest : public ImageRequest<ImageCtxT> {
+public:
+  using typename ImageRequest<ImageCtxT>::Extents;
+
+  ImageListSnapsRequest(
+      ImageCtxT& image_ctx, AioCompletion* aio_comp,
+      Extents&& image_extents, SnapIds&& snap_ids, int list_snaps_flags,
+      SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace);
+
+protected:
+  int clip_request() override;
+
+  void update_timestamp() override {}
+  void send_request() override;
+  void send_image_cache_request() override;
+
+  aio_type_t get_aio_type() const override {
+    return AIO_TYPE_GENERIC;
+  }
+  const char *get_request_type() const override {
+    return "list-snaps";
+  }
+
+private:
+  SnapIds m_snap_ids;
+  int m_list_snaps_flags;
+  SnapshotDelta* m_snapshot_delta;
+};
+
 } // namespace io
 } // namespace librbd
 
@@ -383,5 +416,6 @@ extern template class librbd::io::ImageDiscardRequest<librbd::ImageCtx>;
 extern template class librbd::io::ImageFlushRequest<librbd::ImageCtx>;
 extern template class librbd::io::ImageWriteSameRequest<librbd::ImageCtx>;
 extern template class librbd::io::ImageCompareAndWriteRequest<librbd::ImageCtx>;
+extern template class librbd::io::ImageListSnapsRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_IMAGE_REQUEST_H
