@@ -51,7 +51,6 @@ describe('OSDs page', () => {
             'Metadata',
             'Device health',
             'Performance counter',
-            'Histogram',
             'Performance Details'
           ]);
         });
