@@ -9,7 +9,7 @@
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 /**
  * WriteLogMap: maps block extents to GenericWriteLogEntries
@@ -74,7 +74,7 @@ private:
   BlockExtentToLogMapEntries m_block_to_log_entry_map;
 };
 
-} //namespace rwl
+} //namespace pwl
 } //namespace cache
 } //namespace librbd
 

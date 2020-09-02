@@ -13,30 +13,30 @@
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/cache/rwl/ImageCacheState.h"
-#include "librbd/cache/rwl/LogEntry.h"
+#include "librbd/cache/pwl/ImageCacheState.h"
+#include "librbd/cache/pwl/LogEntry.h"
 #include <map>
 #include <vector>
 
 #undef dout_subsys
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::ReplicatedWriteLog: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::ReplicatedWriteLog: " << this << " " \
                              <<  __func__ << ": "
 
 namespace librbd {
-  namespace cache {
+namespace cache {
+namespace pwl {
+using namespace librbd::cache::pwl;
 
-    using namespace librbd::cache::rwl;
+template <typename I>
+ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state)
+: AbstractWriteLog<I>(image_ctx, cache_state)
+{ 
+}
 
-    template <typename I>
-      ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::ImageCacheState<I>* cache_state)
-        : AbstractWriteLog<I>(image_ctx, cache_state)
-      {
-      }
-
-
-  } // namespace cache
+} // namespace pwl
+} // namespace cache
 } // namespace librbd
 
-template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
+template class librbd::cache::pwl::ReplicatedWriteLog<librbd::ImageCtx>;

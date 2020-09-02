@@ -5,16 +5,16 @@
 #include "LogEntry.h"
 #include "librbd/cache/ImageWriteback.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::LogEntry: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::LogEntry: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 
 namespace cache {
 
-namespace rwl {
+namespace pwl {
 
 std::ostream& GenericLogEntry::format(std::ostream &os) const {
   os << "ram_entry=[" << ram_entry << "], "
@@ -223,6 +223,6 @@ std::ostream &operator<<(std::ostream &os,
   return entry.format(os);
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd

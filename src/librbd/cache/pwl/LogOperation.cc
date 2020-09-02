@@ -3,18 +3,18 @@
 
 #include <iostream>
 #include "LogOperation.h"
-#include "librbd/cache/rwl/Types.h"
+#include "librbd/cache/pwl/Types.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::LogOperation: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::LogOperation: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 
 namespace cache {
 
-namespace rwl {
+namespace pwl {
 
 GenericLogOperation::GenericLogOperation(const utime_t dispatch_time, PerfCounters *perfcounter)
   : m_perfcounter(perfcounter), dispatch_time(dispatch_time) {
@@ -115,7 +115,7 @@ GenericWriteLogOperation::GenericWriteLogOperation(std::shared_ptr<SyncPoint> sy
                                                    CephContext *cct)
   : GenericLogOperation(dispatch_time, perfcounter),
   m_lock(ceph::make_mutex(util::unique_lock_name(
-    "librbd::cache::rwl::GenericWriteLogOperation::m_lock", this))),
+    "librbd::cache::pwl::GenericWriteLogOperation::m_lock", this))),
   m_cct(cct),
   sync_point(sync_point) {
 }
@@ -207,18 +207,18 @@ std::ostream &operator<<(std::ostream &os,
 
 void WriteLogOperation::complete(int result) {
   GenericWriteLogOperation::complete(result);
-  m_perfcounter->tinc(l_librbd_rwl_log_op_dis_to_buf_t, buf_persist_time - dispatch_time);
+  m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_buf_t, buf_persist_time - dispatch_time);
   utime_t buf_lat = buf_persist_comp_time - buf_persist_time;
-  m_perfcounter->tinc(l_librbd_rwl_log_op_buf_to_bufc_t, buf_lat);
-  m_perfcounter->hinc(l_librbd_rwl_log_op_buf_to_bufc_t_hist, buf_lat.to_nsec(),
+  m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_bufc_t, buf_lat);
+  m_perfcounter->hinc(l_librbd_pwl_log_op_buf_to_bufc_t_hist, buf_lat.to_nsec(),
                       log_entry->ram_entry.write_bytes);
-  m_perfcounter->tinc(l_librbd_rwl_log_op_buf_to_app_t, log_append_time - buf_persist_time);
+  m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_app_t, log_append_time - buf_persist_time);
 }
 
 void WriteLogOperation::copy_bl_to_pmem_buffer() {
   /* operation is a shared_ptr, so write_op is only good as long as operation is in scope */
   bufferlist::iterator i(&bl);
-  m_perfcounter->inc(l_librbd_rwl_log_op_bytes, log_entry->write_bytes());
+  m_perfcounter->inc(l_librbd_pwl_log_op_bytes, log_entry->write_bytes());
   ldout(m_cct, 20) << bl << dendl;
   i.copy((unsigned)log_entry->write_bytes(), (char*)log_entry->pmem_buffer);
 }
@@ -333,6 +333,6 @@ std::ostream &operator<<(std::ostream &os,
   return op.format(os);
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd

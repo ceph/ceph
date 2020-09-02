@@ -12,9 +12,9 @@
 #include "librbd/Utils.h"
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/Types.h"
-#include "librbd/cache/rwl/LogOperation.h"
-#include "librbd/cache/rwl/Request.h"
-#include "librbd/cache/rwl/LogMap.h"
+#include "librbd/cache/pwl/LogOperation.h"
+#include "librbd/cache/pwl/Request.h"
+#include "librbd/cache/pwl/LogMap.h"
 #include "AbstractWriteLog.h"
 #include <functional>
 #include <list>
@@ -28,31 +28,34 @@ struct ImageCtx;
 
 namespace cache {
 
+namespace pwl {
+
 template <typename ImageCtxT>
 class ReplicatedWriteLog : public AbstractWriteLog<ImageCtxT> {
 public:
   typedef io::Extent Extent;
   typedef io::Extents Extents;
 
-  ReplicatedWriteLog(ImageCtxT &image_ctx, librbd::cache::rwl::ImageCacheState<ImageCtxT>* cache_state);
+  ReplicatedWriteLog(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
   ~ReplicatedWriteLog();
   ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
   ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
 
 private:
   using This = AbstractWriteLog<ImageCtxT>;
-  using C_WriteRequestT = rwl::C_WriteRequest<This>;
-  using C_BlockIORequestT = rwl::C_BlockIORequest<This>;
-  using C_FlushRequestT = rwl::C_FlushRequest<This>;
-  using C_DiscardRequestT = rwl::C_DiscardRequest<This>;
-  using C_WriteSameRequestT = rwl::C_WriteSameRequest<This>;
-  using C_CompAndWriteRequestT = rwl::C_CompAndWriteRequest<This>;
+  using C_WriteRequestT = pwl::C_WriteRequest<This>;
+  using C_BlockIORequestT = pwl::C_BlockIORequest<This>;
+  using C_FlushRequestT = pwl::C_FlushRequest<This>;
+  using C_DiscardRequestT = pwl::C_DiscardRequest<This>;
+  using C_WriteSameRequestT = pwl::C_WriteSameRequest<This>;
+  using C_CompAndWriteRequestT = pwl::C_CompAndWriteRequest<This>;
 
 };
 
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
+extern template class librbd::cache::pwl::ReplicatedWriteLog<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
