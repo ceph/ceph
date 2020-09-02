@@ -943,10 +943,7 @@ public:
       int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
-                                                              bs(target->get_store()) {
-                                                                blind = (target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
-                                                              }
+      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj);
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
