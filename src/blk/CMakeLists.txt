@@ -20,7 +20,7 @@ if(WITH_SPDK)
     spdk/NVMEDevice.cc)
 endif()
 
-if(HAVE_LIBZBC)
+if(HAVE_LIBZBD)
   list(APPEND libblk_srcs
     zoned/HMSMRDevice.cc)
 endif()
@@ -36,8 +36,8 @@ if(WITH_SPDK)
   target_link_libraries(blk PRIVATE ${SPDK_LIBRARIES})
 endif()
 
-if(HAVE_LIBZBC)
-  target_link_libraries(blk PRIVATE ${ZBC_LIBRARIES})
+if(HAVE_LIBZBD)
+  target_link_libraries(blk PRIVATE ${ZBD_LIBRARIES})
 endif()
 
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
