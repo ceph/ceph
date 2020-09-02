@@ -357,7 +357,7 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator,
-                               uint16_t bilog_op, rgw_zone_set& zones_trace);
+                               rgw_zone_set& zones_trace);
 
 void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp op, std::string& tag,
                                 rgw_bucket_entry_ver& ver,
