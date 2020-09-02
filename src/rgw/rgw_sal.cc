@@ -238,6 +238,8 @@ int RGWRadosBucket::update_container_stats(void)
   ent.size_rounded = iter->second.size_rounded;
   ent.creation_time = iter->second.creation_time;
   ent.placement_rule = std::move(iter->second.placement_rule);
+
+  info.creation_time = ent.creation_time;
   info.placement_rule = ent.placement_rule;
 
   return 0;
