@@ -4133,19 +4133,23 @@ paths:
                     cluster_id:
                       description: Cluster identifier
                       type: string
+                    cluster_type:
+                      description: Cluster type
+                      type: string
                     daemon_id:
                       description: Daemon identifier
                       type: string
                     desc:
-                      description: Error description (if status==-1)
+                      description: Status description
                       type: string
                     status:
-                      description: Status of daemon (1=RUNNING, 0=STOPPED, -1=ERROR
+                      description: Status of daemon
                       type: integer
                   type: object
                 required:
                 - daemon_id
                 - cluster_id
+                - cluster_type
                 type: array
           description: OK
         '400':

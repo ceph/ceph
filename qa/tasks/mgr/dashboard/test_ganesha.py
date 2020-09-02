@@ -161,7 +161,9 @@ class GaneshaTest(DashboardTestCase):
         self.assertIn('available', data)
         self.assertIn('message', data)
         self.assertFalse(data['available'])
-        self.assertIn('Ganesha config location is not configured. Please set the GANESHA_RADOS_POOL_NAMESPACE setting.',
+        self.assertIn(("NFS-Ganesha cluster is not detected. "
+                       "Please set the GANESHA_RADOS_POOL_NAMESPACE "
+                       "setting or deploy an NFS-Ganesha cluster with the Orchestrator."),
                       data['message'])
 
         self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', 'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
