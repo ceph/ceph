@@ -17,10 +17,12 @@
 #include "librbd/io/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
+#include "common/errno.h"
 #include "common/perf_counters.h"
 #include "osdc/Striper.h"
 #include <algorithm>
 #include <functional>
+#include <map>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -33,6 +35,81 @@ using librbd::util::data_object_name;
 using librbd::util::get_image_ctx;
 
 namespace {
+
+template <typename I>
+struct C_AssembleSnapshotDeltas : public C_AioRequest {
+  I* image_ctx;
+  SnapshotDelta* snapshot_delta;
+
+  ceph::mutex lock = ceph::make_mutex(
+    "librbd::io::C_AssembleSnapshotDeltas::lock", false);
+  std::map<uint64_t, SnapshotDelta> object_snapshot_delta;
+
+  C_AssembleSnapshotDeltas(I* image_ctx, AioCompletion* aio_comp,
+                           SnapshotDelta* snapshot_delta)
+    : C_AioRequest(aio_comp),
+      image_ctx(image_ctx), snapshot_delta(snapshot_delta) {
+  }
+
+  SnapshotDelta* get_snapshot_delta(uint64_t object_no) {
+    std::unique_lock locker{lock};
+    return &object_snapshot_delta[object_no];
+  }
+
+  void finish(int r) override {
+    auto cct = image_ctx->cct;
+
+    if (r < 0) {
+      lderr(cct) << "C_AssembleSnapshotDeltas: list snaps failed: "
+                 << cpp_strerror(r) << dendl;
+      C_AioRequest::finish(r);
+      return;
+    }
+
+    std::unique_lock locker{lock};
+    *snapshot_delta = {};
+    for (auto& [object_no, object_snapshot_delta] : object_snapshot_delta) {
+      SnapshotDelta image_snapshot_delta;
+      object_to_image_intervals(object_no, object_snapshot_delta,
+                                &image_snapshot_delta, snapshot_delta);
+
+      ldout(cct, 20) << "object_no=" << object_no << ", "
+                     << "object_snapshot_delta="
+                     << object_snapshot_delta << ", "
+                     << "image_snapshot_delta=" << image_snapshot_delta
+                     << dendl;
+    }
+
+    ldout(cct, 20) << "snapshot_delta=" << *snapshot_delta << dendl;
+    C_AioRequest::finish(0);
+  }
+
+  void object_to_image_intervals(
+      uint64_t object_no, const SnapshotDelta& object_snapshot_delta,
+      SnapshotDelta* image_snapshot_delta,
+      SnapshotDelta* assembled_image_snapshot_delta) {
+    auto cct = image_ctx->cct;
+    for (auto& [key, object_extents] : object_snapshot_delta) {
+      for (auto& object_extent : object_extents) {
+        Extents image_extents;
+        Striper::extent_to_file(cct, &image_ctx->layout, object_no,
+                                object_extent.get_off(),
+                                object_extent.get_len(),
+                                image_extents);
+
+        auto& intervals = (*image_snapshot_delta)[key];
+        auto& assembled_intervals = (*assembled_image_snapshot_delta)[key];
+        for (auto [image_offset, image_length] : image_extents) {
+          SnapshotExtent snapshot_extent{object_extent.get_val().state,
+                                         image_length};
+          intervals.insert(image_offset, image_length, snapshot_extent);
+          assembled_intervals.insert(image_offset, image_length,
+                                     snapshot_extent);
+        }
+      }
+    }
+  }
+};
 
 template <typename I>
 struct C_RBD_Readahead : public Context {
@@ -270,6 +347,17 @@ int ImageRequest<I>::clip_request() {
 }
 
 template <typename I>
+bool ImageRequest<I>::finish_request_early() {
+  auto total_bytes = get_total_length();
+  if (total_bytes == 0) {
+    auto *aio_comp = this->m_aio_comp;
+    aio_comp->set_request_count(0);
+    return true;
+  }
+  return false;
+}
+
+template <typename I>
 uint64_t ImageRequest<I>::get_total_length() const {
   uint64_t total_bytes = 0;
   for (auto& image_extent : this->m_image_extents) {
@@ -359,17 +447,6 @@ int ImageReadRequest<I>::clip_request() {
 }
 
 template <typename I>
-bool ImageReadRequest<I>::finish_request_early() {
-  auto total_bytes = this->get_total_length();
-  if (total_bytes == 0) {
-    auto *aio_comp = this->m_aio_comp;
-    aio_comp->set_request_count(0);
-    return true;
-  }
-  return false;
-}
-
-template <typename I>
 void ImageReadRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -440,12 +517,8 @@ bool AbstractImageWriteRequest<I>::finish_request_early() {
       return true;
     }
   }
-  auto total_bytes = this->get_total_length();
-  if (total_bytes == 0) {
-    aio_comp->set_request_count(0);
-    return true;
-  }
-  return false;
+
+  return ImageRequest<I>::finish_request_early();
 }
 
 template <typename I>
@@ -903,6 +976,75 @@ int ImageCompareAndWriteRequest<I>::prune_object_extents(
   return 0;
 }
 
+template <typename I>
+ImageListSnapsRequest<I>::ImageListSnapsRequest(
+    I& image_ctx, AioCompletion* aio_comp, Extents&& image_extents,
+    SnapIds&& snap_ids, int list_snaps_flags, SnapshotDelta* snapshot_delta,
+    const ZTracer::Trace& parent_trace)
+  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
+                    image_ctx.get_data_io_context(), "list-snaps",
+                    parent_trace),
+    m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),
+    m_snapshot_delta(snapshot_delta) {
+  this->set_bypass_image_cache();
+}
+
+template <typename I>
+int ImageListSnapsRequest<I>::clip_request() {
+  // permit arbitrary list-snaps requests (internal API)
+  return 0;
+}
+
+template <typename I>
+void ImageListSnapsRequest<I>::send_request() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  // map image extents to object extents
+  auto &image_extents = this->m_image_extents;
+  std::map<uint64_t, Extents> object_number_extents;
+  for (auto& image_extent : image_extents) {
+    if (image_extent.second == 0) {
+      continue;
+    }
+
+    striper::LightweightObjectExtents object_extents;
+    Striper::file_to_extents(cct, &image_ctx.layout, image_extent.first,
+                             image_extent.second, 0, 0, &object_extents);
+    for (auto& object_extent : object_extents) {
+      object_number_extents[object_extent.object_no].emplace_back(
+        object_extent.offset, object_extent.length);
+    }
+  }
+
+  // reassemble the deltas back into image-extents when complete
+  auto aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  auto assemble_ctx = new C_AssembleSnapshotDeltas<I>(
+    &image_ctx, aio_comp, m_snapshot_delta);
+  auto sub_aio_comp = AioCompletion::create_and_start<
+    Context, &Context::complete>(assemble_ctx, get_image_ctx(&image_ctx),
+                                 AIO_TYPE_GENERIC);
+
+  // issue the requests
+  sub_aio_comp->set_request_count(object_number_extents.size());
+  for (auto& oe : object_number_extents) {
+    ldout(cct, 20) << data_object_name(&image_ctx, oe.first) << " "
+                   << oe.second << dendl;
+    auto ctx = new C_AioRequest(sub_aio_comp);
+    auto req = ObjectDispatchSpec::create_list_snaps(
+      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.first, std::move(oe.second),
+      SnapIds{m_snap_ids}, m_list_snaps_flags, this->m_trace,
+      assemble_ctx->get_snapshot_delta(oe.first), ctx);
+    req->send();
+  }
+}
+
+template <typename I>
+void ImageListSnapsRequest<I>::send_image_cache_request() {
+  ceph_abort();
+}
+
 } // namespace io
 } // namespace librbd
 
@@ -914,3 +1056,4 @@ template class librbd::io::ImageDiscardRequest<librbd::ImageCtx>;
 template class librbd::io::ImageFlushRequest<librbd::ImageCtx>;
 template class librbd::io::ImageWriteSameRequest<librbd::ImageCtx>;
 template class librbd::io::ImageCompareAndWriteRequest<librbd::ImageCtx>;
+template class librbd::io::ImageListSnapsRequest<librbd::ImageCtx>;
