@@ -117,8 +117,8 @@ void rgw_cls_obj_prepare_op::dump(Formatter *f) const
 
   // for legacy only
   f->dump_bool("log_op", false);
+  f->dump_int("bilog_flags", 0);
 
-  f->dump_int("bilog_flags", bilog_flags);
   encode_json("zones_trace", zones_trace, f);
 }
 

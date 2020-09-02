@@ -173,14 +173,13 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                const cls_rgw_obj_key& key, const string& locator,
-                               uint16_t bilog_flags, rgw_zone_set& zones_trace)
+                               rgw_zone_set& zones_trace)
 {
   rgw_cls_obj_prepare_op call;
   call.op = op;
   call.tag = tag;
   call.key = key;
   call.locator = locator;
-  call.bilog_flags = bilog_flags;
   call.zones_trace = zones_trace;
   bufferlist in;
   encode(call, in);
