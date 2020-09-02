@@ -6,21 +6,14 @@
 
 #include "librbd/cache/ImageCache.h"
 
-class Context;
-class SafeTimer;
-
-class Context;
-class SafeTimer;
-
 namespace librbd {
 
 struct ImageCtx;
 
 namespace cache {
 
+namespace pwl {
 template <typename> class AbstractWriteLog;
-
-namespace rwl {
 template <typename> class ImageCacheState;
 }
 
@@ -30,7 +23,7 @@ public:
   using typename ImageCache<ImageCtxT>::Extent;
   using typename ImageCache<ImageCtxT>::Extents;
 
-  WriteLogCache(ImageCtxT &image_ctx, librbd::cache::rwl::ImageCacheState<ImageCtxT>* cache_state);
+  WriteLogCache(ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
   ~WriteLogCache();
   WriteLogCache(const WriteLogCache&) = delete;
   WriteLogCache &operator=(const WriteLogCache&) = delete;
@@ -58,7 +51,7 @@ public:
   void invalidate(Context *on_finish) override;
   void flush(Context *on_finish) override;
 
-  AbstractWriteLog<ImageCtxT> *m_write_log;
+  librbd::cache::pwl::AbstractWriteLog<ImageCtxT> *m_write_log;
 };
 
 } // namespace cache

@@ -2,11 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "WriteLogCache.h"
-#include "ReplicatedWriteLog.h"
-#include "librbd/cache/rwl/ImageCacheState.h"
+#include "librbd/cache/pwl/ReplicatedWriteLog.h"
+#include "librbd/cache/pwl/ImageCacheState.h"
 
 #undef dout_subsys
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::WriteLogCache: " << this << " " \
                            <<  __func__ << ": "
@@ -14,14 +14,14 @@
 namespace librbd {
 namespace cache {
 
-using namespace librbd::cache::rwl;
+using namespace librbd::cache::pwl;
 
 typedef WriteLogCache<ImageCtx>::Extent Extent;
 typedef WriteLogCache<ImageCtx>::Extents Extents;
 
 template <typename I>
-WriteLogCache<I>::WriteLogCache(I &image_ctx, librbd::cache::rwl::ImageCacheState<I>* cache_state) {
-  m_write_log = new ReplicatedWriteLog<I>(image_ctx, cache_state);
+WriteLogCache<I>::WriteLogCache(I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state) {
+  m_write_log = new librbd::cache::pwl::ReplicatedWriteLog<I>(image_ctx, cache_state);
 }
 
 template <typename I>

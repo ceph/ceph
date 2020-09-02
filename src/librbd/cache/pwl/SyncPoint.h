@@ -5,12 +5,12 @@
 #define CEPH_LIBRBD_CACHE_RWL_SYNC_POINT_H 
 
 #include "librbd/ImageCtx.h"
-#include "librbd/cache/rwl/LogEntry.h"
-#include "librbd/cache/rwl/Types.h"
+#include "librbd/cache/pwl/LogEntry.h"
+#include "librbd/cache/pwl/Types.h"
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 class SyncPoint: public std::enable_shared_from_this<SyncPoint> {
 public:
@@ -62,7 +62,7 @@ private:
                                   const SyncPoint &p);
 };
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd
 

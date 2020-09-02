@@ -3,14 +3,14 @@
 
 #include "SyncPoint.h"
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::SyncPoint: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::SyncPoint: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
 SyncPoint::SyncPoint(uint64_t sync_gen_num, CephContext *cct)
   : log_entry(std::make_shared<SyncPointLogEntry>(sync_gen_num)), m_cct(cct) {
@@ -104,6 +104,6 @@ void SyncPoint::setup_earlier_sync_point(std::shared_ptr<SyncPoint> sync_point,
     }
 }
 
-} // namespace rwl
+} // namespace pwl
 } // namespace cache
 } // namespace librbd

@@ -4,15 +4,15 @@
 #include "LogMap.h"
 #include "include/ceph_assert.h"
 #include "librbd/Utils.h"
-#include "librbd/cache/rwl/LogEntry.h"
+#include "librbd/cache/pwl/LogEntry.h"
 
 namespace librbd {
 namespace cache {
-namespace rwl {
+namespace pwl {
 
-#define dout_subsys ceph_subsys_rbd_rwl
+#define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::rwl::LogMap: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::pwl::LogMap: " << this << " " \
                            <<  __func__ << ": "
 template <typename T>
 std::ostream &operator<<(std::ostream &os,
@@ -37,7 +37,7 @@ template <typename T>
 LogMap<T>::LogMap(CephContext *cct)
   : m_cct(cct),
     m_lock(ceph::make_mutex(util::unique_lock_name(
-           "librbd::cache::rwl::LogMap::m_lock", this))) {
+           "librbd::cache::pwl::LogMap::m_lock", this))) {
 }
 
 /**
@@ -271,8 +271,8 @@ bool LogMap<T>::LogMapEntryCompare::operator()(const LogMapEntry<T> &lhs,
   return false;
 }
 
-} //namespace rwl
+} //namespace pwl
 } //namespace cache
 } //namespace librbd
 
-template class librbd::cache::rwl::LogMap<librbd::cache::rwl::GenericWriteLogEntry>;
+template class librbd::cache::pwl::LogMap<librbd::cache::pwl::GenericWriteLogEntry>;
