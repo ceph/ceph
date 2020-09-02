@@ -11,7 +11,6 @@
    man/8/ceph-create-keys
    man/8/ceph-debugpack
    man/8/ceph-dencoder
-   man/8/ceph-deploy
    man/8/ceph-volume
    man/8/ceph-volume-systemd
    man/8/ceph-fuse
