@@ -6082,7 +6082,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
   }
 
   int r = guard_reshard(nullptr, [&](BucketShard *bs) -> int {
-				   return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, y, zones_trace);
+				   return store->cls_obj_prepare_op(*bs, op, optag, obj, y, zones_trace);
 				 });
 
   if (r < 0) {
@@ -8186,7 +8186,7 @@ bool RGWRados::process_expire_objects()
 }
 
 int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
-                                 rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *_zones_trace)
+                                 rgw_obj& obj, optional_yield y, rgw_zone_set *_zones_trace)
 {
   rgw_zone_set zones_trace;
   if (_zones_trace) {
@@ -8197,7 +8197,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), bilog_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), zones_trace);
   return bs.bucket_obj.operate(&o, y);
 }
 
