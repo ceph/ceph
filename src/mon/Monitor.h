@@ -692,11 +692,10 @@ public:
   void handle_command(MonOpRequestRef op);
   void handle_route(MonOpRequestRef op);
 
-  void handle_mon_metadata(MonOpRequestRef op);
   int get_mon_metadata(int mon, ceph::Formatter *f, std::ostream& err);
   int print_nodes(ceph::Formatter *f, std::ostream& err);
 
-  // Accumulate metadata across calls to update_mon_metadata
+  // track metadata reported by win_election()
   std::map<int, Metadata> mon_metadata;
   std::map<int, Metadata> pending_metadata;
 
@@ -932,7 +931,6 @@ private:
   void extract_save_mon_key(KeyRing& keyring);
 
   void collect_metadata(Metadata *m);
-  void update_mon_metadata(int from, Metadata&& m);
   int load_metadata();
   void count_metadata(const std::string& field, ceph::Formatter *f);
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
