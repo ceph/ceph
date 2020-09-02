@@ -4767,7 +4767,7 @@ void RGWDeleteObj::execute()
     }
 
     if (!ver_restored) {
-      uint64_t epoch;
+      uint64_t epoch = 0;
 
       /* Swift's versioning mechanism hasn't found any previous version of
        * the object that could be restored. This means we should proceed
