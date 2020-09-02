@@ -419,6 +419,7 @@ class RGWRados
   int open_lc_pool_ctx();
   int open_objexp_pool_ctx();
   int open_reshard_pool_ctx();
+  int open_notif_pool_ctx();
 
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap);
@@ -493,6 +494,7 @@ protected:
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
+  librados::IoCtx notif_pool_ctx;     // .rgw.notif
 
   bool pools_initialized;
 
@@ -563,6 +565,11 @@ public:
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
   }
+
+  librados::IoCtx& get_notif_pool_ctx() {
+    return notif_pool_ctx;
+  }
+
   void set_context(CephContext *_cct) {
     cct = _cct;
   }

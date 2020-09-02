@@ -112,7 +112,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   cls_2pc_reservations::iterator last_reservation;
   std::tie(last_reservation, result) = urgent_data.reservations.emplace(std::piecewise_construct,
           std::forward_as_tuple(urgent_data.last_id),
-          std::forward_as_tuple(res_op.size, ceph::real_clock::now()));
+          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now()));
   if (!result) {
     // an old reservation that was never committed or aborted is in the map
     // caller should try again assuming other IDs are ok
@@ -125,7 +125,6 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   encode(urgent_data, head.bl_urgent_data);
 
   const uint64_t urgent_data_length = head.bl_urgent_data.length();
-  auto total_entries = urgent_data.reservations.size();
 
   if (head.max_urgent_data_size < urgent_data_length) {
     CLS_LOG(10, "INFO: cls_2pc_queue_reserve: urgent data size: %lu exceeded maximum: %lu using xattrs", urgent_data_length, head.max_urgent_data_size);
@@ -149,7 +148,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
     }
     std::tie(std::ignore, result) = xattr_reservations.emplace(std::piecewise_construct,
           std::forward_as_tuple(urgent_data.last_id),
-          std::forward_as_tuple(res_op.size, ceph::real_clock::now()));
+          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now()));
     if (!result) {
       // an old reservation that was never committed or aborted is in the map
       // caller should try again assuming other IDs are ok
@@ -180,7 +179,6 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   CLS_LOG(20, "INFO: cls_2pc_queue_reserve: current reservations: %lu (bytes)", urgent_data.reserved_size);
   CLS_LOG(20, "INFO: cls_2pc_queue_reserve: requested size: %lu (bytes)", res_op.size);
   CLS_LOG(20, "INFO: cls_2pc_queue_reserve: urgent data size: %lu (bytes)", urgent_data_length);
-  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: current reservation entries: %lu", total_entries);
 
   cls_2pc_queue_reserve_ret op_ret;
   op_ret.id = urgent_data.last_id;
@@ -322,7 +320,6 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
  
-  auto total_entries = urgent_data.reservations.size();
   auto it = urgent_data.reservations.find(abort_op.id);
   uint64_t reservation_size;
   if (it == urgent_data.reservations.end()) {
@@ -355,7 +352,6 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
       CLS_LOG(20, "INFO: cls_2pc_queue_abort: reservation does not exist: %u", abort_op.id);
       return 0;
     }
-    total_entries += xattr_reservations.size();
     reservation_size = it->second.size;
     xattr_reservations.erase(it);
     bl_xattrs.clear();
@@ -374,7 +370,6 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
   urgent_data.reserved_size -= reservation_size;
 
   CLS_LOG(20, "INFO: cls_2pc_queue_abort: current reservations: %lu (bytes)", urgent_data.reserved_size);
-  CLS_LOG(20, "INFO: cls_2pc_queue_abort: current reservation entries: %lu", total_entries-1); 
 
   // write back head
   head.bl_urgent_data.clear();
@@ -424,6 +419,103 @@ static int cls_2pc_queue_list_reservations(cls_method_context_t hctx, bufferlist
     }
   }
   encode(op_ret, *out);
+
+  return 0;
+}
+
+static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
+  cls_2pc_queue_expire_op expire_op;
+  try {
+    auto in_iter = in->cbegin();
+    decode(expire_op, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to decode entry: %s", err.what());
+    return -EINVAL;
+  }
+
+  //get head
+  cls_queue_head head;
+  auto ret = queue_read_head(hctx, head);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to decode entry: %s", err.what());
+    return -EINVAL;
+  }
+  
+  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %lu reservation entries found", urgent_data.reservations.size());
+  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: current reservations: %lu (bytes)", urgent_data.reserved_size);
+
+  uint64_t reservation_size = 0U;
+  auto stale_found = false;
+  auto xattr_stale_found = false;
+
+  for (auto it = urgent_data.reservations.begin(); it != urgent_data.reservations.end();) {
+    if (it->second.timestamp < expire_op.stale_time) {
+      CLS_LOG(5, "WARNING: cls_2pc_queue_expire_reservations: stale reservation %u will be removed", it->first);
+      reservation_size += it->second.size;
+      it = urgent_data.reservations.erase(it);
+      stale_found = true;
+    } else {
+      ++it;
+    }
+  }
+
+  if (urgent_data.has_xattrs) {
+    // try to look for the reservation in xattrs
+    cls_2pc_reservations xattr_reservations;
+    bufferlist bl_xattrs;
+    ret = cls_cxx_getxattr(hctx, CLS_QUEUE_URGENT_DATA_XATTR_NAME, &bl_xattrs);
+    if (ret < 0 && (ret != -ENOENT && ret != -ENODATA)) {
+      CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to read xattrs with: %d", ret);
+      return ret;
+    }
+    if (ret >= 0) {
+      auto iter = bl_xattrs.cbegin();
+      try {
+        decode(xattr_reservations, iter);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to decode xattrs urgent data map");
+        return -EINVAL;
+      } //end - catch
+      CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %lu reservation entries found in xatts", xattr_reservations.size());
+      for (auto it = xattr_reservations.begin(); it != xattr_reservations.end();) {
+        if (it->second.timestamp < expire_op.stale_time) {
+          CLS_LOG(5, "WARNING: cls_2pc_queue_expire_reservations: stale reservation %u will be removed", it->first);
+          reservation_size += it->second.size;
+          it = xattr_reservations.erase(it);
+          xattr_stale_found = true;
+        } else {
+          ++it;
+        }
+      }
+      if (xattr_stale_found) {
+        // write xattr back without stale reservations
+        bl_xattrs.clear();
+        encode(xattr_reservations, bl_xattrs);
+        ret = cls_cxx_setxattr(hctx, CLS_QUEUE_URGENT_DATA_XATTR_NAME, &bl_xattrs);
+        if (ret < 0) {
+          CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to write xattrs with: %d", ret);
+          return ret;
+        }
+      }
+    }
+  }
+
+  if (stale_found || xattr_stale_found) { 
+    urgent_data.reserved_size -= reservation_size;
+    CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: reservations after cleanup: %lu (bytes)", urgent_data.reserved_size);
+    // write back head without stale reservations
+    head.bl_urgent_data.clear();
+    encode(urgent_data, head.bl_urgent_data);
+    return queue_write_head(hctx, head);
+  }
 
   return 0;
 }
@@ -491,6 +583,7 @@ CLS_INIT(2pc_queue)
   cls_method_handle_t h_2pc_queue_list_reservations;
   cls_method_handle_t h_2pc_queue_list_entries;
   cls_method_handle_t h_2pc_queue_remove_entries;
+  cls_method_handle_t h_2pc_queue_expire_reservations;
 
   cls_register(TPC_QUEUE_CLASS, &h_class);
 
@@ -502,6 +595,7 @@ CLS_INIT(2pc_queue)
   cls_register_cxx_method(h_class, TPC_QUEUE_LIST_RESERVATIONS, CLS_METHOD_RD, cls_2pc_queue_list_reservations, &h_2pc_queue_list_reservations);
   cls_register_cxx_method(h_class, TPC_QUEUE_LIST_ENTRIES, CLS_METHOD_RD, cls_2pc_queue_list_entries, &h_2pc_queue_list_entries);
   cls_register_cxx_method(h_class, TPC_QUEUE_REMOVE_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_remove_entries, &h_2pc_queue_remove_entries);
+  cls_register_cxx_method(h_class, TPC_QUEUE_EXPIRE_RESERVATIONS, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_expire_reservations, &h_2pc_queue_expire_reservations);
 
   return;
 }
