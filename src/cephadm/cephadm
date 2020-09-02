@@ -1996,7 +1996,6 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                     p = os.path.join(data_dir, n)
                     f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
             else:
-                f.write('# LVM OSDs use ceph-volume lvm activate:\n')
                 prestart = CephContainer(
                     image=args.image,
                     entrypoint='/usr/sbin/ceph-volume',
@@ -2010,12 +2009,12 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                     bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
                 )
-                f.write(' '.join(prestart.run_cmd()) + '\n')
+                _write_container_cmd_to_bash(f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == NFSGanesha.daemon_type:
             # add nfs to the rados grace db
             nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
             prestart = nfs_ganesha.get_rados_grace_container('add')
-            f.write(' '.join(prestart.run_cmd()) + '\n')
+            _write_container_cmd_to_bash(f, prestart)
         elif daemon_type == CephIscsi.daemon_type:
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
             ceph_iscsi = CephIscsi.init(fsid, daemon_id)
@@ -2048,12 +2047,12 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                                     daemon_id),
             )
-            f.write(' '.join(poststop.run_cmd()) + '\n')
+            _write_container_cmd_to_bash(f, poststop)
         elif daemon_type == NFSGanesha.daemon_type:
             # remove nfs from the rados grace db
             nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
             poststop = nfs_ganesha.get_rados_grace_container('remove')
-            f.write(' '.join(poststop.run_cmd()) + '\n')
+            _write_container_cmd_to_bash(f, poststop)
         elif daemon_type == CephIscsi.daemon_type:
             # make sure we also stop the tcmu container
             ceph_iscsi = CephIscsi.init(fsid, daemon_id)
