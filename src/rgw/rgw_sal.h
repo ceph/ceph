@@ -204,7 +204,7 @@ class RGWBucket {
     size_t get_size_rounded() const { return ent.size_rounded; }
     uint64_t get_count() const { return ent.count; }
     rgw_placement_rule& get_placement_rule() { return info.placement_rule; }
-    ceph::real_time& get_creation_time() { return ent.creation_time; }
+    ceph::real_time& get_creation_time() { return info.creation_time; }
     ceph::real_time& get_modification_time() { return mtime; }
     obj_version& get_version() { return bucket_version; }
     void set_version(obj_version &ver) { bucket_version = ver; }
