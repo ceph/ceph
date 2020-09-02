@@ -599,6 +599,17 @@ Requires:	python%{python3_pkgversion}
 %description fuse
 FUSE based client for Ceph distributed network file system
 
+%package -n cephfs-mirror
+Summary:	Ceph daemon for mirroring CephFS snapshots
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
+%description -n cephfs-mirror
+Daemon for mirroring CephFS snapshots between Ceph clusters.
+
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
@@ -1749,6 +1760,9 @@ fi
 %{_sbindir}/mount.fuse.ceph
 %{_unitdir}/ceph-fuse@.service
 %{_unitdir}/ceph-fuse.target
+
+%files -n cephfs-mirror
+%{_bindir}/cephfs-mirror
 
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse

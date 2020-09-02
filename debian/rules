@@ -106,6 +106,7 @@ override_dh_strip:
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
 	dh_strip -pceph-base --dbg-package=ceph-base-dbg
+	dh_strip -pcephfs-mirror --dbg-package=cephfs-mirror-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
 	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
 	dh_strip -pceph-immutable-object-cache --dbg-package=ceph-immutable-object-cache-dbg
