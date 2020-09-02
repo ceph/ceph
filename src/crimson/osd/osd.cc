@@ -430,7 +430,8 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<OsdStatusHook>(std::as_const(*this))),
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)),
-      asok->register_command(make_asok_hook<DumpPGStateHistory>(std::as_const(*this))));
+      asok->register_command(make_asok_hook<DumpPGStateHistory>(std::as_const(*this))),
+      asok->register_command(make_asok_hook<SeastarMetricsHook>()));
   }).then_unpack([] {
     return seastar::now();
   });
