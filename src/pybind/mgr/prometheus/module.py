@@ -510,7 +510,7 @@ class Module(MgrModule):
             host_version = servers.get((id_, 'mon'), ('', ''))
             self.metrics['mon_metadata'].set(1, (
                 'mon.{}'.format(id_), host_version[0],
-                mon['public_addr'].split(':')[0], rank,
+                mon['public_addr'].rsplit(':', 1)[0], rank,
                 host_version[1]
             ))
             in_quorum = int(rank in mon_status['quorum'])
@@ -619,8 +619,8 @@ class Module(MgrModule):
             # id can be used to link osd metrics and metadata
             id_ = osd['osd']
             # collect osd metadata
-            p_addr = osd['public_addr'].split(':')[0]
-            c_addr = osd['cluster_addr'].split(':')[0]
+            p_addr = osd['public_addr'].rsplit(':', 1)[0]
+            c_addr = osd['cluster_addr'].rsplit(':', 1)[0]
             if p_addr == "-" or c_addr == "-":
                 self.log.info(
                     "Missing address metadata for osd {0}, skipping occupation"
