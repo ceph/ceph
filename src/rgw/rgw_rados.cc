@@ -3027,13 +3027,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   }
 #endif
 
-  RGWObjState *state;
-  RGWObjManifest *manifest = nullptr;
-  int r = target->get_state(dpp, &state, &manifest, false, y, assume_noent);
-  if (r < 0)
-    return r;
-
-  rgw_obj obj = target->get_obj();
+  rgw_obj& obj = target->get_obj();
 
   if (obj.get_oid().empty()) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
@@ -3041,12 +3035,11 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   }
 
   rgw_rados_ref ref;
-  r = store->get_obj_head_ref(dpp, target->get_meta_placement_rule(), obj, &ref);
+  int r = store->get_obj_head_ref(dpp, target->get_bucket_info(), obj, &ref);
   if (r < 0)
     return r;
 
   bool is_olh = state->is_olh;
-
   bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
 
   const string *ptag = meta.ptag;
@@ -3174,14 +3167,6 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     index_op->set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
   }
 
-  if (!index_op->is_prepared()) {
-    tracepoint(rgw_rados, prepare_enter, req_id.c_str());
-    r = index_op->prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y);
-    tracepoint(rgw_rados, prepare_exit, req_id.c_str());
-    if (r < 0)
-      return r;
-  }
-
   auto& ioctx = ref.pool.ioctx();
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
@@ -3306,17 +3291,34 @@ int RGWRados::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t 
   RGWRados::Bucket bop(target->get_store(), bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
+
   
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
-  int r;
+  RGWObjState *state;
+  int r = target->get_state(&state, false, y, assume_noent);
+  if (r < 0) {
+    return r;
+  }
+
+  //tracepoint(rgw_rados, prepare_enter, req_id.c_str());
+  r = index_op.prepare(CLS_RGW_OP_ADD, &state->write_tag, y);
+  //tracepoint(rgw_rados, prepare_exit, req_id.c_str());
+  if (r < 0) {
+    return r;
+  }
+
   if (assume_noent) {
-    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
+    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, state, (void *)&index_op, y);
     if (r == -EEXIST) {
       assume_noent = false;
+      r = target->get_state(&state, false, y, assume_noent);
+      if (r < 0) {
+        return r;
+      }
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
+    r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail, state, (void *)&index_op, y);
   }
   return r;
 }
@@ -6242,13 +6244,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWMod
   int r = guard_reshard(dpp, nullptr, [&](BucketShard *bs) -> int {
 				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, y, zones_trace);
 				 });
-
-  if (r < 0) {
-    return r;
-  }
-  prepared = true;
-
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64_t poolid, uint64_t epoch,
