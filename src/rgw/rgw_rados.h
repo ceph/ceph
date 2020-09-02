@@ -822,6 +822,7 @@ public:
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
+                     RGWObjState *state,
                      void *index_op, optional_yield y);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs, optional_yield y);
@@ -923,7 +924,6 @@ public:
       BucketShard bs;
       bool bs_initialized{false};
       bool blind;
-      bool prepared{false};
       rgw_zone_set *zones_trace{nullptr};
 
       int init_bs() {
@@ -977,8 +977,6 @@ public:
       int cancel();
 
       const string *get_optag() { return &optag; }
-
-      bool is_prepared() { return prepared; }
     }; // class UpdateIndex
 
     class List {
