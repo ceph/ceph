@@ -6146,7 +6146,7 @@ int RGWRados::Bucket::UpdateIndex::cancel()
   BucketShard *bs;
 
   int ret = guard_reshard(&bs, [&](BucketShard *bs) -> int {
-				 return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags, zones_trace);
+				 return store->cls_obj_complete_cancel(*bs, optag, obj, zones_trace);
 			       });
 
   /*
@@ -8221,13 +8221,18 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
 			     bilog_flags, zones_trace);
 }
 
-int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace)
+int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, rgw_zone_set *zones_trace)
 {
   rgw_bucket_dir_entry ent;
   obj.key.get_index_key(&ent.key);
+  // the `bilog_flags` is never used on the cancelation handling path in
+  // `cls_rgw`. `cls_obj_complete_op` takes it because multiple variants
+  // of BI completion share the same `rgw_cls_obj_complete_op` structure
+  // for client-OSD transport. However, this is just a nasty but private
+  // implementation detail and shouldn't be exposed to upper layers.
   return cls_obj_complete_op(bs, obj, CLS_RGW_OP_CANCEL, tag,
 			     -1 /* pool id */, 0, ent,
-			     RGWObjCategory::None, NULL, bilog_flags,
+			     RGWObjCategory::None, nullptr, 0 /* bilog_flags */,
 			     zones_trace);
 }
 
