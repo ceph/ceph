@@ -55,20 +55,20 @@ export class CephfsService {
     if (!_.isUndefined(name)) {
       params = params.append('name', name);
     }
-    return this.http.post(`${this.baseURL}/${id}/mk_snapshot`, null, { params });
+    return this.http.post(`${this.baseURL}/${id}/snapshot`, null, { params });
   }
 
   rmSnapshot(id: number, path: string, name: string) {
     let params = new HttpParams();
     params = params.append('path', path);
     params = params.append('name', name);
-    return this.http.post(`${this.baseURL}/${id}/rm_snapshot`, null, { params });
+    return this.http.delete(`${this.baseURL}/${id}/snapshot`, { params });
   }
 
-  updateQuota(id: number, path: string, quotas: CephfsQuotas) {
+  quota(id: number, path: string, quotas: CephfsQuotas) {
     let params = new HttpParams();
     params = params.append('path', path);
-    return this.http.post(`${this.baseURL}/${id}/set_quotas`, quotas, {
+    return this.http.put(`${this.baseURL}/${id}/quota`, quotas, {
       observe: 'response',
       params
     });
