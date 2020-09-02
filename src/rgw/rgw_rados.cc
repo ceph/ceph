@@ -6239,8 +6239,8 @@ int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWMod
     }
   }
 
-  int r = guard_reshard(dpp, obj, nullptr, [&](BucketShard *bs) -> int {
-				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, bilog_flags, y, zones_trace);
+  int r = guard_reshard(dpp, nullptr, [&](BucketShard *bs) -> int {
+				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, y, zones_trace);
 				 });
 
   if (r < 0) {
@@ -8431,7 +8431,7 @@ bool RGWRados::process_expire_objects(const DoutPrefixProvider *dpp)
 }
 
 int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, string& tag,
-                                 rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *_zones_trace)
+                                 rgw_obj& obj, optional_yield y, rgw_zone_set *_zones_trace)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs << " obj=" << obj << " tag=" << tag << " op=" << op << dendl_bitx;
@@ -8448,7 +8448,7 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
 
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), bilog_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), zones_trace);
   int ret = bs.bucket_obj.operate(dpp, &o, y);
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
