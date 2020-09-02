@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-DEFAULT_IMAGE='docker.io/ceph/ceph:v15'
+DEFAULT_IMAGE='registry.suse.com/ses/7/ceph/ceph:latest'
 DEFAULT_IMAGE_IS_MASTER=False
 LATEST_STABLE_RELEASE = 'octopus'
 DATA_DIR = '/var/lib/ceph'
