@@ -1,9 +1,9 @@
 <ng-template #tasksTpl>
   <!-- Executing -->
   <div *ngFor="let executingTask of executingTasks; trackBy:trackByFn">
-    <div class="card tc_task border-0 mb-3">
+    <div class="card tc_task border-0">
       <div class="row no-gutters">
-        <div class="col-md-3 text-center">
+        <div class="col-md-2 text-center">
           <span [ngClass]="[icons.stack, icons.large2x]"
                 class="text-info">
             <i [ngClass]="[icons.stack2x, icons.circle]"></i>
@@ -11,7 +11,7 @@
           </span>
         </div>
         <div class="col-md-9">
-          <div class="card-body p-0">
+          <div class="card-body p-1">
             <h6 class="card-title bold">{{ executingTask.description }}</h6>
 
             <div class="mb-1">
@@ -54,16 +54,16 @@
     <hr>
 
     <div *ngFor="let notification of notifications; let i = index">
-      <div class="card tc_notification border-0 mb-3">
+      <div class="card tc_notification border-0">
         <div class="row no-gutters">
-          <div class="col-md-3 text-center">
-            <span [ngClass]="[icons.stack, icons.large2x, notification.textClass]">
+          <div class="col-md-2 text-center">
+            <span [ngClass]="[icons.stack, icons.large2x,  notification.textClass]">
               <i [ngClass]="[icons.circle, icons.stack2x]"></i>
               <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
             </span>
           </div>
-          <div class="col-md-9">
-            <div class="card-body p-0">
+          <div class="col-md-10">
+            <div class="card-body p-1">
               <button class="btn btn-link float-right mt-0 pt-0"
                       title="Remove notification"
                       i18n-title
@@ -114,7 +114,9 @@
             tabindex="-1"
             type="button"
             (click)="closeSidebar()">
-      <span>×</span>
+      <span>
+        <i [ngClass]="icons.close"></i>
+      </span>
     </button>
   </div>
 
