@@ -61,6 +61,7 @@ export enum Icons {
   clearFilters = 'fa fa-window-close', // Clear filters, solid x
   download = 'fa fa-download', // Download
   upload = 'fa fa-upload', // Upload
+  close = 'fa fa-times', // Close
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

@@ -22,6 +22,10 @@
   height: 100%;
 }
 
+.card-body {
+  padding-left: 5px;
+}
+
 ngx-simplebar {
   height: calc(100% - 42.2px);
 }
@@ -44,4 +48,8 @@ table {
 .row {
   margin-left: 0;
   margin-right: 0;
+}
+
+.fa-times {
+  margin-right: 10px;
 }
