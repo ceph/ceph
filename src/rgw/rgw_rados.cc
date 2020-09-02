@@ -5989,6 +5989,16 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
   return 0;
 }
 
+RGWRados::Bucket::UpdateIndex::UpdateIndex(
+  RGWRados::Bucket *_target,
+  const rgw_obj& _obj)
+: target(_target),
+  obj(_obj),
+  bs(target->get_store())
+{
+  blind = (target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
+}
+
 int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call)
 {
   RGWRados *store = target->get_store();
