@@ -128,7 +128,6 @@ endif(WITH_TESTS)
 
 if(WITH_CEPHFS)
   add_subdirectory(cephfs)
-  add_subdirectory(cephfs_mirror)
 endif(WITH_CEPHFS)
 
 if(WITH_RBD)

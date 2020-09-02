@@ -65,9 +65,3 @@ notified about changes in mirror status and/or peers. `cephfs-mirror` daemon sub
 to `FSMap` and gets notified on mirror status and/or peer updates. Peer changes are
 handled by starting or stopping mirroring to when a new peer is added or an existing peer
 is removed.
-
-Feature Status
---------------
-
-`cephfs-mirror` daemon is built by default (follows `WITH_CEPHFS` CMake rule). However, the
-feature is in development phase.

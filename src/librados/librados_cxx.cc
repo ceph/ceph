@@ -2816,10 +2816,6 @@ int librados::Rados::blocklist_add(const std::string& client_address,
   return client->blocklist_add(client_address, expire_seconds);
 }
 
-std::string librados::Rados::get_addrs() const {
-  return client->get_addrs();
-}
-
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
 {
   PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;

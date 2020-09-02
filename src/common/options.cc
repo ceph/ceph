@@ -8682,20 +8682,6 @@ std::vector<Option> get_mds_client_options() {
     });
 }
 
-std::vector<Option> get_cephfs_mirror_options() {
-  return std::vector<Option>({
-    Option("cephfs_mirror_max_concurrent_directory_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(3)
-    .set_min(1)
-    .set_description("maximum number of concurrent snapshot synchronization threads")
-    .set_long_description("maximum number of directory snapshots that can be synchronized concurrently by cephfs-mirror daemon. Controls the number of synchronization threads."),
-
-    Option("cephfs_mirror_directory_choose_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("random")
-    .set_description("policy for choosing directories to mirror snapshots")
-    .set_long_description("policy used by cephfs-mirror daemon to choose directories for snapshot mirroring"),
-    });
-}
 
 static std::vector<Option> build_options()
 {
@@ -8714,7 +8700,6 @@ static std::vector<Option> build_options()
   ingest(get_immutable_object_cache_options(), "immutable-objet-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
-  ingest(get_cephfs_mirror_options(), "cephfs-mirror");
 
   return result;
 }
