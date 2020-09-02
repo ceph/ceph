@@ -499,7 +499,7 @@ public:
   bool match(
       const Session &session,
       std::function<bool(client_t)> is_reconnecting) const;
-  int parse(const std::vector<std::string> &args, std::stringstream *ss);
+  int parse(const std::vector<std::string> &args, std::ostream *ss);
   void set_reconnecting(bool v)
   {
     reconnecting.first = true;

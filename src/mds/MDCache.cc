@@ -509,9 +509,9 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
   for (int i = 0; i < NUM_STRAY; ++i) {
     CInode *stray = create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR);
     CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
-    stringstream name;
-    name << "stray" << i;
-    CDentry *sdn = mydir->add_primary_dentry(name.str(), stray);
+    CachedStackStringStream css;
+    *css << "stray" << i;
+    CDentry *sdn = mydir->add_primary_dentry(css->str(), stray);
     sdn->_mark_dirty(mds->mdlog->get_current_segment());
 
     stray->_get_inode()->dirstat = straydir->get_fnode()->fragstat;
@@ -801,16 +801,16 @@ void MDCache::populate_mydir()
   // open or create stray
   uint64_t num_strays = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
-    stringstream name;
-    name << "stray" << i;
-    CDentry *straydn = mydir->lookup(name.str());
+    CachedStackStringStream css;
+    *css << "stray" << i;
+    CDentry *straydn = mydir->lookup(css->str());
 
     // allow for older fs's with stray instead of stray0
     if (straydn == NULL && i == 0)
       straydn = mydir->lookup("stray");
 
     if (!straydn || !straydn->get_linkage()->get_inode()) {
-      _create_system_file(mydir, name.str().c_str(), create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR),
+      _create_system_file(mydir, css->strv(), create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR),
 			  new C_MDS_RetryOpenRoot(this));
       return;
     }
@@ -5825,11 +5825,11 @@ void MDCache::export_remaining_imported_caps()
 {
   dout(10) << "export_remaining_imported_caps" << dendl;
 
-  stringstream warn_str;
+  CachedStackStringStream css;
 
   int count = 0;
   for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
-    warn_str << " ino " << p->first << "\n";
+    *css << " ino " << p->first << "\n";
     for (auto q = p->second.begin(); q != p->second.end(); ++q) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
@@ -5854,9 +5854,9 @@ void MDCache::export_remaining_imported_caps()
   cap_imports.clear();
   cap_reconnect_waiters.clear();
 
-  if (warn_str.peek() != EOF) {
-    mds->clog->warn() << "failed to reconnect caps for missing inodes:";
-    mds->clog->warn(warn_str);
+  if (css->strv().length()) {
+    mds->clog->warn() << "failed to reconnect caps for missing inodes:"
+                      << css->strv();
   }
 }
 
@@ -6023,16 +6023,16 @@ void MDCache::open_snaprealms()
   if (!reconnected_snaprealms.empty()) {
     dout(5) << "open_snaprealms has unconnected snaprealm:" << dendl;
     for (auto& p : reconnected_snaprealms) {
-      stringstream warn_str;
-      warn_str << " " << p.first << " {";
+      CachedStackStringStream css;
+      *css << " " << p.first << " {";
       bool first = true;
       for (auto& q : p.second) {
         if (!first)
-          warn_str << ", ";
-        warn_str << "client." << q.first << "/" << q.second;
+          *css << ", ";
+        *css << "client." << q.first << "/" << q.second;
       }
-      warn_str << "}";
-      dout(5) << warn_str.str() << dendl;
+      *css << "}";
+      dout(5) << css->strv() << dendl;
     }
   }
   ceph_assert(rejoin_waiters.empty());
@@ -12732,10 +12732,10 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
 
   if (threshold && cache_size() > threshold) {
     if (f) {
-      std::stringstream ss;
-      ss << "cache usage exceeds dump threshold";
+      CachedStackStringStream css;
+      *css << "cache usage exceeds dump threshold";
       f->open_object_section("result");
-      f->dump_string("error", ss.str());
+      f->dump_string("error", css->strv());
       f->close_section();
     } else {
       derr << "cache usage exceeds dump threshold" << dendl;
@@ -12774,26 +12774,26 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
       f->close_section();
       return 1;
     } 
-    ostringstream ss;
-    ss << *in << std::endl;
-    std::string s = ss.str();
-    r = safe_write(fd, s.c_str(), s.length());
+    CachedStackStringStream css;
+    *css << *in << std::endl;
+    auto sv = css->strv();
+    r = safe_write(fd, sv.data(), sv.size());
     if (r < 0)
       return r;
     auto&& dfs = in->get_dirfrags();
     for (auto &dir : dfs) {
-      ostringstream tt;
-      tt << " " << *dir << std::endl;
-      std::string t = tt.str();
-      r = safe_write(fd, t.c_str(), t.length());
+      CachedStackStringStream css2;
+      *css2 << " " << *dir << std::endl;
+      auto sv = css2->strv();
+      r = safe_write(fd, sv.data(), sv.size());
       if (r < 0)
         return r;
       for (auto &p : dir->items) {
 	CDentry *dn = p.second;
-        ostringstream uu;
-        uu << "  " << *dn << std::endl;
-        std::string u = uu.str();
-        r = safe_write(fd, u.c_str(), u.length());
+        CachedStackStringStream css3;
+        *css3 << "  " << *dn << std::endl;
+        auto sv = css3->strv();
+        r = safe_write(fd, sv.data(), sv.size());
         if (r < 0)
           return r;
       }

@@ -573,9 +573,9 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 	!in->get_inode()->layout.is_valid()) {
       dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
               << ": " << in->get_inode()->layout << dendl;
-      std::ostringstream oss;
-      oss << "Invalid layout for inode " << in->ino() << " in journal";
-      mds->clog->error() << oss.str();
+      CachedStackStringStream css;
+      *css << "Invalid layout for inode " << in->ino() << " in journal";
+      mds->clog->error() << css->strv();
       mds->damaged();
       ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
@@ -1241,11 +1241,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	if (!dn->get_linkage()->is_null()) {
 	  if (dn->get_linkage()->is_primary()) {
 	    unlinked[dn->get_linkage()->get_inode()] = dir;
-	    stringstream ss;
-	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	    CachedStackStringStream css;
+	    *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be " << in->ino();
-	    dout(0) << ss.str() << dendl;
-	    mds->clog->warn(ss);
+	    dout(0) << css->strv() << dendl;
+	    mds->clog->warn() << css->strv();
 	  }
 	  dir->unlink_inode(dn, false);
 	}
@@ -1265,11 +1265,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
 	      unlinked[dn->get_linkage()->get_inode()] = dir;
-	      stringstream ss;
-	      ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	      CachedStackStringStream css;
+	      *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 		 << " " << *dn->get_linkage()->get_inode() << " should be " << in->ino();
-	      dout(0) << ss.str() << dendl;
-	      mds->clog->warn(ss);
+	      dout(0) << css->strv() << dendl;
+	      mds->clog->warn() << css->strv();
 	    }
 	    dir->unlink_inode(dn, false);
 	  }
@@ -1312,10 +1312,10 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  if (dn->get_linkage()->is_primary()) {
 	    unlinked[dn->get_linkage()->get_inode()] = dir;
-	    stringstream ss;
-	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	    CachedStackStringStream css;
+	    *css << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be remote " << rb.ino;
-	    dout(0) << ss.str() << dendl;
+	    dout(0) << css->strv() << dendl;
 	  }
 	  dir->unlink_inode(dn, false);
 	}

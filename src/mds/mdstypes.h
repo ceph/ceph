@@ -14,6 +14,7 @@
 #include "common/config.h"
 #include "common/Clock.h"
 #include "common/DecayCounter.h"
+#include "common/StackStringStream.h"
 #include "common/entity_name.h"
 
 #include "include/Context.h"
@@ -1365,9 +1366,9 @@ struct dentry_key_t {
     } else {
       snprintf(b, sizeof(b), "%s", "head");
     }
-    std::ostringstream oss;
-    oss << name << "_" << b;
-    key = oss.str();
+    CachedStackStringStream css;
+    *css << name << "_" << b;
+    key = css->strv();
   }
   static void decode_helper(ceph::buffer::list::const_iterator& bl, std::string& nm,
 			    snapid_t& sn) {
@@ -1782,8 +1783,8 @@ inline void decode(dirfrag_load_vec_t& c, ceph::buffer::list::const_iterator &p)
 
 inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
 {
-  std::ostringstream ss;
-  ss << std::setprecision(1) << std::fixed
+  CachedStackStringStream css;
+  *css << std::setprecision(1) << std::fixed
      << "[pop"
         " IRD:" << dl.vec[0]
      << " IWR:" << dl.vec[1]
@@ -1791,7 +1792,7 @@ inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
      << " FET:" << dl.vec[3]
      << " STR:" << dl.vec[4]
      << " *LOAD:" << dl.meta_load() << "]";
-  return out << ss.str() << std::endl;
+  return out << css->strv() << std::endl;
 }
 
 struct mds_load_t {
