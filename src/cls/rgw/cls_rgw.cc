@@ -1771,11 +1771,12 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return ret;
     }
 
-    if (!obj.is_delete_marker()) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    if (obj.is_delete_marker()) {
+      return 0;
     }
 
-    return 0;
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    return olh.write();
   }
 
   rgw_bucket_olh_entry& olh_entry = olh.get_entry();
