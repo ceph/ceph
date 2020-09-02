@@ -741,6 +741,8 @@ struct cls_rgw_bucket_instance_entry {
   using RESHARD_STATUS = cls_rgw_reshard_status;
   
   cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
+  std::string new_bucket_instance_id;
+  int32_t num_shards{-1};
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
@@ -753,6 +755,10 @@ struct cls_rgw_bucket_instance_entry {
     uint8_t s;
     decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
+    if (struct_v < 2) {
+      decode(new_bucket_instance_id, bl);
+      decode(num_shards, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1235,6 +1241,7 @@ struct cls_rgw_reshard_entry
   std::string tenant;
   std::string bucket_name;
   std::string bucket_id;
+  std::string new_instance_id;
   uint32_t old_num_shards{0};
   uint32_t new_num_shards{0};
 
@@ -1259,6 +1266,9 @@ struct cls_rgw_reshard_entry
     decode(bucket_id, bl);
     decode(old_num_shards, bl);
     decode(new_num_shards, bl);
+    if (struct_v < 2) {
+      decode(new_instance_id, bl);
+    }
     DECODE_FINISH(bl);
   }
 
