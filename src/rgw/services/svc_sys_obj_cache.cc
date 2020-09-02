@@ -567,17 +567,16 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
     svc->asocket.call_list(filter, f);
     f->close_section();
     return 0;
-  } else if (command == "cache inspect"sv) {
-    const auto& target = boost::get<std::string>(cmdmap.at("target"));
-    if (svc->asocket.call_inspect(target, f)) {
-      return 0;
-    } else {
-      ss << "Unable to find entry "s + target + ".\n";
+  } else if (command == "cache inspect"sv || command == "cache erase"sv) {
+    if (cmdmap.find("target") == cmdmap.cend())
+    {
+      ss << "No target specified\n";
       return -ENOENT;
     }
-  } else if (command == "cache erase"sv) {
     const auto& target = boost::get<std::string>(cmdmap.at("target"));
-    if (svc->asocket.call_erase(target)) {
+    if (command == "cache inspect"sv && svc->asocket.call_inspect(target, f)) {
+      return 0;
+    } else if (command == "cache erase"sv && svc->asocket.call_erase(target)) {
       return 0;
     } else {
       ss << "Unable to find entry "s + target + ".\n";
