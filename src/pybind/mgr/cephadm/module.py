@@ -135,7 +135,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         {
             'name': 'daemon_cache_timeout',
             'type': 'secs',
-            'default': 30,  # CHANGEME!
+            'default': 10 * 60,
             'desc': 'seconds to cache service (daemon) inventory',
         },
         {
@@ -492,7 +492,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.set_health_checks(self.health_checks)
 
     def _serve_sleep(self):
-        sleep_interval = 30  # CHANGEME
+        sleep_interval = 600
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         ret = self.event.wait(sleep_interval)
         self.event.clear()
@@ -1429,11 +1429,11 @@ To check that the host is reachable:
     def _refresh_host_daemons(self, host) -> Optional[str]:
         s_timestamp = datetime.datetime.utcnow()
         ceph_services = self._get_ceph_metadata()
-        self.log.debug("LOOKATME services name: {}".format(", ".join(ceph_services.keys())))
+        self.log.debug("Known ceph services: {}".format(", ".join(ceph_services.keys())))
 
         try:
             out, err, code = self._run_cephadm(
-                host, 'mon', 'ls', [], no_fsid=True)
+                host, 'mon', 'ls', ['--fsid', self._cluster_fsid], no_fsid=True)
             if code:
                 return 'host %s cephadm ls returned %d: %s' % (
                     host, code, err)
@@ -1450,7 +1450,6 @@ To check that the host is reachable:
                 continue
             if '.' not in d['name']:
                 continue
-            self.log.debug("LOOKATME processing daemon info for {}".format(d['name']))
             sd = orchestrator.DaemonDescription()
             sd.last_refresh = datetime.datetime.utcnow()
             for k in ['created', 'started', 'last_configured', 'last_deployed']:
@@ -1467,16 +1466,23 @@ To check that the host is reachable:
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
 
-            if not d.get('version', ''):
-                # add the version from the metadata
-                if d['name'] in ceph_services.keys():
-                    self.log.debug("LOOKATME: setting version from metadata")
-                    sd.version = ceph_services[d['name']]['ceph_version']
-                else:
-                    self.log.debug("LOOKATME: no version returned, and no match for the service")
-                    pass
-            else:
+            if d.get('version', ''):
                 sd.version = d.get('version')
+            else:
+                # version is missing from the daemon stats (cephadm ls --fsid <fsid>)
+                # so we attempt to add it from local metadata
+                self.log.debug(f"Attempting to add version to {d['name']} from ceph metadata")
+                service_metadata = ceph_services.get(d['name'], None)
+                if service_metadata:
+                    sd.version = service_metadata.get('ceph_version', '')
+                    if sd.version:
+                        self.log.debug("version successfully added from local metadata")
+                    else:
+                        self.log.warning(
+                            f"ceph metadata for {d['name']} is missing 'ceph_version' field")
+                else:
+                    self.log.warning(
+                        f"unable to add version to {d['name']}. Ceph does not hold any metadata for the daemon")
 
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.osd_service.get_osdspec_affinity(sd.daemon_id)
