@@ -29,6 +29,7 @@
 
 #include "common/Finisher.h"
 #include "common/config.h"
+#include "common/Throttle.h"
 
 #define dout_subsys ceph_subsys_filer
 #undef dout_prefix
@@ -440,8 +441,103 @@ struct C_TruncRange : public Context {
   TruncRange *tr;
   C_TruncRange(Filer *f, TruncRange *t) : filer(f), tr(t) {}
   void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
     filer->_do_truncate_range(tr, 1);
   }
+};
+
+bool TruncWorkQueue::queue_job_to_finisher(C_TruncRange* c_tr) {
+  throttle.get(1);
+  ldout(cct, 10) << "TruncWorkQueue::queue_job_to_finisher get " << 1 << " from throttle" << dendl;
+  if (!stopping) {
+    finisher->queue(c_tr);
+    return true;
+  } else {
+    c_tr->complete(-ECANCELED);
+    return false;
+  }
+}
+
+void TruncWorkQueue::enqueue(C_TruncRange *ctr) {
+  if (stopping) {
+    ctr->complete(-ECANCELED);
+    return;
+  }
+  {
+    ldout(cct, 10) << "TruncWorkQueue::enqueue start to push a C_TruncRange" << dendl;
+    lock_guard l(lock);
+    if (stopping) {
+      ctr->complete(-ECANCELED);
+      ldout(cct, 10) << "TruncWorkQueue::enqueue C_TruncRange is canceled" << dendl;
+      return;
+    }
+    queue.push_back(ctr);
+    ldout(cct, 10) << "TruncWorkQueue::enqueue C_TruncRange is pushed" << dendl;
+  }
+  cv.notify_one();
+}
+
+const char** TruncWorkQueue::get_tracked_conf_keys() const
+{
+  static const char *KEYS[] = {"osdc_max_truncate_ops", NULL};
+  return KEYS;
+}
+
+void TruncWorkQueue::handle_conf_change(const ConfigProxy& conf,
+				                                const std::set<std::string> &changed)
+{
+  if (changed.count("osdc_max_truncate_ops")) {
+    auto old_max = throttle.get_max();
+    auto max_truncate_ops = cct->_conf.get_val<uint64_t>("osdc_max_truncate_ops");
+    throttle.reset_max(max_truncate_ops);
+    ldout(cct, 5) << "TruncWorkQueue::handle_conf_change set throttle max from "
+                  << old_max << " to " << max_truncate_ops << dendl;
+  }
+}
+
+void TruncWorkQueue::run() {
+  while (!stopping) {
+    C_TruncRange *c_trunc_range = dequeue();
+    if (!stopping)
+      queue_job_to_finisher(c_trunc_range);
+    else if (c_trunc_range != nullptr)
+      c_trunc_range->complete(-ECANCELED);
+  }
+  ldout(cct, 5) << "TruncWorkQueue::run start to clear queue" << dendl;
+  lock_guard lk(lock);
+  for (auto& c : queue) {
+    c->complete(-ECANCELED);
+  }
+  queue.clear();
+  ldout(cct, 5) << "TruncWorkQueue::run queue is cleared" << dendl;
+}
+
+class C_OnTruncWorkQueue : public Context {
+public:
+  C_OnTruncWorkQueue(TruncWorkQueue *twq, bool p, C_TruncRange *c) : trunc_work_q(twq), c_trunc_range(c), put_slot(p) {
+    assert(trunc_work_q != nullptr);
+    assert(c_trunc_range != nullptr);
+  }
+  ~C_OnTruncWorkQueue() override {
+    assert(c_trunc_range == nullptr);
+  }
+  void finish(int r) override {
+    int64_t put = put_slot ? 1 : 0;
+    trunc_work_q->put_slots(put);
+    if (r == -ECANCELED || trunc_work_q->is_stopping()) {
+      c_trunc_range->complete(-ECANCELED);
+      c_trunc_range = nullptr;
+      return;
+    }
+    trunc_work_q->enqueue(c_trunc_range);
+    c_trunc_range = nullptr;
+  }
+  
+private:
+  TruncWorkQueue *trunc_work_q;
+  C_TruncRange *c_trunc_range;
+  bool put_slot;
 };
 
 void Filer::_do_truncate_range(TruncRange *tr, int fin)
@@ -453,6 +549,10 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 		 << dendl;
 
   if (tr->length == 0 && tr->uncommitted == 0) {
+    if (trunc_work_queue && fin) {
+      trunc_work_queue->put_slots(1);
+      ldout(cct, 10) << "_do_truncate_range put " << 1 << " slot to throttle" << dendl;
+    }
     tr->oncommit->complete(0);
     trl.unlock();
     delete tr;
@@ -475,13 +575,22 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 
   trl.unlock();
 
+  if (trunc_work_queue && fin && extents.size() == 0) {
+    trunc_work_queue->put_slots(1);
+    ldout(cct, 10) << "_do_truncate_range put " << 1 << " slot to throttle" << dendl;
+  }
+
   // Issue objecter ops outside tr->lock to avoid lock dependency loop
+  Context *oncommit;
   for (const auto& p : extents) {
+    if (trunc_work_queue)
+      oncommit = new C_OnTruncWorkQueue(trunc_work_queue, (bool)fin, new C_TruncRange(this, tr));
+    else
+      oncommit = new C_OnFinisher(new C_TruncRange(this, tr), finisher);
     osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
     ops[0].op.extent.truncate_size = p.offset;
     ops[0].op.extent.truncate_seq = tr->truncate_seq;
-    objecter->_modify(p.oid, p.oloc, ops, tr->mtime, tr->snapc, tr->flags,
-		      new C_OnFinisher(new C_TruncRange(this, tr), finisher));
+    objecter->_modify(p.oid, p.oloc, ops, tr->mtime, tr->snapc, tr->flags, oncommit);
   }
 }

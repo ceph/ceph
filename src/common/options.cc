@@ -3863,6 +3863,11 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osdc_max_truncate_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(8192)
+    .set_min(128)
+    .set_description("maximum number of truncate operations performed in parallel"),
+
     Option("osd_discard_disconnected_ops", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
