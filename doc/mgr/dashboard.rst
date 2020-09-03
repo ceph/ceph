@@ -1094,6 +1094,16 @@ When configuring the Ceph Dashboard with multiple NFS-Ganesha clusters, the
 Web UI will automatically allow to choose to which cluster an export belongs.
 
 
+Support for NFS-Ganesha Clusters Deployed by the Orchestrator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Ceph Dashboard can be used to manage NFS-Ganesha clusters deployed by the
+Orchestrator. It can detect the clusters automatically. For more details
+on deploying NFS-Ganesha clusters with the Orchestrator, please see :ref:`orchestrator-cli-stateless-services`.
+Or particularly, see :ref:`deploy-cephadm-nfs-ganesha` for how to deploy
+NFS-Ganesha clusters with the Cephadm backend.
+
+
 Plug-ins
 --------
 
