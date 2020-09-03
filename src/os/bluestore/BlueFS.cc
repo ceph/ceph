@@ -170,16 +170,14 @@ private:
   }
 };
 
-BlueFS::BlueFS(CephContext* cct,
-               bluefs_shared_alloc_context_t* _shared_alloc)
+BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
     block_reserved(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0),
-    pending_release(MAX_BDEV),
-    shared_alloc(_shared_alloc)
+    pending_release(MAX_BDEV)
 {
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
@@ -317,7 +315,7 @@ void BlueFS::_update_logger_stats()
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
                              uint64_t reserved,
-                             bool shared_with_bluestore)
+                             bluefs_shared_alloc_context_t* _shared_alloc)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << " "
            << reserved << dendl;
@@ -326,7 +324,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
 				       discard_cb[id], static_cast<void*>(this));
   block_reserved[id] = reserved;
-  if (shared_with_bluestore) {
+  if (_shared_alloc) {
     b->set_no_exclusive_lock();
   }
   int r = b->open(path);
@@ -342,8 +340,9 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
 	  << " size " << byte_u_t(b->get_size()) << dendl;
   bdev[id] = b;
   ioc[id] = new IOContext(cct, NULL);
-  if (shared_with_bluestore) {
-    ceph_assert(shared_alloc); // to be set in ctor before
+  if (_shared_alloc) {
+    ceph_assert(!shared_alloc);
+    shared_alloc = _shared_alloc;
     alloc[id] = shared_alloc->a;
     shared_alloc_id = id;
   }
@@ -453,11 +452,10 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
 {
   std::lock_guard l(lock);
   dout(10) << __func__ << " bdev " << id << dendl;
-  if (id >= alloc.size())
-    return -EINVAL;
+  ceph_assert(id < alloc.size());
   for (auto& p : file_map) {
     for (auto& q : p.second->fnode.extents) {
-      if (q.bdev == id && alloc[q.bdev] == shared_alloc->a) {
+      if (q.bdev == id) {
         extents->insert(q.offset, q.length);
       }
     }
@@ -600,7 +598,6 @@ int BlueFS::mount()
 {
   dout(1) << __func__ << dendl;
 
-  bool shared_alloc_ready = shared_alloc && shared_alloc->a;
   int r = _open_super();
   if (r < 0) {
     derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
@@ -630,25 +627,24 @@ int BlueFS::mount()
   for (auto& p : file_map) {
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
-      if (is_shared_alloc(q.bdev)) {
-        // we might have still uninitialized shared_alloc at this point
-        // just bypass initialization then
-        if (shared_alloc_ready && shared_alloc->need_init) {
-          ceph_assert(shared_alloc->a);
-          alloc[q.bdev]->init_rm_free(q.offset, q.length);
-          shared_alloc->bluefs_used += q.length;
-        }
-      } else {
+      bool is_shared = is_shared_alloc(q.bdev);
+      ceph_assert(!is_shared || (is_shared && shared_alloc));
+      if (is_shared && shared_alloc->need_init && shared_alloc->a) {
+        shared_alloc->bluefs_used += q.length;
+        alloc[q.bdev]->init_rm_free(q.offset, q.length);
+      } else if (!is_shared) {
         alloc[q.bdev]->init_rm_free(q.offset, q.length);
       }
     }
   }
-  if (shared_alloc_ready) {
+  if (shared_alloc) {
     shared_alloc->need_init = false;
+    dout(1) << __func__ << " shared_bdev_used = "
+            << shared_alloc->bluefs_used << dendl;
+  } else {
+    dout(1) << __func__ << " shared bdev not used"
+            << dendl;
   }
-  dout(1) << __func__ << " shared_bdev_used = "
-          << (shared_alloc_ready ? (int64_t)shared_alloc->bluefs_used : -1)
-          << dendl;
 
   // set up the log for future writes
   log_writer = _create_writer(_get_file(1));

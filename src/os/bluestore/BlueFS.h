@@ -324,6 +324,7 @@ private:
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
+
   bluefs_shared_alloc_context_t* shared_alloc = nullptr;
   unsigned shared_alloc_id = unsigned(-1);
   inline bool is_shared_alloc(unsigned id) const {
@@ -438,7 +439,7 @@ private:
   }
 
 public:
-  BlueFS(CephContext* cct, bluefs_shared_alloc_context_t* _shared_alloc);
+  BlueFS(CephContext* cct);
   ~BlueFS();
 
   // the super is always stored on bdev 0
@@ -533,7 +534,7 @@ public:
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
                        uint64_t reserved,
-		       bool shared_with_bluestore = false);
+		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;
 
