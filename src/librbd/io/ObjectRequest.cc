@@ -19,6 +19,7 @@
 #include "librbd/asio/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/CopyupRequest.h"
+#include "librbd/io/ImageRequest.h"
 #include "librbd/io/Utils.h"
 
 #include <boost/optional.hpp>
@@ -802,7 +803,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   if (r == -ENOENT) {
     // the object does not exist -- mark the missing extents
     zero_initial_extent(true);
-    this->finish(0);
+    list_from_parent();
     return;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve object snapshot list: " << cpp_strerror(r)
@@ -938,6 +939,106 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
 
   ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
 
+  if (snapshot_delta_empty) {
+    list_from_parent();
+    return;
+  }
+
+  this->finish(0);
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::list_from_parent() {
+  I *image_ctx = this->m_ictx;
+  auto cct = image_ctx->cct;
+
+  ceph_assert(!m_snap_ids.empty());
+  librados::snap_t snap_id_start = *m_snap_ids.begin();
+  librados::snap_t snap_id_end = *m_snap_ids.rbegin();
+
+  std::unique_lock image_locker{image_ctx->image_lock};
+  if ((snap_id_start > 0) || (image_ctx->parent == nullptr) ||
+      ((m_list_snaps_flags & LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT) != 0)) {
+    image_locker.unlock();
+
+    this->finish(0);
+    return;
+  }
+
+  // calculate reverse mapping onto the parent image
+  Extents parent_image_extents;
+  for (auto [object_off, object_len]: m_object_extents) {
+    Striper::extent_to_file(cct, &image_ctx->layout, this->m_object_no,
+                            object_off, object_len, parent_image_extents);
+  }
+
+  uint64_t parent_overlap = 0;
+  uint64_t object_overlap = 0;
+  int r = image_ctx->get_parent_overlap(snap_id_end, &parent_overlap);
+  if (r == 0) {
+    object_overlap = image_ctx->prune_parent_extents(parent_image_extents,
+                                                     parent_overlap);
+  }
+
+  if (object_overlap == 0) {
+    image_locker.unlock();
+
+    this->finish(0);
+    return;
+  }
+
+  auto ctx = create_context_callback<
+    ObjectListSnapsRequest<I>,
+    &ObjectListSnapsRequest<I>::handle_list_from_parent>(this);
+  auto aio_comp = AioCompletion::create_and_start(
+    ctx, librbd::util::get_image_ctx(image_ctx->parent), AIO_TYPE_GENERIC);
+  ldout(cct, 20) << "aio_comp=" << aio_comp<< ", "
+                 << "parent_image_extents " << parent_image_extents << dendl;
+
+  ImageListSnapsRequest<I> req(
+    *image_ctx->parent, aio_comp, std::move(parent_image_extents), {0,
+    image_ctx->parent->snap_id}, 0, &m_parent_snapshot_delta, this->m_trace);
+  req.send();
+}
+
+template <typename I>
+void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
+  I *image_ctx = this->m_ictx;
+  auto cct = image_ctx->cct;
+
+  ldout(cct, 20) << "r=" << r << ", "
+                 << "parent_snapshot_delta=" << m_parent_snapshot_delta
+                 << dendl;
+
+  // ignore special-case of fully empty dataset
+  m_parent_snapshot_delta.erase(INITIAL_WRITE_READ_SNAP_IDS);
+  if (m_parent_snapshot_delta.empty()) {
+    this->finish(0);
+    return;
+  }
+
+  // the write/read snapshot id key is not useful for parent images so
+  // map the the special-case INITIAL_WRITE_READ_SNAP_IDS key
+  *m_snapshot_delta = {};
+  auto& intervals = (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS];
+  for (auto& [key, image_extents] : m_parent_snapshot_delta) {
+    for (auto image_extent : image_extents) {
+      auto state = image_extent.get_val().state;
+
+      // map image-extents back to this object
+      striper::LightweightObjectExtents object_extents;
+      Striper::file_to_extents(cct, &image_ctx->layout, image_extent.get_off(),
+                               image_extent.get_len(), 0, 0, &object_extents);
+      for (auto& object_extent : object_extents) {
+        ceph_assert(object_extent.object_no == this->m_object_no);
+        intervals.insert(
+          object_extent.offset, object_extent.length,
+          {state, object_extent.length});
+      }
+    }
+  }
+
+  ldout(cct, 20) << "snapshot_delta=" << *m_snapshot_delta << dendl;
   this->finish(0);
 }
 
