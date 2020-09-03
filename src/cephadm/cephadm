@@ -512,6 +512,9 @@ class CephIscsi(object):
         tcmu_container = get_container(self.fsid, self.daemon_type, self.daemon_id)
         tcmu_container.entrypoint = "/usr/bin/tcmu-runner"
         tcmu_container.cname = self.get_container_name(desc='tcmu')
+        # remove extra container args for tcmu container.
+        # extra args could cause issue with forking service type
+        tcmu_container.container_args = []
         return tcmu_container
 
 ##################################
@@ -1805,8 +1808,10 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
 def get_container(fsid, daemon_type, daemon_id,
                   privileged=False,
                   ptrace=False,
-                  container_args=[]):
-    # type: (str, str, Union[int, str], bool, bool, List[str]) -> CephContainer
+                  container_args=None):
+    # type: (str, str, Union[int, str], bool, bool, Optional[List[str]]) -> CephContainer
+    if container_args is None:
+        container_args = []
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
