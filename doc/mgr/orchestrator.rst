@@ -382,6 +382,9 @@ where ``name`` is the name of the CephFS and ``placement`` is a
 This command will create the required Ceph pools, create the new
 CephFS, and deploy mds servers.
 
+
+.. _orchestrator-cli-stateless-services:
+
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 =================================================
 
