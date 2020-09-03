@@ -3,6 +3,7 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "include/interval_set.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd/object_map_types.h"
 #include "librbd/AsioEngine.h"
@@ -13,7 +14,6 @@
 #include "librbd/api/Image.h"
 #include "librbd/api/Io.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
-#include "librbd/io/ImageRequest.h"
 #include "librbd/io/ReadResult.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -39,28 +39,6 @@ inline ImageCtx* get_image_ctx(MockTestImageCtx* image_ctx) {
 }
 
 } // namespace util
-
-namespace io {
-
-template <>
-struct ImageRequest<MockTestImageCtx> {
-  static ImageRequest *s_instance;
-
-  static void aio_read(MockTestImageCtx *ictx, AioCompletion *c,
-                       Extents &&image_extents, ReadResult &&read_result,
-                       IOContext io_context, int op_flags,
-                       int read_flags,
-                       const ZTracer::Trace &parent_trace) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->aio_read(c, image_extents);
-  }
-  MOCK_METHOD2(aio_read, void(AioCompletion *, const Extents&));
-};
-
-ImageRequest<MockTestImageCtx> *ImageRequest<MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace io
-
 } // namespace librbd
 
 // template definitions
@@ -108,6 +86,32 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
 }
 
 } // anonymous namespace
+
+
+MATCHER(IsListSnaps, "") {
+  auto req = boost::get<io::ImageDispatchSpec::ListSnaps>(&arg->request);
+  return (req != nullptr);
+}
+
+MATCHER_P2(IsRead, snap_id, image_interval, "") {
+  auto req = boost::get<io::ImageDispatchSpec::Read>(&arg->request);
+  if (req == nullptr ||
+      arg->io_context->read_snap().value_or(CEPH_NOSNAP) != snap_id) {
+    return false;
+  }
+
+  // ensure the read request encloses the full snapshot delta
+  interval_set<uint64_t> expected_interval(image_interval);
+  interval_set<uint64_t> read_interval;
+  for (auto &image_extent : arg->image_extents) {
+    read_interval.insert(image_extent.first, image_extent.second);
+  }
+
+  interval_set<uint64_t> intersection;
+  intersection.intersection_of(expected_interval, read_interval);
+  expected_interval.subtract(intersection);
+  return expected_interval.empty();
+}
 
 class TestMockDeepCopyObjectCopyRequest : public TestMockFixture {
 public:
@@ -175,31 +179,19 @@ public:
     EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
   }
 
-  void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx,
-                         librados::MockTestMemIoCtxImpl &mock_io_ctx,
-                         const librados::snap_set_t &snap_set) {
-    expect_get_object_name(mock_image_ctx);
-    expect_set_snap_read(mock_io_ctx, CEPH_SNAPDIR);
-    EXPECT_CALL(mock_io_ctx,
-                list_snaps(mock_image_ctx.image_ctx->get_object_name(0), _))
-      .WillOnce(DoAll(WithArg<1>(Invoke([&snap_set](librados::snap_set_t *out_snap_set) {
-                          *out_snap_set = snap_set;
-                        })),
-                      Return(0)));
-  }
+  void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, send(IsListSnaps()))
+      .WillOnce(Invoke(
+        [&mock_image_ctx, r](io::ImageDispatchSpec* spec) {
+          if (r < 0) {
+            spec->fail(r);
+            return;
+          }
 
-  void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx,
-                         librados::MockTestMemIoCtxImpl &mock_io_ctx, int r) {
-    expect_get_object_name(mock_image_ctx);
-    expect_set_snap_read(mock_io_ctx, CEPH_SNAPDIR);
-    auto &expect = EXPECT_CALL(mock_io_ctx,
-                               list_snaps(mock_image_ctx.image_ctx->get_object_name(0),
-                                          _));
-    if (r < 0) {
-      expect.WillOnce(Return(r));
-    } else {
-      expect.WillOnce(DoDefault());
-    }
+          spec->image_dispatcher =
+            mock_image_ctx.image_ctx->io_image_dispatcher;
+          mock_image_ctx.image_ctx->io_image_dispatcher->send(spec);
+        }));
   }
 
   void expect_get_object_name(librbd::MockTestImageCtx &mock_image_ctx) {
@@ -219,31 +211,28 @@ public:
                                      m_snap_map, 0, false, nullptr, on_finish);
   }
 
-  void expect_set_snap_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
-                            uint64_t snap_id) {
-    EXPECT_CALL(mock_io_ctx, set_snap_read(snap_id));
+  void expect_read(librbd::MockTestImageCtx& mock_image_ctx,
+                   uint64_t snap_id, uint64_t offset, uint64_t length, int r) {
+    interval_set<uint64_t> extents;
+    extents.insert(offset, length);
+    expect_read(mock_image_ctx, snap_id, extents, r);
   }
 
-  void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx, uint64_t offset,
-                          uint64_t length, int r) {
-
-    auto &expect = EXPECT_CALL(mock_io_ctx, sparse_read(_, offset, length, _, _,
-                                                        _));
-    if (r < 0) {
-      expect.WillOnce(Return(r));
-    } else {
-      expect.WillOnce(DoDefault());
-    }
-  }
-
-  void expect_sparse_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
+  void expect_read(librbd::MockTestImageCtx& mock_image_ctx, uint64_t snap_id,
                    const interval_set<uint64_t> &extents, int r) {
-    for (auto extent : extents) {
-      expect_sparse_read(mock_io_ctx, extent.first, extent.second, r);
-      if (r < 0) {
-        break;
-      }
-    }
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher,
+                send(IsRead(snap_id, extents)))
+      .WillOnce(Invoke(
+        [&mock_image_ctx, r](io::ImageDispatchSpec* spec) {
+          if (r < 0) {
+            spec->fail(r);
+            return;
+          }
+
+          spec->image_dispatcher =
+            mock_image_ctx.image_ctx->io_image_dispatcher;
+          mock_image_ctx.image_ctx->io_image_dispatcher->send(spec);
+        }));
   }
 
   void expect_write(librados::MockTestMemIoCtxImpl &mock_io_ctx,
@@ -490,11 +479,8 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, DNE) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
-
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, -ENOENT);
+  expect_list_snaps(mock_src_image_ctx, -ENOENT);
 
   request->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
@@ -523,15 +509,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -541,112 +524,6 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(0, compare_objects());
-}
-
-TEST_F(TestMockDeepCopyObjectCopyRequest, ReadMissingStaleSnapSet) {
-  ASSERT_EQ(0, create_snap("one"));
-  ASSERT_EQ(0, create_snap("two"));
-
-  // scribble some data
-  interval_set<uint64_t> one;
-  scribble(m_src_image_ctx, 10, 102400, &one);
-  ASSERT_EQ(0, create_snap("three"));
-
-  ASSERT_EQ(0, create_snap("copy"));
-  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
-  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
-
-  librbd::MockExclusiveLock mock_exclusive_lock;
-  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
-
-  librbd::MockObjectMap mock_object_map;
-  mock_dst_image_ctx.object_map = &mock_object_map;
-
-  expect_test_features(mock_dst_image_ctx);
-  expect_get_object_count(mock_dst_image_ctx);
-
-  C_SaferCond ctx;
-  MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
-                                                  mock_dst_image_ctx, 0, 0,
-                                                  &ctx);
-
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
-  librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
-    request->get_dst_io_ctx()));
-
-  librados::clone_info_t dummy_clone_info;
-  dummy_clone_info.cloneid = librados::SNAP_HEAD;
-  dummy_clone_info.size = 123;
-
-  librados::snap_set_t dummy_snap_set1;
-  dummy_snap_set1.clones.push_back(dummy_clone_info);
-
-  dummy_clone_info.size = 234;
-  librados::snap_set_t dummy_snap_set2;
-  dummy_snap_set2.clones.push_back(dummy_clone_info);
-
-  InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, dummy_snap_set1);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[3]);
-  expect_sparse_read(mock_src_io_ctx, 0, 123, -ENOENT);
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, dummy_snap_set2);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[3]);
-  expect_sparse_read(mock_src_io_ctx, 0, 234, -ENOENT);
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[3]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(),
-               {m_dst_snap_ids[1], {m_dst_snap_ids[1],
-                                    m_dst_snap_ids[0]}},
-               0);
-  expect_start_op(mock_exclusive_lock);
-  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
-                           m_dst_snap_ids[2], OBJECT_EXISTS, 0);
-  expect_start_op(mock_exclusive_lock);
-  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
-                           m_dst_snap_ids[3], is_fast_diff(mock_dst_image_ctx) ?
-                           OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
-
-  request->send();
-  ASSERT_EQ(0, ctx.wait());
-  ASSERT_EQ(0, compare_objects());
-}
-
-TEST_F(TestMockDeepCopyObjectCopyRequest, ReadMissingUpToDateSnapMap) {
-  // scribble some data
-  interval_set<uint64_t> one;
-  scribble(m_src_image_ctx, 10, 102400, &one);
-
-  ASSERT_EQ(0, create_snap("copy"));
-  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
-  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
-
-  librbd::MockExclusiveLock mock_exclusive_lock;
-  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
-
-  librbd::MockObjectMap mock_object_map;
-  mock_dst_image_ctx.object_map = &mock_object_map;
-
-  expect_test_features(mock_dst_image_ctx);
-
-  C_SaferCond ctx;
-  MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
-                                                  mock_dst_image_ctx, 0, 0,
-                                                  &ctx);
-
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
-
-  InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), -ENOENT);
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-
-  request->send();
-  ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
 TEST_F(TestMockDeepCopyObjectCopyRequest, ReadError) {
@@ -671,13 +548,10 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadError) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
-
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(),  -EINVAL);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(),
+              -EINVAL);
 
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -706,15 +580,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, -EINVAL);
 
@@ -756,17 +627,13 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[2]);
-  expect_sparse_read(mock_src_io_ctx, two, 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[2], two, 0);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -822,15 +689,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -877,15 +741,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[1]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[1], 0, one.range_end(), 0);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -929,15 +790,12 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
                                                   mock_dst_image_ctx, 0, 0,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[0]);
-  expect_sparse_read(mock_src_io_ctx, 0, one.range_end(), 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
@@ -983,9 +841,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
   interval_set<uint64_t> four;
   scribble(m_src_image_ctx, 10, 102400, &four);
 
-  // map should begin after src start and src end's dst snap seqs should
-  // point to HEAD revision
-  m_snap_map.erase(src_snap_id_start);
+  // src end's dst snap seqs should point to HEAD revision
   m_snap_map[m_src_image_ctx->snaps[0]][0] = CEPH_NOSNAP;
 
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
@@ -1007,19 +863,14 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
                                                   dst_snap_id_start,
                                                   &ctx);
 
-  librados::MockTestMemIoCtxImpl &mock_src_io_ctx(get_mock_io_ctx(
-    request->get_src_io_ctx()));
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
   InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, 0);
+  expect_list_snaps(mock_src_image_ctx, 0);
 
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[1]);
-  expect_sparse_read(mock_src_io_ctx, two, 0);
-
-  expect_set_snap_read(mock_src_io_ctx, m_src_snap_ids[2]);
-  expect_sparse_read(mock_src_io_ctx, three, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[1], two, 0);
+  expect_read(mock_src_image_ctx, m_src_snap_ids[2], three, 0);
 
   expect_start_op(mock_exclusive_lock);
   expect_write(mock_dst_io_ctx, two,

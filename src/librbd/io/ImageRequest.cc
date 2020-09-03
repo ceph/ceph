@@ -433,6 +433,10 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
 
 template <typename I>
 int ImageReadRequest<I>::clip_request() {
+  if ((m_read_flags & READ_FLAG_DISABLE_CLIPPING) != 0) {
+    return 0;
+  }
+
   int r = ImageRequest<I>::clip_request();
   if (r < 0) {
     return r;
