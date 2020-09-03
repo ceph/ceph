@@ -1,25 +1,6 @@
 #!/usr/bin/python3
 
-from __future__ import print_function
-from subprocess import call
-try:
-    from subprocess import check_output
-except ImportError:
-    def check_output(*popenargs, **kwargs):
-        import subprocess
-        # backported from python 2.7 stdlib
-        process = subprocess.Popen(
-            stdout=subprocess.PIPE, *popenargs, **kwargs)
-        output, unused_err = process.communicate()
-        retcode = process.poll()
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            error = subprocess.CalledProcessError(retcode, cmd)
-            error.output = output
-            raise error
-        return output
+from subprocess import call, check_output, DEVNULL
 
 import filecmp
 import os
@@ -32,11 +13,6 @@ import logging
 import json
 import tempfile
 import platform
-
-try:
-    from subprocess import DEVNULL
-except ImportError:
-    DEVNULL = open(os.devnull, "wb")
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING,
                     datefmt="%FT%T")
