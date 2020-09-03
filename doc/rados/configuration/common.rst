@@ -29,7 +29,7 @@ minimal settings for each instance of monitor daemons. For example:
    the command line to retrieve the name of the node. Do not use ``host``
    settings for anything other than initial monitors unless you are deploying
    Ceph manually. You **MUST NOT** specify ``host`` under individual daemons
-   when using deployment tools like ``chef`` or ``ceph-deploy``, as those tools
+   when using deployment tools like ``chef`` or ``cephadm``, as those tools
    will enter the appropriate values for you in the cluster map.
 
 
@@ -61,7 +61,7 @@ following path::
 
 	/var/lib/ceph/mon/$cluster-$id
 
-You or a deployment tool (e.g., ``ceph-deploy``) must create the corresponding
+You or a deployment tool (e.g., ``cephadm``) must create the corresponding
 directory. With metavariables fully  expressed and a cluster named "ceph", the
 foregoing directory would evaluate to::
 
@@ -116,7 +116,7 @@ following path::
 
 	/var/lib/ceph/osd/$cluster-$id
 
-You or a deployment tool (e.g., ``ceph-deploy``) must create the corresponding
+You or a deployment tool (e.g., ``cephadm``) must create the corresponding
 directory. With metavariables fully  expressed and a cluster named "ceph", the
 foregoing directory would evaluate to::
 

@@ -39,9 +39,7 @@ another node, chassis, rack, row, or even datacenter depending on the setting.
    can mount kernel clients within virtual machines (VMs) on a single node.
 
 If you are creating OSDs using a single disk, you must create directories
-for the data manually first. For example::
-
-	ceph-deploy osd create --data {disk} {host}
+for the data manually first.
 
 
 Fewer OSDs than Replicas

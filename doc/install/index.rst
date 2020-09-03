@@ -44,7 +44,7 @@ Ceph clusters using Ansible.
   management features and dashboard integration are not available.
 
 
-:ref:`ceph-deploy <ceph-deploy-index>` is a tool for quickly deploying clusters.
+``ceph-deploy`` is a tool for quickly deploying clusters.
 
   .. IMPORTANT::
 
@@ -63,7 +63,6 @@ Ceph can also be :ref:`installed manually <install-manual>`.
    :hidden:
 
    index_manual
-   ceph-deploy/index
 
 
 

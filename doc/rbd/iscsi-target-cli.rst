@@ -36,8 +36,7 @@ to the *Installing* section:
    The Ceph configuration files must exist on the iSCSI gateway node
    under ``/etc/ceph/``.
 
-#. Install and configure the `Ceph Command-line
-   Interface <http://docs.ceph.com/docs/master/start/quick-rbd/#install-ceph>`_
+#. Install and configure the `Ceph Command-line Interface`_
 
 #. If needed, open TCP ports 3260 and 5000 on the firewall.
 
@@ -233,3 +232,10 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 
 The next step is to configure the iSCSI initiators.
+
+.. _`Ceph Command-line Interface`: ../../start/quick-rbd/#install-ceph
+
+.. toctree::
+   :hidden:
+
+   ../../start/quick-rbd
