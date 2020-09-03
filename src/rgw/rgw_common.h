@@ -1064,10 +1064,7 @@ struct RGWObjVersionTracker {
   void prepare_op_for_read(librados::ObjectReadOperation *op);
   void prepare_op_for_write(librados::ObjectWriteOperation *op);
 
-  void apply_write() {
-    read_version = write_version;
-    write_version = obj_version();
-  }
+  void apply_write();
 
   void clear() {
     read_version = obj_version();
