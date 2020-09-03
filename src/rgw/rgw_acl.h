@@ -68,6 +68,9 @@ public:
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ACLPermission*>& o);
+
+  friend bool operator==(const ACLPermission& lhs, const ACLPermission& rhs);
+  friend bool operator!=(const ACLPermission& lhs, const ACLPermission& rhs);
 };
 WRITE_CLASS_ENCODER(ACLPermission)
 
@@ -94,6 +97,9 @@ public:
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ACLGranteeType*>& o);
+
+  friend bool operator==(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
+  friend bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
 };
 WRITE_CLASS_ENCODER(ACLGranteeType)
 
@@ -204,6 +210,9 @@ public:
     url_spec = _url_spec;
     permission.set_permissions(perm);
   }
+
+  friend bool operator==(const ACLGrant& lhs, const ACLGrant& rhs);
+  friend bool operator!=(const ACLGrant& lhs, const ACLGrant& rhs);
 };
 WRITE_CLASS_ENCODER(ACLGrant)
 
@@ -254,6 +263,9 @@ struct ACLReferer {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+
+  friend bool operator==(const ACLReferer& lhs, const ACLReferer& rhs);
+  friend bool operator!=(const ACLReferer& lhs, const ACLReferer& rhs);
 
 private:
   boost::optional<std::string_view> get_http_host(const std::string_view url) const {
@@ -359,6 +371,9 @@ public:
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
   }
+
+  friend bool operator==(const RGWAccessControlList& lhs, const RGWAccessControlList& rhs);
+  friend bool operator!=(const RGWAccessControlList& lhs, const RGWAccessControlList& rhs);
 };
 WRITE_CLASS_ENCODER(RGWAccessControlList)
 
@@ -396,6 +411,9 @@ public:
   rgw_user& get_id() { return id; }
   const rgw_user& get_id() const { return id; }
   string& get_display_name() { return display_name; }
+
+  friend bool operator==(const ACLOwner& lhs, const ACLOwner& rhs);
+  friend bool operator!=(const ACLOwner& lhs, const ACLOwner& rhs);
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
@@ -467,6 +485,9 @@ public:
 
   virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }
   bool is_public() const;
+
+  friend bool operator==(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);
+  friend bool operator!=(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
 

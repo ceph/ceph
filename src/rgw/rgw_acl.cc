@@ -15,6 +15,64 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+bool operator==(const ACLPermission& lhs, const ACLPermission& rhs) {
+  return lhs.flags == rhs.flags;
+}
+bool operator!=(const ACLPermission& lhs, const ACLPermission& rhs) {
+  return !(lhs == rhs);
+}
+
+bool operator==(const ACLGranteeType& lhs, const ACLGranteeType& rhs) {
+  return lhs.type == rhs.type;
+}
+bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs) {
+  return lhs.type != rhs.type;
+}
+
+bool operator==(const ACLGrant& lhs, const ACLGrant& rhs) {
+  return lhs.type == rhs.type && lhs.id == rhs.id
+      && lhs.email == rhs.email && lhs.permission == rhs.permission
+      && lhs.name == rhs.name && lhs.group == rhs.group
+      && lhs.url_spec == rhs.url_spec;
+}
+bool operator!=(const ACLGrant& lhs, const ACLGrant& rhs) {
+  return !(lhs == rhs);
+}
+
+bool operator==(const ACLReferer& lhs, const ACLReferer& rhs) {
+  return lhs.url_spec == rhs.url_spec && lhs.perm == rhs.perm;
+}
+bool operator!=(const ACLReferer& lhs, const ACLReferer& rhs) {
+  return !(lhs == rhs);
+}
+
+bool operator==(const RGWAccessControlList& lhs,
+                const RGWAccessControlList& rhs) {
+  return lhs.acl_user_map == rhs.acl_user_map
+      && lhs.acl_group_map == rhs.acl_group_map
+      && lhs.referer_list == rhs.referer_list
+      && lhs.grant_map == rhs.grant_map;
+}
+bool operator!=(const RGWAccessControlList& lhs,
+                const RGWAccessControlList& rhs) {
+  return !(lhs == rhs);
+}
+
+bool operator==(const ACLOwner& lhs, const ACLOwner& rhs) {
+  return lhs.id == rhs.id && lhs.display_name == rhs.display_name;
+}
+bool operator!=(const ACLOwner& lhs, const ACLOwner& rhs) {
+  return !(lhs == rhs);
+}
+
+bool operator==(const RGWAccessControlPolicy& lhs,
+                const RGWAccessControlPolicy& rhs) {
+  return lhs.acl == rhs.acl && lhs.owner == rhs.owner;
+}
+bool operator!=(const RGWAccessControlPolicy& lhs,
+                const RGWAccessControlPolicy& rhs) {
+  return !(lhs == rhs);
+}
 
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {
