@@ -50,3 +50,6 @@ class TestCephadmCLI(MgrTestCase):
         self._orch_cmd('daemon', 'start', 'osd.0')
         self.wait_for_health_clear(30)
         self._orch_cmd('daemon', 'restart', 'osd.0')
+
+    def test_device_ls_wide(self):
+        self._orch_cmd('device', 'ls', '--wide')
