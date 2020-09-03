@@ -11,7 +11,6 @@
 #include "InstanceWatcher.h"
 #include "MirrorWatcher.h"
 
-class CephContext;
 class ContextWQ;
 
 namespace cephfs {
