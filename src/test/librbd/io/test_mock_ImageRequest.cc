@@ -265,7 +265,7 @@ TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
   ReadResult rr;
   MockImageReadRequest mock_aio_image_read_1(
     mock_image_ctx, aio_comp_1, {{0, 1}}, std::move(rr),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_read_1.send();
@@ -278,7 +278,7 @@ TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
 
   MockImageReadRequest mock_aio_image_read_2(
     mock_image_ctx, aio_comp_2, {{0, 1}}, std::move(rr),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx.get_data_io_context(), 0, 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_read_2.send();

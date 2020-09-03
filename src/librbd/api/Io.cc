@@ -232,7 +232,8 @@ void Io<I>::aio_read(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
 
   auto req = io::ImageDispatchSpec::create_read(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(read_result), image_ctx.get_data_io_context(), op_flags, trace);
+    std::move(read_result), image_ctx.get_data_io_context(), op_flags, 0,
+    trace);
   req->send();
 }
 

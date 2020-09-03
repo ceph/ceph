@@ -39,8 +39,10 @@ private:
 public:
   struct Read {
     ReadResult read_result;
+    int read_flags;
 
-    Read(ReadResult &&read_result) : read_result(std::move(read_result)) {
+    Read(ReadResult &&read_result, int read_flags)
+      : read_result(std::move(read_result)), read_flags(read_flags) {
     }
   };
 
@@ -125,11 +127,11 @@ public:
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       ReadResult &&read_result, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace) {
+      int read_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx.io_image_dispatcher,
                                  image_dispatch_layer, aio_comp,
                                  std::move(image_extents),
-                                 Read{std::move(read_result)},
+                                 Read{std::move(read_result), read_flags},
                                  io_context, op_flags, parent_trace);
   }
 

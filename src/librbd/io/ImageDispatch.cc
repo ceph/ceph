@@ -34,8 +34,9 @@ void ImageDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool ImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    IOContext io_context, int op_flags, int read_flags,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -46,7 +47,7 @@ bool ImageDispatch<I>::read(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_read(
     m_image_ctx, aio_comp, std::move(image_extents), std::move(read_result),
-    io_context, op_flags, parent_trace);
+    io_context, op_flags, read_flags, parent_trace);
   return true;
 }
 

@@ -35,7 +35,7 @@ public:
 
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
                        Extents &&image_extents, ReadResult &&read_result,
-                       IOContext io_context, int op_flags,
+                       IOContext io_context, int op_flags, int read_flags,
                        const ZTracer::Trace &parent_trace);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl,
@@ -111,7 +111,7 @@ public:
 
   ImageReadRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                    Extents &&image_extents, ReadResult &&read_result,
-                   IOContext io_context, int op_flags,
+                   IOContext io_context, int op_flags, int read_flags,
                    const ZTracer::Trace &parent_trace);
 
 protected:
@@ -128,6 +128,7 @@ protected:
   }
 private:
   int m_op_flags;
+  int m_read_flags;
 };
 
 template <typename ImageCtxT = ImageCtx>

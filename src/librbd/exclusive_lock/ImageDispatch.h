@@ -52,7 +52,7 @@ public:
   bool read(
       io::AioCompletion* aio_comp, io::Extents &&image_extents,
       io::ReadResult &&read_result, IOContext io_context, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t tid,
+      int read_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
       std::atomic<uint32_t>* image_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;

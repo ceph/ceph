@@ -35,7 +35,7 @@ void ImageWriteback<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   io::ImageReadRequest<> req(*image_ctx, aio_comp, std::move(image_extents),
                               io::ReadResult{bl},
                               image_ctx->get_data_io_context(), fadvise_flags,
-                              {});
+                              0, {});
   req.set_bypass_image_cache();
   req.send();
 }
