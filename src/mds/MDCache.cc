@@ -12032,6 +12032,8 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
   for (const auto& dir : info.resultfrags) {
     dout(10) << " storing result frag " << *dir << dendl;
 
+    dir->mark_new(mdr->ls);
+
     // freeze and store them too
     dir->auth_pin(this);
     dir->state_set(CDir::STATE_FRAGMENTING);
