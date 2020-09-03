@@ -251,6 +251,9 @@ class Infiniband {
         return c >= base && c < end;
       }
 
+      bool is_valid_chunk(const Chunk* c) const {
+        return c >= chunk_base && c < chunk_base + num_chunk;
+      }
       MemoryManager& manager;
       uint32_t buffer_size;
       uint32_t num_chunk = 0;
@@ -346,6 +349,7 @@ class Infiniband {
     void return_tx(std::vector<Chunk*> &chunks);
     int get_send_buffers(std::vector<Chunk*> &c, size_t bytes);
     bool is_tx_buffer(const char* c) { return send->is_my_buffer(c); }
+    bool is_valid_chunk(const Chunk* c) { return send->is_valid_chunk(c); }
     Chunk *get_tx_chunk_by_buffer(const char *c) {
       return send->get_chunk_by_buffer(c);
     }
