@@ -405,6 +405,9 @@ Alternatively, the realm, zonegroup, and zone can be manually created using ``ra
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
+
+.. _deploy-cephadm-nfs-ganesha:
+
 Deploying NFS ganesha
 =====================
 
