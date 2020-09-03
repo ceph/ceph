@@ -903,63 +903,7 @@ public:
       shard_id = id;
     }
 
-    class UpdateIndex {
-      RGWRados::Bucket *target;
-      std::string optag;
-      rgw_obj obj;
-      BucketShard bs;
-      bool bs_initialized{false};
-      bool blind;
-      rgw_zone_set *zones_trace{nullptr};
-
-      int init_bs(const DoutPrefixProvider *dpp) {
-        int r =
-	  bs.init(target->get_bucket(), obj, &target->bucket_info, dpp);
-        if (r < 0) {
-          return r;
-        }
-        bs_initialized = true;
-        return 0;
-      }
-
-      void invalidate_bs() {
-        bs_initialized = false;
-      }
-
-      int get_bucket_shard(BucketShard **pbs, const DoutPrefixProvider *dpp) {
-        if (!bs_initialized) {
-          int r = init_bs(dpp);
-          if (r < 0) {
-            return r;
-          }
-        }
-        *pbs = &bs;
-        return 0;
-      }
-
-      int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
-    public:
-
-      UpdateIndex(RGWRados::Bucket *_target,
-                  const rgw_obj& _obj,
-                  rgw_zone_set *zones_trace = nullptr);
-
-      int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const std::string *write_tag, optional_yield y);
-      int complete(const DoutPrefixProvider *dpp, int64_t poolid, uint64_t epoch, uint64_t size,
-                   uint64_t accounted_size, ceph::real_time& ut,
-                   const std::string& etag, const std::string& content_type,
-                   const std::string& storage_class,
-                   bufferlist *acl_bl, RGWObjCategory category,
-		   std::list<rgw_obj_index_key> *remove_objs, const std::string *user_data = nullptr, bool appendable = false);
-      int complete_del(const DoutPrefixProvider *dpp,
-                       int64_t poolid, uint64_t epoch,
-                       ceph::real_time& removed_mtime, /* mtime of removed object */
-                       std::list<rgw_obj_index_key> *remove_objs);
-      int cancel(const DoutPrefixProvider *dpp,
-                 std::list<rgw_obj_index_key> *remove_objs);
-
-      const std::string *get_optag() { return &optag; }
-    }; // class UpdateIndex
+    class UpdateIndex;
 
     class List {
     protected:
