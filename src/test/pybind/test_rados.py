@@ -56,7 +56,7 @@ class TestRadosStateError(object):
         assert_raises(RadosStateError, rados.conf_parse_env)
         assert_raises(RadosStateError, rados.conf_get, 'opt')
         assert_raises(RadosStateError, rados.conf_set, 'opt', 'val')
-        assert_raises(RadosStateError, rados.ping_monitor, 0)
+        assert_raises(RadosStateError, rados.ping_monitor, '0')
 
     def _requires_connected(self, rados):
         assert_raises(RadosStateError, rados.pool_exists, 'foo')
