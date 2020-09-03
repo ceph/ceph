@@ -108,6 +108,7 @@ enum ObjectDispatchLayer {
 
 enum {
   READ_FLAG_DISABLE_READ_FROM_PARENT            = 1UL << 0,
+  READ_FLAG_DISABLE_CLIPPING                    = 1UL << 1,
 };
 
 enum {
