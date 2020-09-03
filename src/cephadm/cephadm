@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+VERSION="1.0"
 DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
 DEFAULT_IMAGE_IS_MASTER = True
 LATEST_STABLE_RELEASE = 'octopus'
@@ -16,27 +17,7 @@ DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 10
 SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
 SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
-
-"""
-You can invoke cephadm in two ways:
-
-1. The normal way, at the command line.
-
-2. By piping the script to the python3 binary.  In this latter case, you should
-   prepend one or more lines to the beginning of the script.
-
-   For arguments,
-
-       injected_argv = [...]
-
-   e.g.,
-
-       injected_argv = ['ls']
-
-   For reading stdin from the '--config-json -' argument,
-
-       injected_stdin = '...'
-"""
+CEPHADM_TOOL_PATH = '/var/lib/ceph/%s/cephadm' # Variable part is for the cluster fsid
 
 import argparse
 import datetime
@@ -85,9 +66,9 @@ if sys.version_info >= (3, 0):
     from urllib.error import HTTPError
 else:
     from urllib2 import urlopen, HTTPError
-
 if sys.version_info > (3, 0):
     unicode = str
+
 
 container_path = ''
 cached_stdin = None
@@ -1663,11 +1644,8 @@ def get_parm(option):
         if cached_stdin is not None:
             j = cached_stdin
         else:
-            try:
-                j = injected_stdin  # type: ignore
-            except NameError:
-                j = sys.stdin.read()
-                cached_stdin = j
+            j = sys.stdin.read()
+            cached_stdin = j
     else:
         # inline json string
         if option[0] == '{' and option[-1] == '}':
@@ -1727,15 +1705,20 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
     mounts = dict()
 
     if daemon_type in Ceph.daemons:
-        if fsid:
-            run_path = os.path.join('/var/run/ceph', fsid);
-            if os.path.exists(run_path):
-                mounts[run_path] = '/var/run/ceph:z'
-            log_dir = get_log_dir(fsid)
-            mounts[log_dir] = '/var/log/ceph:z'
-            crash_dir = '/var/lib/ceph/%s/crash' % fsid
-            if os.path.exists(crash_dir):
-                mounts[crash_dir] = '/var/lib/ceph/crash:z'
+        run_path = os.path.join('/var/run/ceph', fsid);
+        if os.path.exists(run_path):
+            mounts[run_path] = '/var/run/ceph:z'
+
+        log_dir = get_log_dir(fsid)
+        mounts[log_dir] = '/var/log/ceph:z'
+
+        crash_dir = '/var/lib/ceph/%s/crash' % fsid
+        if os.path.exists(crash_dir):
+            mounts[crash_dir] = '/var/lib/ceph/crash:z'
+
+        if daemon_type == 'mgr':
+            cephadm_path = CEPHADM_TOOL_PATH % fsid
+            mounts[cephadm_path] =  '%s:z' % cephadm_path
 
     if daemon_type in Ceph.daemons and daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
@@ -1939,6 +1922,7 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid)
         mon_dir = get_data_dir(fsid, 'mon', daemon_id)
         log_dir = get_log_dir(fsid)
+
         out = CephContainer(
             image=args.image,
             entrypoint='/usr/bin/ceph-mon',
@@ -2481,11 +2465,11 @@ class CephContainer:
 
 ##################################
 
-
 @infer_image
 def command_version():
     # type: () -> int
-    out = CephContainer(args.image, 'ceph', ['--version']).run()
+    out = "cephadm script version %s\n" % VERSION
+    out += CephContainer(args.image, 'ceph', ['--version']).run()
     print(out.strip())
     return 0
 
@@ -2886,6 +2870,15 @@ def command_bootstrap():
     if ipv6:
         logger.info('Enabling IPv6 (ms_bind_ipv6)')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
+
+
+    # Copy cephadm tool used to bootstrap the clsuter in the folder for the
+    # cluster in this host
+    logger.info('Preparing cephadm tool to be used in the new cluster')
+    cephadm_path = CEPHADM_TOOL_PATH % fsid
+    shutil.copy(__file__, cephadm_path)
+    cli(['config', 'set', 'global', 'cephadm_path', cephadm_path])
+
 
     # create mgr
     logger.info('Creating mgr...')
@@ -5326,8 +5319,13 @@ def _get_parser():
     subparsers = parser.add_subparsers(help='sub-command')
 
     parser_version = subparsers.add_parser(
-        'version', help='get ceph version from container')
+        'version', help='get cephadm script version and ceph version from container')
     parser_version.set_defaults(func=command_version)
+    parser_version.add_argument(
+        '--cephadm',
+        action='version',
+        version=VERSION,
+        help='Only shows the cephadm script version')
 
     parser_pull = subparsers.add_parser(
         'pull', help='pull latest image version')
@@ -5816,11 +5814,8 @@ if __name__ == "__main__":
     dictConfig(logging_config)
     logger = logging.getLogger()
 
-    # allow argv to be injected
-    try:
-        av = injected_argv  # type: ignore
-    except NameError:
-        av = sys.argv[1:]
+    # Process command line
+    av = sys.argv[1:]
     logger.debug("%s\ncephadm %s" % ("-" * 80, av))
     args = _parse_args(av)
 

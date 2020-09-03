@@ -290,7 +290,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.device_cache_timeout = 0
             self.daemon_cache_timeout = 0
             self.host_check_interval = 0
-            self.mode = ''
             self.container_image_base = ''
             self.container_image_prometheus = ''
             self.container_image_grafana = ''
@@ -316,13 +315,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.notify('mon_map', None)
         self.config_notify()
 
-        path = self.get_ceph_option('cephadm_path')
-        try:
-            with open(path, 'r') as f:
-                self._cephadm = f.read()
-        except (IOError, TypeError) as e:
-            raise RuntimeError("unable to read cephadm at '%s': %s" % (
-                path, str(e)))
+        self._read_cephadm_script()
 
         self._worker_pool = multiprocessing.pool.ThreadPool(10)
 
@@ -406,6 +399,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_cephadm_service(self, service_type: str) -> CephadmService:
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
         return self.cephadm_services[service_type]
+
+    def _read_cephadm_script(self):
+        path = self.get_ceph_option('cephadm_path')
+        try:
+            with open(path, 'r') as f:
+                self._cephadm = f.read()
+        except (IOError, TypeError) as e:
+            raise RuntimeError("unable to read cephadm at '%s': %s" % (
+                path, str(e)))
 
     def _kick_serve_loop(self):
         self.log.debug('_kick_serve_loop')
@@ -723,10 +725,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         else:
             self._ssh_options = None
 
-        if self.mode == 'root':
-            self.ssh_user = self.get_store('ssh_user', default='root')
-        elif self.mode == 'cephadm-package':
-            self.ssh_user = 'cephadm'
+        self.ssh_user = self.get_store('ssh_user', default='root')
 
         self._reset_cons()
 
@@ -1095,7 +1094,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.offline_hosts.add(host)
             self._reset_con(host)
 
-            user = self.ssh_user if self.mode == 'root' else 'cephadm'
+            user = self.ssh_user
             msg = f'''Failed to connect to {host} ({addr}).
 Please make sure that the host is reachable and accepts connections using the cephadm SSH key
 
@@ -1156,6 +1155,7 @@ To check that the host is reachable:
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
+
         with self._remote_connection(host, addr) as tpl:
             conn, connr = tpl
             assert image or entity
@@ -1181,41 +1181,24 @@ To check that the host is reachable:
             final_args += args
 
             self.log.debug('args: %s' % (' '.join(final_args)))
-            if self.mode == 'root':
+
+            if stdin:
+                self.log.debug('stdin: %s' % stdin)
+            try:
+                cephadm_path = self.get_ceph_option('cephadm_path')
+                self.log.info("Tying to execute : %s" % (['sudo', cephadm_path] + final_args))
                 if stdin:
-                    self.log.debug('stdin: %s' % stdin)
-                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
-                if stdin:
-                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
-                script += self._cephadm
-                python = connr.choose_python()
-                if not python:
-                    raise RuntimeError(
-                        'unable to find python on %s (tried %s in %s)' % (
-                            host, remotes.PYTHONS, remotes.PATH))
-                try:
-                    out, err, code = remoto.process.check(
-                        conn,
-                        [python, '-u'],
-                        stdin=script.encode('utf-8'))
-                except RuntimeError as e:
-                    self._reset_con(host)
-                    if error_ok:
-                        return [], [str(e)], 1
-                    raise
-            elif self.mode == 'cephadm-package':
-                try:
-                    out, err, code = remoto.process.check(
-                        conn,
-                        ['sudo', '/usr/bin/cephadm'] + final_args,
-                        stdin=stdin)
-                except RuntimeError as e:
-                    self._reset_con(host)
-                    if error_ok:
-                        return [], [str(e)], 1
-                    raise
-            else:
-                assert False, 'unsupported mode'
+                    self.log.info("with stdin = %s" % stdin)
+                out, err, code = remoto.process.check(
+                    conn,
+                    [cephadm_path] + final_args,
+                    stdin=stdin.encode('utf-8'))
+
+            except RuntimeError as e:
+                self._reset_con(host)
+                if error_ok:
+                    return [], [str(e)], 1
+                raise
 
             self.log.debug('code: %d' % code)
             if out:
@@ -1231,6 +1214,47 @@ To check that the host is reachable:
     def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
         return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
 
+    def _copy_cephadm(self, host: str, addr: str):
+        """
+        Copy the cephadm script provided in the cephadm manager module
+        """
+        # Refresh the copy in memory
+        self._read_cephadm_script()
+
+        # Copy the script to the host
+        with self._remote_connection(host, addr) as tpl:
+            conn, connr = tpl
+            try:
+                cephadm_path = self.get_ceph_option('cephadm_path')
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['mkdir', '-p', os.path.dirname(cephadm_path)])
+                self.log.debug('mkdir-> %s-:-%s' % (out, err))
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['cp', '/dev/stdin' , cephadm_path],
+                    stdin=self._cephadm.encode('utf-8'))
+                self.log.debug('cp-> %s-:-%s' % (out, err))
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['chmod', '+x' , cephadm_path])
+                self.log.debug('chmod-> %s-:-%s' % (out, err))
+                cephadm_version = "-"
+                self.log.info('Cephadm script copied to %s' % ("%s:%s" % (host, cephadm_path)))
+                try:
+                    out, err, code = remoto.process.check(
+                        conn,
+                        [cephadm_path, 'version', '--cephadm'])
+                    if out:
+                        cephadm_version = out
+                    self.log.info('Cephadm script version %s available in %s' % (cephadm_version, ("%s:%s" % (host, cephadm_path))))
+                except RuntimeError as e:
+                        self.log.error("Error trying to get cephadm version: %s " % str(e))
+            except RuntimeError as e:
+                self._reset_con(host)
+                self.log.error(str(e))
+                raise
+
     def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -1239,6 +1263,10 @@ To check that the host is reachable:
         :param host: host name
         """
         assert_valid_host(spec.hostname)
+
+        # Copy cephadm used in this cluster to the remote host
+        self._copy_cephadm(spec.hostname, spec.addr)
+
         out, err, code = self._run_cephadm(spec.hostname, cephadmNoImage, 'check-host',
                                            ['--expect-hostname', spec.hostname],
                                            addr=spec.addr,
