@@ -119,7 +119,7 @@ void read_parent(I *image_ctx, uint64_t object_no, const Extents &extents,
 
   ImageRequest<I>::aio_read(
     image_ctx->parent, comp, std::move(parent_extents), ReadResult{data},
-    image_ctx->parent->get_data_io_context(), 0, trace);
+    image_ctx->parent->get_data_io_context(), 0, 0, trace);
 }
 
 } // namespace util

@@ -237,11 +237,11 @@ template <typename I>
 void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents,
                                ReadResult &&read_result, IOContext io_context,
-                               int op_flags,
+                               int op_flags, int read_flags,
 			       const ZTracer::Trace &parent_trace) {
   ImageReadRequest<I> req(*ictx, c, std::move(image_extents),
                           std::move(read_result), io_context, op_flags,
-                          parent_trace);
+                          read_flags, parent_trace);
   req.send();
 }
 
@@ -423,10 +423,11 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
                                       Extents &&image_extents,
                                       ReadResult &&read_result,
                                       IOContext io_context, int op_flags,
-				      const ZTracer::Trace &parent_trace)
+				      int read_flags,
+                                      const ZTracer::Trace &parent_trace)
   : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
                     io_context, "read", parent_trace),
-    m_op_flags(op_flags) {
+    m_op_flags(op_flags), m_read_flags(read_flags) {
   aio_comp->read_result = std::move(read_result);
 }
 
@@ -482,8 +483,8 @@ void ImageReadRequest<I>::send_request() {
       aio_comp, oe.offset, oe.length, std::move(oe.buffer_extents));
     auto req = ObjectDispatchSpec::create_read(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.object_no,
-      {{oe.offset, oe.length}}, this->m_io_context, m_op_flags, 0, this->m_trace,
-      &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
+      {{oe.offset, oe.length}}, this->m_io_context, m_op_flags, m_read_flags,
+      this->m_trace, &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
     req->send();
   }
 

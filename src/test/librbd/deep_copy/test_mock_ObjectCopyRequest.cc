@@ -49,6 +49,7 @@ struct ImageRequest<MockTestImageCtx> {
   static void aio_read(MockTestImageCtx *ictx, AioCompletion *c,
                        Extents &&image_extents, ReadResult &&read_result,
                        IOContext io_context, int op_flags,
+                       int read_flags,
                        const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_read(c, image_extents);

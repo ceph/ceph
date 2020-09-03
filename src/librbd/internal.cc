@@ -1331,7 +1331,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       io::ImageReadRequest<> req(*src, comp, {{offset, len}},
 				 io::ReadResult{bl}, src->get_data_io_context(),
-                                 fadvise_flags, std::move(trace));
+                                 fadvise_flags, 0, std::move(trace));
       ctx->read_trace = req.get_trace();
 
       req.send();
@@ -1542,7 +1542,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                                                    io::AIO_TYPE_READ);
       io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}},
                                    io::ReadResult{&bl},
-                                   ictx->get_data_io_context(), 0,
+                                   ictx->get_data_io_context(), 0, 0,
                                    std::move(trace));
 
       int ret = ctx.wait();

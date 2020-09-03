@@ -176,12 +176,12 @@ void CopyupRequest<I>::read_from_parent() {
     ImageRequest<I>::aio_read(
       m_image_ctx->parent, comp, std::move(m_image_extents),
       ReadResult{&m_copyup_extent_map, &m_copyup_data},
-      m_image_ctx->parent->get_data_io_context(), 0, m_trace);
+      m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
   } else {
     ImageRequest<I>::aio_read(
       m_image_ctx->parent, comp, std::move(m_image_extents),
       ReadResult{&m_copyup_data},
-      m_image_ctx->parent->get_data_io_context(), 0, m_trace);
+      m_image_ctx->parent->get_data_io_context(), 0, 0, m_trace);
   }
 }
 
