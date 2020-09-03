@@ -1,6 +1,7 @@
 import json
 import errno
 import logging
+import shlex
 from collections import defaultdict
 from contextlib import contextmanager
 from functools import wraps
@@ -1763,16 +1764,35 @@ To check that the host is reachable:
         return '\n'.join(out + err)
 
     @trivial_completion
-    def blink_device_light(self, ident_fault, on, locs) -> List[str]:
+    def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:
+        """
+        Blink a device light. Calling something like::
+
+          lsmcli local-disk-ident-led-on --path $path
+
+        If you must, you can customize this via::
+
+          ceph config-key set mgr/cephadm/lsmcli_blink_lights_cmd '<my jinja2 template>'
+
+        See templates/lsmcli_blink_lights_cmd.j2
+        """
         @forall_hosts
         def blink(host, dev, path):
-            cmd = [
-                'lsmcli',
-                'local-disk-%s-led-%s' % (
-                    ident_fault,
-                    'on' if on else 'off'),
-                '--path', path or dev,
-            ]
+            j2_ctx = {
+                'on': on,
+                'ident_fault': ident_fault,
+                'dev': dev,
+                'path': path
+            }
+
+            custom_template = self.get_store('lsmcli_blink_lights_cmd', None)
+            if custom_template:
+                lsmcli_blink_lights_cmd = self.template.engine.render_plain(custom_template, j2_ctx)
+            else:
+                lsmcli_blink_lights_cmd = self.template.render('lsmcli_blink_lights_cmd.j2', j2_ctx)
+
+            cmd = shlex.split(lsmcli_blink_lights_cmd)
+
             out, err, code = self._run_cephadm(
                 host, 'osd', 'shell', ['--'] + cmd,
                 error_ok=True)
