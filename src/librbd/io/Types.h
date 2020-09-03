@@ -107,6 +107,10 @@ enum ObjectDispatchLayer {
 };
 
 enum {
+  READ_FLAG_DISABLE_READ_FROM_PARENT            = 1UL << 0,
+};
+
+enum {
   OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE            = 1UL << 0
 };
 

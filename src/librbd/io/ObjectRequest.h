@@ -94,19 +94,19 @@ class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
   static ObjectReadRequest* create(
       ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
-      Context *completion) {
+      IOContext io_context, int op_flags, int read_flags,
+      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+      Extents* extent_map, uint64_t* version, Context *completion) {
     return new ObjectReadRequest(ictx, objectno, extents, io_context, op_flags,
-                                 parent_trace, read_data, extent_map, version,
-                                 completion);
+                                 read_flags, parent_trace, read_data,
+                                 extent_map, version, completion);
   }
 
   ObjectReadRequest(
       ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
-      IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
-      Context *completion);
+      IOContext io_context, int op_flags, int read_flags,
+      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+      Extents* extent_map, uint64_t* version, Context *completion);
 
   void send() override;
 
@@ -142,6 +142,7 @@ private:
   typedef std::vector<ExtentResult> ExtentResults;
   ExtentResults m_extent_results;
   int m_op_flags;
+  int m_read_flags;
 
   ceph::bufferlist* m_read_data;
   Extents* m_extent_map;

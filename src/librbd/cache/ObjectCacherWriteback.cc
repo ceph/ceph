@@ -142,9 +142,13 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
     io_context->read_snap(snapid);
   }
 
+  // extract the embedded RBD read flags from the op_flags
+  int read_flags = (op_flags & READ_FLAGS_MASK) >> READ_FLAGS_SHIFT;
+  op_flags &= ~READ_FLAGS_MASK;
+
   auto req = io::ObjectDispatchSpec::create_read(
     m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, {{off, len}},
-    io_context, op_flags, trace, &req_comp->bl,
+    io_context, op_flags, read_flags, trace, &req_comp->bl,
     &req_comp->extent_map, nullptr, req_comp);
   req->send();
 }

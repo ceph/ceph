@@ -35,7 +35,7 @@ struct ObjectDispatchInterface {
 
   virtual bool read(
       uint64_t object_no, const Extents &extents,
-      IOContext io_context, int op_flags,
+      IOContext io_context, int op_flags, int read_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
       Extents* extent_map, uint64_t* version, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,

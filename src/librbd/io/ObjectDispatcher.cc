@@ -108,7 +108,8 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   bool operator()(ObjectDispatchSpec::ReadRequest& read) const {
     return object_dispatch->read(
       read.object_no, read.extents, object_dispatch_spec->io_context,
-      object_dispatch_spec->op_flags, object_dispatch_spec->parent_trace,
+      object_dispatch_spec->op_flags, read.read_flags,
+      object_dispatch_spec->parent_trace,
       read.read_data, read.extent_map, read.version,
       &object_dispatch_spec->object_dispatch_flags,
       &object_dispatch_spec->dispatch_result,
