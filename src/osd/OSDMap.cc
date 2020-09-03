@@ -1366,12 +1366,8 @@ void OSDMap::set_max_osd(int m)
 {
   int o = max_osd;
   max_osd = m;
-  osd_state.resize(max_osd);
-  osd_weight.resize(max_osd);
-  for (; o<max_osd; o++) {
-    osd_state[o] = 0;
-    osd_weight[o] = CEPH_OSD_OUT;
-  }
+  osd_state.resize(max_osd, 0);
+  osd_weight.resize(max_osd, CEPH_OSD_OUT);
   osd_info.resize(max_osd);
   osd_xinfo.resize(max_osd);
   osd_addrs->client_addrs.resize(max_osd);
