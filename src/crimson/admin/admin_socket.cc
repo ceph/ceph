@@ -37,7 +37,7 @@ tell_result_t::tell_result_t(int ret, std::string&& err, ceph::bufferlist&& out)
   : ret{ret}, err(std::move(err)), out(std::move(out))
 {}
 
-tell_result_t::tell_result_t(Formatter* formatter)
+tell_result_t::tell_result_t(std::unique_ptr<Formatter> formatter)
 {
   formatter->flush(out);
 }
@@ -301,7 +301,7 @@ class VersionHook final : public AdminSocketHook {
     f->dump_string("release", ceph_release_to_str());
     f->dump_string("release_type", ceph_release_type());
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
 
@@ -322,7 +322,7 @@ class GitVersionHook final : public AdminSocketHook {
     f->open_object_section("version");
     f->dump_string("git_version", git_version_to_str());
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
 
@@ -349,7 +349,7 @@ class HelpHook final : public AdminSocketHook {
 	}
       }
       f->close_section();
-      return seastar::make_ready_future<tell_result_t>(f.get());
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
     });
   }
 };
@@ -380,7 +380,7 @@ class GetdescsHook final : public AdminSocketHook {
         cmdnum++;
       }
       f->close_section();
-      return seastar::make_ready_future<tell_result_t>(f.get());
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
     });
   }
 };
@@ -428,7 +428,7 @@ public:
     f->open_object_section("config_show");
     local_conf().show_config(f.get());
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
 
@@ -461,7 +461,7 @@ public:
     f->open_object_section("config_get");
     f->dump_string(var, conf_val);
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
 
@@ -492,7 +492,7 @@ public:
       f->open_object_section("config_set");
       f->dump_string("success", "");
       f->close_section();
-      return seastar::make_ready_future<tell_result_t>(f.get());
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
     }).handle_exception_type([](std::invalid_argument& e) {
       return seastar::make_ready_future<tell_result_t>(
         tell_result_t{-EINVAL, e.what()});
