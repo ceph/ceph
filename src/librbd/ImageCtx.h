@@ -352,6 +352,7 @@ namespace librbd {
 
     void rebuild_data_io_context();
     IOContext get_data_io_context() const;
+    IOContext duplicate_data_io_context() const;
 
     static void get_timer_instance(CephContext *cct, SafeTimer **timer,
                                    ceph::mutex **timer_lock);
