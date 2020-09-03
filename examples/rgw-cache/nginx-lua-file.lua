@@ -20,7 +20,7 @@ end
 if check ~= nil then
     local xamzcache = concathdrs:sub(2)
     xamzcache = xamzcache .. string.char(0xB2) .. "Authorization" .. string.char(0xB1) .. check
-        if xamzcache:find("aws4_request") ~= nil and uri ~= "/" and uri:find("?") == nil then
+        if xamzcache:find("aws4_request") ~= nil and uri ~= "/" and uri:find("?") == nil and hdrs["if-match"] == nil then
             ngx.var.authvar = xamzcache
         end
 end

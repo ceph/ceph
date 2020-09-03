@@ -571,7 +571,7 @@ get_v4_canonical_headers(const req_info& info,
     }
     const char* const t = info.env->get(token_env.c_str());
     if (!t) {
-      dout(10) << "warning env var not available" << dendl;
+      dout(10) << "warning env var not available " << token_env.c_str() << dendl;
       continue;
     }
 
