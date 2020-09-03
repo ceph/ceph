@@ -2090,7 +2090,7 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   // don't trim past the oldest reported osd epoch
   for (auto& osd_epoch : osd_epochs) {
     if (osd_epoch.second < floor &&
-        osdmap.is_out(osd_epoch.first)) {
+        osdmap.is_in(osd_epoch.first)) {
       floor = osd_epoch.second;
     }
   }
