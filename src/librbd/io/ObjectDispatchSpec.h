@@ -44,15 +44,16 @@ public:
 
   struct ReadRequest : public RequestBase {
     const Extents extents;
+    int read_flags;
     ceph::bufferlist* read_data;
     Extents* extent_map;
     uint64_t* version;
 
     ReadRequest(uint64_t object_no, const Extents &extents,
-                ceph::bufferlist* read_data, Extents* extent_map,
-                uint64_t* version)
-      : RequestBase(object_no), extents(extents), read_data(read_data),
-        extent_map(extent_map), version(version) {
+                int read_flags, ceph::bufferlist* read_data,
+                Extents* extent_map, uint64_t* version)
+      : RequestBase(object_no), extents(extents), read_flags(read_flags),
+        read_data(read_data), extent_map(extent_map), version(version) {
     }
   };
 
@@ -170,13 +171,14 @@ public:
   static ObjectDispatchSpec* create_read(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, const Extents &extents, IOContext io_context,
-      int op_flags, const ZTracer::Trace &parent_trace,
+      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
       ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
       Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
                                   ReadRequest{object_no, extents,
-                                              read_data, extent_map, version},
+                                              read_flags, read_data, extent_map,
+                                              version},
                                   io_context, op_flags, parent_trace,
                                   on_finish);
   }

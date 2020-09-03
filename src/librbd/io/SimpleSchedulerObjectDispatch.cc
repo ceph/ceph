@@ -220,7 +220,7 @@ void SimpleSchedulerObjectDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::read(
     uint64_t object_no, const Extents &extents, IOContext io_context,
-    int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {

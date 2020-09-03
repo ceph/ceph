@@ -201,13 +201,13 @@ void ObjectRequest<I>::finish(int r) {
 template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(
     I *ictx, uint64_t objectno, const Extents &extents,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
-    Context *completion)
-  : ObjectRequest<I>(ictx, objectno, io_context, "read", parent_trace,
-                     completion),
-    m_extents(extents), m_op_flags(op_flags), m_read_data(read_data),
-    m_extent_map(extent_map), m_version(version) {
+    IOContext io_context, int op_flags, int read_flags,
+    const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+    Extents* extent_map, uint64_t* version, Context *completion)
+  : ObjectRequest<I>(ictx, objectno, io_context, "read",
+                     parent_trace, completion),
+    m_extents(extents), m_op_flags(op_flags), m_read_flags(read_flags),
+    m_read_data(read_data), m_extent_map(extent_map), m_version(version) {
 }
 
 template <typename I>
@@ -299,6 +299,11 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
 
 template <typename I>
 void ObjectReadRequest<I>::read_parent() {
+  if ((m_read_flags & READ_FLAG_DISABLE_READ_FROM_PARENT) != 0) {
+    this->finish(-ENOENT);
+    return;
+  }
+
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << dendl;
 
