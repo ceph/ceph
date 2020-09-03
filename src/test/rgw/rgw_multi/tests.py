@@ -948,7 +948,8 @@ def test_datalog_autotrim():
         k = new_key(zone, bucket.name, 'key')
         k.set_contents_from_string('body')
 
-    # wait for data sync to catch up
+    # wait for metadata and data sync to catch up
+    zonegroup_meta_checkpoint(zonegroup)
     zonegroup_data_checkpoint(zonegroup_conns)
 
     # trim each datalog
@@ -1102,6 +1103,7 @@ def test_bucket_sync_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+    zonegroup_meta_checkpoint(zonegroup)
 
     for bucket_name in buckets:
         disable_bucket_sync(realm.meta_master_zone(), bucket_name)
@@ -1123,6 +1125,8 @@ def test_bucket_sync_enable_right_after_disable():
         for objname in objnames:
             k = new_key(zone, bucket.name, objname)
             k.set_contents_from_string(content)
+
+    zonegroup_meta_checkpoint(zonegroup)
 
     for bucket_name in buckets:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
