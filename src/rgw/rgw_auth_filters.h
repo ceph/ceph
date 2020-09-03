@@ -76,6 +76,10 @@ public:
     return get_decoratee().is_owner_of(uid);
   }
 
+  bool is_anonymous() const override {
+    return get_decoratee().is_anonymous();
+  }
+
   uint32_t get_perm_mask() const override {
     return get_decoratee().get_perm_mask();
   }
@@ -159,6 +163,13 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
     /* The override has been specified but the account belongs to the authenticated
      * identity. We may safely forward the call to a next stage. */
     DecoratedApplier<T>::load_acct_info(dpp, user_info);
+  } else if (this->is_anonymous()) {
+    /* If the user was authed by the anonymous engine then scope the ANON user
+     * to the correct tenant */
+    if (acct_user_override.tenant.empty())
+      user_info.user_id = rgw_user(acct_user_override.id, RGW_USER_ANON_ID);
+    else
+      user_info.user_id = rgw_user(acct_user_override.tenant, RGW_USER_ANON_ID);
   } else {
     /* Compatibility mechanism for multi-tenancy. For more details refer to
      * load_acct_info method of rgw::auth::RemoteApplier. */
