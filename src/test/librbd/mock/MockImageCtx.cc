@@ -45,4 +45,8 @@ IOContext MockImageCtx::get_data_io_context() {
   return ctx;
 }
 
+IOContext MockImageCtx::duplicate_data_io_context() {
+  return std::make_shared<neorados::IOContext>(*get_data_io_context());
+}
+
 } // namespace librbd

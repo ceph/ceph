@@ -924,6 +924,11 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     return atomic_load(&data_io_context);
   }
 
+  IOContext ImageCtx::duplicate_data_io_context() const {
+    auto ctx = get_data_io_context();
+    return std::make_shared<neorados::IOContext>(*ctx);
+  }
+
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
                                     ceph::mutex **timer_lock) {
     auto safe_timer_singleton =
