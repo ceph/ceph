@@ -349,6 +349,65 @@ public:
 
 /* class RGWRadosThread */
 
+class RGWRados::Bucket::UpdateIndex {
+  RGWRados::Bucket *target;
+  string optag;
+  rgw_obj obj;
+  BucketShard bs;
+  bool bs_initialized{false};
+  bool blind;
+  rgw_zone_set *zones_trace{nullptr};
+
+  int init_bs() {
+    int r =
+      bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */);
+    if (r < 0) {
+      return r;
+    }
+    bs_initialized = true;
+    return 0;
+  }
+
+  void invalidate_bs() {
+    bs_initialized = false;
+  }
+
+  int get_bucket_shard(BucketShard **pbs) {
+    if (!bs_initialized) {
+      int r = init_bs();
+      if (r < 0) {
+        return r;
+      }
+    }
+    *pbs = &bs;
+    return 0;
+  }
+
+  int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
+public:
+
+  UpdateIndex(RGWRados::Bucket *_target,
+              const rgw_obj& _obj,
+              rgw_zone_set *zones_trace = nullptr);
+
+  int prepare(RGWModifyOp, const string *write_tag, optional_yield y);
+  int complete(int64_t poolid, uint64_t epoch, uint64_t size,
+               uint64_t accounted_size, ceph::real_time& ut,
+               const string& etag, const string& content_type,
+               const string& storage_class,
+               bufferlist *acl_bl, RGWObjCategory category,
+    	   list<rgw_obj_index_key> *remove_objs,
+               uint16_t bilog_flags,
+               const string *user_data = nullptr, bool appendable = false);
+  int complete_del(int64_t poolid, uint64_t epoch,
+                   ceph::real_time& removed_mtime, /* mtime of removed object */
+                   list<rgw_obj_index_key> *remove_objs,
+                   uint16_t bilog_flags);
+  int cancel();
+
+  const string *get_optag() { return &optag; }
+}; // class UpdateIndex
+
 void RGWRadosThread::start()
 {
   worker = new Worker(cct, this);
