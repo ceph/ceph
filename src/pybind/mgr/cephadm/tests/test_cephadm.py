@@ -23,7 +23,7 @@ from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
-    with_cephadm_module, with_service, assert_rm_service
+    with_cephadm_module, with_service, assert_rm_service, _get_ceph_metadata
 from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
 
 """
@@ -157,6 +157,13 @@ class TestCephadm(object):
             c = cephadm_module.get_inventory()
             assert wait(cephadm_module, c) == [InventoryHost('test')]
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_ceph_metadata", _get_ceph_metadata(
+        {
+            "rgw.myrgw.foobar": {
+                "ceph_version_short": "latest"
+            }
+        }
+    ))
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
@@ -439,6 +446,13 @@ class TestCephadm(object):
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
             assert out in exp_command
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_ceph_metadata", _get_ceph_metadata(
+        {
+            "osd.0": {
+                "ceph_version_short": "latest"
+            }
+        }
+    ))
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
@@ -497,6 +511,13 @@ class TestCephadm(object):
                 assert_rm_daemon(cephadm_module, 'rgw.realm.zone1', 'host1')
                 assert_rm_daemon(cephadm_module, 'rgw.realm.zone1', 'host2')
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_ceph_metadata", _get_ceph_metadata(
+        {
+            "rgw.myrgw.myhost.myid": {
+                "ceph_version_short": "latest"
+            }
+        }
+    ))
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
@@ -758,6 +779,13 @@ class TestCephadm(object):
                     code, out, err = cephadm_module.check_host('test')
                     assert err is None
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_ceph_metadata", _get_ceph_metadata(
+        {
+            "rgw.myrgw.myhost.myid": {
+                "ceph_version_short": "latest"
+            }
+        }
+    ))
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
     def test_etc_ceph(self, _check, _get_connection, cephadm_module):
