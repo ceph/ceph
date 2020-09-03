@@ -263,7 +263,7 @@ void Mirror::run() {
       continue;
     }
 
-    Context *on_finish = new LambdaContext([this, fs_name](int r) {
+    Context *on_finish = new LambdaContext([this, fs_name = fs_name](int r) {
                                              handle_shutdown(fs_name, r);
                             });
     fs_mirror->shutdown(new C_AsyncCallback<ContextWQ>(m_work_queue, on_finish));

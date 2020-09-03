@@ -14,7 +14,6 @@
 #include "FSMirror.h"
 #include "Types.h"
 
-class CephContext;
 class Messenger;
 class MonClient;
 class ContextWQ;
