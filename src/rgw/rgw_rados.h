@@ -907,7 +907,6 @@ public:
       RGWRados::Bucket *target;
       std::string optag;
       rgw_obj obj;
-      uint16_t bilog_flags{0};
       BucketShard bs;
       bool bs_initialized{false};
       bool blind;
@@ -943,10 +942,6 @@ public:
 
       UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj);
 
-      void set_bilog_flags(uint16_t flags) {
-        bilog_flags = flags;
-      }
-      
       void set_zones_trace(rgw_zone_set *_zones_trace) {
         zones_trace = _zones_trace;
       }
