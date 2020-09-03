@@ -10,6 +10,7 @@
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/io/CopyupRequest.h"
+#include "librbd/io/ImageRequest.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/Utils.h"
 
@@ -54,6 +55,37 @@ struct CopyupRequest<librbd::MockTestImageCtx> : public CopyupRequest<librbd::Mo
 };
 
 CopyupRequest<librbd::MockTestImageCtx>* CopyupRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+template <>
+struct ImageListSnapsRequest<librbd::MockTestImageCtx> {
+  static ImageListSnapsRequest* s_instance;
+
+  AioCompletion* aio_comp;
+  Extents image_extents;
+  SnapshotDelta* snapshot_delta;
+
+  ImageListSnapsRequest() {
+    s_instance = this;
+  }
+  ImageListSnapsRequest(
+      librbd::MockImageCtx& image_ctx, AioCompletion* aio_comp,
+      Extents&& image_extents, SnapIds&& snap_ids, int list_snaps_flags,
+      SnapshotDelta* snapshot_delta, const ZTracer::Trace& parent_trace) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->aio_comp = aio_comp;
+    s_instance->image_extents = image_extents;
+    s_instance->snapshot_delta = snapshot_delta;
+  }
+
+
+  MOCK_METHOD0(execute_send, void());
+  void send() {
+    ceph_assert(s_instance != nullptr);
+    s_instance->execute_send();
+  }
+};
+
+ImageListSnapsRequest<librbd::MockTestImageCtx>* ImageListSnapsRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 namespace util {
 
@@ -113,6 +145,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   typedef ObjectListSnapsRequest<librbd::MockTestImageCtx> MockObjectListSnapsRequest;
   typedef AbstractObjectWriteRequest<librbd::MockTestImageCtx> MockAbstractObjectWriteRequest;
   typedef CopyupRequest<librbd::MockTestImageCtx> MockCopyupRequest;
+  typedef ImageListSnapsRequest<librbd::MockTestImageCtx> MockImageListSnapsRequest;
   typedef util::Mock MockUtils;
 
   void expect_object_may_exist(MockTestImageCtx &mock_image_ctx,
@@ -348,6 +381,23 @@ struct TestMockIoObjectRequest : public TestMockFixture {
           *out_snap_set = snap_set;
           return r;
         })));
+  }
+
+  void expect_image_list_snaps(MockImageListSnapsRequest& req,
+                               const Extents& image_extents,
+                               const SnapshotDelta& image_snapshot_delta,
+                               int r) {
+    EXPECT_CALL(req, execute_send())
+      .WillOnce(Invoke(
+        [&req, image_extents, image_snapshot_delta, r]() {
+          ASSERT_EQ(image_extents, req.image_extents);
+          *req.snapshot_delta = image_snapshot_delta;
+
+          auto aio_comp = req.aio_comp;
+          aio_comp->set_request_count(1);
+          aio_comp->add_request();
+          aio_comp->complete_request(r);
+        }));
   }
 };
 
@@ -1738,6 +1788,42 @@ TEST_F(TestMockIoObjectRequest, ListSnapsError) {
     {3, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsParent) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.parent = &mock_image_ctx;
+
+  InSequence seq;
+
+  expect_list_snaps(mock_image_ctx, {}, -ENOENT);
+
+  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
+  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
+
+  MockImageListSnapsRequest mock_image_list_snaps_request;
+  SnapshotDelta image_snapshot_delta;
+  image_snapshot_delta[{1,6}].insert(
+    0, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+  expect_image_list_snaps(mock_image_list_snaps_request,
+                          {{0, 4096}}, image_snapshot_delta, 0);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0,
+    {{440320, 1024}, {2122728, 1024}, {2220032, 2048}, {3072000, 4096}},
+    {0, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{0,0}].insert(
+    0, 1024, {SNAPSHOT_EXTENT_STATE_DATA, 1024});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
 } // namespace io

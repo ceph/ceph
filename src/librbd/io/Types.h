@@ -120,6 +120,10 @@ enum {
   OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR      = 1UL << 1
 };
 
+enum {
+  LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT      = 1UL << 0,
+};
+
 enum SnapshotExtentState {
   SNAPSHOT_EXTENT_STATE_DNE,    /* does not exist */
   SNAPSHOT_EXTENT_STATE_ZEROED,

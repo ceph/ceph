@@ -475,11 +475,15 @@ private:
   neorados::SnapSet m_snap_set;
   boost::system::error_code m_ec;
 
+  SnapshotDelta m_parent_snapshot_delta;
+
   void list_snaps();
   void handle_list_snaps(int r);
 
-  void zero_initial_extent(bool dne);
+  void list_from_parent();
+  void handle_list_from_parent(int r);
 
+  void zero_initial_extent(bool dne);
 };
 
 } // namespace io
