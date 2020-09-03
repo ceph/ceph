@@ -5055,7 +5055,7 @@ int BlueStore::_write_out_fm_meta(uint64_t target_size)
   return r;
 }
 
-int BlueStore::_open_alloc()
+int BlueStore::_create_alloc()
 {
   ceph_assert(shared_alloc.a == NULL);
   ceph_assert(bdev->get_size());
@@ -5069,15 +5069,25 @@ int BlueStore::_open_alloc()
   }
 
   shared_alloc.set(Allocator::create(cct, cct->_conf->bluestore_allocator,
-                            bdev->get_size(),
-                            alloc_size, "block"));
+    bdev->get_size(),
+    alloc_size, "block"));
 
   if (!shared_alloc.a) {
-    lderr(cct) << __func__ << " Allocator::unknown alloc type "
-               << cct->_conf->bluestore_allocator
-               << dendl;
+    lderr(cct) << __func__ << "Failed to create allocator:: "
+      << cct->_conf->bluestore_allocator
+      << dendl;
     return -EINVAL;
   }
+  return 0;
+}
+
+int BlueStore::_init_alloc()
+{
+  int r = _create_alloc();
+  if (r < 0) {
+    return r;
+  }
+  ceph_assert(shared_alloc.a != NULL);
 
   if (bdev->is_smr()) {
     shared_alloc.a->set_zone_states(fm->get_zone_states(db));
@@ -5274,7 +5284,7 @@ bool BlueStore::test_mount_in_use()
 int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
-  bluefs = new BlueFS(cct, &shared_alloc);
+  bluefs = new BlueFS(cct);
 
   string bfn;
   struct stat st;
@@ -5322,7 +5332,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
   // never trim here
   r = bluefs->add_block_device(bluefs_layout.shared_bdev, bfn, false,
                                0, // no need to provide valid 'reserved' for shared dev
-                               true);
+                               &shared_alloc);
   if (r < 0) {
     derr << __func__ << " add block device(" << bfn << ") returned: "
 	  << cpp_strerror(r) << dendl;
@@ -5497,7 +5507,6 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 
   // open in read-only first to read FM list and init allocator
   // as they might be needed for some BlueFS procedures
-
   r = _open_db(false, false, true);
   if (r < 0)
     goto out_bdev;
@@ -5511,7 +5520,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_db;
 
-  r = _open_alloc();
+  r = _init_alloc();
   if (r < 0)
     goto out_fm;
 
@@ -5525,11 +5534,13 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 
   r = _open_db(false, to_repair, read_only);
   if (r < 0) {
-    goto out_fm;
+    goto out_alloc;
   }
   return 0;
 
- out_fm:
+out_alloc:
+  _close_alloc();
+out_fm:
   _close_fm();
  out_db:
   _close_db(read_only);
@@ -5545,8 +5556,8 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 void BlueStore::_close_db_and_around(bool read_only)
 {
   _close_db(read_only);
-  _close_alloc();
   _close_fm();
+  _close_alloc();
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -6119,28 +6130,18 @@ int BlueStore::mkfs()
     goto out_close_bdev;
   }
 
-  uint64_t alloc_size;
-  alloc_size = min_alloc_size;
-  if (bdev->is_smr()) {
-    int r = _zoned_check_config_settings();
-    if (r < 0)
-      return r;
-    alloc_size = _zoned_piggyback_device_parameters_onto(alloc_size);
-  }
-  shared_alloc.set(Allocator::create(cct, cct->_conf->bluestore_allocator,
-    bdev->get_size(),
-    alloc_size, "block"));
-  if (!shared_alloc.a) {
-    r = -EINVAL;
+  r = _create_alloc();
+  if (r < 0) {
     goto out_close_bdev;
   }
+
   reserved = _get_ondisk_reserved();
   shared_alloc.a->init_add_free(reserved,
     p2align(bdev->get_size(), min_alloc_size) - reserved);
 
   r = _open_db(true);
   if (r < 0)
-    goto out_close_bdev;
+    goto out_close_alloc;
 
   {
     KeyValueDB::Transaction t = db->get_transaction();
@@ -6189,9 +6190,9 @@ int BlueStore::mkfs()
   _close_fm();
  out_close_db:
   _close_db(false);
+ out_close_alloc:
+  _close_alloc();
  out_close_bdev:
-  delete shared_alloc.a;
-  shared_alloc.reset();
   _close_bdev();
  out_close_fsid:
   _close_fsid();
