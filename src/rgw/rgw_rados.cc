@@ -2972,8 +2972,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
 
   const string *ptag = meta.ptag;
-  if (!ptag && !index_op->get_optag()->empty()) {
-    ptag = index_op->get_optag();
+  if (const auto* optag = index_op->get_optag(); !ptag && optag && !optag->empty()) {
+    ptag = optag;
   }
   r = target->prepare_atomic_modification(op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, modify_tail, y);
   if (r < 0)
