@@ -953,11 +953,9 @@ public:
       int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj);
-
-      void set_zones_trace(rgw_zone_set *_zones_trace) {
-        zones_trace = _zones_trace;
-      }
+      UpdateIndex(RGWRados::Bucket *_target,
+                  const rgw_obj& _obj,
+                  rgw_zone_set *zones_trace = nullptr);
 
       int prepare(RGWModifyOp, const string *write_tag, optional_yield y);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,

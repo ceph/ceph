@@ -3211,10 +3211,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(target->get_store(), bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
-  index_op.set_zones_trace(meta.zones_trace);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj(), meta.zones_trace);
 
-  
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   RGWObjState *state;
   int r = target->get_state(&state, false, y, assume_noent);
@@ -5103,10 +5101,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
-  
-  index_op.set_zones_trace(params.zones_trace);
-
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, params.zones_trace);
   r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag, y);
   if (r < 0)
     return r;
@@ -5978,10 +5973,12 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
 
 RGWRados::Bucket::UpdateIndex::UpdateIndex(
   RGWRados::Bucket *_target,
-  const rgw_obj& _obj)
+  const rgw_obj& _obj,
+  rgw_zone_set *zones_trace)
 : target(_target),
   obj(_obj),
-  bs(target->get_store())
+  bs(target->get_store()),
+  zones_trace(zones_trace)
 {
   blind = (target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
 }
