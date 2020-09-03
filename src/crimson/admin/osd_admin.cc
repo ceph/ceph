@@ -47,7 +47,7 @@ public:
     f->open_object_section("status");
     osd.dump_status(f.get());
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 private:
   const crimson::osd::OSD& osd;
@@ -98,7 +98,7 @@ public:
     uint64_t seq = osd.send_pg_stats();
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->dump_unsigned("stat_seq", seq);
-    return seastar::make_ready_future<tell_result_t>(tell_result_t(f.get()));
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 
 private:
@@ -125,7 +125,7 @@ public:
     f->open_object_section("pgstate_history");
     osd.dump_pg_state_history(f.get());
     f->close_section();
-    return seastar::make_ready_future<tell_result_t>(f.get());
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 private:
   const crimson::osd::OSD& osd;
@@ -183,7 +183,7 @@ public:
      }
    }
    f->close_section();
-   return seastar::make_ready_future<tell_result_t>(f.get());
+   return seastar::make_ready_future<tell_result_t>(std::move(f));
  }
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<SeastarMetricsHook>();
