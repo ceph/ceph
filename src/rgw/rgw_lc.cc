@@ -2154,8 +2154,8 @@ std::string s3_expiration_header(
   for (const auto& ri : rule_map) {
     const auto& rule = ri.second;
     auto& id = rule.get_id();
-    auto& prefix = rule.get_prefix();
     auto& filter = rule.get_filter();
+    auto& prefix = filter.has_prefix() ? filter.get_prefix(): rule.get_prefix();
     auto& expiration = rule.get_expiration();
     auto& noncur_expiration = rule.get_noncur_expiration();
 
@@ -2185,7 +2185,7 @@ std::string s3_expiration_header(
 
     if(! prefix.empty()) {
       if (! boost::starts_with(obj_key.name, prefix))
-	continue;
+        continue;
     }
 
     if (filter.has_tags()) {
