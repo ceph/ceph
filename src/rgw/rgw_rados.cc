@@ -2971,6 +2971,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, bool modify_tail,
+                                           RGWObjState *state,
                                            void *_index_op, optional_yield y)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
@@ -3119,11 +3120,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                           !obj.key.instance.empty();
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
-
-  if (versioned_op) {
-    index_op->set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
-  }
-
   auto& ioctx = ref.pool.ioctx();
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
@@ -3151,7 +3147,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
                         storage_class, &acl_bl,
-                        meta.category, meta.remove_objs, meta.user_data, meta.appendable);
+                        meta.category, meta.remove_objs,
+                        versioned_op ? RGW_BILOG_FLAG_VERSIONED_OP : 0,
+                        meta.user_data, meta.appendable);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -5141,7 +5139,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
   
   index_op.set_zones_trace(params.zones_trace);
-  index_op.set_bilog_flags(params.bilog_flags);
 
   r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag, y);
   if (r < 0)
@@ -5162,7 +5159,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(poolid, ioctx.get_last_version(), state->mtime, params.remove_objs);
+    r = index_op.complete_del(poolid, ioctx.get_last_version(), state->mtime,
+                              params.remove_objs, params.bilog_flags);
     
     int ret = target->complete_atomic_modification();
     if (ret < 0) {
@@ -5244,7 +5242,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime)
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-  return index_op.complete_del(-1 /* pool */, 0, mtime, NULL);
+  return index_op.complete_del(-1 /* pool */, 0, mtime, nullptr, 0 /* bilog_flags */);
 }
 
 static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
@@ -5860,7 +5858,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
       int64_t poolid = ioctx.get_id();
       r = index_op.complete(poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, &acl_bl,
-                            RGWObjCategory::Main, NULL);
+                            RGWObjCategory::Main, nullptr, 0);
     } else {
       int ret = index_op.cancel();
       if (ret < 0) {
@@ -6096,8 +6094,8 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             const string& content_type, const string& storage_class,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
-                                            list<rgw_obj_index_key> *remove_objs, const string *user_data,
-                                            bool appendable)
+                                            list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
+                                            const string *user_data, bool appendable)
 {
   if (blind) {
     return 0;
@@ -6145,7 +6143,8 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
 
 int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
                                                 real_time& removed_mtime,
-                                                list<rgw_obj_index_key> *remove_objs)
+                                                list<rgw_obj_index_key> *remove_objs,
+                                                uint16_t bilog_flags)
 {
   if (blind) {
     return 0;
