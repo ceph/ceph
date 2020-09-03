@@ -895,7 +895,6 @@ OPTION(bdev_debug_aio_log_age, OPT_DOUBLE)
 // to the uio_pci_generic driver. The purpose is to prevent the case where
 // NVMe driver is loaded while osd is running.
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL)
-OPTION(bdev_nvme_retry_count, OPT_INT) // -1 means by default which is 4
 OPTION(bdev_enable_discard, OPT_BOOL)
 OPTION(bdev_async_discard, OPT_BOOL)
 OPTION(bdev_flock_retry_interval, OPT_FLOAT)
