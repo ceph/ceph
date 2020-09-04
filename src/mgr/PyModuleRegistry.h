@@ -193,7 +193,8 @@ public:
     auto itp = clients.equal_range(std::string(name));
     for (auto it = itp.first; it != itp.second; ++it) {
       if (it->second == addrs) {
-        it = clients.erase(it);
+        clients.erase(it);
+        return;
       }
     }
   }
