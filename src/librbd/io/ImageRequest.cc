@@ -58,7 +58,7 @@ struct C_RBD_Readahead : public Context {
 };
 
 template <typename I>
-void readahead(I *ictx, const Extents& image_extents) {
+void readahead(I *ictx, const Extents& image_extents, IOContext io_context) {
   uint64_t total_bytes = 0;
   for (auto& image_extent : image_extents) {
     total_bytes += image_extent.second;
@@ -76,8 +76,6 @@ void readahead(I *ictx, const Extents& image_extents) {
 
   uint64_t image_size = ictx->get_image_size(ictx->snap_id);
   ictx->image_lock.unlock_shared();
-
-  auto io_context = ictx->get_data_io_context();
 
   auto readahead_extent = ictx->readahead.update(image_extents, image_size);
   uint64_t readahead_offset = readahead_extent.first;
@@ -161,20 +159,22 @@ bool should_update_timestamp(const utime_t& now, const utime_t& timestamp,
 template <typename I>
 void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents,
-                               ReadResult &&read_result, int op_flags,
+                               ReadResult &&read_result, IOContext io_context,
+                               int op_flags,
 			       const ZTracer::Trace &parent_trace) {
   ImageReadRequest<I> req(*ictx, c, std::move(image_extents),
-                          std::move(read_result), op_flags, parent_trace);
+                          std::move(read_result), io_context, op_flags,
+                          parent_trace);
   req.send();
 }
 
 template <typename I>
 void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                 Extents &&image_extents, bufferlist &&bl,
-                                int op_flags,
+                                IOContext io_context, int op_flags,
 				const ZTracer::Trace &parent_trace) {
   ImageWriteRequest<I> req(*ictx, c, std::move(image_extents), std::move(bl),
-                           op_flags, parent_trace);
+                           io_context, op_flags, parent_trace);
   req.send();
 }
 
@@ -182,9 +182,11 @@ template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                   Extents &&image_extents,
                                   uint32_t discard_granularity_bytes,
-				  const ZTracer::Trace &parent_trace) {
+				  IOContext io_context,
+                                  const ZTracer::Trace &parent_trace) {
   ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents),
-                             discard_granularity_bytes, parent_trace);
+                             discard_granularity_bytes, io_context,
+                             parent_trace);
   req.send();
 }
 
@@ -199,10 +201,12 @@ void ImageRequest<I>::aio_flush(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
                                     Extents &&image_extents,
-                                    bufferlist &&bl, int op_flags,
+                                    bufferlist &&bl, IOContext io_context,
+                                    int op_flags,
 				    const ZTracer::Trace &parent_trace) {
   ImageWriteSameRequest<I> req(*ictx, c, std::move(image_extents),
-                               std::move(bl), op_flags, parent_trace);
+                               std::move(bl), io_context, op_flags,
+                               parent_trace);
   req.send();
 }
 
@@ -212,11 +216,12 @@ void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
                                             bufferlist &&cmp_bl,
                                             bufferlist &&bl,
                                             uint64_t *mismatch_offset,
-                                            int op_flags,
+                                            IOContext io_context, int op_flags,
                                             const ZTracer::Trace &parent_trace) {
   ImageCompareAndWriteRequest<I> req(*ictx, c, std::move(image_extents),
                                      std::move(cmp_bl), std::move(bl),
-                                     mismatch_offset, op_flags, parent_trace);
+                                     mismatch_offset, io_context, op_flags,
+                                     parent_trace);
   req.send();
 }
 
@@ -328,10 +333,11 @@ void ImageRequest<I>::update_timestamp() {
 template <typename I>
 ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
                                       Extents &&image_extents,
-                                      ReadResult &&read_result, int op_flags,
+                                      ReadResult &&read_result,
+                                      IOContext io_context, int op_flags,
 				      const ZTracer::Trace &parent_trace)
-  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents), "read",
-		    parent_trace),
+  : ImageRequest<I>(image_ctx, aio_comp, std::move(image_extents),
+                    io_context, "read", parent_trace),
     m_op_flags(op_flags) {
   aio_comp->read_result = std::move(read_result);
 }
@@ -371,7 +377,7 @@ void ImageReadRequest<I>::send_request() {
   auto &image_extents = this->m_image_extents;
   if (image_ctx.cache && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), image_extents);
+    readahead(get_image_ctx(&image_ctx), image_extents, this->m_io_context);
   }
 
   // map image extents to object extents
@@ -387,8 +393,6 @@ void ImageReadRequest<I>::send_request() {
     buffer_ofs += extent.second;
   }
 
-  auto io_context = image_ctx.get_data_io_context();
-
   // issue the requests
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(object_extents.size());
@@ -401,7 +405,7 @@ void ImageReadRequest<I>::send_request() {
       aio_comp, oe.offset, oe.length, std::move(oe.buffer_extents));
     auto req = ObjectDispatchSpec::create_read(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.object_no,
-      {{oe.offset, oe.length}}, io_context, m_op_flags, this->m_trace,
+      {{oe.offset, oe.length}}, this->m_io_context, m_op_flags, this->m_trace,
       &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
     req->send();
   }
@@ -430,7 +434,8 @@ bool AbstractImageWriteRequest<I>::finish_request_early() {
   AioCompletion *aio_comp = this->m_aio_comp;
   {
     std::shared_lock image_locker{this->m_image_ctx.image_lock};
-    if (this->m_image_ctx.snap_id != CEPH_NOSNAP || this->m_image_ctx.read_only) {
+    if (this->m_image_ctx.snap_id != CEPH_NOSNAP ||
+        this->m_image_ctx.read_only) {
       aio_comp->fail(-EROFS);
       return true;
     }
@@ -450,7 +455,6 @@ void AbstractImageWriteRequest<I>::send_request() {
 
   bool journaling = false;
 
-  auto io_context = image_ctx.get_data_io_context();
   AioCompletion *aio_comp = this->m_aio_comp;
   {
     // prevent image size from changing between computing clip and recording
@@ -488,7 +492,7 @@ void AbstractImageWriteRequest<I>::send_request() {
       journal_tid = append_journal_event(m_synchronous);
     }
 
-    send_object_requests(object_extents, io_context, journal_tid);
+    send_object_requests(object_extents, this->m_io_context, journal_tid);
   }
 
   update_stats(clip_len);

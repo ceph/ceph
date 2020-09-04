@@ -266,7 +266,8 @@ void ObjectCopyRequest<I>::send_read_from_parent() {
   auto src_image_ctx = m_src_image_ctx;
   io::ImageRequest<I>::aio_read(src_image_ctx->parent, comp,
                                 std::move(image_extents),
-                                io::ReadResult{&m_read_from_parent_data}, 0,
+                                io::ReadResult{&m_read_from_parent_data},
+                                src_image_ctx->get_data_io_context(), 0,
                                 ZTracer::Trace());
 }
 
