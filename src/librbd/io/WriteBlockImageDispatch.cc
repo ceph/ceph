@@ -127,8 +127,8 @@ void WriteBlockImageDispatch<I>::wait_on_writes_unblocked(
 template <typename I>
 bool WriteBlockImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -140,8 +140,9 @@ bool WriteBlockImageDispatch<I>::write(
 template <typename I>
 bool WriteBlockImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
-    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
-    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    uint32_t discard_granularity_bytes, IOContext io_context,
+    const ZTracer::Trace &parent_trace, uint64_t tid,
+    std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -153,8 +154,8 @@ bool WriteBlockImageDispatch<I>::discard(
 template <typename I>
 bool WriteBlockImageDispatch<I>::write_same(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -166,8 +167,8 @@ bool WriteBlockImageDispatch<I>::write_same(
 template <typename I>
 bool WriteBlockImageDispatch<I>::compare_and_write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
-    bufferlist &&bl, uint64_t *mismatch_offset, int op_flags,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
+    bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
+    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {

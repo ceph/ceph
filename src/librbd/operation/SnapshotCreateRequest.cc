@@ -401,10 +401,6 @@ void SnapshotCreateRequest<I>::update_snap_context() {
 
   std::shared_lock owner_locker{image_ctx.owner_lock};
   std::unique_lock image_locker{image_ctx.image_lock};
-  if (image_ctx.old_format) {
-    return;
-  }
-
   if (image_ctx.get_snap_info(m_snap_id) != NULL) {
     return;
   }
