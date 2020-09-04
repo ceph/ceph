@@ -776,6 +776,9 @@ int trim_part(cls_method_context_t hctx,
   if (op.ofs < part_header.min_ofs) {
     return 0;
   }
+  if (op.exclusive && op.ofs == part_header.min_ofs) {
+    return 0;
+  }
 
   if (op.ofs >= part_header.next_ofs) {
     if (full_part(part_header)) {
@@ -803,15 +806,19 @@ int trim_part(cls_method_context_t hctx,
       return r;
     }
 
-    r = reader.get_next_entry(nullptr, nullptr, nullptr);
-    if (r < 0) {
-      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d",
-	      __func__, r);
-      return r;
+    if (op.exclusive) {
+      part_header.min_index = pre_header.index;
+    } else {
+      r = reader.get_next_entry(nullptr, nullptr, nullptr);
+      if (r < 0) {
+	CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d",
+		__func__, r);
+	return r;
+      }
+      part_header.min_index = pre_header.index + 1;
     }
 
     part_header.min_ofs = reader.get_ofs();
-    part_header.min_index = pre_header.index + 1;
   }
 
   r = write_part_header(hctx, part_header);

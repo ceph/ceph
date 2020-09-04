@@ -143,12 +143,13 @@ void push_part(WriteOp& op, std::string_view tag,
 
 void trim_part(WriteOp& op,
 	       std::optional<std::string_view> tag,
-	       std::uint64_t ofs)
+	       std::uint64_t ofs, bool exclusive)
 {
   fifo::op::trim_part tp;
 
   tp.tag = tag;
   tp.ofs = ofs;
+  tp.exclusive = exclusive;
 
   bufferlist in;
   encode(tp, in);

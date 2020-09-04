@@ -220,7 +220,7 @@ TEST_F(LegacyFIFO, TestPushListTrim)
   }
 
   /* trim one entry */
-  r = f->trim(markers[min_entry], null_yield);
+  r = f->trim(markers[min_entry], false, null_yield);
   ASSERT_EQ(0, r);
   ++min_entry;
 
@@ -333,7 +333,7 @@ TEST_F(LegacyFIFO, TestMultipleParts)
     ASSERT_EQ(expected_more, more);
 
     marker = result.front().marker;
-    r = f->trim(*marker, null_yield);
+    r = f->trim(*marker, false, null_yield);
     ASSERT_EQ(0, r);
 
     /* check tail */
@@ -459,7 +459,7 @@ TEST_F(LegacyFIFO, TestTwoPushersTrim)
 
   auto& entry = result[num - 1];
   marker = entry.marker;
-  r = f1->trim(marker, null_yield);
+  r = f1->trim(marker, false, null_yield);
   /* list what's left by fifo2 */
 
   const auto left = max_entries - num;
@@ -577,7 +577,7 @@ TEST_F(LegacyFIFO, TestAioTrim)
     marker = result.front().marker;
     std::unique_ptr<R::AioCompletion> c(rados.aio_create_completion(nullptr,
 								    nullptr));
-    r = f->trim(*marker, c.get());
+    r = f->trim(*marker, false, c.get());
     ASSERT_EQ(0, r);
     c->wait_for_complete();
     r = c->get_return_value();
@@ -606,4 +606,42 @@ TEST_F(LegacyFIFO, TestAioTrim)
   /* check current tail exists */
   r = f->get_part_info(info.tail_part_num, &partinfo, null_yield);
   ASSERT_EQ(0, r);
+}
+
+TEST_F(LegacyFIFO, TestTrimExclusive) {
+  std::unique_ptr<RCf::FIFO> f;
+  auto r = RCf::FIFO::create(ioctx, fifo_id, &f, null_yield);
+  ASSERT_EQ(0, r);
+  std::vector<RCf::list_entry> result;
+  bool more = false;
+
+  static constexpr auto max_entries = 10u;
+  for (uint32_t i = 0; i < max_entries; ++i) {
+    cb::list bl;
+    encode(i, bl);
+    f->push(bl, null_yield);
+  }
+
+  f->list(1, std::nullopt, &result, &more, null_yield);
+  auto [val, marker] = decode_entry<std::uint32_t>(result.front());
+  ASSERT_EQ(0, val);
+  f->trim(marker, true, null_yield);
+
+  result.clear();
+  f->list(max_entries, std::nullopt, &result, &more, null_yield);
+  std::tie(val, marker) = decode_entry<std::uint32_t>(result.front());
+  ASSERT_EQ(0, val);
+  f->trim(result[4].marker, true, null_yield);
+
+  result.clear();
+  f->list(max_entries, std::nullopt, &result, &more, null_yield);
+  std::tie(val, marker) = decode_entry<std::uint32_t>(result.front());
+  ASSERT_EQ(4, val);
+  f->trim(result.back().marker, true, null_yield);
+
+  result.clear();
+  f->list(max_entries, std::nullopt, &result, &more, null_yield);
+  std::tie(val, marker) = decode_entry<std::uint32_t>(result.front());
+  ASSERT_EQ(result.size(), 1);
+  ASSERT_EQ(max_entries - 1, val);
 }

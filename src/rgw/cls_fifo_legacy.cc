@@ -152,12 +152,13 @@ int push_part(lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
 
 void trim_part(lr::ObjectWriteOperation* op,
 	       std::optional<std::string_view> tag,
-	       std::uint64_t ofs)
+	       std::uint64_t ofs, bool exclusive)
 {
   fifo::op::trim_part tp;
 
   tp.tag = tag;
   tp.ofs = ofs;
+  tp.exclusive = exclusive;
 
   cb::list in;
   encode(tp, in);
@@ -621,25 +622,27 @@ int FIFO::push_entries(const std::deque<cb::list>& data_bufs,
 
 int FIFO::trim_part(int64_t part_num, uint64_t ofs,
 		    std::optional<std::string_view> tag,
+		    bool exclusive,
 		    optional_yield y)
 {
   lr::ObjectWriteOperation op;
   std::unique_lock l(m);
   const auto part_oid = info.part_oid(part_num);
   l.unlock();
-  rgw::cls::fifo::trim_part(&op, tag, ofs);
+  rgw::cls::fifo::trim_part(&op, tag, ofs, exclusive);
   return rgw_rados_operate(ioctx, part_oid, &op, y);
 }
 
 int FIFO::trim_part(int64_t part_num, uint64_t ofs,
 		    std::optional<std::string_view> tag,
+		    bool exclusive,
 		    lr::AioCompletion* c)
 {
   lr::ObjectWriteOperation op;
   std::unique_lock l(m);
   const auto part_oid = info.part_oid(part_num);
   l.unlock();
-  rgw::cls::fifo::trim_part(&op, tag, ofs);
+  rgw::cls::fifo::trim_part(&op, tag, ofs, exclusive);
   return ioctx.aio_operate(part_oid, c, &op);
 }
 
@@ -924,7 +927,7 @@ int FIFO::list(int max_entries,
   return r;
 }
 
-int FIFO::trim(std::string_view markstr, optional_yield y)
+int FIFO::trim(std::string_view markstr, bool exclusive, optional_yield y)
 {
   auto marker = to_marker(markstr);
   if (!marker) {
@@ -941,13 +944,13 @@ int FIFO::trim(std::string_view markstr, optional_yield y)
     std::unique_lock l(m);
     auto max_part_size = info.params.max_part_size;
     l.unlock();
-    r = trim_part(pn, max_part_size, std::nullopt, y);
+    r = trim_part(pn, max_part_size, std::nullopt, false, y);
     if (r < 0 && r == -ENOENT) {
       return r;
     }
     ++pn;
   }
-  r = trim_part(part_num, ofs, std::nullopt, y);
+  r = trim_part(part_num, ofs, std::nullopt, exclusive, y);
   if (r < 0 && r != -ENOENT) {
     return r;
   }
@@ -982,6 +985,7 @@ struct Trimmer {
   std::int64_t part_num;
   std::uint64_t ofs;
   std::int64_t pn;
+  bool exclusive;
   lr::AioCompletion* super;
   lr::AioCompletion* cur = lr::Rados::aio_create_completion(
     static_cast<void*>(this), &FIFO::trim_callback);
@@ -990,8 +994,9 @@ struct Trimmer {
   int retries = 0;
 
   Trimmer(FIFO* fifo, std::int64_t part_num, std::uint64_t ofs, std::int64_t pn,
-	  lr::AioCompletion* super)
-    : fifo(fifo), part_num(part_num), ofs(ofs), pn(pn), super(super) {
+	  bool exclusive, lr::AioCompletion* super)
+    : fifo(fifo), part_num(part_num), ofs(ofs), pn(pn), exclusive(exclusive),
+      super(super) {
     super->pc->get();
   }
   ~Trimmer() {
@@ -1019,7 +1024,7 @@ void FIFO::trim_callback(lr::completion_t, void* arg)
       trimmer->cur->release();
       trimmer->cur = lr::Rados::aio_create_completion(arg, &FIFO::trim_callback);
       r = trimmer->fifo->trim_part(trimmer->pn++, max_part_size, std::nullopt,
-				   trimmer->cur);
+				   false, trimmer->cur);
       if (r < 0) {
 	complete(trimmer->super, r);
 	delete trimmer;
@@ -1033,7 +1038,7 @@ void FIFO::trim_callback(lr::completion_t, void* arg)
       trimmer->update = true;
       trimmer->canceled = tail_part_num < trimmer->part_num;
       r = trimmer->fifo->trim_part(trimmer->part_num, trimmer->ofs,
-				   std::nullopt, trimmer->cur);
+				   std::nullopt, trimmer->exclusive, trimmer->cur);
       if (r < 0) {
 	complete(trimmer->super, r);
 	delete trimmer;
@@ -1069,7 +1074,7 @@ void FIFO::trim_callback(lr::completion_t, void* arg)
   }
 }
 
-int FIFO::trim(std::string_view markstr, lr::AioCompletion* c) {
+int FIFO::trim(std::string_view markstr, bool exclusive, lr::AioCompletion* c) {
   auto marker = to_marker(markstr);
   if (!marker) {
     return -EINVAL;
@@ -1079,7 +1084,7 @@ int FIFO::trim(std::string_view markstr, lr::AioCompletion* c) {
   const auto pn = info.tail_part_num;
   const auto part_oid = info.part_oid(pn);
   l.unlock();
-  auto trimmer = new Trimmer(this, marker->num, marker->ofs, pn, c);
+  auto trimmer = new Trimmer(this, marker->num, marker->ofs, pn, exclusive, c);
   ++trimmer->pn;
   auto ofs = marker->ofs;
   if (pn < marker->num) {
@@ -1087,7 +1092,8 @@ int FIFO::trim(std::string_view markstr, lr::AioCompletion* c) {
   } else {
     trimmer->update = true;
   }
-  auto r = trimmer->fifo->trim_part(pn, ofs, std::nullopt, trimmer->cur);
+  auto r = trimmer->fifo->trim_part(pn, ofs, std::nullopt, exclusive,
+				    trimmer->cur);
   if (r < 0) {
     complete(trimmer->super, r);
     delete trimmer;

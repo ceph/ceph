@@ -112,7 +112,8 @@ void push_part(WriteOp& op, std::string_view tag,
 	       std::deque<cb::list> data_bufs,
 	       fu2::unique_function<void(bs::error_code, int)>);
 void trim_part(WriteOp& op, std::optional<std::string_view> tag,
-	       std::uint64_t ofs);
+	       std::uint64_t ofs,
+	       bool exclusive);
 void list_part(ReadOp& op,
 	       std::optional<std::string_view> tag,
 	       std::uint64_t ofs,
@@ -567,6 +568,8 @@ public:
   /// Signature: (bs::error_code)
   template<typename CT>
   auto trim(std::string_view markstr, //< Position to which to trim, inclusive
+	    bool exclusive, //< If true, trim markers up to but NOT INCLUDING
+	                    //< markstr, otherwise trim markstr as well.
 	    CT&& ct //< CompletionToken
     ) {
     auto m = to_marker(markstr);
@@ -582,7 +585,7 @@ public:
     } else {
       using handler_type = decltype(init.completion_handler);
       auto t = ceph::allocate_unique<Trimmer<handler_type>>(
-	a, this, m->num, m->ofs, std::move(init.completion_handler));
+	a, this, m->num, m->ofs, exclusive, std::move(init.completion_handler));
       t.release()->trim();
     }
     return init.result.get();
@@ -1088,9 +1091,10 @@ private:
   auto trim_part(int64_t part_num,
 		 uint64_t ofs,
 		 std::optional<std::string_view> tag,
+		 bool exclusive,
 		 CT&& ct) {
     WriteOp op;
-    cls::fifo::trim_part(op, tag, ofs);
+    cls::fifo::trim_part(op, tag, ofs, exclusive);
     return r->execute(info.part_oid(part_num), ioc, std::move(op),
 		      std::forward<CT>(ct));
   }
@@ -1362,6 +1366,7 @@ private:
     FIFO* f;
     std::int64_t part_num;
     std::uint64_t ofs;
+    bool exclusive;
     Handler handler;
     std::int64_t pn;
     int i = 0;
@@ -1411,8 +1416,9 @@ private:
 
   public:
     Trimmer(FIFO* f, std::int64_t part_num, std::uint64_t ofs,
-	    Handler&& handler)
-      : f(f), part_num(part_num), ofs(ofs), handler(std::move(handler)) {
+	    bool exclusive, Handler&& handler)
+      : f(f), part_num(part_num), ofs(ofs), exclusive(exclusive),
+	handler(std::move(handler)) {
       std::unique_lock l(f->m);
       pn = f->info.tail_part_num;
     }
@@ -1426,6 +1432,7 @@ private:
 	l.unlock();
 	f->trim_part(
 	  pn, max_part_size, std::nullopt,
+	  false,
 	  ca::bind_ea(
 	    e, a,
 	    [t = std::unique_ptr<Trimmer>(this),
@@ -1444,7 +1451,7 @@ private:
 	return;
       }
       f->trim_part(
-	part_num, ofs, std::nullopt,
+	part_num, ofs, std::nullopt, exclusive,
 	ca::bind_ea(
 	  e, a,
 	  [t = std::unique_ptr<Trimmer>(this),

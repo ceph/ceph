@@ -297,7 +297,7 @@ TEST(FIFO, TestPushListTrim) {
 
 
 		  /* trim one entry */
-		  f->trim(markers[min_entry], y);
+		  f->trim(markers[min_entry], false, y);
 		  ++min_entry;
 		}
 
@@ -444,7 +444,7 @@ TEST(FIFO, TestMultipleParts) {
 
 		    marker = result.front().marker;
 
-		    f->trim(*marker, y);
+		    f->trim(*marker, false, y);
 		  }
 
 		  /* check tail */
@@ -606,7 +606,7 @@ TEST(FIFO, TestTwoPushersTrim) {
 		  auto& entry = result[num - 1];
 		  marker = entry.marker;
 
-		  f1->trim(marker, y);
+		  f1->trim(marker, false, y);
 
 		  /* list what's left by fifo2 */
 
@@ -683,6 +683,57 @@ TEST(FIFO, TestPushBatch) {
 
 		auto& info = f->meta();
 		ASSERT_EQ(info.head_part_num, 4);
+	      });
+  c.run();
+}
+
+TEST(FIFO, TestTrimExclusive) {
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+
+  s::spawn(c, [&](s::yield_context y) mutable {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y);
+		static constexpr auto max_entries = 10u;
+		for (uint32_t i = 0; i < max_entries; ++i) {
+		  cb::list bl;
+		  encode(i, bl);
+		  f->push(bl, y);
+		}
+
+		{
+		  auto [result, more] = f->list(1, std::nullopt, y);
+		  auto [val, marker] =
+		    decode_entry<std::uint32_t>(result.front());
+		  ASSERT_EQ(0, val);
+		  f->trim(marker, true, y);
+		}
+		{
+		  auto [result, more] = f->list(max_entries, std::nullopt, y);
+		  auto [val, marker] = decode_entry<std::uint32_t>(result.front());
+		  ASSERT_EQ(0, val);
+		  f->trim(result[4].marker, true, y);
+		}
+		{
+		  auto [result, more] = f->list(max_entries, std::nullopt, y);
+		  auto [val, marker] =
+		    decode_entry<std::uint32_t>(result.front());
+		  ASSERT_EQ(4, val);
+		  f->trim(result.back().marker, true, y);
+		}
+		{
+		  auto [result, more] = f->list(max_entries, std::nullopt, y);
+		  auto [val, marker] =
+		    decode_entry<std::uint32_t>(result.front());
+		  ASSERT_EQ(result.size(), 1);
+		  ASSERT_EQ(max_entries - 1, val);
+		}
 	      });
   c.run();
 }
