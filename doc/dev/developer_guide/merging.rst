@@ -1,3 +1,5 @@
+.. _merging:
+
 What is Merged Where and When?
 ===============================
 
