@@ -1,7 +1,7 @@
 @use './src/styles/defaults/bootstrap-defaults' as bd;
 
 // Angular2-Tree Component
-::ng-deep tree-root {
+::ng-deep cd-cephfs-directories tree-root {
   .tree-children {
     overflow: inherit;
   }

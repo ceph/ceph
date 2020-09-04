@@ -47,16 +47,6 @@
     float: left;
   }
 
-  ::ng-deep .table-filters {
-    border-left: 1px solid bd.$datatable-divider-color;
-    float: right;
-    padding-left: 8px;
-  }
-
-  ::ng-deep .table-filters label {
-    margin-right: 4px;
-  }
-
   .form-group {
     padding-left: 8px;
   }
@@ -90,7 +80,7 @@
   }
 }
 
-::ng-deep .cd-datatable {
+::ng-deep cd-table .cd-datatable {
   border: 1px solid bd.$gray-400;
   margin-bottom: 0;
   max-width: none !important;
