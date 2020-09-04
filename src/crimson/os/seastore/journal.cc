@@ -396,6 +396,34 @@ Journal::replay_ret Journal::replay(delta_handler_t &&delta_handler)
     });
 }
 
+Journal::scan_extents_ret Journal::scan_extents(
+  paddr_t addr,
+  extent_len_t bytes_to_read)
+{
+  // Caller doesn't know addr of first record, so addr.offset == 0 is special
+  if (addr.offset == 0) addr.offset = block_size;
+
+  return seastar::do_with(
+    scan_extents_ret_bare(),
+    [=](auto &ret) {
+      return seastar::do_with(
+	extent_handler_t([&ret](auto addr, const auto &info) mutable {
+	  ret.second.push_back(std::make_pair(addr, info));
+	  return scan_extents_ertr::now();
+	}),
+	[=, &ret](auto &handler) mutable {
+	  return scan_segment(
+	    addr,
+	    bytes_to_read,
+	    nullptr,
+	    &handler).safe_then([&ret](auto next) mutable {
+	      ret.first = next;
+	      return std::move(ret);
+	    });
+	});
+    });
+}
+
 Journal::scan_segment_ret Journal::scan_segment(
   paddr_t addr,
   extent_len_t bytes_to_read,
