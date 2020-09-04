@@ -3082,9 +3082,10 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
   }
 }
 
-void Client::put_inode(Inode *in, int n)
+void Client::_put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << __func__ << " on " << *in << dendl;
+
   int left = in->_put(n);
   if (left == 0) {
     // release any caps
@@ -3106,6 +3107,31 @@ void Client::put_inode(Inode *in, int n)
 
     delete in;
   }
+}
+
+void Client::delay_put_inodes(bool wakeup)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  std::map<Inode*,int> release;
+  {
+    std::scoped_lock dl(delay_i_lock);
+    release.swap(delay_i_release);
+  }
+
+  for (auto &[in, cnt] : release)
+    _put_inode(in, cnt);
+
+  if (wakeup)
+    mount_cond.notify_all();
+}
+
+void Client::put_inode(Inode *in, int n)
+{
+  ldout(cct, 20) << __func__ << " on " << *in << " n = " << n << dendl;
+
+  std::scoped_lock dl(delay_i_lock);
+  delay_i_release[in] += n;
 }
 
 void Client::close_dir(Dir *dir)
@@ -6217,6 +6243,7 @@ void Client::_unmount(bool abort)
   deleg_timeout = 0;
 
   if (abort) {
+    mount_aborted = true;
     // Abort all mds sessions
     _abort_mds_sessions(-ENOTCONN);
 
@@ -6233,13 +6260,6 @@ void Client::_unmount(bool abort)
     }
     return mds_requests.empty();
   });
-
-  {
-    std::scoped_lock l(timer_lock);
-    if (tick_event)
-      timer.cancel_event(tick_event);
-    tick_event = 0;
-  }
 
   cwd.reset();
 
@@ -6307,12 +6327,15 @@ void Client::_unmount(bool abort)
   // empty lru cache
   trim_cache();
 
+  delay_put_inodes();
+
   while (lru.lru_get_size() > 0 ||
          !inode_map.empty()) {
     ldout(cct, 2) << "cache still has " << lru.lru_get_size()
             << "+" << inode_map.size() << " items"
 	    << ", waiting (for caps to release?)"
             << dendl;
+
     if (auto r = mount_cond.wait_for(lock, ceph::make_timespan(5));
 	r == std::cv_status::timeout) {
       dump_cache(NULL);
@@ -6325,6 +6348,13 @@ void Client::_unmount(bool abort)
   if (!cct->_conf->client_trace.empty()) {
     ldout(cct, 1) << "closing trace file '" << cct->_conf->client_trace << "'" << dendl;
     traceout.close();
+  }
+
+  {
+    std::scoped_lock l(timer_lock);
+    if (tick_event)
+      timer.cancel_event(tick_event);
+    tick_event = 0;
   }
 
   _close_sessions();
@@ -6401,7 +6431,7 @@ void Client::tick()
     }
   }
 
-  if (mdsmap->get_epoch()) {
+  if (!mount_aborted && mdsmap->get_epoch()) {
     // renew caps?
     utime_t el = now - last_cap_renew;
     if (el > mdsmap->get_session_timeout() / 3.0)
@@ -6415,14 +6445,17 @@ void Client::tick()
   while (!p.end()) {
     Inode *in = *p;
     ++p;
-    if (in->hold_caps_until > now)
+    if (!mount_aborted && in->hold_caps_until > now)
       break;
     delayed_list.pop_front();
-    check_caps(in, CHECK_CAPS_NODELAY);
+    if (!mount_aborted)
+      check_caps(in, CHECK_CAPS_NODELAY);
   }
 
-  collect_and_send_metrics();
+  if (!mount_aborted)
+    collect_and_send_metrics();
 
+  delay_put_inodes(is_unmounting());
   trim_cache(true);
 
   if (blocklisted && (is_mounted() || is_unmounting()) &&
@@ -9671,16 +9704,6 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   return read;
 }
 
-
-/*
- * we keep count of uncommitted sync writes on the inode, so that
- * fsync can DDRT.
- */
-void Client::_sync_write_commit(Inode *in)
-{
-  put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-}
-
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -9939,7 +9962,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
     // simple, non-atomic sync write
     C_SaferCond onfinish("Client::_write flock");
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
@@ -9948,7 +9971,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     client_lock.unlock();
     r = onfinish.wait();
     client_lock.lock();
-    _sync_write_commit(in);
+    put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     if (r < 0)
       goto done;
   }
@@ -13946,7 +13969,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       client_lock.unlock();
       onfinish.wait();
       client_lock.lock();
-      _sync_write_commit(in);
+      put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     }
   } else if (!(mode & FALLOC_FL_KEEP_SIZE)) {
     uint64_t size = offset + length;
