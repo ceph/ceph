@@ -7,6 +7,8 @@ tests", but rather tests that can be run easily on a single build machine
 after compiling Ceph from source, whereas integration tests require packages
 and multi-machine clusters to run.
 
+.. _make-check:
+
 What does "make check" mean?
 ----------------------------
 
