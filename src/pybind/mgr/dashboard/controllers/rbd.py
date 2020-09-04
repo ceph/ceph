@@ -11,7 +11,7 @@ from datetime import datetime
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
-    DeletePermission, CreatePermission, EndpointDoc, ControllerDoc
+    DeletePermission, CreatePermission, allow_empty_body, ControllerDoc, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -191,6 +191,7 @@ class Rbd(RESTController):
               'dest_namespace': '{dest_namespace}',
               'dest_image_name': '{dest_image_name}'}, 2.0)
     @RESTController.Resource('POST')
+    @allow_empty_body
     def copy(self, image_spec, dest_pool_name, dest_namespace, dest_image_name,
              snapshot_name=None, obj_size=None, features=None,
              stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
@@ -221,6 +222,7 @@ class Rbd(RESTController):
     @RbdTask('flatten', ['{image_spec}'], 2.0)
     @RESTController.Resource('POST')
     @UpdatePermission
+    @allow_empty_body
     def flatten(self, image_spec):
 
         def _flatten(ioctx, image):
@@ -236,6 +238,7 @@ class Rbd(RESTController):
 
     @RbdTask('trash/move', ['{image_spec}'], 2.0)
     @RESTController.Resource('POST')
+    @allow_empty_body
     def move_trash(self, image_spec, delay=0):
         """Move an image to the trash.
         Images, even ones actively in-use by clones,
@@ -290,6 +293,7 @@ class RbdSnapshot(RESTController):
              ['{image_spec}', '{snapshot_name}'], 5.0)
     @RESTController.Resource('POST')
     @UpdatePermission
+    @allow_empty_body
     def rollback(self, image_spec, snapshot_name):
         def _rollback(ioctx, img, snapshot_name):
             img.rollback_to_snap(snapshot_name)
@@ -303,6 +307,7 @@ class RbdSnapshot(RESTController):
               'child_namespace': '{child_namespace}',
               'child_image_name': '{child_image_name}'}, 2.0)
     @RESTController.Resource('POST')
+    @allow_empty_body
     def clone(self, image_spec, snapshot_name, child_pool_name,
               child_image_name, child_namespace=None, obj_size=None, features=None,
               stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
@@ -389,6 +394,7 @@ class RbdTrash(RESTController):
     @RbdTask('trash/purge', ['{pool_name}'], 2.0)
     @RESTController.Collection('POST', query_params=['pool_name'])
     @DeletePermission
+    @allow_empty_body
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
         now = "{}Z".format(datetime.utcnow().isoformat())
@@ -405,6 +411,7 @@ class RbdTrash(RESTController):
     @RbdTask('trash/restore', ['{image_id_spec}', '{new_image_name}'], 2.0)
     @RESTController.Resource('POST')
     @CreatePermission
+    @allow_empty_body
     def restore(self, image_id_spec, new_image_name):
         """Restore an image from trash."""
         pool_name, namespace, image_id = parse_image_spec(image_id_spec)

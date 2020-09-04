@@ -6,8 +6,8 @@ import os
 import cherrypy
 import cephfs
 
-from . import ApiController, ControllerDoc, RESTController, \
-    UiApiController, EndpointDoc
+from . import ApiController, ControllerDoc, RESTController, UiApiController, \
+    allow_empty_body, EndpointDoc
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -390,6 +390,7 @@ class CephFS(RESTController):
         return path
 
     @RESTController.Resource('POST', path='/tree')
+    @allow_empty_body
     def mk_tree(self, fs_id, path):
         """
         Create a directory.
@@ -410,6 +411,7 @@ class CephFS(RESTController):
         cfs.rm_dir(path)
 
     @RESTController.Resource('PUT', path='/quota')
+    @allow_empty_body
     def quota(self, fs_id, path, max_bytes=None, max_files=None):
         """
         Set the quotas of the specified path.
@@ -441,6 +443,7 @@ class CephFS(RESTController):
         return cfs.get_quotas(path)
 
     @RESTController.Resource('POST', path='/snapshot')
+    @allow_empty_body
     def snapshot(self, fs_id, path, name=None):
         """
         Create a snapshot.
