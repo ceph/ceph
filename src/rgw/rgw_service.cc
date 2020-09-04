@@ -53,6 +53,12 @@ int RGWServices_Def::init(CephContext *cct,
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
+  // Q: will we have the bucket layout available here?
+  // A: metadata log uses the `neorados` along the path to determine
+  //    which backend (fifo / log) should be used. Would it be enough
+  //    BILog as well?
+  //    Liekly we would need to introduce use `bilog_rados->init()`
+  //    as `datalog_rados` does with its `start()`. 
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
@@ -80,6 +86,7 @@ int RGWServices_Def::init(CephContext *cct,
 
   finisher->init();
   bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
+  // the two stage initialization
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
