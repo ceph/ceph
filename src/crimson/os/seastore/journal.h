@@ -61,6 +61,24 @@ struct record_header_t {
   }
 };
 
+struct extent_info_t {
+  extent_types_t type = extent_types_t::NONE;
+  laddr_t addr = L_ADDR_NULL;
+  extent_len_t len = 0;
+
+  extent_info_t() = default;
+  extent_info_t(const extent_t &et)
+    : type(et.type), addr(et.addr), len(et.bl.length()) {}
+
+  DENC(extent_info_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.type, p);
+    denc(v.addr, p);
+    denc(v.len, p);
+    DENC_FINISH(p);
+  }
+};
+
 /**
  * Callback interface for managing available segments
  */
@@ -266,3 +284,4 @@ private:
 }
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)

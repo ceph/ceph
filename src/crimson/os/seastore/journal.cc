@@ -66,6 +66,9 @@ ceph::bufferlist Journal::encode_record(
     record.extents.size()
   };
   ::encode(header, metadatabl);
+  for (const auto &i: record.extents) {
+    ::encode(extent_info_t(i), metadatabl);
+  }
   for (const auto &i: record.deltas) {
     ::encode(i, metadatabl);
   }
@@ -113,6 +116,8 @@ Journal::record_size_t Journal::get_encoded_record_length(
   const record_t &record) const {
   extent_len_t metadata =
     (extent_len_t)ceph::encoded_sizeof_bounded<record_header_t>();
+  metadata += record.extents.size() *
+    ceph::encoded_sizeof_bounded<extent_info_t>();
   extent_len_t data = 0;
   for (const auto &i: record.deltas) {
     metadata += ceph::encoded_sizeof(i);
@@ -321,6 +326,7 @@ std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
 {
   auto bliter = bl.cbegin();
   bliter += ceph::encoded_sizeof_bounded<record_header_t>();
+  bliter += header.extents  * ceph::encoded_sizeof_bounded<extent_info_t>();
   logger().debug("{}: decoding {} deltas", __func__, header.deltas);
   std::vector<delta_info_t> deltas(header.deltas);
   for (auto &&i : deltas) {
