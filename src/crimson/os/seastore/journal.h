@@ -190,6 +190,28 @@ public:
 	       const delta_info_t&)>;
   replay_ret replay(delta_handler_t &&delta_handler);
 
+  /**
+   * scan_extents
+   *
+   * Scans records beginning at addr until the first record boundary after
+   * addr + bytes_to_read.
+   *
+   * Returns <next_addr, list<extent, extent_info>>
+   * next_addr will be P_ADDR_NULL if no further extents exist in segment.
+   * If addr.offset == 0, scan will adjust to first record in segment.
+   */
+  using scan_extents_ertr = SegmentManager::read_ertr;
+  using scan_extents_ret_bare = std::pair<
+    paddr_t,
+    std::list<std::pair<paddr_t, extent_info_t>>
+    >;
+  using scan_extents_ret = scan_extents_ertr::future<scan_extents_ret_bare>;
+  scan_extents_ret scan_extents(
+    paddr_t addr,
+    extent_len_t bytes_to_read
+  );
+
+
 private:
   const extent_len_t block_size;
   const extent_len_t max_record_length;
@@ -285,6 +307,8 @@ private:
    * addr+bytes_to_read invoking delta_handler and extent_info_handler
    * on deltas and extent_infos respectively.  deltas, extent_infos
    * will only be decoded if the corresponding handler is included.
+   *
+   * @return next address to read from, P_ADDR_NULL if segment complete
    */
   using scan_segment_ertr = SegmentManager::read_ertr;
   using scan_segment_ret = scan_segment_ertr::future<paddr_t>;
