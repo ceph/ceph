@@ -84,6 +84,16 @@ enum {
   l_mds_root_rfiles,
   l_mds_root_rbytes,
   l_mds_root_rsnaps,
+  l_mdss_handle_inode_file_caps,
+  l_mdss_ceph_cap_op_revoke,
+  l_mdss_ceph_cap_op_grant,
+  l_mdss_ceph_cap_op_trunc,
+  l_mdss_ceph_cap_op_flushsnap_ack,
+  l_mdss_ceph_cap_op_flush_ack,
+  l_mdss_handle_client_caps,
+  l_mdss_handle_client_caps_dirty,
+  l_mdss_handle_client_cap_release,
+  l_mdss_process_request_cap_release,
   l_mds_last,
 };
 
