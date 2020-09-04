@@ -90,6 +90,8 @@ click on `New issue`_.
 .. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
 .. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
 
+.. _mailing-list:
+
 Mailing list
 ------------
 
@@ -129,6 +131,7 @@ There are also `other Ceph-related mailing lists`_.
 
 .. _`other Ceph-related mailing lists`: https://ceph.com/irc/
 
+.. _irc:
 
 IRC
 ---
@@ -140,6 +143,8 @@ time using `Internet Relay Chat`_.
 
 See ``https://ceph.com/irc/`` for how to set up your IRC
 client and a list of channels.
+
+.. _submitting-patches:
 
 Submitting patches
 ------------------
@@ -228,6 +233,8 @@ Kubernetes/Rook development cluster
 -----------------------------------
 
 See :ref:`kubernetes-dev`
+
+.. _backporting:
 
 Backporting
 -----------
