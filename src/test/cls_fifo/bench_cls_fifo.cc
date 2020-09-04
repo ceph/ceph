@@ -105,7 +105,7 @@ benchmark pull(RCf::FIFO& f, const std::uint32_t count,
       break;
     got += result.size();
     remaining -= result.size();
-    f.trim(result.back().marker, y);
+    f.trim(result.back().marker, false, y);
   }
   auto finish = sc::steady_clock::now();
   return benchmark(got, (finish - start));
@@ -140,7 +140,7 @@ void concurpull(const std::string& oid, const std::int64_t pool,
 	  got += result.size();
 	  remaining -= result.size();
 	  if (*exit_early) break;
-	  f->trim(result.back().marker, y);
+	  f->trim(result.back().marker, false, y);
 	}
 	auto finish = sc::steady_clock::now();
 	bench.entries = got;

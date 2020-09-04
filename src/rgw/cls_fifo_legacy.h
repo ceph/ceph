@@ -62,7 +62,8 @@ void part_init(lr::ObjectWriteOperation* op, std::string_view tag,
 int push_part(lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
 	      std::deque<cb::list> data_bufs, optional_yield y);
 void trim_part(lr::ObjectWriteOperation* op,
-	       std::optional<std::string_view> tag, std::uint64_t ofs);
+	       std::optional<std::string_view> tag, std::uint64_t ofs,
+	       bool exclusive);
 int list_part(lr::IoCtx& ioctx, const std::string& oid,
 	      std::optional<std::string_view> tag, std::uint64_t ofs,
 	      std::uint64_t max_entries,
@@ -148,9 +149,11 @@ class FIFO {
   int push_entries(const std::deque<cb::list>& data_bufs,
 		   optional_yield y);
   int trim_part(int64_t part_num, uint64_t ofs,
-		std::optional<std::string_view> tag, optional_yield y);
+		std::optional<std::string_view> tag, bool exclusive,
+		optional_yield y);
   int trim_part(int64_t part_num, uint64_t ofs,
-		std::optional<std::string_view> tag, lr::AioCompletion* c);
+		std::optional<std::string_view> tag, bool exclusive,
+		lr::AioCompletion* c);
 
   static void trim_callback(lr::completion_t, void* arg);
   static void update_callback(lr::completion_t, void* arg);
@@ -214,10 +217,14 @@ public:
     );
   /// Trim entries, coroutine/block style
   int trim(std::string_view markstr, //< Position to which to trim, inclusive
+	   bool exclusive, //< If true, do not trim the target entry
+			   //< itself, just all those before it.
 	   optional_yield y //< Optional yield
     );
   /// Trim entries, librados AioCompletion style
   int trim(std::string_view markstr, //< Position to which to trim, inclusive
+	   bool exclusive, //< If true, do not trim the target entry
+			   //< itself, just all those before it.
 	   lr::AioCompletion* c //< librados AIO Completion
     );
   /// Get part info

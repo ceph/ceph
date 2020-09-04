@@ -194,17 +194,20 @@ struct trim_part
 {
   std::optional<std::string> tag;
   std::uint64_t ofs{0};
+  bool exclusive = false;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
     encode(ofs, bl);
+    encode(exclusive, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(ofs, bl);
+    decode(exclusive, bl);
     DECODE_FINISH(bl);
   }
 };
