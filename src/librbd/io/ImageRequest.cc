@@ -75,8 +75,9 @@ void readahead(I *ictx, const Extents& image_extents) {
   }
 
   uint64_t image_size = ictx->get_image_size(ictx->snap_id);
-  auto snap_id = ictx->snap_id;
   ictx->image_lock.unlock_shared();
+
+  auto io_context = ictx->get_data_io_context();
 
   auto readahead_extent = ictx->readahead.update(image_extents, image_size);
   uint64_t readahead_offset = readahead_extent.first;
@@ -101,7 +102,7 @@ void readahead(I *ictx, const Extents& image_extents) {
                                              object_extent.length);
       auto req = io::ObjectDispatchSpec::create_read(
         ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-        {{object_extent.offset, object_extent.length}}, snap_id, 0, {},
+        {{object_extent.offset, object_extent.length}}, io_context, 0, {},
         &req_comp->read_data, &req_comp->extent_map, nullptr, req_comp);
       req->send();
     }
@@ -373,17 +374,9 @@ void ImageReadRequest<I>::send_request() {
     readahead(get_image_ctx(&image_ctx), image_extents);
   }
 
-  librados::snap_t snap_id;
-  uint64_t buffer_ofs = 0;
-  {
-    // prevent image size from changing between computing clip and recording
-    // pending async operation
-    std::shared_lock image_locker{image_ctx.image_lock};
-    snap_id = image_ctx.snap_id;
-  }
-
   // map image extents to object extents
   LightweightObjectExtents object_extents;
+  uint64_t buffer_ofs = 0;
   for (auto &extent : image_extents) {
     if (extent.second == 0) {
       continue;
@@ -393,6 +386,8 @@ void ImageReadRequest<I>::send_request() {
                              extent.second, 0, buffer_ofs, &object_extents);
     buffer_ofs += extent.second;
   }
+
+  auto io_context = image_ctx.get_data_io_context();
 
   // issue the requests
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -406,7 +401,7 @@ void ImageReadRequest<I>::send_request() {
       aio_comp, oe.offset, oe.length, std::move(oe.buffer_extents));
     auto req = ObjectDispatchSpec::create_read(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, oe.object_no,
-      {{oe.offset, oe.length}}, snap_id, m_op_flags, this->m_trace,
+      {{oe.offset, oe.length}}, io_context, m_op_flags, this->m_trace,
       &req_comp->bl, &req_comp->extent_map, nullptr, req_comp);
     req->send();
   }
@@ -455,14 +450,12 @@ void AbstractImageWriteRequest<I>::send_request() {
 
   bool journaling = false;
 
+  auto io_context = image_ctx.get_data_io_context();
   AioCompletion *aio_comp = this->m_aio_comp;
-  ::SnapContext snapc;
   {
     // prevent image size from changing between computing clip and recording
     // pending async operation
     std::shared_lock image_locker{image_ctx.image_lock};
-
-    snapc = image_ctx.snapc;
     journaling = (image_ctx.journal != nullptr &&
                   image_ctx.journal->is_journal_appending());
   }
@@ -495,7 +488,7 @@ void AbstractImageWriteRequest<I>::send_request() {
       journal_tid = append_journal_event(m_synchronous);
     }
 
-    send_object_requests(object_extents, snapc, journal_tid);
+    send_object_requests(object_extents, io_context, journal_tid);
   }
 
   update_stats(clip_len);
@@ -503,7 +496,7 @@ void AbstractImageWriteRequest<I>::send_request() {
 
 template <typename I>
 void AbstractImageWriteRequest<I>::send_object_requests(
-    const LightweightObjectExtents &object_extents, const ::SnapContext &snapc,
+    const LightweightObjectExtents &object_extents, IOContext io_context,
     uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -515,8 +508,8 @@ void AbstractImageWriteRequest<I>::send_object_requests(
                    << oe.offset << "~" << oe.length << " from "
                    << oe.buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    auto request = create_object_request(oe, snapc, journal_tid, single_extent,
-                                         req_comp);
+    auto request = create_object_request(oe, io_context, journal_tid,
+                                         single_extent, req_comp);
     request->send();
   }
 }
@@ -565,7 +558,7 @@ void ImageWriteRequest<I>::send_image_cache_request() {
 
 template <typename I>
 ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
-    const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+    const LightweightObjectExtent &object_extent, IOContext io_context,
     uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
@@ -579,8 +572,8 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
 
   auto req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(bl), snapc, m_op_flags, 0, std::nullopt,
-    journal_tid, this->m_trace, on_finish);
+    object_extent.offset, std::move(bl), io_context, m_op_flags, 0,
+    std::nullopt, journal_tid, this->m_trace, on_finish);
   return req;
 }
 
@@ -627,12 +620,12 @@ void ImageDiscardRequest<I>::send_image_cache_request() {
 
 template <typename I>
 ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
-    const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+    const LightweightObjectExtent &object_extent, IOContext io_context,
     uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, object_extent.length, snapc,
+    object_extent.offset, object_extent.length, io_context,
     OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, journal_tid, this->m_trace,
     on_finish);
   return req;
@@ -792,7 +785,7 @@ void ImageWriteSameRequest<I>::send_image_cache_request() {
 
 template <typename I>
 ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
-    const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+    const LightweightObjectExtent &object_extent, IOContext io_context,
     uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
@@ -805,14 +798,14 @@ ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
     req = ObjectDispatchSpec::create_write_same(
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
       object_extent.offset, object_extent.length, std::move(buffer_extents),
-      std::move(bl), snapc, m_op_flags, journal_tid,
+      std::move(bl), io_context, m_op_flags, journal_tid,
       this->m_trace, on_finish);
     return req;
   }
   req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(bl), snapc, m_op_flags, 0, std::nullopt,
-    journal_tid, this->m_trace, on_finish);
+    object_extent.offset, std::move(bl), io_context, m_op_flags, 0,
+    std::nullopt, journal_tid, this->m_trace, on_finish);
   return req;
 }
 
@@ -867,7 +860,7 @@ void ImageCompareAndWriteRequest<I>::send_image_cache_request() {
 
 template <typename I>
 ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
-    const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+    const LightweightObjectExtent &object_extent, IOContext io_context,
     uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
@@ -877,7 +870,7 @@ ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
   assemble_extent(object_extent, &bl);
   auto req = ObjectDispatchSpec::create_compare_and_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
-    object_extent.offset, std::move(m_cmp_bl), std::move(bl), snapc,
+    object_extent.offset, std::move(m_cmp_bl), std::move(bl), io_context,
     m_mismatch_offset, m_op_flags, journal_tid, this->m_trace, on_finish);
   return req;
 }

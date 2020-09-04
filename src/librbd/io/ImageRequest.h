@@ -6,10 +6,10 @@
 
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
-#include "common/snap_types.h"
 #include "common/zipkin_trace.h"
 #include "osd/osd_types.h"
 #include "librbd/Utils.h"
+#include "librbd/Types.h"
 #include "librbd/io/Types.h"
 #include <list>
 #include <utility>
@@ -151,9 +151,9 @@ protected:
   }
 
   void send_object_requests(const LightweightObjectExtents &object_extents,
-                            const ::SnapContext &snapc, uint64_t journal_tid);
+                            IOContext io_context, uint64_t journal_tid);
   virtual ObjectDispatchSpec *create_object_request(
-      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) = 0;
 
   virtual uint64_t append_journal_event(bool synchronous) = 0;
@@ -193,7 +193,7 @@ protected:
 
 
   ObjectDispatchSpec *create_object_request(
-      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
@@ -229,7 +229,7 @@ protected:
   void send_image_cache_request() override;
 
   ObjectDispatchSpec *create_object_request(
-      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
@@ -300,7 +300,7 @@ protected:
   void send_image_cache_request() override;
 
   ObjectDispatchSpec *create_object_request(
-      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
@@ -332,7 +332,7 @@ protected:
                        bufferlist *bl);
 
   ObjectDispatchSpec *create_object_request(
-      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
