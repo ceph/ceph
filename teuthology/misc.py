@@ -521,14 +521,7 @@ def write_file(remote, path, data):
     :param path: Path on the remote being written to.
     :param data: Data to be written.
     """
-    remote.run(
-        args=[
-            'cat',
-            run.Raw('>'),
-            path,
-        ],
-        stdin=data,
-    )
+    remote.write_file(path, data)
 
 
 def sudo_write_file(remote, path, data, perms=None, owner=None):
@@ -543,21 +536,7 @@ def sudo_write_file(remote, path, data, perms=None, owner=None):
 
     Both perms and owner are passed directly to chmod.
     """
-    permargs = []
-    if perms:
-        permargs = [run.Raw('&&'), 'sudo', 'chmod', perms, path]
-    owner_args = []
-    if owner:
-        owner_args = [run.Raw('&&'), 'sudo', 'chown', owner, path]
-    remote.run(
-        args=[
-            'sudo',
-            'sh',
-            '-c',
-            'cat > ' + path,
-        ] + owner_args + permargs,
-        stdin=data,
-    )
+    remote.sudo_write_file(path, data, mode=perms, owner=owner)
 
 
 def copy_file(from_remote, from_path, to_remote, to_path=None):
@@ -645,7 +624,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     on when the main site goes up and down.
     """
     # read in the specified file
-    in_data = get_file(remote, path, False).decode()
+    in_data = remote.read_file(path, False).decode()
     out_data = ""
 
     first_line = True
@@ -677,22 +656,8 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
 def append_lines_to_file(remote, path, lines, sudo=False):
     """
     Append lines to a file.
-    An intermediate file is used in the same manner as in
-    Remove_lines_from_list.
     """
-
-    temp_file_path = remote.mktemp()
-
-    data = get_file(remote, path, sudo).decode()
-
-    # add the additional data and write it back out, using a temp file
-    # in case of connectivity of loss, and then mv it to the
-    # actual desired location
-    data += lines
-    write_file(remote, temp_file_path, data)
-
-    # then do a 'mv' to the actual file location
-    move_file(remote, temp_file_path, path, sudo)
+    remote.write_file(path, lines, append=True, sudo=sudo)
 
 def prepend_lines_to_file(remote, path, lines, sudo=False):
     """
@@ -702,17 +667,9 @@ def prepend_lines_to_file(remote, path, lines, sudo=False):
     """
 
     temp_file_path = remote.mktemp()
-
-    data = get_file(remote, path, sudo).decode()
-
-    # add the additional data and write it back out, using a temp file
-    # in case of connectivity of loss, and then mv it to the
-    # actual desired location
-    data = lines + data
-    write_file(remote, temp_file_path, data)
-
-    # then do a 'mv' to the actual file location
-    move_file(remote, temp_file_path, path, sudo)
+    remote.write_file(temp_file_path, lines)
+    remote.copy_file(path, temp_file_path, append=True, sudo=sudo)
+    remote.move_file(temp_file_path, path, sudo=sudo)
 
 
 def create_file(remote, path, data="", permissions=str(644), sudo=False):
@@ -808,7 +765,7 @@ def get_scratch_devices(remote):
     """
     devs = []
     try:
-        file_data = get_file(remote, "/scratch_devs").decode()
+        file_data = remote.read_file("/scratch_devs").decode()
         devs = file_data.split()
     except Exception:
         devs = remote.sh('ls /dev/[sv]d?').strip().split('\n')
