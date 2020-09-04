@@ -1,3 +1,5 @@
+.. _testing-integration-tests:
+
 Testing - Integration Tests
 ===========================
 
@@ -96,7 +98,7 @@ all the integration tests, for all the Ceph components.
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
-  verify the `integration testing`_ infrastructure works as expected)
+  verify the :ref:`testing-integration-tests` infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS mounted using FUSE

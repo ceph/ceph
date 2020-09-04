@@ -38,7 +38,7 @@ a practical summary of the same.
 Update the tracker
 ------------------
 
-Before you start, you should know the `Issue tracker`_ number of the bug
+Before you start, you should know the :ref:`issue-tracker` number of the bug
 you intend to fix. If there is no tracker issue, now is the time to create
 one.
 
@@ -195,7 +195,7 @@ the `Git Commit Good Practice`_ article at the `OpenStack Project Wiki`_.
 .. _`Git Commit Good Practice`: https://wiki.openstack.org/wiki/GitCommitMessages
 .. _`OpenStack Project Wiki`: https://wiki.openstack.org/wiki/Main_Page
 
-Once your pull request (PR) is opened, update the `Issue tracker`_ by
+Once your pull request (PR) is opened, update the :ref:`issue-tracker` by
 adding a comment to the bug pointing the other developers to your PR. The
 update can be as simple as::
 
@@ -208,7 +208,7 @@ When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
 <https://en.wikipedia.org/wiki/Continuous_integration>`_
 infrastructure will test it automatically. At the time of this writing
 (March 2016), the automated CI testing included a test to check that the
-commits in the PR are properly signed (see `Submitting patches`_) and a
+commits in the PR are properly signed (see :ref:`submitting-patches`) and a
 `make check`_ test.
 
 The latter, `make check`_, builds the PR and runs it through a battery of
@@ -255,7 +255,7 @@ sub-directory`_ and are run via the `teuthology framework`_.
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
 The Ceph community has access to the `Sepia lab
-<https://wiki.sepia.ceph.com/doku.php>`_ where `integration tests`_ can be
+<https://wiki.sepia.ceph.com/doku.php>`_ where :ref:`testing-integration-tests` can be
 run on real hardware. Other developers may add tags like "needs-qa" to your
 PR. This allows PRs that need testing to be merged into a single branch and
 tested all at the same time. Since teuthology suites can take hours (even
@@ -263,7 +263,7 @@ days in some cases) to run, this can save a lot of time.
 
 To request access to the Sepia lab, start `here <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
 
-Integration testing is discussed in more detail in the `integration testing`_
+Integration testing is discussed in more detail in the :ref:`testing-integration-tests`
 chapter.
 
 Code review
@@ -272,7 +272,7 @@ Code review
 Once your bugfix has been thoroughly tested, or even during this process,
 it will be subjected to code review by other developers. This typically
 takes the form of correspondence in the PR itself, but can be supplemented
-by discussions on `IRC`_ and the `Mailing list`_.
+by discussions on :ref:`irc` and the :ref:`mailing-list`.
 
 Amending your PR
 ----------------
@@ -301,9 +301,9 @@ The bugfixing process culminates when one of the project leads decides to
 merge your PR.
 
 When this happens, it is a signal for you (or the lead who merged the PR)
-to change the `Issue tracker`_ status to "Resolved". Some issues may be
+to change the :ref:`issue-tracker` status to "Resolved". Some issues may be
 flagged for backporting, in which case the status should be changed to
-"Pending Backport" (see the `Backporting`_ chapter for details).
+"Pending Backport" (see the :ref:`backporting` chapter for details).
 
 See also :ref:`merging` for more information on merging.
 
@@ -357,10 +357,3 @@ the **ptl-tool** have the following form::
 
 
 .. _make check:
-.. _Backporting: ../essentials/#backporting
-.. _IRC:  ../essentials/#irc
-.. _Issue Tracker: ../issue-tracker
-.. _Integration Tests: ../tests-integration-tests
-.. _Integration Testing: ../tests-integration-tests
-.. _Mailing List: ../essentials/#mailing-list
-.. _Submitting Patches: ../essentials/#submitting-patches
