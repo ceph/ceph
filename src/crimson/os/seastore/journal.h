@@ -273,12 +273,42 @@ private:
     record_header_t header,
     bufferlist &bl);
 
+  /// attempts to decode extent infos from bl, return nullopt if unsuccessful
+  std::optional<std::vector<extent_info_t>> try_decode_extent_infos(
+    record_header_t header,
+    bufferlist &bl);
+
+  /**
+   * scan_segment
+   *
+   * Scans bytes_to_read forward from addr to the first record after
+   * addr+bytes_to_read invoking delta_handler and extent_info_handler
+   * on deltas and extent_infos respectively.  deltas, extent_infos
+   * will only be decoded if the corresponding handler is included.
+   */
+  using scan_segment_ertr = SegmentManager::read_ertr;
+  using scan_segment_ret = scan_segment_ertr::future<paddr_t>;
+  using delta_scan_handler_t = std::function<
+    replay_ret(paddr_t record_start,
+	       paddr_t record_block_base,
+	       const delta_info_t&)>;
+  using extent_handler_t = std::function<
+    scan_segment_ertr::future<>(paddr_t addr,
+				const extent_info_t &info)>;
+  scan_segment_ret scan_segment(
+    paddr_t addr,
+    extent_len_t bytes_to_read,
+    delta_scan_handler_t *delta_handler,
+    extent_handler_t *extent_info_handler
+  );
+
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
-    journal_seq_t start,           ///< [in] starting addr, seq
-    delta_handler_t &delta_handler ///< [in] processes deltas in order
+    journal_seq_t start,             ///< [in] starting addr, seq
+    delta_handler_t &delta_handler   ///< [in] processes deltas in order
   );
+
 };
 
 }
