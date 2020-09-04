@@ -2354,6 +2354,8 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
 	dout(7) << "   sending MClientCaps to client." << it->first
 		<< " seq " << seq << " re-issue " << ccap_string(pending) << dendl;
 
+        if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_grant);
+
 	auto m = make_message<MClientCaps>(CEPH_CAP_OP_GRANT, in->ino(),
 					   in->find_snaprealm()->inode->ino(),
 					   cap->get_cap_id(), cap->get_last_seq(),
@@ -2393,10 +2395,13 @@ int Locker::issue_caps(CInode *in, Capability *only_cap)
 
       int op = (before & ~after) ? CEPH_CAP_OP_REVOKE : CEPH_CAP_OP_GRANT;
       if (op == CEPH_CAP_OP_REVOKE) {
+        if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_revoke);
 	revoking_caps.push_back(&cap->item_revoking_caps);
 	revoking_caps_by_client[cap->get_client()].push_back(&cap->item_client_revoking_caps);
 	cap->set_last_revoke_stamp(ceph_clock_now());
 	cap->reset_num_revoke_warnings();
+      } else {
+        if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_grant);
       }
 
       auto m = make_message<MClientCaps>(op, in->ino(),
@@ -2421,6 +2426,7 @@ void Locker::issue_truncate(CInode *in)
   dout(7) << "issue_truncate on " << *in << dendl;
   
   for (auto &p : in->client_caps) {
+    if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_trunc);
     Capability *cap = &p.second;
     auto m = make_message<MClientCaps>(CEPH_CAP_OP_TRUNC,
                                        in->ino(),
@@ -2647,6 +2653,8 @@ void Locker::handle_inode_file_caps(const cref_t<MInodeFileCaps> &m)
   ceph_assert(in->is_auth());
 
   dout(7) << "handle_inode_file_caps replica mds." << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
+
+  if (mds->logger) mds->logger->inc(l_mdss_handle_inode_file_caps);
 
   in->set_mds_caps_wanted(from, m->get_caps());
 
@@ -2904,6 +2912,7 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
       continue;
     if (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       dout(10) << "share_inode_max_size with client." << client << dendl;
+      if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_grant);
       cap->inc_last_seq();
       auto m = make_message<MClientCaps>(CEPH_CAP_OP_GRANT,
                                          in->ino(),
@@ -3112,14 +3121,21 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     return;
   }
 
+  if (mds->logger) mds->logger->inc(l_mdss_handle_client_caps);
+  if (dirty) {
+      if (mds->logger) mds->logger->inc(l_mdss_handle_client_caps_dirty);
+  }
+
   if (m->get_client_tid() > 0 && session &&
       session->have_completed_flush(m->get_client_tid())) {
     dout(7) << "handle_client_caps already flushed tid " << m->get_client_tid()
 	    << " for client." << client << dendl;
     ref_t<MClientCaps> ack;
     if (op == CEPH_CAP_OP_FLUSHSNAP) {
+      if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flushsnap_ack);
       ack = make_message<MClientCaps>(CEPH_CAP_OP_FLUSHSNAP_ACK, m->get_ino(), 0, 0, 0, 0, 0, dirty, 0, mds->get_osd_epoch_barrier());
     } else {
+      if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flush_ack);
       ack = make_message<MClientCaps>(CEPH_CAP_OP_FLUSH_ACK, m->get_ino(), 0, m->get_cap_id(), m->get_seq(), m->get_caps(), 0, dirty, 0, mds->get_osd_epoch_barrier());
     }
     ack->set_snap_follows(follows);
@@ -3264,8 +3280,10 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 	head_in->remove_need_snapflush(in, snap, client);
     } else {
       dout(7) << " not expecting flushsnap " << snap << " from client." << client << " on " << *in << dendl;
-      if (ack)
+      if (ack) {
+        if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flushsnap_ack);
 	mds->send_message_client_counted(ack, m->get_connection());
+      }
     }
     goto out;
   }
@@ -3355,8 +3373,10 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 	need_flush = _need_flush_mdlog(in, cap->wanted() & ~cap->pending());
     } else {
       // no update, ack now.
-      if (ack)
+      if (ack) {
+        if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flush_ack);
 	mds->send_message_client_counted(ack, m->get_connection());
+      }
       
       bool did_issue = eval(in, CEPH_CAP_LOCKS);
       if (!did_issue && (cap->wanted() & ~cap->pending()))
@@ -3451,6 +3471,8 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
     return;
   }
     
+  if (mds->logger) mds->logger->inc(l_mdss_process_request_cap_release);
+
   if (caps & ~cap->issued()) {
     dout(10) << " confirming not issued caps " << ccap_string(caps & ~cap->issued()) << dendl;
     caps &= cap->issued();
@@ -3534,8 +3556,12 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
     // hmm, i guess snap was already deleted?  just ack!
     dout(10) << " wow, the snap following " << follows
 	     << " was already deleted.  nothing to record, just ack." << dendl;
-    if (ack)
+    if (ack) {
+      if (ack->get_op() == CEPH_CAP_OP_FLUSHSNAP_ACK) {
+          if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flushsnap_ack);
+      }
       mds->send_message_client_counted(ack, m->get_connection());
+    }
     return;
   }
 
@@ -3917,6 +3943,8 @@ void Locker::handle_client_cap_release(const cref_t<MClientCapRelease> &m)
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
   }
+
+  if (mds->logger) mds->logger->inc(l_mdss_handle_client_cap_release);
 
   if (m->osd_epoch_barrier && !mds->objecter->have_map(m->osd_epoch_barrier)) {
     // Pause RADOS operations until we see the required epoch
