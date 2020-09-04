@@ -82,23 +82,23 @@ void InstanceWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
                                     uint64_t notifier_id, bufferlist& bl) {
   dout(20) << dendl;
 
-  std::string dir_name;
+  std::string dir_path;
   std::string mode;
   try {
     JSONDecoder jd(bl);
-    JSONDecoder::decode_json("dir_name", dir_name, &jd.parser, true);
+    JSONDecoder::decode_json("dir_path", dir_path, &jd.parser, true);
     JSONDecoder::decode_json("mode", mode, &jd.parser, true);
   } catch (const JSONDecoder::err &e) {
     derr << ": failed to decode notify json: " << e.what() << dendl;
   }
 
-  dout(20) << ": notifier_id=" << notifier_id << ", dir_name=" << dir_name
+  dout(20) << ": notifier_id=" << notifier_id << ", dir_path=" << dir_path
            << ", mode=" << mode << dendl;
 
   if (mode == "acquire") {
-    m_listener.acquire_directory(dir_name);
+    m_listener.acquire_directory(dir_path);
   } else if (mode == "release") {
-    m_listener.release_directory(dir_name);
+    m_listener.release_directory(dir_path);
   } else {
     derr << ": unknown mode" << dendl;
   }

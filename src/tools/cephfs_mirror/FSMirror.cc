@@ -360,19 +360,19 @@ void FSMirror::handle_shutdown_instance_watcher(int r) {
   }
 }
 
-void FSMirror::handle_acquire_directory(string_view dir_name) {
-  dout(5) << ": dir_name=" << dir_name << dendl;
+void FSMirror::handle_acquire_directory(string_view dir_path) {
+  dout(5) << ": dir_path=" << dir_path << dendl;
 
   std::scoped_lock locker(m_lock);
-  m_directories.emplace(dir_name);
+  m_directories.emplace(dir_path);
   m_cond.notify_all();
 }
 
-void FSMirror::handle_release_directory(string_view dir_name) {
-  dout(5) << ": dir_name=" << dir_name << dendl;
+void FSMirror::handle_release_directory(string_view dir_path) {
+  dout(5) << ": dir_path=" << dir_path << dendl;
 
   std::scoped_lock locker(m_lock);
-  auto it = m_directories.find(dir_name);
+  auto it = m_directories.find(dir_path);
   if (it != m_directories.end()) {
     m_directories.erase(it);
   }

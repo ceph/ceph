@@ -25,8 +25,8 @@ public:
     virtual ~Listener() {
     }
 
-    virtual void acquire_directory(string_view dir_name) = 0;
-    virtual void release_directory(string_view dir_name) = 0;
+    virtual void acquire_directory(string_view dir_path) = 0;
+    virtual void release_directory(string_view dir_path) = 0;
   };
 
   static InstanceWatcher *create(librados::IoCtx &ioctx,
