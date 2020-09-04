@@ -12,10 +12,12 @@ import teuthology.provision
 from teuthology import misc
 from teuthology.exceptions import CommandFailedError
 from teuthology.misc import host_shortname
+import errno
 import time
 import re
 import logging
 from io import BytesIO
+from io import StringIO
 import os
 import pwd
 import tempfile
@@ -526,6 +528,12 @@ class Remote(object):
         :param stdout:  output object, defaults to io.BytesIO()
         :param offset:  number of bytes to skip from the file
         :param length:  number of bytes to read from the file
+
+        :raises: :class:`FileNotFoundError`: there is no such file by the path
+        :raises: :class:`RuntimeError`:      unexpected error occurred
+
+        :returns: the file contents in bytes, if stdout is `io.BytesIO`, by default
+        :returns: the file contents in str, if stdout is `io.StringIO`
         """
         dd = 'sudo dd' if sudo else 'dd'
         args = dd + ' if=' + path + ' of=/dev/stdout'
@@ -542,7 +550,15 @@ class Remote(object):
         if iflags:
             args += ' iflag=' + ','.join(iflags)
         args = 'set -ex' + '\n' + args
-        proc = self.run(args=args, stdout=stdout)
+        proc = self.run(args=args, stdout=stdout, stderr=StringIO(), check_status=False)
+        if proc.returncode:
+            if 'No such file or directory' in proc.stderr.getvalue():
+                raise FileNotFoundError(errno.ENOENT,
+                        f"Cannot find file on the remote '{self.name}'", path)
+            else:
+                raise RuntimeError("Unexpected error occurred while trying to "
+                        f"read '{path}' file on the remote '{self.name}'")
+
         return proc.stdout.getvalue()
 
 
