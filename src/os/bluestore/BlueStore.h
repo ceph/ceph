@@ -143,6 +143,7 @@ enum {
   l_bluestore_omap_get_keys_lat,
   l_bluestore_omap_get_values_lat,
   l_bluestore_clist_lat,
+  l_bluestore_remove_lat,
   l_bluestore_last
 };
 
