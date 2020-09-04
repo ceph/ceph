@@ -1104,7 +1104,7 @@ def main():
     if parsed_args.input_file:
         try:
             if parsed_args.input_file == '-':
-                inbuf = sys.stdin.read()
+                inbuf = sys.stdin.buffer.read()
             else:
                 with open(parsed_args.input_file, 'rb') as f:
                     inbuf = f.read()
