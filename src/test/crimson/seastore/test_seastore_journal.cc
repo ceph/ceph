@@ -168,7 +168,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     char contents = distribution(generator);
     bufferlist bl;
     bl.append(buffer::ptr(buffer::create(blocks * block_size, contents)));
-    return extent_t{bl};
+    return extent_t{extent_types_t::TEST_BLOCK, L_ADDR_NULL, bl};
   }
 
   delta_info_t generate_delta(size_t bytes) {

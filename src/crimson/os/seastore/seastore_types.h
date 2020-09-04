@@ -282,6 +282,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 /* description of a new physical extent */
 struct extent_t {
+  extent_types_t type;  ///< type of extent
+  laddr_t addr;         ///< laddr of extent (L_ADDR_NULL for non-logical)
   ceph::bufferlist bl;  ///< payload, bl.length() == length, aligned
 };
 

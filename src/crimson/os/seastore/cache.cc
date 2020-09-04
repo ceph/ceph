@@ -248,7 +248,15 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     if (i->get_type() == extent_types_t::ROOT) {
       assert(0 == "ROOT never gets written as a fresh block");
     }
-    record.extents.push_back(extent_t{std::move(bl)});
+
+    assert(bl.length() == i->get_length());
+    record.extents.push_back(extent_t{
+	i->get_type(),
+	i->is_logical()
+	? i->cast<LogicalCachedExtent>()->get_laddr()
+	: L_ADDR_NULL,
+	std::move(bl)
+      });
   }
 
   return std::make_optional<record_t>(std::move(record));
