@@ -1321,7 +1321,6 @@ Rados object in state %s." % self.state)
             target = str(target)
 
         target = cstr(target, 'target', opt=True)
-        inbuf = cstr(inbuf, 'inbuf')
 
         cdef:
             char *_target = opt_str(target)
@@ -1422,7 +1421,6 @@ Rados object in state %s." % self.state)
         self.require_state("connected")
 
         cmds = [cstr(cmd, 'cmd')]
-        inbuf = cstr(inbuf, 'inbuf')
         target = cstr(target, 'target', opt=True)
 
         cdef:
@@ -1482,7 +1480,6 @@ Rados object in state %s." % self.state)
 
         pgid_raw = cstr(pgid, 'pgid')
         cmds = [cstr(cmd, 'cmd')]
-        inbuf = cstr(inbuf, 'inbuf')
 
         cdef:
             char *_pgid = pgid_raw
