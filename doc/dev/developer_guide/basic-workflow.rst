@@ -76,9 +76,9 @@ detailed instructions on forking. In short, if your GitHub username is
 https://github.com/mygithubaccount/ceph. Once you have created your fork,
 you clone it by doing:
 
-.. code::
+.. prompt:: bash $
 
-    $ git clone https://github.com/mygithubaccount/ceph
+   git clone https://github.com/mygithubaccount/ceph
 
 While it is possible to clone the upstream repo directly, in this case you
 must fork it first. Forking is what enables us to open a `GitHub pull
@@ -96,10 +96,12 @@ copy of the ``master`` branch in ``remotes/origin/master``. Since the fork
 upstream repo (https://github.com/ceph/ceph.git, typically abbreviated to
 ``ceph/ceph.git``) is updated frequently by other developers, you will need
 to sync your fork periodically. To do this, first add the upstream repo as
-a "remote" and fetch it::
+a "remote" and fetch it
 
-    $ git remote add ceph https://github.com/ceph/ceph.git
-    $ git fetch ceph
+.. prompt:: bash $
+
+   git remote add ceph https://github.com/ceph/ceph.git
+   git fetch ceph
 
 Fetching downloads all objects (commits, branches) that were added since
 the last sync. After running these commands, all the branches from
@@ -108,27 +110,31 @@ the last sync. After running these commands, all the branches from
 ``ceph/$BRANCH_NAME`` in certain git commands.
 
 For example, your local ``master`` branch can be reset to the upstream Ceph
-``master`` branch by doing::
+``master`` branch by doing
 
-    $ git fetch ceph
-    $ git checkout master
-    $ git reset --hard ceph/master
+.. prompt:: bash $
+
+   git fetch ceph
+   git checkout master
+   git reset --hard ceph/master
 
 Finally, the ``master`` branch of your fork can then be synced to upstream
-master by::
+master by
 
-    $ git push -u origin master
+.. prompt:: bash $
+
+   git push -u origin master
 
 Bugfix branch
 -------------
 
 Next, create a branch for the bugfix:
 
-.. code::
+.. prompt:: bash $
 
-    $ git checkout master
-    $ git checkout -b fix_1
-    $ git push -u origin fix_1
+   git checkout master
+   git checkout -b fix_1
+   git push -u origin fix_1
 
 This creates a ``fix_1`` branch locally and in our GitHub fork. At this
 point, the ``fix_1`` branch is identical to the ``master`` branch, but not
@@ -153,13 +159,17 @@ see the chapters on testing.
 
 For now, let us just assume that you have finished work on the bugfix and
 that you have tested it and believe it works. Commit the changes to your local
-branch using the ``--signoff`` option::
+branch using the ``--signoff`` option
 
-    $ git commit -as
+.. prompt:: bash $
 
-and push the changes to your fork::
+   git commit -as
 
-    $ git push origin fix_1
+and push the changes to your fork
+
+.. prompt:: bash $
+
+   git push origin fix_1
 
 GitHub pull request
 -------------------
@@ -280,9 +290,9 @@ history. See `this tutorial
 introduction to rebasing. When you are done with your modifications, you
 will need to force push your branch with:
 
-.. code::
+.. prompt:: bash $
 
-    $ git push --force origin fix_1
+   git push --force origin fix_1
 
 Merge
 -----
@@ -325,9 +335,11 @@ you can search the git log for their email address. Reviewers are likely
 to have committed something before, and as long as they have committed
 something, the git log will probably contain their email address.
 
-Use the following command::
+Use the following command
 
-   [branch under review]$ git log
+.. prompt:: bash [branch-under-review]$
+
+   git log
 
 Using ptl-tool to Generate Merge Commits
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
