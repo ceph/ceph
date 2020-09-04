@@ -40,10 +40,10 @@ using librbd::util::create_trace;
 namespace {
 
 template <typename I>
-inline bool is_copy_on_read(I *ictx, librados::snap_t snap_id) {
+inline bool is_copy_on_read(I *ictx, const IOContext& io_context) {
   std::shared_lock image_locker{ictx->image_lock};
-  return (ictx->clone_copy_on_read &&
-          !ictx->read_only && snap_id == CEPH_NOSNAP &&
+  return (ictx->clone_copy_on_read && !ictx->read_only &&
+          io_context->read_snap().value_or(CEPH_NOSNAP) == CEPH_NOSNAP &&
           (ictx->exclusive_lock == nullptr ||
            ictx->exclusive_lock->is_lock_owner()));
 }
@@ -54,11 +54,11 @@ template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_write(
     I *ictx, uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags, int write_flags,
+    IOContext io_context, int op_flags, int write_flags,
     std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, Context *completion) {
   return new ObjectWriteRequest<I>(ictx, object_no, object_off,
-                                   std::move(data), snapc, op_flags,
+                                   std::move(data), io_context, op_flags,
                                    write_flags, assert_version,
                                    parent_trace, completion);
 }
@@ -67,10 +67,10 @@ template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_discard(
     I *ictx, uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    const ::SnapContext &snapc, int discard_flags,
+    IOContext io_context, int discard_flags,
     const ZTracer::Trace &parent_trace, Context *completion) {
   return new ObjectDiscardRequest<I>(ictx, object_no, object_off,
-                                     object_len, snapc, discard_flags,
+                                     object_len, io_context, discard_flags,
                                      parent_trace, completion);
 }
 
@@ -78,10 +78,10 @@ template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_write_same(
     I *ictx, uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+    ceph::bufferlist&& data, IOContext io_context, int op_flags,
     const ZTracer::Trace &parent_trace, Context *completion) {
   return new ObjectWriteSameRequest<I>(ictx, object_no, object_off,
-                                       object_len, std::move(data), snapc,
+                                       object_len, std::move(data), io_context,
                                        op_flags, parent_trace, completion);
 }
 
@@ -90,20 +90,20 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_compare_and_write(
     I *ictx, uint64_t object_no, uint64_t object_off,
     ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
-    const ::SnapContext &snapc, uint64_t *mismatch_offset, int op_flags,
+    IOContext io_context, uint64_t *mismatch_offset, int op_flags,
     const ZTracer::Trace &parent_trace, Context *completion) {
   return new ObjectCompareAndWriteRequest<I>(ictx, object_no, object_off,
                                              std::move(cmp_data),
-                                             std::move(write_data), snapc,
+                                             std::move(write_data), io_context,
                                              mismatch_offset, op_flags,
                                              parent_trace, completion);
 }
 
 template <typename I>
 ObjectRequest<I>::ObjectRequest(
-    I *ictx, uint64_t objectno, librados::snap_t snap_id,
+    I *ictx, uint64_t objectno, IOContext io_context,
     const char *trace_name, const ZTracer::Trace &trace, Context *completion)
-  : m_ictx(ictx), m_object_no(objectno), m_snap_id(snap_id),
+  : m_ictx(ictx), m_object_no(objectno), m_io_context(io_context),
     m_completion(completion),
     m_trace(create_trace(*ictx, "", trace)) {
   ceph_assert(m_ictx->data_ctx.is_valid());
@@ -136,7 +136,8 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
   parent_extents->clear();
 
   uint64_t parent_overlap;
-  int r = m_ictx->get_parent_overlap(m_snap_id, &parent_overlap);
+  int r = m_ictx->get_parent_overlap(
+    m_io_context->read_snap().value_or(CEPH_NOSNAP), &parent_overlap);
   if (r < 0) {
     // NOTE: it's possible for a snapshot to be deleted while we are
     // still reading from it
@@ -184,11 +185,11 @@ void ObjectRequest<I>::finish(int r) {
 template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(
     I *ictx, uint64_t objectno, const Extents &extents,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
+    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
     ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
     Context *completion)
-  : ObjectRequest<I>(ictx, objectno, snap_id, "read",
-                     parent_trace, completion),
+  : ObjectRequest<I>(ictx, objectno, io_context, "read", parent_trace,
+                     completion),
     m_extents(extents), m_op_flags(op_flags), m_read_data(read_data),
     m_extent_map(extent_map), m_version(version) {
 }
@@ -204,14 +205,16 @@ void ObjectReadRequest<I>::send() {
 template <typename I>
 void ObjectReadRequest<I>::read_object() {
   I *image_ctx = this->m_ictx;
-  {
-    std::shared_lock image_locker{image_ctx->image_lock};
-    if (image_ctx->object_map != nullptr &&
-        !image_ctx->object_map->object_may_exist(this->m_object_no)) {
-      image_ctx->asio_engine->post([this]() { read_parent(); });
-      return;
-    }
+
+  std::shared_lock image_locker{image_ctx->image_lock};
+  auto read_snap_id = this->m_io_context->read_snap().value_or(CEPH_NOSNAP);
+  if (read_snap_id == image_ctx->snap_id &&
+      image_ctx->object_map != nullptr &&
+      !image_ctx->object_map->object_may_exist(this->m_object_no)) {
+    image_ctx->asio_engine->post([this]() { read_parent(); });
+    return;
   }
+  image_locker.unlock();
 
   ldout(image_ctx->cct, 20) << dendl;
 
@@ -227,12 +230,12 @@ void ObjectReadRequest<I>::read_object() {
       read_op.read(object_off, object_len, &(extent_result.first));
     }
   }
-  util::apply_op_flags(m_op_flags, image_ctx->get_read_flags(this->m_snap_id),
-                       &read_op);
+  util::apply_op_flags(
+    m_op_flags, image_ctx->get_read_flags(read_snap_id), &read_op);
 
   image_ctx->rados_api.execute(
     {data_object_name(this->m_ictx, this->m_object_no)},
-    *image_ctx->get_data_io_context(), std::move(read_op), nullptr,
+    *this->m_io_context, std::move(read_op), nullptr,
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_read_object(r); }), m_version,
       (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
@@ -286,8 +289,10 @@ void ObjectReadRequest<I>::read_parent() {
   auto ctx = create_context_callback<
     ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_parent>(this);
 
-  io::util::read_parent<I>(image_ctx, this->m_object_no, this->m_extents,
-                           this->m_snap_id, this->m_trace, m_read_data, ctx);
+  io::util::read_parent<I>(
+    image_ctx, this->m_object_no, this->m_extents,
+    this->m_io_context->read_snap().value_or(CEPH_NOSNAP), this->m_trace,
+    m_read_data, ctx);
 }
 
 template <typename I>
@@ -316,7 +321,7 @@ void ObjectReadRequest<I>::handle_read_parent(int r) {
 template <typename I>
 void ObjectReadRequest<I>::copyup() {
   I *image_ctx = this->m_ictx;
-  if (!is_copy_on_read(image_ctx, this->m_snap_id)) {
+  if (!is_copy_on_read(image_ctx, this->m_io_context)) {
     this->finish(0);
     return;
   }
@@ -360,14 +365,12 @@ void ObjectReadRequest<I>::copyup() {
 template <typename I>
 AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
     I *ictx, uint64_t object_no, uint64_t object_off, uint64_t len,
-    const ::SnapContext &snapc, const char *trace_name,
+    IOContext io_context, const char *trace_name,
     const ZTracer::Trace &parent_trace, Context *completion)
-  : ObjectRequest<I>(ictx, object_no, CEPH_NOSNAP, trace_name, parent_trace,
+  : ObjectRequest<I>(ictx, object_no, io_context, trace_name, parent_trace,
                      completion),
-    m_object_off(object_off), m_object_len(len), m_snap_seq(snapc.seq.val)
+    m_object_off(object_off), m_object_len(len)
 {
-  m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
-
   if (this->m_object_off == 0 &&
       this->m_object_len == ictx->get_object_size()) {
     m_full_object = true;
@@ -390,7 +393,9 @@ void AbstractObjectWriteRequest<I>::compute_parent_info() {
   this->compute_parent_extents(&m_parent_extents, false);
 
   if (!this->has_parent() ||
-      (m_full_object && m_snaps.empty() && !is_post_copyup_write_required())) {
+      (m_full_object &&
+       !this->m_io_context->write_snap_context() &&
+       !is_post_copyup_write_required())) {
     m_copyup_enabled = false;
   }
 }
@@ -492,7 +497,10 @@ void AbstractObjectWriteRequest<I>::write_object() {
     ldout(image_ctx->cct, 20) << "guarding write" << dendl;
     if (m_guarding_migration_write) {
       cls_client::assert_snapc_seq(
-        &write_op, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
+        &write_op,
+        (this->m_io_context->write_snap_context() ?
+          this->m_io_context->write_snap_context()->first : 0),
+        cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
       write_op.assert_exists();
     }
@@ -504,7 +512,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
 
   image_ctx->rados_api.execute(
     {data_object_name(this->m_ictx, this->m_object_no)},
-    *image_ctx->get_data_io_context(), std::move(write_op),
+    *this->m_io_context, std::move(write_op),
     librbd::asio::util::get_callback_adapter(
       [this](int r) { handle_write_object(r); }), nullptr,
       (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
