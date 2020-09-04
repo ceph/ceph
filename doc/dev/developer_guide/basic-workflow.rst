@@ -209,9 +209,9 @@ When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
 infrastructure will test it automatically. At the time of this writing
 (March 2016), the automated CI testing included a test to check that the
 commits in the PR are properly signed (see :ref:`submitting-patches`) and a
-`make check`_ test.
+:ref:`make-check` test.
 
-The latter, `make check`_, builds the PR and runs it through a battery of
+The latter, :ref:`make-check`, builds the PR and runs it through a battery of
 tests. These tests run on machines operated by the Ceph Continuous
 Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
@@ -222,7 +222,7 @@ Refer to the chapters on testing for details.
 Notes on PR make check test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The GitHub `make check`_ test is driven by a Jenkins instance.
+The GitHub :ref:`make-check` test is driven by a Jenkins instance.
 
 Jenkins merges the PR branch into the latest version of the base branch before
 starting the build, so you don't have to rebase the PR to pick up any fixes.
@@ -232,14 +232,14 @@ comment should contain the string "test this please". Since a human subscribed
 to the PR might interpret that as a request for him or her to test the PR,
 it's good to write the request as "Jenkins, test this please".
 
-The `make check`_ log is the place to go if there is a failure and you're not
-sure what caused it. To reach it, first click on "details" (next to the `make
-check`_ test in the PR) to get into the Jenkins web GUI, and then click on
+The :ref:`make-check` log is the place to go if there is a failure and you're not
+sure what caused it. To reach it, first click on "details" (next to the :ref:`make-check`
+test in the PR) to get into the Jenkins web GUI, and then click on
 "Console Output" (on the left).
 
 Jenkins is set up to grep the log for strings known to have been associated
-with `make check`_ failures in the past. However, there is no guarantee that
-the strings are associated with any given `make check`_ failure. You have to
+with :ref:`make-check` failures in the past. However, there is no guarantee that
+the strings are associated with any given :ref:`make-check` failure. You have to
 dig into the log to be sure.
 
 Integration tests AKA ceph-qa-suite
@@ -354,6 +354,3 @@ the **ptl-tool** have the following form::
              client: move client_lock to _unmount()
              client: add timer_lock support
      Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
-
-
-.. _make check:
