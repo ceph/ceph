@@ -222,7 +222,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   }
   RGWMetadataLog meta_log{s->cct, store, store->svc()->zone, store->svc()->cls, period};
 
-  op_ret = meta_log.trim(shard_id, marker);
+  op_ret = meta_log.trim(shard_id, marker, true);
 }
 
 void RGWOp_MDLog_Lock::execute(optional_yield y) {

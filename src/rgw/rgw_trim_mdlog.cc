@@ -270,10 +270,8 @@ bool MetaMasterTrimShardCollectCR::spawn_next()
         << " at marker=" << stable
         << " last_trim=" << last_trim
         << " realm_epoch=" << sync_status.sync_info.realm_epoch << dendl;
-    RGWCoroutine* master_trim_cr = mdlog->master_trim_cr(shard_id, stable, &last_trim);
-    if (master_trim_cr) {
-      spawn(master_trim_cr, false);
-    }
+
+    spawn(mdlog->master_trim_cr(shard_id, stable, &last_trim) , false);
 
     shard_id++;
     return true;
@@ -468,10 +466,7 @@ int MetaPeerTrimShardCR::operate()
         << " at marker=" << stable
         << " last_trim=" << *last_trim << dendl;
     yield {
-      RGWCoroutine* peer_trim_cr = mdlog->peer_trim_cr(shard_id, stable, exclusive);
-      if (peer_trim_cr) {
-        call(peer_trim_cr);
-      }
+      call(mdlog->peer_trim_cr(shard_id, stable, exclusive));
     }
     if (retcode < 0 && retcode != -ENODATA) {
       ldpp_dout(env.dpp, 1) << "failed to trim mdlog shard " << shard_id
