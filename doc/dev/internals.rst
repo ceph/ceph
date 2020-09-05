@@ -12,8 +12,6 @@ You can start a development mode Ceph cluster, after compiling the source, with:
 	# check that it's there
 	bin/ceph health
 
-.. _mailing-list:
-
 .. rubric:: Mailing list
 
 The ``dev@ceph.io`` list is for discussion about the development of Ceph,
