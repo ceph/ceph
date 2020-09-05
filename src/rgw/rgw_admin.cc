@@ -8380,7 +8380,7 @@ next:
 
     // trim until -ENODATA
     do {
-      ret = meta_log->trim(doo(), shard_id, marker);
+      ret = meta_log->trim(dpp(), shard_id, marker, true);
     } while (ret == 0);
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
