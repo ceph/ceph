@@ -363,7 +363,7 @@ struct error_code;
     };
     struct disposer {
       void operator()(ptr_node* const delete_this) {
-	if (!dispose_if_hypercombined(delete_this)) {
+	if (!__builtin_expect(dispose_if_hypercombined(delete_this), 0)) {
 	  delete delete_this;
 	}
       }
