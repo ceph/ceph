@@ -665,6 +665,7 @@ private:
     return seastar::make_ready_future<bool>(true);
   }
 
+  bool is_valid_rep_op_reply(const MOSDRepOpReply& reply) const;
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
