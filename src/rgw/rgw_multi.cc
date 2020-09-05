@@ -230,6 +230,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 	 obj_iter != obj_parts.end();
 	 ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
+      /* XXXX cleanup obj_part.failed_prefixes */
       rgw_obj obj;
       if (obj_part.manifest.empty()) {
         string oid = mp_obj.get_part(obj_iter->second.num);

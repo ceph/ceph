@@ -26,11 +26,12 @@ struct RGWUploadPartInfo {
   ceph::real_time modified;
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
+  std::vector<std::string> failed_prefixes;
 
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 2, bl);
+    ENCODE_START(5, 2, bl);
     encode(num, bl);
     encode(size, bl);
     encode(etag, bl);
@@ -38,6 +39,7 @@ struct RGWUploadPartInfo {
     encode(manifest, bl);
     encode(cs_info, bl);
     encode(accounted_size, bl);
+    encode(failed_prefixes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -53,6 +55,9 @@ struct RGWUploadPartInfo {
       decode(accounted_size, bl);
     } else {
       accounted_size = size;
+    }
+    if (struct_v >= 5) {
+      decode(failed_prefixes, bl);
     }
     DECODE_FINISH(bl);
   }
