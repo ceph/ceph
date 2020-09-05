@@ -20,7 +20,9 @@ if(WITH_SPDK)
     spdk/NVMEDevice.cc)
 endif()
 
-if(HAVE_LIBZBD)
+if(WITH_LIBZBD)
+  find_package(zbd REQUIRED)
+  set(HAVE_LIBZBD ${ZBD_FOUND})
   list(APPEND libblk_srcs
     zoned/HMSMRDevice.cc)
 endif()
@@ -36,7 +38,7 @@ if(WITH_SPDK)
   target_link_libraries(blk PRIVATE ${SPDK_LIBRARIES})
 endif()
 
-if(HAVE_LIBZBD)
+if(WITH_LIBZBD)
   target_link_libraries(blk PRIVATE ${ZBD_LIBRARIES})
 endif()
 
