@@ -206,6 +206,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   const int part_num;
   const std::string part_num_str;
   RGWMPObj mp;
+  std::vector<std::string> saved_prefixes;
 
   // write the first chunk and wait on aio->drain() for its completion.
   // on EEXIST, retry with random prefix

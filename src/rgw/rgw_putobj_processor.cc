@@ -356,6 +356,9 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
   // then drain to wait for the result in case of EEXIST
   int r = writer.write_exclusive(data);
   if (r == -EEXIST) {
+    // save failed prefix
+    saved_prefixes.push_back(manifest.get_prefix());
+
     // randomize the oid prefix and reprepare the head/manifest
     std::string oid_rand = gen_rand_alphanumeric(store->ctx(), 32);
 
@@ -484,6 +487,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   info.accounted_size = accounted_size;
   info.modified = real_clock::now();
   info.manifest = manifest;
+  info.saved_prefixes = std::move(saved_prefixes);
 
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);

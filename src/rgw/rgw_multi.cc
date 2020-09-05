@@ -99,4 +99,3 @@ void RGWUploadPartInfo::dump(Formatter *f) const
   utime_t ut(modified);
   encode_json("modified", ut, f);
 }
-
