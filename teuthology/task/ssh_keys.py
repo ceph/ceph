@@ -154,13 +154,13 @@ def push_keys_to_host(ctx, config, public_key, private_key):
             priv_key_data = '{priv_key}'.format(priv_key=private_key)
             misc.delete_file(remote, priv_key_file, force=True)
             # Hadoop requires that .ssh/id_rsa have permissions of '500'
-            misc.create_file(remote, priv_key_file, priv_key_data, str(500))
+            remote.write_file(priv_key_file, priv_key_data, mode='0500')
 
             # then a private key
             pub_key_file = '/home/{user}/.ssh/id_rsa.pub'.format(user=username)
             pub_key_data = 'ssh-rsa {pub_key} {user_host}'.format(pub_key=public_key, user_host=str(remote))
             misc.delete_file(remote, pub_key_file, force=True)
-            misc.create_file(remote, pub_key_file, pub_key_data)
+            remote.write_file(pub_key_file, pub_key_data)
 
             # add appropriate entries to the authorized_keys file for this host
             auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(
