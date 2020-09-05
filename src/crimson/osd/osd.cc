@@ -590,6 +590,8 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
 
 seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 {
+  logger().debug("{}: {}", __func__, pgid);
+
   return seastar::do_with(PGMeta(store.get(), pgid), [] (auto& pg_meta) {
     return pg_meta.get_epoch();
   }).then([this](epoch_t e) {
