@@ -57,43 +57,57 @@ authentication disabled. If you (or your deployment utility) have already
 generated the keys, you may skip the steps related to generating keys.
 
 #. Create a ``client.admin`` key, and save a copy of the key for your client
-   host::
+   host
 
-	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
+   .. prompt:: bash $
+
+     ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
 
    **Warning:** This will clobber any existing
    ``/etc/ceph/client.admin.keyring`` file. Do not perform this step if a
    deployment tool has already done it for you. Be careful!
 
 #. Create a keyring for your monitor cluster and generate a monitor
-   secret key. ::
+   secret key.
 
-	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+   .. prompt:: bash $
+
+     ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
 
 #. Copy the monitor keyring into a ``ceph.mon.keyring`` file in every monitor's
    ``mon data`` directory. For example, to copy it to ``mon.a`` in cluster ``ceph``,
-   use the following::
+   use the following
 
-    cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
+   .. prompt:: bash $
 
-#. Generate a secret key for every MGR, where ``{$id}`` is the MGR letter::
+     cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
 
-    ceph auth get-or-create mgr.{$id} mon 'allow profile mgr' mds 'allow *' osd 'allow *' -o /var/lib/ceph/mgr/ceph-{$id}/keyring
+#. Generate a secret key for every MGR, where ``{$id}`` is the MGR letter
 
-#. Generate a secret key for every OSD, where ``{$id}`` is the OSD number::
+   .. prompt:: bash $
 
-    ceph auth get-or-create osd.{$id} mon 'allow rwx' osd 'allow *' -o /var/lib/ceph/osd/ceph-{$id}/keyring
+      ceph auth get-or-create mgr.{$id} mon 'allow profile mgr' mds 'allow *' osd 'allow *' -o /var/lib/ceph/mgr/ceph-{$id}/keyring
 
-#. Generate a secret key for every MDS, where ``{$id}`` is the MDS letter::
+#. Generate a secret key for every OSD, where ``{$id}`` is the OSD number
 
-    ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' mgr 'allow profile mds' -o /var/lib/ceph/mds/ceph-{$id}/keyring
+   .. prompt:: bash $
+
+      ceph auth get-or-create osd.{$id} mon 'allow rwx' osd 'allow *' -o /var/lib/ceph/osd/ceph-{$id}/keyring
+
+#. Generate a secret key for every MDS, where ``{$id}`` is the MDS letter
+
+   .. prompt:: bash $
+
+      ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' mgr 'allow profile mds' -o /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Enable ``cephx`` authentication by setting the following options in the
-   ``[global]`` section of your `Ceph configuration`_ file::
+   ``[global]`` section of your `Ceph configuration`_ file
 
-    auth cluster required = cephx
-    auth service required = cephx
-    auth client required = cephx
+   .. code-block:: ini
+
+      auth cluster required = cephx
+      auth service required = cephx
+      auth client required = cephx
 
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
@@ -111,11 +125,13 @@ running authentication. **We do not recommend it.** However, it may be easier
 during setup and/or troubleshooting to temporarily disable authentication.
 
 #. Disable ``cephx`` authentication by setting the following options in the
-   ``[global]`` section of your `Ceph configuration`_ file::
+   ``[global]`` section of your `Ceph configuration`_ file
 
-    auth cluster required = none
-    auth service required = none
-    auth client required = none
+   .. code-block:: ini
+
+      auth cluster required = none
+      auth service required = none
+      auth client required = none
 
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.

@@ -81,7 +81,9 @@ Authentication
 .. versionadded:: Bobtail 0.56
 
 For Bobtail (v 0.56) and beyond, you should expressly enable or disable
-authentication in the ``[global]`` section of your Ceph configuration file. ::
+authentication in the ``[global]`` section of your Ceph configuration file.
+
+.. code-block:: ini
 
 	auth cluster required = cephx
 	auth service required = cephx
@@ -125,7 +127,7 @@ foregoing directory would evaluate to::
 You may override this path using the ``osd data`` setting. We don't recommend
 changing the default location. Create the default directory on your OSD host.
 
-::
+.. prompt:: bash $
 
 	ssh {osd-host}
 	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
@@ -134,6 +136,8 @@ The ``osd data`` path ideally leads to a mount point with a hard disk that is
 separate from the hard disk storing and running the operating system and
 daemons. If the OSD is for a disk other than the OS disk, prepare it for
 use with Ceph, and mount it to the directory you just created::
+
+.. prompt:: bash $
 
 	ssh {new-osd-host}
 	sudo mkfs -t {fstype} /dev/{disk}
