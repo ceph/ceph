@@ -32,6 +32,7 @@
 #include "rgw_rest_conn.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
+#include "rgw_lc.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -127,6 +128,10 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
       return ret;
     }
   }
+
+  // remove lifecycle config, if any
+  (void) store->getRados()->get_lc()->remove_bucket_config(
+    info, get_attrs().attrs);
 
   ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
   if ( ret < 0) {
