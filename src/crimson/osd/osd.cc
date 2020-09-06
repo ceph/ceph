@@ -37,6 +37,7 @@
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
 
+#include "crimson/admin/osd_admin.h"
 #include "crimson/common/exception.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"

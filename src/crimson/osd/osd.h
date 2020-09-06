@@ -15,7 +15,6 @@
 #include "crimson/common/gated.h"
 #include "crimson/net/chained_dispatchers.h"
 #include "crimson/admin/admin_socket.h"
-#include "crimson/admin/osd_admin.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
