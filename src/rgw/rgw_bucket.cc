@@ -321,9 +321,9 @@ bool rgw_bucket_object_check_filter(const string& oid)
   return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
 }
 
-int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const Span& parent_span)
+int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const jaeger_tracing::Span& parent_span)
 {
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWObjectCtx rctx(store);
 
@@ -2670,11 +2670,11 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                RGWBucketEntryPoint& info,
                                                optional_yield y,
-                                               const Bucket::PutParams& params, const Span& parent_span)
+                                               const Bucket::PutParams& params, const jaeger_tracing::Span& parent_span)
 {
    
    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
@@ -2777,7 +2777,7 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,
                                                 optional_yield y,
-                                                const BucketInstance::PutParams& params, const Span& parent_span)
+                                                const BucketInstance::PutParams& params, const jaeger_tracing::Span& parent_span)
 {
   if (params.objv_tracker) {
     info.objv_tracker = *params.objv_tracker;
@@ -2796,11 +2796,11 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo& info,
                                             optional_yield y,
-                                            const BucketInstance::PutParams& params, const Span& parent_span)
+                                            const BucketInstance::PutParams& params, const jaeger_tracing::Span& parent_span)
 {
    
    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
@@ -2920,11 +2920,11 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             map<string, bufferlist>& attrs,
                                             RGWObjVersionTracker *objv_tracker,
-                                            optional_yield y, const Span& parent_span)
+                                            optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
@@ -2932,9 +2932,9 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
 
     if (!bucket_info.has_instance_obj) {
       /* an old bucket object, need to convert it */
-        Span span_2 = child_span("rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info", span_1);
+        jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::convert_old_bucket_info", span_1);
         int ret = convert_old_bucket_info(ctx, bucket, y);
-        finish_trace(span_2);
+        jaeger_tracing::finish_trace(span_2);
 
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
@@ -2958,7 +2958,7 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               ceph::real_time creation_time,
 			      optional_yield y,
                               bool update_entrypoint,
-                              rgw_ep_info *pinfo, const Span& parent_span)
+                              rgw_ep_info *pinfo, const jaeger_tracing::Span& parent_span)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return do_link_bucket(ctx, user_id, bucket, creation_time, y,
@@ -2972,9 +2972,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                  ceph::real_time creation_time,
 				 optional_yield y,
                                  bool update_entrypoint,
-                                 rgw_ep_info *pinfo, const Span& parent_span)
+                                 rgw_ep_info *pinfo, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   int ret;
 
   RGWBucketEntryPoint ep;
@@ -2989,13 +2989,13 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
       ep = pinfo->ep;
       pattrs = &pinfo->attrs;
     } else {
-      Span span_1 = child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span);
+      jaeger_tracing::Span span_1 = jaeger_tracing::child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span);
       ret = svc.bucket->read_bucket_entrypoint_info(ctx,
                                                     meta_key,
                                                     &ep, &rot,
                                                     nullptr, &attrs,
                                                     y);
-      finish_trace(span_1);
+      jaeger_tracing::finish_trace(span_1);
       if (ret < 0 && ret != -ENOENT) {
         ldout(cct, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
@@ -3003,9 +3003,9 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
       pattrs = &attrs;
     }
   }
-  Span span_2 = child_span("rgw_user.cc : RGWUserCtl::add_bucket", span);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_user.cc : RGWUserCtl::add_bucket", span);
   ret = ctl.user->add_bucket(user_id, bucket, creation_time);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -3037,7 +3037,7 @@ done_err:
   return ret;
 }
 
-int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint, const Span& parent_span)
+int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint, const jaeger_tracing::Span& parent_span)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return do_unlink_bucket(ctx, user_id, bucket, y, update_entrypoint, parent_span);
@@ -3048,12 +3048,12 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                    const rgw_user& user_id,
                                    const rgw_bucket& bucket,
 				   optional_yield y,
-                                   bool update_entrypoint, const Span& parent_span)
+                                   bool update_entrypoint, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
-  Span span_1 = child_span("rgw_user.cc : RGWUserCtl::remove_bucket", span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_user.cc : RGWUserCtl::remove_bucket", span);
   int ret = ctl.user->remove_bucket(user_id, bucket);
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3066,9 +3066,9 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
   string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-  Span span_2 = child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("svc_bucket_sobj.cc : RGWSI_Bucket_SObj::read_bucket_entrypoint_info", span);
   ret = svc.bucket->read_bucket_entrypoint_info(ctx, meta_key, &ep, &ot, nullptr, &attrs, y);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
   if (ret == -ENOENT)
     return 0;
   if (ret < 0)

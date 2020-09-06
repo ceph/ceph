@@ -202,11 +202,11 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 
 int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
-			   RGWMPObj& mp_obj, const Span& parent_span)
+			   RGWMPObj& mp_obj, const jaeger_tracing::Span& parent_span)
 {
    
    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   rgw_obj meta_obj;
@@ -222,11 +222,11 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   uint64_t parts_accounted_size = 0;
 
   do {
-    Span span_2 = child_span("rgw_multi.cc : list_multipart_parts", span_1);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_multi.cc : list_multipart_parts", span_1);
     ret = list_multipart_parts(store, bucket_info, cct,
 			       mp_obj.get_upload_id(), mp_obj.get_meta(),
 			       1000, marker, obj_parts, &marker, &truncated);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     if (ret < 0) {
       ldout(cct, 20) << __func__ << ": list_multipart_parts returned " <<
 	ret << dendl;
@@ -246,9 +246,9 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
-        Span span_3 = child_span("rgw_rados.cc : RGWRados::update_gc_chain", span_1);
+        jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::update_gc_chain", span_1);
         store->getRados()->update_gc_chain(meta_obj, obj_part.manifest, &chain);
-        finish_trace(span_3);
+        jaeger_tracing::finish_trace(span_3);
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
           rgw_obj head;
@@ -265,9 +265,9 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   } while (truncated);
 
   /* use upload id as tag and do it synchronously */
-  Span span_4 = child_span("rgw_rados.cc : RGWRados::send_chain_to_gc", span_1);
+  jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::send_chain_to_gc", span_1);
   ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
-  finish_trace(span_4);
+  jaeger_tracing::finish_trace(span_4);
   if (ret < 0) {
     ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
     if (ret == -ENOENT) {
@@ -302,11 +302,11 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 			   const string& delim,
 			   const int& max_uploads,
 			   vector<rgw_bucket_dir_entry> *objs,
-			   map<string, bool> *common_prefixes, bool *is_truncated, const Span& parent_span)
+			   map<string, bool> *common_prefixes, bool *is_truncated, const jaeger_tracing::Span& parent_span)
 {
    
    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
@@ -323,11 +323,11 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 }
 
 int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-				string& prefix, string& delim, const Span& parent_span)
+				string& prefix, string& delim, const jaeger_tracing::Span& parent_span)
 {
    
    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   constexpr int max = 1000;

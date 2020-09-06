@@ -46,7 +46,7 @@ bool topics_has_endpoint_secret(const rgw_pubsub_user_topics& topics) {
     }
     return false;
 }
-void RGWPSCreateTopicOp::execute(const Span& parent_span) {
+void RGWPSCreateTopicOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -61,7 +61,7 @@ void RGWPSCreateTopicOp::execute(const Span& parent_span) {
   ldout(s->cct, 20) << "successfully created topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSListTopicsOp::execute(const Span& parent_span) {
+void RGWPSListTopicsOp::execute(const jaeger_tracing::Span& parent_span) {
   ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_user_topics(&result);
   // if there are no topics it is not considered an error
@@ -78,7 +78,7 @@ void RGWPSListTopicsOp::execute(const Span& parent_span) {
   ldout(s->cct, 20) << "successfully got topics" << dendl;
 }
 
-void RGWPSGetTopicOp::execute(const Span& parent_span) {
+void RGWPSGetTopicOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -97,7 +97,7 @@ void RGWPSGetTopicOp::execute(const Span& parent_span) {
   ldout(s->cct, 1) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSDeleteTopicOp::execute(const Span& parent_span) {
+void RGWPSDeleteTopicOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -111,7 +111,7 @@ void RGWPSDeleteTopicOp::execute(const Span& parent_span) {
   ldout(s->cct, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-void RGWPSCreateSubOp::execute(const Span& parent_span) {
+void RGWPSCreateSubOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -126,7 +126,7 @@ void RGWPSCreateSubOp::execute(const Span& parent_span) {
   ldout(s->cct, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSGetSubOp::execute(const Span& parent_span) {
+void RGWPSGetSubOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -146,7 +146,7 @@ void RGWPSGetSubOp::execute(const Span& parent_span) {
   ldout(s->cct, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSDeleteSubOp::execute(const Span& parent_span) {
+void RGWPSDeleteSubOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -161,7 +161,7 @@ void RGWPSDeleteSubOp::execute(const Span& parent_span) {
   ldout(s->cct, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSAckSubEventOp::execute(const Span& parent_span) {
+void RGWPSAckSubEventOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -176,7 +176,7 @@ void RGWPSAckSubEventOp::execute(const Span& parent_span) {
   ldout(s->cct, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
 }
 
-void RGWPSPullSubEventsOp::execute(const Span& parent_span) {
+void RGWPSPullSubEventsOp::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -197,7 +197,7 @@ void RGWPSPullSubEventsOp::execute(const Span& parent_span) {
 }
 
 
-int RGWPSCreateNotifOp::verify_permission(const Span& parent_span) {
+int RGWPSCreateNotifOp::verify_permission(const jaeger_tracing::Span& parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;
@@ -219,7 +219,7 @@ int RGWPSCreateNotifOp::verify_permission(const Span& parent_span) {
   return 0;
 }
 
-int RGWPSDeleteNotifOp::verify_permission(const Span& parent_span) {
+int RGWPSDeleteNotifOp::verify_permission(const jaeger_tracing::Span& parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;
@@ -238,7 +238,7 @@ int RGWPSDeleteNotifOp::verify_permission(const Span& parent_span) {
   return 0;
 }
 
-int RGWPSListNotifsOp::verify_permission(const Span& parent_span) {
+int RGWPSListNotifsOp::verify_permission(const jaeger_tracing::Span& parent_span) {
   int ret = get_params();
   if (ret < 0) {
     return ret;

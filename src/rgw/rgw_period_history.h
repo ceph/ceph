@@ -94,7 +94,7 @@ class RGWPeriodHistory final {
   /// return a cursor to the current period
   Cursor get_current() const;
 
-  /// build up a connected period history that covers the span between
+  /// build up a connected period history that covers the jaeger_tracing::Span between
   /// current_period and the given period, reading predecessor periods or
   /// fetching them from the master as necessary. returns a cursor at the
   /// given period that can be used to traverse the current_history

@@ -74,7 +74,7 @@ public:
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -103,7 +103,7 @@ public:
 // Action=ListTopics
 class RGWPSListTopics_ObjStore_AWS : public RGWPSListTopicsOp {
 public:
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -144,7 +144,7 @@ public:
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -198,7 +198,7 @@ public:
     return 0;
   }
   
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -443,10 +443,10 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
 
 public:
   const char* name() const override { return "pubsub_notification_create_s3"; }
-  void execute(const Span& parent_span = nullptr) override;
+  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
 };
 
-void RGWPSCreateNotif_ObjStore_S3::execute(const Span& parent_span) {
+void RGWPSCreateNotif_ObjStore_S3::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params_from_body();
   if (op_ret < 0) {
     return;
@@ -585,11 +585,11 @@ private:
   }
 
 public:
-  void execute(const Span& parent_span = nullptr) override;
+  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
   const char* name() const override { return "pubsub_notification_delete_s3"; }
 };
 
-void RGWPSDeleteNotif_ObjStore_S3::execute(const Span& parent_span) {
+void RGWPSDeleteNotif_ObjStore_S3::execute(const jaeger_tracing::Span& parent_span) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -676,8 +676,8 @@ private:
   }
 
 public:
-  void execute(const Span& parent_span = nullptr) override;
-  void send_response(const Span& parent_span = nullptr) override {
+  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
     }
@@ -693,7 +693,7 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::execute(const Span& parent_span) {
+void RGWPSListNotifs_ObjStore_S3::execute(const jaeger_tracing::Span& parent_span) {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);

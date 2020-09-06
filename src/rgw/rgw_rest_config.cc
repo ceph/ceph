@@ -58,7 +58,7 @@ void RGWOp_ZoneGroupMap_Get::send_response(const jaeger_tracing::Span& parent_sp
   flusher.flush();
 }
 
-void RGWOp_ZoneConfig_Get::send_response(const Span& parent_span) {
+void RGWOp_ZoneConfig_Get::send_response(const jaeger_tracing::Span& parent_span) {
   const RGWZoneParams& zone_params = store->svc()->zone->get_zone_params();
 
   set_req_state_err(s, op_ret);

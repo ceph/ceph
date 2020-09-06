@@ -92,10 +92,10 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               const bool skip_retarget)
 {
   RGWOpType type = op->get_type();
-  Span span = new_span(op->name());
+  jaeger_tracing::Span span = jaeger_tracing::new_span(op->name());
   if(type>0){
-    set_span_tag(span, "operation_type", op->name());
-    set_span_tag(span, "operation_id", s->req_id.c_str());
+    jaeger_tracing::set_span_tag(span, "operation_type", op->name());
+    jaeger_tracing::set_span_tag(span, "operation_id", s->req_id.c_str());
   }
   s->root_span = std::move(span);
 

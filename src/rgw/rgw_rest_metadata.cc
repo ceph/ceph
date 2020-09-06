@@ -49,7 +49,7 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   }
 }
 
-void RGWOp_Metadata_Get::execute(const Span& parent_span) {
+void RGWOp_Metadata_Get::execute(const jaeger_tracing::Span& parent_span) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
@@ -66,7 +66,7 @@ void RGWOp_Metadata_Get::execute(const Span& parent_span) {
   op_ret = 0;
 }
 
-void RGWOp_Metadata_Get_Myself::execute(const Span& parent_span) {
+void RGWOp_Metadata_Get_Myself::execute(const jaeger_tracing::Span& parent_span) {
   string owner_id;
 
   owner_id = s->owner.get_id().to_str();
@@ -75,7 +75,7 @@ void RGWOp_Metadata_Get_Myself::execute(const Span& parent_span) {
   return RGWOp_Metadata_Get::execute(parent_span);
 }
 
-void RGWOp_Metadata_List::execute(const Span& parent_span) {
+void RGWOp_Metadata_List::execute(const jaeger_tracing::Span& parent_span) {
   string marker;
   ldout(s->cct, 16) << __func__
 		    << " raw marker " << s->info.args.get("marker")
@@ -234,7 +234,7 @@ static bool string_to_sync_type(const string& sync_string,
   return true;
 }
 
-void RGWOp_Metadata_Put::execute(const Span& parent_span) {
+void RGWOp_Metadata_Put::execute(const jaeger_tracing::Span& parent_span) {
   bufferlist bl;
   string metadata_key;
 
@@ -290,7 +290,7 @@ void RGWOp_Metadata_Put::send_response(const jaeger_tracing::Span& parent_span) 
   end_header(s);
 }
 
-void RGWOp_Metadata_Delete::execute(const Span& parent_span) {
+void RGWOp_Metadata_Delete::execute(const jaeger_tracing::Span& parent_span) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);

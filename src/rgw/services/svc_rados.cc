@@ -56,7 +56,7 @@ uint64_t RGWSI_RADOS::instance_id()
 }
 
 int RGWSI_RADOS::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
-                               const OpenParams& params, const Span& parent_span)
+                               const OpenParams& params, const jaeger_tracing::Span& parent_span)
 {
   return rgw_init_ioctx(get_rados_handle(), pool, io_ctx,
                         params.create,
@@ -286,7 +286,7 @@ int RGWSI_RADOS::Pool::lookup()
   return 0;
 }
 
-int RGWSI_RADOS::Pool::open(const OpenParams& params, const Span& parent_span)
+int RGWSI_RADOS::Pool::open(const OpenParams& params, const jaeger_tracing::Span& parent_span)
 {
   return rados_svc->open_pool_ctx(pool, state.ioctx, params, parent_span);
 }

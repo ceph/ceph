@@ -13,12 +13,15 @@
 #include <jaegertracing/net/IPAddress.h>
 #include <jaegertracing/net/Socket.h>
 
-
-typedef std::unique_ptr<opentracing::Span> Span;
+static std::atomic<bool> jaeger_initialized(false);
 
 struct Jaeger_Tracer{
     Jaeger_Tracer(){}
-    ~Jaeger_Tracer();
+    ~Jaeger_Tracer(){
+      if(this->tracer)
+        this->tracer->Close();
+      jaeger_initialized = false;
+    }
   std::shared_ptr<opentracing::v3::Tracer> tracer = NULL;
 };
 
@@ -26,55 +29,60 @@ struct Jaeger_Tracer{
 extern Jaeger_Tracer tracer;
 extern std::atomic<bool> jaeger_initialized;
 
+namespace jaeger_tracing{
 
-static inline void init_tracer(const char* tracerName,const char* filePath){
-      if(jaeger_initialized) return;
+  typedef std::unique_ptr<opentracing::Span> Span;
 
-      try{
-          auto yaml = YAML::LoadFile(filePath);
-          auto configuration = jaegertracing::Config::parse(yaml);
+  static inline void init_tracer(const char* tracerName,const char* filePath){
+        
+        if(jaeger_initialized) return;
 
-          jaegertracing::net::Socket socket;
-          socket.open(AF_INET, SOCK_STREAM);
-          const std::string serverURL = configuration.sampler().samplingServerURL();
-          socket.connect(serverURL); // this is used to check if the tracer is able to connect with server successfully
+        try{
+            auto yaml = YAML::LoadFile(filePath);
+            auto configuration = jaegertracing::Config::parse(yaml);
 
-          tracer.tracer = jaegertracing::Tracer::make(
-          tracerName,
-          configuration,
-          jaegertracing::logging::consoleLogger());
-      }catch(...) {return;}
-      opentracing::Tracer::InitGlobal(
-      std::static_pointer_cast<opentracing::Tracer>(tracer.tracer));
-      jaeger_initialized = true;
-  }
+            jaegertracing::net::Socket socket;
+            socket.open(AF_INET, SOCK_STREAM);
+            const std::string serverURL = configuration.sampler().samplingServerURL();
+            socket.connect(serverURL); // this is used to check if the tracer is able to connect with server successfully
 
-static inline Span new_span(const char* span_name){
-      Span span=opentracing::Tracer::Global()->StartSpan(span_name);
-      return span;
-  }
-static inline Span child_span(const char* span_name, const Span& parent_span){
-    if(parent_span){
-        Span span = opentracing::Tracer::Global()->StartSpan(span_name, {opentracing::ChildOf(&parent_span->context())});
+            tracer.tracer = jaegertracing::Tracer::make(
+            tracerName,
+            configuration,
+            jaegertracing::logging::consoleLogger());
+        }catch(...) {return;}
+        opentracing::Tracer::InitGlobal(
+        std::static_pointer_cast<opentracing::Tracer>(tracer.tracer));
+        jaeger_initialized = true;
+    }
+
+  static inline Span new_span(const char* span_name){
+        Span span=opentracing::Tracer::Global()->StartSpan(span_name);
         return span;
     }
-    return nullptr;
+  static inline Span child_span(const char* span_name, const Span& parent_span){
+      if(parent_span){
+          Span span = opentracing::Tracer::Global()->StartSpan(span_name, {opentracing::ChildOf(&parent_span->context())});
+          return span;
+      }
+      return nullptr;
+    }
+
+  //method to finish tracing of a single Span
+  static inline void finish_trace(Span& span)
+  {
+      if(span){
+        Span s = std::move(span);
+        s->Finish();
+      }
   }
 
-//method to finish tracing of a single Span
-static inline void finish_trace(Span& span)
-{
-    if(span){
-      Span s = std::move(span);
-      s->Finish();
-    }
-}
-
-//setting tags in spans
-static inline void set_span_tag(Span& span, const char* key, const char* value)
-{
-  if(span)
-    span->SetTag(key, value);
+  //setting tags in spans
+  static inline void set_span_tag(Span& span, const char* key, const char* value)
+  {
+    if(span)
+      span->SetTag(key, value);
+  }
 }
 
 #endif

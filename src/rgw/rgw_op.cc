@@ -398,7 +398,7 @@ static int get_multipart_info(struct req_state *s,
 			      const string& meta_oid,
                               multipart_upload_info *upload_info, const jaeger_tracing::Span& parent_span = nullptr)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   map<string, bufferlist>::iterator iter;
   bufferlist header;
@@ -415,9 +415,9 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
                               RGWBucketInfo& bucket_info,
                               map<string, bufferlist>& bucket_attrs,
                               RGWAccessControlPolicy *policy,
-                              rgw_bucket& bucket, const Span& parent_span = nullptr)
+                              rgw_bucket& bucket, const jaeger_tracing::Span& parent_span = nullptr)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
     ldpp_dout(s, 0) << "NOTICE: bucket " << bucket_info.bucket.name
@@ -429,9 +429,9 @@ static int read_bucket_policy(rgw::sal::RGWStore *store,
     return 0;
   }
 
-  Span span_1 = child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", span);
   int ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy);
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
   if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -450,7 +450,7 @@ static int read_obj_policy(rgw::sal::RGWStore *store,
                            rgw::sal::RGWObject* object,
                            bool copy_src=false, const jaeger_tracing::Span& parent_span = nullptr)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   string upload_id;
   upload_id = s->info.args.get("uploadId");
@@ -476,7 +476,7 @@ static int read_obj_policy(rgw::sal::RGWStore *store,
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-  Span span_1 = child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", span);
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
                                      bucket_info, bucket_attrs, acl, storage_class, object, s->yield);
   jaeger_tracing::finish_trace(span_1);
@@ -484,9 +484,9 @@ static int read_obj_policy(rgw::sal::RGWStore *store,
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    Span span_2 = child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", span);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_op.cc : rgw_op_get_bucket_policy_from_attr", span);
     ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     if (ret < 0) {
       return ret;
     }
@@ -518,9 +518,9 @@ static int read_obj_policy(rgw::sal::RGWStore *store,
  * only_bucket: If true, reads the user and bucket ACLs rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, const Span& parent_span)
+int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   int ret = 0;
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
@@ -550,7 +550,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
   /* check if copy source is within the current domain */
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::RGWBucket> src_bucket;
-    ret = store->get_bucket(nullptr, s->src_tenant_name, s->src_bucket_name, &src_bucket);
+    ret = store->get_bucket(nullptr, s->src_tenant_name, s->src_bucket_name, &src_bucket, span);
     if (ret == 0) {
       ret = src_bucket->load_by_name(s->src_tenant_name, s->src_bucket_name,
 				     s->bucket_instance_id, &obj_ctx, s->yield);
@@ -715,9 +715,9 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-			      bool prefetch_data, const Span& parent_span)
+			      bool prefetch_data, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   int ret = 0;
 
@@ -883,7 +883,7 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
 // general, they should just return op_ret.
 namespace {
 template<typename F>
-int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f, const Span& parent_span = nullptr) {
+int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f, const jaeger_tracing::Span& parent_span = nullptr) {
   auto r = f();
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
     r = b->try_refresh_info(nullptr);
@@ -896,9 +896,9 @@ int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f, const Span& par
 }
 
 
-int RGWGetObj::verify_permission(const Span& parent_span)
+int RGWGetObj::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   s->object->set_atomic(s->obj_ctx);
 
@@ -963,9 +963,9 @@ void populate_metadata_in_request(req_state* s, const rgw::sal::RGWAttrs& attrs)
   }
 }
 
-int RGWOp::verify_op_mask(const Span& parent_span)
+int RGWOp::verify_op_mask(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   uint32_t required_mask = op_mask();
 
@@ -985,9 +985,9 @@ int RGWOp::verify_op_mask(const Span& parent_span)
   return 0;
 }
 
-int RGWGetObjTags::verify_permission(const Span& parent_span)
+int RGWGetObjTags::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   auto iam_action = s->object->get_instance().empty()?
     rgw::IAM::s3GetObjectTagging:
@@ -1010,15 +1010,15 @@ int RGWGetObjTags::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetObjTags::pre_exec(const Span& parent_span)
+void RGWGetObjTags::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjTags::execute(const Span& parent_span)
+void RGWGetObjTags::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw::sal::RGWAttrs attrs;
 
@@ -1040,9 +1040,9 @@ void RGWGetObjTags::execute(const Span& parent_span)
   send_response_data(tags_bl, span);
 }
 
-int RGWPutObjTags::verify_permission(const Span& parent_span)
+int RGWPutObjTags::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   auto iam_action = s->object->get_instance().empty() ?
     rgw::IAM::s3PutObjectTagging:
@@ -1063,9 +1063,9 @@ int RGWPutObjTags::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutObjTags::execute(const Span& parent_span)
+void RGWPutObjTags::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = get_params(span);
   if (op_ret < 0)
@@ -1083,17 +1083,17 @@ void RGWPutObjTags::execute(const Span& parent_span)
   }
 }
 
-void RGWDeleteObjTags::pre_exec(const Span& parent_span)
+void RGWDeleteObjTags::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw_bucket_object_pre_exec(s);
 }
 
 
-int RGWDeleteObjTags::verify_permission(const Span& parent_span)
+int RGWDeleteObjTags::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
     auto iam_action = s->object->get_instance().empty() ?
@@ -1116,9 +1116,9 @@ int RGWDeleteObjTags::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDeleteObjTags::execute(const Span& parent_span)
+void RGWDeleteObjTags::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (rgw::sal::RGWObject::empty(s->object.get()))
     return;
@@ -1126,9 +1126,9 @@ void RGWDeleteObjTags::execute(const Span& parent_span)
   op_ret = s->object->delete_obj_attrs(s->obj_ctx, RGW_ATTR_TAGS, s->yield, span);
 }
 
-int RGWGetBucketTags::verify_permission(const Span& parent_span)
+int RGWGetBucketTags::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketTagging)) {
     return -EACCES;
@@ -1137,16 +1137,16 @@ int RGWGetBucketTags::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetBucketTags::pre_exec(const Span& parent_span)
+void RGWGetBucketTags::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketTags::execute(const Span& parent_span) 
+void RGWGetBucketTags::execute(const jaeger_tracing::Span& parent_span) 
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   auto iter = s->bucket_attrs.find(RGW_ATTR_TAGS);
   if (iter != s->bucket_attrs.end()) {
     has_tags = true;
@@ -1157,15 +1157,15 @@ void RGWGetBucketTags::execute(const Span& parent_span)
   send_response_data(tags_bl, span);
 }
 
-int RGWPutBucketTags::verify_permission(const Span& parent_span) {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+int RGWPutBucketTags::verify_permission(const jaeger_tracing::Span& parent_span) {
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
 
-void RGWPutBucketTags::execute(const Span& parent_span) {
+void RGWPutBucketTags::execute(const jaeger_tracing::Span& parent_span) {
 
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = get_params(span);
   if (op_ret < 0) 
@@ -1184,21 +1184,21 @@ void RGWPutBucketTags::execute(const Span& parent_span) {
 
 }
 
-void RGWDeleteBucketTags::pre_exec(const Span& parent_span)
+void RGWDeleteBucketTags::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw_bucket_object_pre_exec(s);
 }
 
-int RGWDeleteBucketTags::verify_permission(const Span& parent_span)
+int RGWDeleteBucketTags::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
 
-void RGWDeleteBucketTags::execute(const Span& parent_span)
+void RGWDeleteBucketTags::execute(const jaeger_tracing::Span& parent_span)
 {
   jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist in_data;
@@ -1221,9 +1221,9 @@ void RGWDeleteBucketTags::execute(const Span& parent_span)
   });
 }
 
-int RGWGetBucketReplication::verify_permission(const Span& parent_span)
+int RGWGetBucketReplication::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetReplicationConfiguration)) {
     return -EACCES;
@@ -1232,29 +1232,29 @@ int RGWGetBucketReplication::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetBucketReplication::pre_exec(const Span& parent_span)
+void RGWGetBucketReplication::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketReplication::execute(const Span& parent_span)
+void RGWGetBucketReplication::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span =child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span =jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   send_response_data(span);
 }
 
-int RGWPutBucketReplication::verify_permission(const Span& parent_span) {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+int RGWPutBucketReplication::verify_permission(const jaeger_tracing::Span& parent_span) {
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
 }
 
-void RGWPutBucketReplication::execute(const Span& parent_span) {
+void RGWPutBucketReplication::execute(const jaeger_tracing::Span& parent_span) {
 
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = get_params(span);
   if (op_ret < 0) 
@@ -1285,19 +1285,19 @@ void RGWPutBucketReplication::execute(const Span& parent_span) {
   });
 }
 
-void RGWDeleteBucketReplication::pre_exec(const Span& parent_span)
+void RGWDeleteBucketReplication::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-int RGWDeleteBucketReplication::verify_permission(const Span& parent_span)
+int RGWDeleteBucketReplication::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
 }
 
-void RGWDeleteBucketReplication::execute(const Span& parent_span)
+void RGWDeleteBucketReplication::execute(const jaeger_tracing::Span& parent_span)
 {
   jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist in_data;
@@ -1347,9 +1347,9 @@ int RGWOp::do_aws4_auth_completion()
   return 0;
 }
 
-int RGWOp::init_quota(const Span& parent_span)
+int RGWOp::init_quota(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   /* no quota enforcement for system requests */
   if (s->system_request)
@@ -1432,9 +1432,9 @@ static bool validate_cors_rule_header(RGWCORSRule *rule, const char *req_hdrs) {
   return true;
 }
 
-int RGWOp::read_bucket_cors(const Span& parent_span)
+int RGWOp::read_bucket_cors(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist bl;
 
   map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_CORS);
@@ -1558,9 +1558,9 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
                                        const boost::optional<Policy>& bucket_policy,
                                        const off_t start_ofs,
                                        const off_t end_ofs,
-                                       bool swift_slo, const Span& parent_span)
+                                       bool swift_slo, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   ldpp_dout(this, 20) << "user manifest obj=" << ent.key.name
       << "[" << ent.key.instance << "]" << dendl;
@@ -1849,9 +1849,9 @@ static int get_obj_user_manifest_iterate_cb(rgw::sal::RGWBucket* bucket,
     bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, swift_slo);
 }
 
-int RGWGetObj::handle_user_manifest(const char *prefix, const Span& parent_span)
+int RGWGetObj::handle_user_manifest(const char *prefix, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   const std::string_view prefix_view(prefix);
   ldpp_dout(this, 2) << "RGWGetObj::handle_user_manifest() prefix="
@@ -1945,9 +1945,9 @@ int RGWGetObj::handle_user_manifest(const char *prefix, const Span& parent_span)
   return r;
 }
 
-int RGWGetObj::handle_slo_manifest(bufferlist& bl, const Span& parent_span)
+int RGWGetObj::handle_slo_manifest(bufferlist& bl, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWSLOInfo slo_info;
   auto bliter = bl.cbegin();
@@ -2082,9 +2082,9 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, const Span& parent_span)
   return 0;
 }
 
-int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span)
+int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   /* garbage collection related handling */
   utime_t start_time = ceph_clock_now();
@@ -2099,9 +2099,9 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Spa
   return send_response_data(bl, bl_ofs, bl_len, span);
 }
 
-bool RGWGetObj::prefetch_data(const Span& parent_span)
+bool RGWGetObj::prefetch_data(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   /* HEAD request, stop prefetch*/
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
@@ -2118,9 +2118,9 @@ bool RGWGetObj::prefetch_data(const Span& parent_span)
   return get_data;
 }
 
-void RGWGetObj::pre_exec(const Span& parent_span)
+void RGWGetObj::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -2140,9 +2140,9 @@ static inline void rgw_cond_decode_objtags(
   }
 }
 
-void RGWGetObj::execute(const Span& parent_span)
+void RGWGetObj::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
@@ -2203,11 +2203,11 @@ void RGWGetObj::execute(const Span& parent_span)
       op_ret = -EINVAL;
       goto done_err;
     }
-    Span span_1 = child_span("started torrent", span);
+    jaeger_tracing::Span span_1 = jaeger_tracing::child_span("started torrent", span);
     torrent.init(s, store);
     rgw_obj obj = s->object->get_obj();
     op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
-    finish_trace(span_1);
+    jaeger_tracing::finish_trace(span_1);
     if (op_ret < 0)
     {
       ldpp_dout(this, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
@@ -2323,9 +2323,9 @@ done_err:
   send_response_data_error(span);
 }
 
-int RGWGetObj::init_common(const Span& parent_span)
+int RGWGetObj::init_common(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   if (range_str) {
     /* range parsed error when prefetch */
     if (!range_parsed) {
@@ -2349,9 +2349,9 @@ int RGWGetObj::init_common(const Span& parent_span)
   return 0;
 }
 
-int RGWListBuckets::verify_permission(const Span& parent_span)
+int RGWListBuckets::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
@@ -2372,7 +2372,7 @@ int RGWListBuckets::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWGetUsage::verify_permission(const Span& parent_span)
+int RGWGetUsage::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -2381,9 +2381,9 @@ int RGWGetUsage::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWListBuckets::execute(const Span& parent_span)
+void RGWListBuckets::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   bool done;
   bool started = false;
@@ -2473,7 +2473,7 @@ send_end:
   send_response_end(span);
 }
 
-void RGWGetUsage::execute(const Span& parent_span)
+void RGWGetUsage::execute(const jaeger_tracing::Span& parent_span)
 {
   uint64_t start_epoch = 0;
   uint64_t end_epoch = (uint64_t)-1;
@@ -2537,7 +2537,7 @@ void RGWGetUsage::execute(const Span& parent_span)
   return;
 }
 
-int RGWStatAccount::verify_permission(const Span& parent_span)
+int RGWStatAccount::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_user_permission_no_policy(this, s, RGW_PERM_READ)) {
     return -EACCES;
@@ -2546,7 +2546,7 @@ int RGWStatAccount::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWStatAccount::execute(const Span& parent_span)
+void RGWStatAccount::execute(const jaeger_tracing::Span& parent_span)
 {
   string marker;
   rgw::sal::RGWBucketList buckets;
@@ -2602,21 +2602,21 @@ void RGWStatAccount::execute(const Span& parent_span)
   } while (buckets.is_truncated());
 }
 
-int RGWGetBucketVersioning::verify_permission(const Span& parent_span)
+int RGWGetBucketVersioning::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketVersioning);
 }
 
-void RGWGetBucketVersioning::pre_exec(const Span& parent_span)
+void RGWGetBucketVersioning::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketVersioning::execute(const Span& parent_span)
+void RGWGetBucketVersioning::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (! s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -2628,22 +2628,22 @@ void RGWGetBucketVersioning::execute(const Span& parent_span)
   mfa_enabled = s->bucket->get_info().mfa_enabled();
 }
 
-int RGWSetBucketVersioning::verify_permission(const Span& parent_span)
+int RGWSetBucketVersioning::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketVersioning);
 }
 
-void RGWSetBucketVersioning::pre_exec(const Span& parent_span)
+void RGWSetBucketVersioning::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetBucketVersioning::execute(const Span& parent_span)
+void RGWSetBucketVersioning::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   op_ret = get_params(span);
   if (op_ret < 0)
     return;
@@ -2724,38 +2724,38 @@ void RGWSetBucketVersioning::execute(const Span& parent_span)
   }
 }
 
-int RGWGetBucketWebsite::verify_permission(const Span& parent_span)
+int RGWGetBucketWebsite::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketWebsite);
 }
 
-void RGWGetBucketWebsite::pre_exec(const Span& parent_span)
+void RGWGetBucketWebsite::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketWebsite::execute(const Span& parent_span)
+void RGWGetBucketWebsite::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!s->bucket->get_info().has_website) {
     op_ret = -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
 }
 
-int RGWSetBucketWebsite::verify_permission(const Span& parent_span)
+int RGWSetBucketWebsite::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketWebsite);
 }
 
-void RGWSetBucketWebsite::pre_exec(const Span& parent_span)
+void RGWSetBucketWebsite::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetBucketWebsite::execute(const Span& parent_span)
+void RGWSetBucketWebsite::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = get_params(span);
 
@@ -2782,22 +2782,22 @@ void RGWSetBucketWebsite::execute(const Span& parent_span)
   }
 }
 
-int RGWDeleteBucketWebsite::verify_permission(const Span& parent_span)
+int RGWDeleteBucketWebsite::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteBucketWebsite);
 }
 
-void RGWDeleteBucketWebsite::pre_exec(const Span& parent_span)
+void RGWDeleteBucketWebsite::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteBucketWebsite::execute(const Span& parent_span)
+void RGWDeleteBucketWebsite::execute(const jaeger_tracing::Span& parent_span)
 {
   bufferlist in_data;
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
   if (op_ret < 0) {
@@ -2819,9 +2819,9 @@ void RGWDeleteBucketWebsite::execute(const Span& parent_span)
   }
 }
 
-int RGWStatBucket::verify_permission(const Span& parent_span)
+int RGWStatBucket::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   // This (a HEAD request on a bucket) is governed by the s3:ListBucket permission.
   if (!verify_bucket_permission(this, s, rgw::IAM::s3ListBucket)) {
     return -EACCES;
@@ -2830,15 +2830,15 @@ int RGWStatBucket::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWStatBucket::pre_exec(const Span& parent_span)
+void RGWStatBucket::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWStatBucket::execute(const Span& parent_span)
+void RGWStatBucket::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
@@ -2851,9 +2851,9 @@ void RGWStatBucket::execute(const Span& parent_span)
   op_ret = bucket->update_container_stats(span);
 }
 
-int RGWListBucket::verify_permission(const Span& parent_span)
+int RGWListBucket::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = get_params(span);
   if (op_ret < 0) {
@@ -2878,9 +2878,9 @@ int RGWListBucket::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWListBucket::parse_max_keys(const Span& parent_span)
+int RGWListBucket::parse_max_keys(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   // Bound max value of max-keys to configured value for security
   // Bound min value of max-keys to '0'
   // Some S3 clients explicitly send max-keys=0 to detect if the bucket is
@@ -2890,15 +2890,15 @@ int RGWListBucket::parse_max_keys(const Span& parent_span)
 			default_max);
 }
 
-void RGWListBucket::pre_exec(const Span& parent_span)
+void RGWListBucket::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListBucket::execute(const Span& parent_span)
+void RGWListBucket::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -2936,19 +2936,19 @@ void RGWListBucket::execute(const Span& parent_span)
   }
 }
 
-int RGWGetBucketLogging::verify_permission(const Span& parent_span)
+int RGWGetBucketLogging::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLogging);
 }
 
-int RGWGetBucketLocation::verify_permission(const Span& parent_span)
+int RGWGetBucketLocation::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLocation);
 }
 
-int RGWCreateBucket::verify_permission(const Span& parent_span)
+int RGWCreateBucket::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   /* This check is mostly needed for S3 that doesn't support account ACL.
    * Swift doesn't allow to delegate any permission to an anonymous user,
    * so it will become an early exit in such case. */
@@ -2982,11 +2982,11 @@ int RGWCreateBucket::verify_permission(const Span& parent_span)
   if (s->user->get_max_buckets()) {
     rgw::sal::RGWBucketList buckets;
     string marker;
-    Span span_1 = child_span("rgw_bucket.cc : rgw_read_user_buckets", span);
+    jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_bucket.cc : rgw_read_user_buckets", span);
     op_ret = rgw_read_user_buckets(store, s->user->get_id(), buckets,
 				   marker, string(), s->user->get_max_buckets(),
 				   false);
-    finish_trace(span_1);
+    jaeger_tracing::finish_trace(span_1);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -3025,9 +3025,9 @@ int forward_request_to_master(struct req_state *s, obj_version *objv,
   return 0;
 }
 
-void RGWCreateBucket::pre_exec(const Span& parent_span)
+void RGWCreateBucket::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span); 
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span); 
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -3197,9 +3197,9 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
 }
 
 
-void RGWCreateBucket::execute(const Span& parent_span)
+void RGWCreateBucket::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   buffer::list aclbl;
   buffer::list corsbl;
@@ -3353,9 +3353,9 @@ void RGWCreateBucket::execute(const Span& parent_span)
                                           s->bucket->get_creation_time(), s->yield, false, nullptr, span);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    Span span_4 = child_span("rgw_bucket.cc : RGWBucketCtl::unlink_bucket", span);
+    jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::unlink_bucket", span);
     op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_key(), s->yield);
-    finish_trace(span_4);
+    jaeger_tracing::finish_trace(span_4);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -3420,9 +3420,9 @@ void RGWCreateBucket::execute(const Span& parent_span)
   }
 }
 
-int RGWDeleteBucket::verify_permission(const Span& parent_span)
+int RGWDeleteBucket::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!verify_bucket_permission(this, s, rgw::IAM::s3DeleteBucket)) {
     return -EACCES;
@@ -3431,15 +3431,15 @@ int RGWDeleteBucket::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDeleteBucket::pre_exec(const Span& parent_span)
+void RGWDeleteBucket::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteBucket::execute(const Span& parent_span)
+void RGWDeleteBucket::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (s->bucket_name.empty()) {
     op_ret = -EINVAL;
@@ -3471,9 +3471,9 @@ void RGWDeleteBucket::execute(const Span& parent_span)
     }
   }
 
-  Span span_1 = child_span("rgw_bucket.cc : RGWBucketCtl::sync_user_stats", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::sync_user_stats", span);
   op_ret = s->bucket->sync_user_stats();
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -3519,8 +3519,8 @@ void RGWDeleteBucket::execute(const Span& parent_span)
   return;
 }
 
-int RGWPutObj::init_processing(const Span& parent_span) {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+int RGWPutObj::init_processing(const jaeger_tracing::Span& parent_span) {
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
   map<string, bufferlist> src_attrs;
@@ -3613,9 +3613,9 @@ int RGWPutObj::init_processing(const Span& parent_span) {
   return RGWOp::init_processing(span);
 }
 
-int RGWPutObj::verify_permission(const Span& parent_span)
+int RGWPutObj::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (! copy_source.empty()) {
 
@@ -3747,9 +3747,9 @@ int RGWPutObj::verify_permission(const Span& parent_span)
 }
 
 
-void RGWPutObj::pre_exec(const Span& parent_span)
+void RGWPutObj::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -3760,14 +3760,14 @@ public:
   explicit RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
   ~RGWPutObj_CB() override {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span) override {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jaeger_tracing::Span& parent_span) override {
     return op->get_data_cb(bl, bl_ofs, bl_len, parent_span);
   }
 };
 
-int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span)
+int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist bl_tmp;
   bl.begin(bl_ofs).copy(bl_len, bl_tmp);
 
@@ -3776,9 +3776,9 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Spa
   return bl_len;
 }
 
-int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl, const Span& parent_span)
+int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWPutObj_CB cb(this);
   RGWGetObj_Filter* filter = &cb;
@@ -3873,9 +3873,9 @@ static CompressorRef get_compressor_plugin(const req_state *s,
   return Compressor::create(s->cct, alg);
 }
 
-void RGWPutObj::execute(const Span& parent_span)
+void RGWPutObj::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -3927,18 +3927,18 @@ void RGWPutObj::execute(const Span& parent_span)
       return;
     }
 
-    Span span_2 = child_span("rgw_common.h : buf_to_hex", span);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_common.h : buf_to_hex", span);
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    Span span_3 = child_span("rgw_rados.cc : RGWRados::check_quota", span);
+    jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::check_quota", span);
     op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_key(),
 				user_quota, bucket_quota, s->content_length);
-    finish_trace(span_3);
+    jaeger_tracing::finish_trace(span_3);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -3955,14 +3955,14 @@ void RGWPutObj::execute(const Span& parent_span)
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    Span span_4 = child_span("rgw_rados.cc : RGWRados::swift_versioning_copy", span);
+    jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::swift_versioning_copy", span);
     op_ret = store->getRados()->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket.get(),
                                           s->object.get(),
                                           this,
                                           s->yield);
-    finish_trace(span_4);
+    jaeger_tracing::finish_trace(span_4);
     if (op_ret < 0) {
       return;
     }
@@ -4045,9 +4045,9 @@ void RGWPutObj::execute(const Span& parent_span)
     rgw::sal::RGWRadosBucket bucket(store, copy_source_bucket_info);
 
     RGWObjState *astate;
-    Span span_5 = child_span("rgw_rados.cc : RGWRados::get_obj_state", span);
+    jaeger_tracing::Span span_5 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_obj_state", span);
     op_ret = obj.get_obj_state(&obj_ctx, bucket, &astate, s->yield);
-    finish_trace(span_5);
+    jaeger_tracing::finish_trace(span_5);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
@@ -4091,7 +4091,7 @@ void RGWPutObj::execute(const Span& parent_span)
     }
   }
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
-  Span span_6 = child_span("rgw_op.cc : RGWPutObj-data transfer", span);
+  jaeger_tracing::Span span_6 = jaeger_tracing::child_span("rgw_op.cc : RGWPutObj-data transfer", span);
   do {
     bufferlist data;
     if (fst > lst)
@@ -4131,7 +4131,7 @@ void RGWPutObj::execute(const Span& parent_span)
 
     ofs += len;
   } while (len > 0);
-  finish_trace(span_6);
+  jaeger_tracing::finish_trace(span_6);
   tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
   // flush any data in filters
@@ -4154,10 +4154,10 @@ void RGWPutObj::execute(const Span& parent_span)
     return;
   }
 
-  Span span_7 = child_span("rgw_rados.cc : RGWRados::check_quota", span);
+  jaeger_tracing::Span span_7 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::check_quota", span);
   op_ret = store->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket->get_key(),
                               user_quota, bucket_quota, s->obj_size);
-  finish_trace(span_7);  
+  jaeger_tracing::finish_trace(span_7);  
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
@@ -4269,17 +4269,17 @@ void RGWPutObj::execute(const Span& parent_span)
   }
 }
 
-int RGWPostObj::verify_permission(const Span& parent_span)
+int RGWPostObj::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return 0;
 }
 
-void RGWPostObj::pre_exec(const Span& parent_span)
+void RGWPostObj::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPostObj::execute(const Span& parent_span)
+void RGWPostObj::execute(const jaeger_tracing::Span& parent_span)
 {
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
@@ -4531,7 +4531,7 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
   }
 }
 
-int RGWPutMetadataAccount::init_processing(const Span& parent_span)
+int RGWPutMetadataAccount::init_processing(const jaeger_tracing::Span& parent_span)
 {
   /* First, go to the base class. At the time of writing the method was
    * responsible only for initializing the quota. This isn't necessary
@@ -4581,7 +4581,7 @@ int RGWPutMetadataAccount::init_processing(const Span& parent_span)
   return 0;
 }
 
-int RGWPutMetadataAccount::verify_permission(const Span& parent_span)
+int RGWPutMetadataAccount::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -4606,7 +4606,7 @@ int RGWPutMetadataAccount::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutMetadataAccount::execute(const Span& parent_span)
+void RGWPutMetadataAccount::execute(const jaeger_tracing::Span& parent_span)
 {
   /* Params have been extracted earlier. See init_processing(). */
   RGWUserInfo new_uinfo;
@@ -4638,7 +4638,7 @@ void RGWPutMetadataAccount::execute(const Span& parent_span)
                                        .set_attrs(&attrs));
 }
 
-int RGWPutMetadataBucket::verify_permission(const Span& parent_span)
+int RGWPutMetadataBucket::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
     return -EACCES;
@@ -4647,12 +4647,12 @@ int RGWPutMetadataBucket::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutMetadataBucket::pre_exec(const Span& parent_span)
+void RGWPutMetadataBucket::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutMetadataBucket::execute(const Span& parent_span)
+void RGWPutMetadataBucket::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -4726,7 +4726,7 @@ void RGWPutMetadataBucket::execute(const Span& parent_span)
     });
 }
 
-int RGWPutMetadataObject::verify_permission(const Span& parent_span)
+int RGWPutMetadataObject::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   // This looks to be something specific to Swift. We could add
   // operations like swift:PutMetadataObject to the Policy Engine.
@@ -4737,12 +4737,12 @@ int RGWPutMetadataObject::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutMetadataObject::pre_exec(const Span& parent_span)
+void RGWPutMetadataObject::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutMetadataObject::execute(const Span& parent_span)
+void RGWPutMetadataObject::execute(const jaeger_tracing::Span& parent_span)
 {
   rgw_obj target_obj;
   rgw::sal::RGWAttrs attrs, rmattrs;
@@ -4788,9 +4788,9 @@ void RGWPutMetadataObject::execute(const Span& parent_span)
   op_ret = s->object->set_obj_attrs(s->obj_ctx, &attrs, &rmattrs, s->yield, &target_obj);
 }
 
-int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, const Span& parent_span)
+int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWSLOInfo slo_info;
   auto bliter = bl.cbegin();
@@ -4839,9 +4839,9 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, const Span& parent_span)
   return 0;
 }
 
-int RGWDeleteObj::verify_permission(const Span& parent_span)
+int RGWDeleteObj::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   int op_ret = get_params(span);
   if (op_ret) {
@@ -4901,15 +4901,15 @@ int RGWDeleteObj::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDeleteObj::pre_exec(const Span& parent_span)
+void RGWDeleteObj::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteObj::execute(const Span& parent_span)
+void RGWDeleteObj::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -5017,12 +5017,12 @@ void RGWDeleteObj::execute(const Span& parent_span)
     s->object->set_atomic(s->obj_ctx);
 
     bool ver_restored = false;
-    Span span_1 = child_span("rgw_rados.cc : RGWRados::swift_versoning_restore", span);
+    jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::swift_versoning_restore", span);
     op_ret = store->getRados()->swift_versioning_restore(*obj_ctx, s->bucket_owner.get_id(),
 							 s->bucket.get(),
 							 s->object.get(),
 							 ver_restored, this);
-    finish_trace(span_1);
+    jaeger_tracing::finish_trace(span_1);
     if (op_ret < 0) {
       return;
     }
@@ -5122,9 +5122,9 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
   return true;
 }
 
-int RGWCopyObj::verify_permission(const Span& parent_span)
+int RGWCopyObj::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWAccessControlPolicy src_acl(s->cct);
   boost::optional<Policy> src_policy;
@@ -5274,9 +5274,9 @@ int RGWCopyObj::verify_permission(const Span& parent_span)
 }
 
 
-int RGWCopyObj::init_common(const Span& parent_span)
+int RGWCopyObj::init_common(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0) {
@@ -5326,15 +5326,15 @@ void RGWCopyObj::progress_cb(off_t ofs)
   last_ofs = ofs;
 }
 
-void RGWCopyObj::pre_exec(const Span& parent_span)
+void RGWCopyObj::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWCopyObj::execute(const Span& parent_span)
+void RGWCopyObj::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (init_common(span) < 0)
     return;
@@ -5425,9 +5425,9 @@ void RGWCopyObj::execute(const Span& parent_span)
   }
 }
 
-int RGWGetACLs::verify_permission(const Span& parent_span)
+int RGWGetACLs::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bool perm;
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
     auto iam_action = s->object->get_instance().empty() ?
@@ -5457,15 +5457,15 @@ int RGWGetACLs::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetACLs::pre_exec(const Span& parent_span)
+void RGWGetACLs::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetACLs::execute(const Span& parent_span)
+void RGWGetACLs::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   stringstream ss;
   RGWAccessControlPolicy* const acl = \
     (!rgw::sal::RGWObject::empty(s->object.get()) ? s->object_acl.get() : s->bucket_acl.get());
@@ -5477,9 +5477,9 @@ void RGWGetACLs::execute(const Span& parent_span)
 
 
 
-int RGWPutACLs::verify_permission(const Span& parent_span)
+int RGWPutACLs::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bool perm;
 
   rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
@@ -5498,7 +5498,7 @@ int RGWPutACLs::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWGetLC::verify_permission(const Span& parent_span)
+int RGWGetLC::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   bool perm;
   perm = verify_bucket_permission(this, s, rgw::IAM::s3GetLifecycleConfiguration);
@@ -5508,7 +5508,7 @@ int RGWGetLC::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWPutLC::verify_permission(const Span& parent_span)
+int RGWPutLC::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   bool perm;
   perm = verify_bucket_permission(this, s, rgw::IAM::s3PutLifecycleConfiguration);
@@ -5518,7 +5518,7 @@ int RGWPutLC::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWDeleteLC::verify_permission(const Span& parent_span)
+int RGWDeleteLC::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   bool perm;
   perm = verify_bucket_permission(this, s, rgw::IAM::s3PutLifecycleConfiguration);
@@ -5528,30 +5528,30 @@ int RGWDeleteLC::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutACLs::pre_exec(const Span& parent_span)
+void RGWPutACLs::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetLC::pre_exec(const Span& parent_span)
-{
-  rgw_bucket_object_pre_exec(s);
-}
-
-void RGWPutLC::pre_exec(const Span& parent_span)
+void RGWGetLC::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteLC::pre_exec(const Span& parent_span)
+void RGWPutLC::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutACLs::execute(const Span& parent_span)
+void RGWDeleteLC::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutACLs::execute(const jaeger_tracing::Span& parent_span)
+{
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist bl;
 
   RGWAccessControlPolicy_S3 *policy = NULL;
@@ -5651,9 +5651,9 @@ void RGWPutACLs::execute(const Span& parent_span)
     *_dout << dendl;
   }
 
-  Span span_1 = child_span("rgw_acl_s3.cc RGWAccessControlPolicy_S3::rebuild", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_acl_s3.cc RGWAccessControlPolicy_S3::rebuild", span);
   op_ret = policy->rebuild(store->ctl()->user, &owner, new_policy, s->err.message);
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
   if (op_ret < 0)
     return;
 
@@ -5669,9 +5669,9 @@ void RGWPutACLs::execute(const Span& parent_span)
     op_ret = -EACCES;
     return;
   }
-  Span span_2 = child_span("rgw_acl.h : RGWAccessControlPolicy::encode", span);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_acl.h : RGWAccessControlPolicy::encode", span);
   new_policy.encode(bl);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
@@ -5681,18 +5681,18 @@ void RGWPutACLs::execute(const Span& parent_span)
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
-    Span span_3 = child_span("rgw_bucket.cc : RGWBucketCtl::set_bucket_instance_attrs", span);
+    jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::set_bucket_instance_attrs", span);
     op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
 							  &s->bucket->get_info().objv_tracker,
 							  s->yield);
-    finish_trace(span_3);
+    jaeger_tracing::finish_trace(span_3);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
   }
 }
 
-void RGWPutLC::execute(const Span& parent_span)
+void RGWPutLC::execute(const jaeger_tracing::Span& parent_span)
 {
   bufferlist bl;
   
@@ -5784,7 +5784,7 @@ void RGWPutLC::execute(const Span& parent_span)
   return;
 }
 
-void RGWDeleteLC::execute(const Span& parent_span)
+void RGWDeleteLC::execute(const jaeger_tracing::Span& parent_span)
 {
   bufferlist data;
   op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
@@ -5800,15 +5800,15 @@ void RGWDeleteLC::execute(const Span& parent_span)
   return;
 }
 
-int RGWGetCORS::verify_permission(const Span& parent_span)
+int RGWGetCORS::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketCORS);
 }
 
-void RGWGetCORS::execute(const Span& parent_span)
+void RGWGetCORS::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   op_ret = read_bucket_cors(span);
   if (op_ret < 0)
     return ;
@@ -5820,15 +5820,15 @@ void RGWGetCORS::execute(const Span& parent_span)
   }
 }
 
-int RGWPutCORS::verify_permission(const Span& parent_span)
+int RGWPutCORS::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
-void RGWPutCORS::execute(const Span& parent_span)
+void RGWPutCORS::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   rgw_raw_obj obj;
 
@@ -5849,16 +5849,16 @@ void RGWPutCORS::execute(const Span& parent_span)
     });
 }
 
-int RGWDeleteCORS::verify_permission(const Span& parent_span)
+int RGWDeleteCORS::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span spann = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   // No separate delete permission
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
-void RGWDeleteCORS::execute(const Span& parent_span)
+void RGWDeleteCORS::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   bufferlist data;
   op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, span);
   if (op_ret < 0) {
@@ -5910,7 +5910,7 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
   return 0;
 }
 
-void RGWOptionsCORS::execute(const Span& parent_span)
+void RGWOptionsCORS::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = read_bucket_cors();
   if (op_ret < 0)
@@ -5942,32 +5942,32 @@ void RGWOptionsCORS::execute(const Span& parent_span)
   return;
 }
 
-int RGWGetRequestPayment::verify_permission(const Span& parent_span)
+int RGWGetRequestPayment::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketRequestPayment);
 }
 
-void RGWGetRequestPayment::pre_exec(const Span& parent_span)
+void RGWGetRequestPayment::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetRequestPayment::execute(const Span& parent_span)
+void RGWGetRequestPayment::execute(const jaeger_tracing::Span& parent_span)
 {
   requester_pays = s->bucket->get_info().requester_pays;
 }
 
-int RGWSetRequestPayment::verify_permission(const Span& parent_span)
+int RGWSetRequestPayment::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketRequestPayment);
 }
 
-void RGWSetRequestPayment::pre_exec(const Span& parent_span)
+void RGWSetRequestPayment::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetRequestPayment::execute(const Span& parent_span)
+void RGWSetRequestPayment::execute(const jaeger_tracing::Span& parent_span)
 {
 
   op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info);
@@ -5991,9 +5991,9 @@ void RGWSetRequestPayment::execute(const Span& parent_span)
   s->bucket_attrs = s->bucket->get_attrs();
 }
 
-int RGWInitMultipart::verify_permission(const Span& parent_span)
+int RGWInitMultipart::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
@@ -6026,15 +6026,15 @@ int RGWInitMultipart::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWInitMultipart::pre_exec(const Span& parent_span)
+void RGWInitMultipart::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWInitMultipart::execute(const Span& parent_span)
+void RGWInitMultipart::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   bufferlist aclbl;
   map<string, bufferlist> attrs;
@@ -6046,9 +6046,9 @@ void RGWInitMultipart::execute(const Span& parent_span)
   if (rgw::sal::RGWObject::empty(s->object.get()))
     return;
 
-  Span span_1 = child_span("rgw_acl.h : RGWAccessControlPolicy::encode", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_acl.h : RGWAccessControlPolicy::encode", span);
   policy.encode(aclbl);
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
   attrs[RGW_ATTR_ACL] = aclbl;
 
   populate_with_generic_attrs(s, attrs);
@@ -6100,9 +6100,9 @@ void RGWInitMultipart::execute(const Span& parent_span)
     upload_info.dest_placement = s->dest_placement;
 
     bufferlist bl;
-    Span span_2 = child_span("rgw_op.cc : encode", span);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_op.cc : encode", span);
     encode(upload_info, bl);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     obj_op.meta.data = &bl;
 
     op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield, span);
@@ -6116,9 +6116,9 @@ void RGWInitMultipart::execute(const Span& parent_span)
   }
 }
 
-int RGWCompleteMultipart::verify_permission(const Span& parent_span)
+int RGWCompleteMultipart::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
@@ -6151,15 +6151,15 @@ int RGWCompleteMultipart::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWCompleteMultipart::pre_exec(const Span& parent_span)
+void RGWCompleteMultipart::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWCompleteMultipart::execute(const Span& parent_span)
+void RGWCompleteMultipart::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWMultiCompleteUpload *parts;
   map<int, string>::iterator iter;
@@ -6258,9 +6258,9 @@ void RGWCompleteMultipart::execute(const Span& parent_span)
   store->getRados()->obj_to_raw((s->bucket->get_info()).placement_rule, meta_obj->get_obj(), &raw_obj);
   store->getRados()->get_obj_data_pool((s->bucket->get_info()).placement_rule,
 			   meta_obj->get_obj(), &meta_pool);
-  Span span_1 = child_span("rgw_rados : RGWRados::open_pool_ctx", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_rados : RGWRados::open_pool_ctx", span);
   store->getRados()->open_pool_ctx(meta_pool, serializer.ioctx, true);
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
 
   op_ret = serializer.try_lock(raw_obj.oid, dur);
   if (op_ret < 0) {
@@ -6279,10 +6279,10 @@ void RGWCompleteMultipart::execute(const Span& parent_span)
   attrs = meta_obj->get_attrs();
 
   do {
-    Span span_2 = child_span(__PRETTY_FUNCTION__, span);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, span);
     op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
 				  marker, obj_parts, &marker, &truncated);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_UPLOAD;
     }
@@ -6321,10 +6321,10 @@ void RGWCompleteMultipart::execute(const Span& parent_span)
         return;
       }
 
-       Span span_3 = child_span("rgw_common.h : hex_to_buf", span);
+       jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_common.h : hex_to_buf", span);
       hex_to_buf(obj_iter->second.etag.c_str(), petag,
 		CEPH_CRYPTO_MD5_DIGESTSIZE);
-    finish_trace(span_3);
+    jaeger_tracing::finish_trace(span_3);
       hash.Update((const unsigned char *)petag, sizeof(petag));
 
       RGWUploadPartInfo& obj_part = obj_iter->second;
@@ -6384,9 +6384,9 @@ void RGWCompleteMultipart::execute(const Span& parent_span)
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
 
-  Span span_4 = child_span("rgw_op.cc : buf_to_hex", span);
+  jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_op.cc : buf_to_hex", span);
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-  finish_trace(span_4);
+  jaeger_tracing::finish_trace(span_4);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
            "-%lld", (long long)parts->parts.size());
   etag = final_etag_str;
@@ -6466,7 +6466,7 @@ int RGWCompleteMultipart::MPSerializer::try_lock(
   return ret;
 }
 
-void RGWCompleteMultipart::complete(const Span& parent_span)
+void RGWCompleteMultipart::complete(const jaeger_tracing::Span& parent_span)
 {
   /* release exclusive lock iff not already */
   if (unlikely(serializer.locked)) {
@@ -6478,9 +6478,9 @@ void RGWCompleteMultipart::complete(const Span& parent_span)
   send_response(parent_span);
 }
 
-int RGWAbortMultipart::verify_permission(const Span& parent_span)
+int RGWAbortMultipart::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
@@ -6511,15 +6511,15 @@ int RGWAbortMultipart::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWAbortMultipart::pre_exec(const Span& parent_span)
+void RGWAbortMultipart::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWAbortMultipart::execute(const Span& parent_span)
+void RGWAbortMultipart::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   op_ret = -EINVAL;
   string upload_id;
@@ -6542,28 +6542,28 @@ void RGWAbortMultipart::execute(const Span& parent_span)
   op_ret = abort_multipart_upload(store, s->cct, obj_ctx, s->bucket->get_info(), mp, span);
 }
 
-int RGWListMultipart::verify_permission(const Span& parent_span)
+int RGWListMultipart::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   if (!verify_object_permission(this, s, rgw::IAM::s3ListMultipartUploadParts))
     return -EACCES;
 
   return 0;
 }
 
-void RGWListMultipart::pre_exec(const Span& parent_span)
+void RGWListMultipart::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListMultipart::execute(const Span& parent_span)
+void RGWListMultipart::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   string meta_oid;
   RGWMPObj mp;
 
-  op_ret = get_params();
+  op_ret = get_params(span);
   if (op_ret < 0)
     return;
 
@@ -6574,15 +6574,15 @@ void RGWListMultipart::execute(const Span& parent_span)
   if (op_ret < 0)
     return;
 
-  Span span_1 = child_span("rgw_multi.cc : list_multipart_parts", span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_multi.cc : list_multipart_parts", span);
   op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);
-  finish_trace(span_1);
+  jaeger_tracing::finish_trace(span_1);
 }
 
-int RGWListBucketMultiparts::verify_permission(const Span& parent_span)
+int RGWListBucketMultiparts::verify_permission(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (!verify_bucket_permission(this,
                                 s,
@@ -6592,20 +6592,20 @@ int RGWListBucketMultiparts::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWListBucketMultiparts::pre_exec(const Span& parent_span)
+void RGWListBucketMultiparts::pre_exec(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListBucketMultiparts::execute(const Span& parent_span)
+void RGWListBucketMultiparts::execute(const jaeger_tracing::Span& parent_span)
 {
-  Span span = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   vector<rgw_bucket_dir_entry> objs;
   string marker_meta;
 
-  op_ret = get_params();
+  op_ret = get_params(span);
   if (op_ret < 0)
     return;
 
@@ -6643,7 +6643,7 @@ void RGWListBucketMultiparts::execute(const Span& parent_span)
   }
 }
 
-void RGWGetHealthCheck::execute(const Span& parent_span)
+void RGWGetHealthCheck::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!g_conf()->rgw_healthcheck_disabling_path.empty() &&
       (::access(g_conf()->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
@@ -6654,7 +6654,7 @@ void RGWGetHealthCheck::execute(const Span& parent_span)
   }
 }
 
-int RGWDeleteMultiObj::verify_permission(const Span& parent_span)
+int RGWDeleteMultiObj::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
@@ -6690,12 +6690,12 @@ int RGWDeleteMultiObj::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDeleteMultiObj::pre_exec(const Span& parent_span)
+void RGWDeleteMultiObj::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteMultiObj::execute(const Span& parent_span)
+void RGWDeleteMultiObj::execute(const jaeger_tracing::Span& parent_span)
 {
   RGWMultiDelDelete *multi_delete;
   vector<rgw_obj_key>::iterator iter;
@@ -6960,17 +6960,17 @@ bool RGWBulkDelete::Deleter::delete_chunk(const std::list<acct_path_t>& paths)
   return true;
 }
 
-int RGWBulkDelete::verify_permission(const Span& parent_span)
+int RGWBulkDelete::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return 0;
 }
 
-void RGWBulkDelete::pre_exec(const Span& parent_span)
+void RGWBulkDelete::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWBulkDelete::execute(const Span& parent_span)
+void RGWBulkDelete::execute(const jaeger_tracing::Span& parent_span)
 {
   deleter = std::unique_ptr<Deleter>(new Deleter(this, store, s));
 
@@ -6992,7 +6992,7 @@ void RGWBulkDelete::execute(const Span& parent_span)
 
 constexpr std::array<int, 2> RGWBulkUploadOp::terminal_errors;
 
-int RGWBulkUploadOp::verify_permission(const Span& parent_span)
+int RGWBulkUploadOp::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -7016,7 +7016,7 @@ int RGWBulkUploadOp::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWBulkUploadOp::pre_exec(const Span& parent_span)
+void RGWBulkUploadOp::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
@@ -7407,7 +7407,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   return op_ret;
 }
 
-void RGWBulkUploadOp::execute(const Span& parent_span)
+void RGWBulkUploadOp::execute(const jaeger_tracing::Span& parent_span)
 {
   ceph::bufferlist buffer(64 * 1024);
 
@@ -7531,7 +7531,7 @@ ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
   return len;
 }
 
-int RGWSetAttrs::verify_permission(const Span& parent_span)
+int RGWSetAttrs::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   // This looks to be part of the RGW-NFS machinery and has no S3 or
   // Swift equivalent.
@@ -7547,12 +7547,12 @@ int RGWSetAttrs::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWSetAttrs::pre_exec(const Span& parent_span)
+void RGWSetAttrs::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetAttrs::execute(const Span& parent_span)
+void RGWSetAttrs::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -7571,12 +7571,12 @@ void RGWSetAttrs::execute(const Span& parent_span)
   }
 }
 
-void RGWGetObjLayout::pre_exec(const Span& parent_span)
+void RGWGetObjLayout::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjLayout::execute(const Span& parent_span)
+void RGWGetObjLayout::execute(const jaeger_tracing::Span& parent_span)
 {
   /* Make sure bucket is correct */
   s->object->set_bucket(s->bucket.get());
@@ -7595,7 +7595,7 @@ void RGWGetObjLayout::execute(const Span& parent_span)
 }
 
 
-int RGWConfigBucketMetaSearch::verify_permission(const Span& parent_span)
+int RGWConfigBucketMetaSearch::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
@@ -7604,12 +7604,12 @@ int RGWConfigBucketMetaSearch::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWConfigBucketMetaSearch::pre_exec(const Span& parent_span)
+void RGWConfigBucketMetaSearch::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWConfigBucketMetaSearch::execute(const Span& parent_span)
+void RGWConfigBucketMetaSearch::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -7628,7 +7628,7 @@ void RGWConfigBucketMetaSearch::execute(const Span& parent_span)
   s->bucket_attrs = s->bucket->get_attrs();
 }
 
-int RGWGetBucketMetaSearch::verify_permission(const Span& parent_span)
+int RGWGetBucketMetaSearch::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
@@ -7637,12 +7637,12 @@ int RGWGetBucketMetaSearch::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetBucketMetaSearch::pre_exec(const Span& parent_span)
+void RGWGetBucketMetaSearch::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-int RGWDelBucketMetaSearch::verify_permission(const Span& parent_span)
+int RGWDelBucketMetaSearch::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
@@ -7651,12 +7651,12 @@ int RGWDelBucketMetaSearch::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDelBucketMetaSearch::pre_exec(const Span& parent_span)
+void RGWDelBucketMetaSearch::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDelBucketMetaSearch::execute(const Span& parent_span)
+void RGWDelBucketMetaSearch::execute(const jaeger_tracing::Span& parent_span)
 {
   s->bucket->get_info().mdsearch_config.clear();
 
@@ -7684,7 +7684,7 @@ int RGWHandler::init(rgw::sal::RGWRadosStore *_store,
   return 0;
 }
 
-int RGWHandler::do_init_permissions(const Span& parent_span)
+int RGWHandler::do_init_permissions(const jaeger_tracing::Span& parent_span)
 {
   int ret = rgw_build_bucket_policies(store, s, parent_span);
   if (ret < 0) {
@@ -7697,7 +7697,7 @@ int RGWHandler::do_init_permissions(const Span& parent_span)
   return ret;
 }
 
-int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket, const Span& parent_span)
+int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket, const jaeger_tracing::Span& parent_span)
 {
   if (only_bucket) {
     /* already read bucket info */
@@ -7733,7 +7733,7 @@ std::ostream& RGWOp::gen_prefix(std::ostream& out) const
   return s->gen_prefix(out) << s->dialect << ':' << name() << ' ';
 }
 
-void RGWDefaultResponseOp::send_response(const Span& parent_span) {
+void RGWDefaultResponseOp::send_response(const jaeger_tracing::Span& parent_span) {
   if (op_ret) {
     set_req_state_err(s, op_ret);
   }
@@ -7741,7 +7741,7 @@ void RGWDefaultResponseOp::send_response(const Span& parent_span) {
   end_header(s);
 }
 
-void RGWPutBucketPolicy::send_response(const Span& parent_span)
+void RGWPutBucketPolicy::send_response(const jaeger_tracing::Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -7750,7 +7750,7 @@ void RGWPutBucketPolicy::send_response(const Span& parent_span)
   end_header(s);
 }
 
-int RGWPutBucketPolicy::verify_permission(const Span& parent_span)
+int RGWPutBucketPolicy::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPolicy)) {
     return -EACCES;
@@ -7759,7 +7759,7 @@ int RGWPutBucketPolicy::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWPutBucketPolicy::get_params(const Span& parent_span)
+int RGWPutBucketPolicy::get_params(const jaeger_tracing::Span& parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   // At some point when I have more time I want to make a version of
@@ -7770,7 +7770,7 @@ int RGWPutBucketPolicy::get_params(const Span& parent_span)
   return op_ret;
 }
 
-void RGWPutBucketPolicy::execute(const Span& parent_span)
+void RGWPutBucketPolicy::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -7805,7 +7805,7 @@ void RGWPutBucketPolicy::execute(const Span& parent_span)
   }
 }
 
-void RGWGetBucketPolicy::send_response(const Span& parent_span)
+void RGWGetBucketPolicy::send_response(const jaeger_tracing::Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -7815,7 +7815,7 @@ void RGWGetBucketPolicy::send_response(const Span& parent_span)
   dump_body(s, policy);
 }
 
-int RGWGetBucketPolicy::verify_permission(const Span& parent_span)
+int RGWGetBucketPolicy::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicy)) {
     return -EACCES;
@@ -7824,7 +7824,7 @@ int RGWGetBucketPolicy::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetBucketPolicy::execute(const Span& parent_span)
+void RGWGetBucketPolicy::execute(const jaeger_tracing::Span& parent_span)
 {
   rgw::sal::RGWAttrs attrs(s->bucket_attrs);
   auto aiter = attrs.find(RGW_ATTR_IAM_POLICY);
@@ -7847,7 +7847,7 @@ void RGWGetBucketPolicy::execute(const Span& parent_span)
   } 
 }
 
-void RGWDeleteBucketPolicy::send_response(const Span& parent_span)
+void RGWDeleteBucketPolicy::send_response(const jaeger_tracing::Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -7856,7 +7856,7 @@ void RGWDeleteBucketPolicy::send_response(const Span& parent_span)
   end_header(s);
 }
 
-int RGWDeleteBucketPolicy::verify_permission(const Span& parent_span)
+int RGWDeleteBucketPolicy::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3DeleteBucketPolicy)) {
     return -EACCES;
@@ -7865,7 +7865,7 @@ int RGWDeleteBucketPolicy::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDeleteBucketPolicy::execute(const Span& parent_span)
+void RGWDeleteBucketPolicy::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       rgw::sal::RGWAttrs attrs(s->bucket_attrs);
@@ -7875,17 +7875,17 @@ void RGWDeleteBucketPolicy::execute(const Span& parent_span)
     });
 }
 
-void RGWPutBucketObjectLock::pre_exec(const Span& parent_span)
+void RGWPutBucketObjectLock::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-int RGWPutBucketObjectLock::verify_permission(const Span& parent_span)
+int RGWPutBucketObjectLock::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketObjectLockConfiguration);
 }
 
-void RGWPutBucketObjectLock::execute(const Span& parent_span)
+void RGWPutBucketObjectLock::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     ldpp_dout(this, 0) << "ERROR: object Lock configuration cannot be enabled on existing buckets" << dendl;
@@ -7935,17 +7935,17 @@ void RGWPutBucketObjectLock::execute(const Span& parent_span)
   return;
 }
 
-void RGWGetBucketObjectLock::pre_exec(const Span& parent_span)
+void RGWGetBucketObjectLock::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-int RGWGetBucketObjectLock::verify_permission(const Span& parent_span)
+int RGWGetBucketObjectLock::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketObjectLockConfiguration);
 }
 
-void RGWGetBucketObjectLock::execute(const Span& parent_span)
+void RGWGetBucketObjectLock::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
@@ -7953,7 +7953,7 @@ void RGWGetBucketObjectLock::execute(const Span& parent_span)
   }
 }
 
-int RGWPutObjRetention::verify_permission(const Span& parent_span)
+int RGWPutObjRetention::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_object_permission(this, s, rgw::IAM::s3PutObjectRetention)) {
     return -EACCES;
@@ -7968,12 +7968,12 @@ int RGWPutObjRetention::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutObjRetention::pre_exec(const Span& parent_span)
+void RGWPutObjRetention::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutObjRetention::execute(const Span& parent_span)
+void RGWPutObjRetention::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     ldpp_dout(this, 0) << "ERROR: object retention can't be set if bucket object lock not configured" << dendl;
@@ -8039,7 +8039,7 @@ void RGWPutObjRetention::execute(const Span& parent_span)
   return;
 }
 
-int RGWGetObjRetention::verify_permission(const Span& parent_span)
+int RGWGetObjRetention::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention)) {
     return -EACCES;
@@ -8047,12 +8047,12 @@ int RGWGetObjRetention::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetObjRetention::pre_exec(const Span& parent_span)
+void RGWGetObjRetention::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjRetention::execute(const Span& parent_span)
+void RGWGetObjRetention::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     ldpp_dout(this, 0) << "ERROR: bucket object lock not configured" << dendl;
@@ -8083,7 +8083,7 @@ void RGWGetObjRetention::execute(const Span& parent_span)
   return;
 }
 
-int RGWPutObjLegalHold::verify_permission(const Span& parent_span)
+int RGWPutObjLegalHold::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_object_permission(this, s, rgw::IAM::s3PutObjectLegalHold)) {
     return -EACCES;
@@ -8091,12 +8091,12 @@ int RGWPutObjLegalHold::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWPutObjLegalHold::pre_exec(const Span& parent_span)
+void RGWPutObjLegalHold::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutObjLegalHold::execute(const Span& parent_span) {
+void RGWPutObjLegalHold::execute(const jaeger_tracing::Span& parent_span) {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     ldpp_dout(this, 0) << "ERROR: object legal hold can't be set if bucket object lock not configured" << dendl;
     op_ret = -ERR_INVALID_REQUEST;
@@ -8133,7 +8133,7 @@ void RGWPutObjLegalHold::execute(const Span& parent_span) {
   return;
 }
 
-int RGWGetObjLegalHold::verify_permission(const Span& parent_span)
+int RGWGetObjLegalHold::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold)) {
     return -EACCES;
@@ -8141,12 +8141,12 @@ int RGWGetObjLegalHold::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetObjLegalHold::pre_exec(const Span& parent_span)
+void RGWGetObjLegalHold::pre_exec(const jaeger_tracing::Span& parent_span)
 {
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjLegalHold::execute(const Span& parent_span)
+void RGWGetObjLegalHold::execute(const jaeger_tracing::Span& parent_span)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     ldpp_dout(this, 0) << "ERROR: bucket object lock not configured" << dendl;
@@ -8177,13 +8177,13 @@ void RGWGetObjLegalHold::execute(const Span& parent_span)
   return;
 }
 
-void RGWGetClusterStat::execute(const Span& parent_span)
+void RGWGetClusterStat::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = this->store->getRados()->get_rados_handle()->cluster_stat(stats_op);
 }
 
 
-int RGWGetBucketPolicyStatus::verify_permission(const Span& parent_span)
+int RGWGetBucketPolicyStatus::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicyStatus)) {
     return -EACCES;
@@ -8192,12 +8192,12 @@ int RGWGetBucketPolicyStatus::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetBucketPolicyStatus::execute(const Span& parent_span)
+void RGWGetBucketPolicyStatus::execute(const jaeger_tracing::Span& parent_span)
 {
   isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public();
 }
 
-int RGWPutBucketPublicAccessBlock::verify_permission(const Span& parent_span)
+int RGWPutBucketPublicAccessBlock::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPublicAccessBlock)) {
     return -EACCES;
@@ -8206,14 +8206,14 @@ int RGWPutBucketPublicAccessBlock::verify_permission(const Span& parent_span)
   return 0;
 }
 
-int RGWPutBucketPublicAccessBlock::get_params(const Span& parent_span)
+int RGWPutBucketPublicAccessBlock::get_params(const jaeger_tracing::Span& parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 
-void RGWPutBucketPublicAccessBlock::execute(const Span& parent_span)
+void RGWPutBucketPublicAccessBlock::execute(const jaeger_tracing::Span& parent_span)
 {
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
@@ -8256,7 +8256,7 @@ void RGWPutBucketPublicAccessBlock::execute(const Span& parent_span)
 
 }
 
-int RGWGetBucketPublicAccessBlock::verify_permission(const Span& parent_span)
+int RGWGetBucketPublicAccessBlock::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicy)) {
     return -EACCES;
@@ -8265,7 +8265,7 @@ int RGWGetBucketPublicAccessBlock::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWGetBucketPublicAccessBlock::execute(const Span& parent_span)
+void RGWGetBucketPublicAccessBlock::execute(const jaeger_tracing::Span& parent_span)
 {
   auto attrs = s->bucket_attrs;
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
@@ -8287,7 +8287,7 @@ void RGWGetBucketPublicAccessBlock::execute(const Span& parent_span)
 }
 
 
-void RGWDeleteBucketPublicAccessBlock::send_response(const Span& parent_span)
+void RGWDeleteBucketPublicAccessBlock::send_response(const jaeger_tracing::Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -8296,7 +8296,7 @@ void RGWDeleteBucketPublicAccessBlock::send_response(const Span& parent_span)
   end_header(s);
 }
 
-int RGWDeleteBucketPublicAccessBlock::verify_permission(const Span& parent_span)
+int RGWDeleteBucketPublicAccessBlock::verify_permission(const jaeger_tracing::Span& parent_span)
 {
   if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPublicAccessBlock)) {
     return -EACCES;
@@ -8305,7 +8305,7 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission(const Span& parent_span)
   return 0;
 }
 
-void RGWDeleteBucketPublicAccessBlock::execute(const Span& parent_span)
+void RGWDeleteBucketPublicAccessBlock::execute(const jaeger_tracing::Span& parent_span)
 {
   op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       rgw::sal::RGWAttrs attrs(s->bucket_attrs);

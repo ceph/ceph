@@ -229,7 +229,7 @@ extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
                                  uint64_t max,
                                  bool need_stats);
 
-extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const Span& parent_span = nullptr);
+extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key, const jaeger_tracing::Span& parent_span = nullptr);
 extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
 extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
@@ -636,7 +636,7 @@ public:
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
                                    optional_yield y,
-                                   const Bucket::PutParams& params = {}, const Span& parent_span = nullptr);
+                                   const Bucket::PutParams& params = {}, const jaeger_tracing::Span& parent_span = nullptr);
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
                                     optional_yield y,
                                     const Bucket::RemoveParams& params = {});
@@ -649,7 +649,7 @@ public:
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                  RGWBucketInfo& info,
                                  optional_yield y,
-                                 const BucketInstance::PutParams& params = {}, const Span& parent_span = nullptr);
+                                 const BucketInstance::PutParams& params = {}, const jaeger_tracing::Span& parent_span = nullptr);
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   optional_yield y,
@@ -671,7 +671,7 @@ public:
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker,
-                                optional_yield y, const Span& parent_span = nullptr);
+                                optional_yield y, const jaeger_tracing::Span& parent_span = nullptr);
 
   /* user/bucket */
   int link_bucket(const rgw_user& user_id,
@@ -679,12 +679,12 @@ public:
                   ceph::real_time creation_time,
 		  optional_yield y,
                   bool update_entrypoint = true,
-                  rgw_ep_info *pinfo = nullptr, const Span& parent_span = nullptr);
+                  rgw_ep_info *pinfo = nullptr, const jaeger_tracing::Span& parent_span = nullptr);
 
   int unlink_bucket(const rgw_user& user_id,
                     const rgw_bucket& bucket,
 		    optional_yield y,
-                    bool update_entrypoint = true, const Span& parent_span = nullptr);
+                    bool update_entrypoint = true, const jaeger_tracing::Span& parent_span = nullptr);
 
   int chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
             const rgw_user& user_id, const std::string& display_name,
@@ -723,7 +723,7 @@ private:
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
                                     optional_yield y,
-                                    const BucketInstance::PutParams& params, const Span& parent_span = nullptr);
+                                    const BucketInstance::PutParams& params, const jaeger_tracing::Span& parent_span = nullptr);
 
   int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                   RGWBucketInfo& info,
@@ -740,13 +740,13 @@ private:
                      ceph::real_time creation_time,
 		     optional_yield y,
                      bool update_entrypoint,
-                     rgw_ep_info *pinfo, const Span& parent_span = nullptr);
+                     rgw_ep_info *pinfo, const jaeger_tracing::Span& parent_span = nullptr);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
 		       optional_yield y,
-                       bool update_entrypoint, const Span& parent_span = nullptr);
+                       bool update_entrypoint, const jaeger_tracing::Span& parent_span = nullptr);
 
 };
 

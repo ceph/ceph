@@ -1766,11 +1766,11 @@ int RGWRados::Bucket::List::list_objects_ordered(
   vector<rgw_bucket_dir_entry> *result,
   map<string, bool> *common_prefixes,
   bool *is_truncated,
-  optional_yield y, const Span& parent_span)
+  optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
       
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados *store = target->get_store();
@@ -2051,11 +2051,11 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 						   vector<rgw_bucket_dir_entry> *result,
 						   map<string, bool> *common_prefixes,
 						   bool *is_truncated,
-                                                   optional_yield y, const Span& parent_span)
+                                                   optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
       
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados *store = target->get_store();
@@ -2210,11 +2210,11 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             real_time creation_time,
                             rgw_bucket *pmaster_bucket,
                             uint32_t *pmaster_num_shards,
-			    bool exclusive, const Span& parent_span)
+			    bool exclusive, const jaeger_tracing::Span& parent_span)
 {
    
       
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -2223,17 +2223,17 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    Span span_2 = child_span("svc_zone.cc : RGWSI_Zone::select_bucket_placement", span_1);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("svc_zone.cc : RGWSI_Zone::select_bucket_placement", span_1);
     ret = svc.zone->select_bucket_placement(owner, zonegroup_id, placement_rule,
                                             &selected_placement_rule, &rule_info);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     if (ret < 0)
       return ret;
 
     if (!pmaster_bucket) {
-      Span span_3 = child_span("rgw_rados.cc : RGWRados::create_bucket_id", span_1);
+      jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::create_bucket_id", span_1);
       create_bucket_id(&bucket.marker);
-      finish_trace(span_3);
+      jaeger_tracing::finish_trace(span_3);
       bucket.bucket_id = bucket.marker;
     } else {
       bucket.marker = pmaster_bucket->marker;
@@ -2330,23 +2330,23 @@ bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_ob
   return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
 }
 
-int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx, const Span& parent_span)
+int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx, const jaeger_tracing::Span& parent_span)
 {
    
       
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
 
   rgw_pool pool;
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::get_obj_data_pool", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_obj_data_pool", span_1);
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
     ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
     return -EIO;
   }
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
 
   int r = open_pool_ctx(pool, *ioctx, false);
   if (r < 0) {
@@ -2795,11 +2795,11 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                                     rgw::sal::RGWBucket* bucket,
                                     rgw::sal::RGWObject* obj,
                                     const DoutPrefixProvider *dpp,
-                                    optional_yield y, const Span& parent_span)
+                                    optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   if (! swift_versioning_enabled(bucket)) {
@@ -3002,11 +3002,11 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, bool modify_tail,
-                                           void *_index_op, optional_yield y, const Span& parent_span)
+                                           void *_index_op, optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
@@ -3049,11 +3049,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (!ptag && !index_op->get_optag()->empty()) {
     ptag = index_op->get_optag();
   }
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::Object::Pepare prepare_atomic_modification", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::Object::Pepare prepare_atomic_modification", span_1);
   r = target->prepare_atomic_modification(op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, modify_tail, y);
   if (r < 0)
     return r;
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
 
   if (real_clock::is_zero(meta.set_mtime)) {
     meta.set_mtime = real_clock::now();
@@ -3195,9 +3195,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   poolid = ioctx.get_id();
 
   {
-    Span span_3 = child_span("rgw_rados.cc : RGWRados::Object::complete_atomic_modification", span_1);
+    jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::Object::complete_atomic_modification", span_1);
     r = target->complete_atomic_modification();
-    finish_trace(span_3);
+    jaeger_tracing::finish_trace(span_3);
   }
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
@@ -3242,16 +3242,16 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   /* update quota cache */
   if (meta.completeMultipart){
-    Span span_4 = child_span("rgw_quota.cc : update_stats", span_1);
+    jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_quota.cc : update_stats", span_1);
   	store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
                                      0, orig_size);
-    finish_trace(span_4);
+    jaeger_tracing::finish_trace(span_4);
   }
   else {
-    Span span_4 = child_span("rgw_quota.cc : update_stats", span_1);
+    jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_quota.cc : update_stats", span_1);
     store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
                                       accounted_size, orig_size); 
-    finish_trace(span_4); 
+    jaeger_tracing::finish_trace(span_4); 
   }
   return 0;
 
@@ -3301,11 +3301,11 @@ done_cancel:
 }
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
-                                           map<string, bufferlist>& attrs, optional_yield y, const Span& parent_span)
+                                           map<string, bufferlist>& attrs, optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWBucketInfo& bucket_info = target->get_bucket_info();
@@ -4208,11 +4208,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
-               optional_yield y, const Span& parent_span)
+               optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   int ret;
@@ -4302,13 +4302,13 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
   uint64_t max_chunk_size;
 
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::get_max_chunk_size", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_max_chunk_size", span_1);
   ret = get_max_chunk_size(dest_bucket->get_placement_rule(), dest_obj->get_obj(), &max_chunk_size);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj->get_bucket() << dendl;
     return ret;
   }
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
 
   rgw_pool src_pool;
   rgw_pool dest_pool;
@@ -4497,11 +4497,11 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *petag,
                const DoutPrefixProvider *dpp,
-               optional_yield y, const Span& parent_span)
+               optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   string tag;
@@ -4522,9 +4522,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   do {
     bufferlist bl;
-    Span span_2 = child_span("rgw_rados.cc : RGWRados::Object::Read::read", span_1);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::Object::Read::read", span_1);
     ret = read_op.read(ofs, end, bl, y);
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: fail to read object data, ret = " << ret << dendl;
       return ret;
@@ -4540,9 +4540,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   } while (ofs <= end);
 
   // flush
-  Span span_3 = child_span("rgw_putobj_processor.cc : HeadObjectProcesssor::processor", span_1);
+  jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_putobj_processor.cc : HeadObjectProcesssor::processor", span_1);
   ret = processor.process({}, ofs);
-  finish_trace(span_3);
+  jaeger_tracing::finish_trace(span_3);
   if (ret < 0) {
     return ret;
   }
@@ -4629,9 +4629,9 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
-int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, const Span& parent_span)
+int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, const jaeger_tracing::Span& parent_span)
 {
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   constexpr uint NUM_ENTRIES = 1000u;
 
   rgw_obj_index_key marker;
@@ -4674,9 +4674,9 @@ int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y, c
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty, const Span& parent_span)
+int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, bool check_empty, const jaeger_tracing::Span& parent_span)
 {
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   const rgw_bucket& bucket = bucket_info.bucket;
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -4695,13 +4695,13 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
 
   if (objv_tracker.read_version.empty()) {
     RGWBucketEntryPoint ep;
-    Span span_2 = child_span("rgw_bucket.cc : RGWBucketCtl::read_bucket_entrypoint_info", span_1);
+    jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_bucket.cc : RGWBucketCtl::read_bucket_entrypoint_info", span_1);
     r = ctl.bucket->read_bucket_entrypoint_info(bucket_info.bucket,
                                                 &ep,
 						null_yield,
                                                 RGWBucketCtl::Bucket::GetParams()
                                                 .set_objv_tracker(&objv_tracker));
-    finish_trace(span_2);
+    jaeger_tracing::finish_trace(span_2);
     if (r < 0 ||
         (!bucket_info.bucket.bucket_id.empty() &&
          ep.bucket.bucket_id != bucket_info.bucket.bucket_id)) {
@@ -4718,11 +4718,11 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   }
  
   if (remove_ep) {
-    Span span_3 = child_span("rgw_bucket.cc : remove_bucket_entrypoint_info", span_1);
+    jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_bucket.cc : remove_bucket_entrypoint_info", span_1);
     r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket, null_yield,
                                                   RGWBucketCtl::Bucket::RemoveParams()
                                                   .set_objv_tracker(&objv_tracker));
-    finish_trace(span_3);
+    jaeger_tracing::finish_trace(span_3);
     if (r < 0)
       return r;
   }
@@ -4730,9 +4730,9 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   /* if the bucket is not synced we can remove the meta file */
   if (!svc.zone->is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    Span span_4 = child_span("rgw_bucket.cc : remove_bucket_instance_info", span_1);
+    jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_bucket.cc : remove_bucket_instance_info", span_1);
     r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, null_yield);
-    finish_trace(span_4);
+    jaeger_tracing::finish_trace(span_4);
     if (r < 0) {
       return r;
     }
@@ -5047,12 +5047,9 @@ struct tombstone_entry {
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_span)
+int RGWRados::Object::Delete::delete_obj(optional_yield y, const jaeger_tracing::Span& parent_span)
 {
-   
-    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
-  
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   RGWRados *store = target->get_store();
   rgw_obj& src_obj = target->get_obj();
@@ -5093,25 +5090,25 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
         meta.mtime = params.mtime;
       }
 
-      Span span_2 = child_span("rgw_rados.cc : RGWRados::set_olh", span_1);
+      jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::set_olh", span_1);
       int r = store->set_olh(target->get_ctx(), target->get_bucket_info(), marker, true, &meta, params.olh_epoch, params.unmod_since, params.high_precision_time, y, params.zones_trace);
-      finish_trace(span_2);
+      jaeger_tracing::finish_trace(span_2);
       if (r < 0) {
         return r;
       }
     } else {
       rgw_bucket_dir_entry dirent;
 
-      Span span_3 = child_span("rgw_rados.cc : RGWRados::bi_get_instance", span_1);
+      jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::bi_get_instance", span_1);
       int r = store->bi_get_instance(target->get_bucket_info(), obj, &dirent);
-      finish_trace(span_3);
+      jaeger_tracing::finish_trace(span_3);
       if (r < 0) {
         return r;
       }
       result.delete_marker = dirent.is_delete_marker();
-      Span span_4 = child_span("rgw_rados.cc : RGWRados::unlink_obj_instance", span_1);
+      jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::unlink_obj_instance", span_1);
       r = store->unlink_obj_instance(target->get_ctx(), target->get_bucket_info(), obj, params.olh_epoch, y, params.zones_trace);
-      finish_trace(span_4);
+      jaeger_tracing::finish_trace(span_4);
       if (r < 0) {
         return r;
       }
@@ -5125,9 +5122,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
       return r;
     }
 
-    Span span_5 = child_span("svc_datalog.cc : RGWSI_DataLog_RADOS::add_entry", span_1);
+    jaeger_tracing::Span span_5 = jaeger_tracing::child_span("svc_datalog.cc : RGWSI_DataLog_RADOS::add_entry", span_1);
     r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
-    finish_trace(span_5);
+    jaeger_tracing::finish_trace(span_5);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
       return r;
@@ -5137,9 +5134,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
   }
 
   rgw_rados_ref ref;
-  Span span_6 = child_span("rgw_rados.cc : RGWRados::get_obj_head_ref", span_1);
+  jaeger_tracing::Span span_6 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_obj_head_ref", span_1);
   int r = store->get_obj_head_ref(target->get_bucket_info(), obj, &ref);
-  finish_trace(span_6);
+  jaeger_tracing::finish_trace(span_6);
   if (r < 0) {
     return r;
   }
@@ -5199,9 +5196,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
     return -ENOENT;
   }
 
-  Span span_7 = child_span("rgw_rados.cc : RGWRados::Object::prepare_atomic_modification", span_1);
+  jaeger_tracing::Span span_7 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::Object::prepare_atomic_modification", span_1);
   r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true, false, y);
-  finish_trace(span_7);
+  jaeger_tracing::finish_trace(span_7);
   if (r < 0)
     return r;
 
@@ -5217,9 +5214,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
   if (r < 0)
     return r;
 
-  Span span_8 = child_span("rgw_rados.cc : RGWRados::remove_rgw_head_obj", span_1);
+  jaeger_tracing::Span span_8 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::remove_rgw_head_obj", span_1);
   store->remove_rgw_head_obj(op);
-  finish_trace(span_8);
+  jaeger_tracing::finish_trace(span_8);
 
   auto& ioctx = ref.pool.ioctx();
   r = rgw_rados_operate(ioctx, ref.obj.oid, &op, null_yield, 0, span_1);
@@ -5234,13 +5231,13 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    Span span_11 = child_span("rgw_rados.cc : RGWRados::Bucket::UpdateIndex::complete_del()", span_1);
+    jaeger_tracing::Span span_11 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::Bucket::UpdateIndex::complete_del()", span_1);
     r = index_op.complete_del(poolid, ioctx.get_last_version(), state->mtime, params.remove_objs);
-    finish_trace(span_11);
+    jaeger_tracing::finish_trace(span_11);
     
-    Span span_9 = child_span("rgw_rados.cc : RGWRados::Object::complete_atomic_modification", span_1);
+    jaeger_tracing::Span span_9 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::Object::complete_atomic_modification", span_1);
     int ret = target->complete_atomic_modification();
-    finish_trace(span_9);
+    jaeger_tracing::finish_trace(span_9);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
@@ -5260,9 +5257,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const Span& parent_sp
     return r;
 
   /* update quota cache */
-  Span span_10 = child_span("rgw_quota.cc : update_stats", span_1);
+  jaeger_tracing::Span span_10 = jaeger_tracing::child_span("rgw_quota.cc : update_stats", span_1);
   store->quota_handler->update_stats(params.bucket_owner, obj.bucket, -1, 0, obj_accounted_size);
-  finish_trace(span_10);
+  jaeger_tracing::finish_trace(span_10);
 
   return 0;
 }
@@ -5273,11 +5270,11 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
                          int versioning_status,
                          uint16_t bilog_flags,
                          const real_time& expiration_time,
-                         rgw_zone_set *zones_trace, const Span& parent_span)
+                         rgw_zone_set *zones_trace, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados::Object del_target(this, bucket_info, obj_ctx, obj);
@@ -5839,11 +5836,11 @@ int RGWRados::set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj
 int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& src_obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs,
-                        optional_yield y, const Span& parent_span)
+                        optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   rgw_obj obj = src_obj;
@@ -5852,9 +5849,9 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
   }
 
   rgw_rados_ref ref;
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::get_obj_head_ref", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::get_obj_head_ref", span_1);
   int r = get_obj_head_ref(bucket_info, obj, &ref);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
   if (r < 0) {
     return r;
   }
@@ -5982,11 +5979,11 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
   return 0;
 }
 
-int RGWRados::Object::Read::prepare(optional_yield y, const Span& parent_span)
+int RGWRados::Object::Read::prepare(optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
      
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados *store = source->get_store();
@@ -6009,9 +6006,9 @@ int RGWRados::Object::Read::prepare(optional_yield y, const Span& parent_span)
 
   state.obj = astate->obj;
 
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::obj_to_raw", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::obj_to_raw", span_1);
   store->obj_to_raw(bucket_info.placement_rule, state.obj, &state.head_obj);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
 
   state.cur_pool = state.head_obj.pool;
   state.cur_ioctx = &state.io_ctxs[state.cur_pool];
@@ -6157,11 +6154,9 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
   return 0;
 }
 
-int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_tag, optional_yield y, const Span& parent_span)
-{
-   
-      
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_tag, optional_yield y, const jaeger_tracing::Span& parent_span)
+{   
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (blind) {
     return 0;
@@ -6195,11 +6190,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
                                             list<rgw_obj_index_key> *remove_objs, const string *user_data,
-                                            bool appendable, const Span& parent_span)
+                                            bool appendable, const jaeger_tracing::Span& parent_span)
 {
-   
-    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   if (blind) {
@@ -6236,13 +6229,13 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
 
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::cls_obj_complete_add", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::cls_obj_complete_add", span_1);
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
 
-  Span span_3 = child_span("svc_datalog_rados.cc : RGWSI_DataLog_RADOS::add_entry", span_1);
+  jaeger_tracing::Span span_3 = jaeger_tracing::child_span("svc_datalog_rados.cc : RGWSI_DataLog_RADOS::add_entry", span_1);
   int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
-  finish_trace(span_3);
+  jaeger_tracing::finish_trace(span_3);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
@@ -6475,7 +6468,7 @@ struct get_obj_data {
 
 static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                off_t read_ofs, off_t len, bool is_head_obj,
-                               RGWObjState *astate, void *arg, const Span& parent_span)
+                               RGWObjState *astate, void *arg, const jaeger_tracing::Span& parent_span)
 {
   struct get_obj_data *d = (struct get_obj_data *)arg;
 
@@ -6485,7 +6478,7 @@ static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
 
 int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                  off_t read_ofs, off_t len, bool is_head_obj,
-                                 RGWObjState *astate, void *arg, const Span& parent_span)
+                                 RGWObjState *astate, void *arg, const jaeger_tracing::Span& parent_span)
 {
   ObjectReadOperation op;
   struct get_obj_data *d = (struct get_obj_data *)arg;
@@ -6533,11 +6526,11 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
 }
 
 int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
-                                    optional_yield y, const Span& parent_span)
+                                    optional_yield y, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWRados *store = source->get_store();
@@ -6549,10 +6542,10 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
-  Span span_2 = child_span("rgw_rados.cc : RGWRados::iterate", span_1);
+  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_rados.cc : RGWRados::iterate", span_1);
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data, y, span_1);
-  finish_trace(span_2);
+  jaeger_tracing::finish_trace(span_2);
   if (r < 0) {
     ldout(cct, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client
@@ -6565,7 +6558,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
 int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
                           const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                           off_t ofs, off_t end, uint64_t max_chunk_size,
-                          iterate_obj_cb cb, void *arg, optional_yield y, const Span& parent_span)
+                          iterate_obj_cb cb, void *arg, optional_yield y, const jaeger_tracing::Span& parent_span)
 {
   rgw_raw_obj head_obj;
   rgw_raw_obj read_obj;
@@ -7810,11 +7803,11 @@ int RGWRados::get_bucket_info(RGWServices *svc,
                               const string& tenant, const string& bucket_name,
                               RGWBucketInfo& info,
                               real_time *pmtime,
-                              optional_yield y, map<string, bufferlist> *pattrs, const Span& parent_span)
+                              optional_yield y, map<string, bufferlist> *pattrs, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   auto obj_ctx = svc->sysobj->init_obj_ctx();
   RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
@@ -7845,11 +7838,11 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
-                              real_time mtime, map<string, bufferlist> *pattrs, const Span& parent_span)
+                              real_time mtime, map<string, bufferlist> *pattrs, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   return ctl.bucket->store_bucket_instance_info(info.bucket, info, null_yield,
@@ -7860,11 +7853,11 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 }
 
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
-                                     map<string, bufferlist> *pattrs, bool create_entry_point, const Span& parent_span)
+                                     map<string, bufferlist> *pattrs, bool create_entry_point, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   bool create_head = !info.has_instance_obj || create_entry_point;
@@ -8447,11 +8440,11 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      bool* cls_filtered,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
-				      check_filter_t force_check_filter, const Span& parent_span)
+				      check_filter_t force_check_filter, const jaeger_tracing::Span& parent_span)
 {
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
   /* expansion_factor allows the number of entries to read to grow
    * exponentially; this is used when earlier reads are producing too
@@ -8715,11 +8708,11 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
-					check_filter_t force_check_filter, const Span& parent_span) {
+					check_filter_t force_check_filter, const jaeger_tracing::Span& parent_span) {
   
    
     
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   ldout(cct, 10) << "cls_bucket_list_unordered " << bucket_info.bucket <<
@@ -8777,9 +8770,9 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     } else {
       // so now we have the key used to compute the bucket index shard
       // and can extract the specific shard from it
-      Span span_2 = child_span("svc_bi_rados.cc : RGWSI_BucketIndex_RADOS::bucket_shard_index", span_1);
+      jaeger_tracing::Span span_2 = jaeger_tracing::child_span("svc_bi_rados.cc : RGWSI_BucketIndex_RADOS::bucket_shard_index", span_1);
       current_shard = svc.bi_rados->bucket_shard_index(obj_key.name, num_shards);
-      finish_trace(span_2);
+      jaeger_tracing::finish_trace(span_2);
     }
   }
 
@@ -8851,7 +8844,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 check_updates:
 
   // suggest updates if there is any
-  Span span_4 = child_span("svc_rados.cc : RGWSI_RADOS::Obj::aio_operate", span_1);
+  jaeger_tracing::Span span_4 = jaeger_tracing::child_span("svc_rados.cc : RGWSI_RADOS::Obj::aio_operate", span_1);
   map<string, bufferlist>::iterator miter = updates.begin();
   for (; miter != updates.end(); ++miter) {
     if (miter->second.length()) {
@@ -8863,7 +8856,7 @@ check_updates:
       c->release();
     }
   }
-  finish_trace(span_4);
+  jaeger_tracing::finish_trace(span_4);
 
   if (last_entry && !ent_list.empty()) {
     *last_entry = last_added_entry;

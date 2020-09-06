@@ -32,7 +32,7 @@ void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
 
 int RGWSI_BucketIndex_RADOS::open_pool(const rgw_pool& pool,
                                        RGWSI_RADOS::Pool *index_pool,
-                                       bool mostly_omap, const Span& parent_span)
+                                       bool mostly_omap, const jaeger_tracing::Span& parent_span)
 {
   *index_pool = svc.rados->pool(pool);
   return index_pool->open(RGWSI_RADOS::OpenParams()
@@ -40,11 +40,11 @@ int RGWSI_BucketIndex_RADOS::open_pool(const rgw_pool& pool,
 }
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_pool(const RGWBucketInfo& bucket_info,
-                                                    RGWSI_RADOS::Pool *index_pool, const Span& parent_span)
+                                                    RGWSI_RADOS::Pool *index_pool, const jaeger_tracing::Span& parent_span)
 {
    
    
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   const rgw_pool& explicit_pool = bucket_info.bucket.explicit_placement.index_pool;
@@ -172,12 +172,10 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
                                                std::optional<int> _shard_id,
                                                RGWSI_RADOS::Pool *index_pool,
                                                map<int, string> *bucket_objs,
-                                               map<int, string> *bucket_instance_ids, const Span& parent_span)
+                                               map<int, string> *bucket_instance_ids, const jaeger_tracing::Span& parent_span)
 {
   string bucket_oid_base;
-   
-   
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   int shard_id = _shard_id.value_or(-1);
   int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
@@ -328,12 +326,10 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
 }
 
 
-int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info, const Span& parent_span)
+int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info, const jaeger_tracing::Span& parent_span)
 {
   string bucket_oid_base;
-   
-   
-  Span span_1 = child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   
 
   RGWSI_RADOS::Pool index_pool;

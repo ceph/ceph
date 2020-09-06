@@ -1369,16 +1369,16 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     limit = -1; /* no limit */
     return 0;
   }
 
-  void send_response_begin(bool has_buckets, const Span& parent_span = nullptr) override {
+  void send_response_begin(bool has_buckets, const jaeger_tracing::Span& parent_span = nullptr) override {
     sent_data = true;
   }
 
-  void send_response_data(rgw::sal::RGWBucketList& buckets, const Span& parent_span = nullptr) override {
+  void send_response_data(rgw::sal::RGWBucketList& buckets, const jaeger_tracing::Span& parent_span = nullptr) override {
     if (!sent_data)
       return;
     auto& m = buckets.get_buckets();
@@ -1398,7 +1398,7 @@ public:
     }
   } /* send_response_data */
 
-  void send_response_end(const Span& parent_span = nullptr) override {
+  void send_response_end(const jaeger_tracing::Span& parent_span = nullptr) override {
     // do nothing
   }
 
@@ -1545,12 +1545,12 @@ public:
 	       RGW_LOOKUP_FLAG_FILE);
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     max = default_max;
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     struct req_state* s = get_state();
     for (const auto& iter : objs) {
 
@@ -1715,12 +1715,12 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     max = default_max;
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     valid = true;
     if ((objs.size() > 1) ||
 	(! objs.empty() &&
@@ -1761,7 +1761,7 @@ public:
 
   bool only_bucket() override { return false; }
 
-  int read_permissions(RGWOp* op_obj, const Span& parent_span = nullptr) override {
+  int read_permissions(RGWOp* op_obj, const jaeger_tracing::Span& parent_span = nullptr) override {
     /* we ARE a 'create bucket' request (cf. rgw_rest.cc, ll. 1305-6) */
     return 0;
   }
@@ -1794,7 +1794,7 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -1803,7 +1803,7 @@ public:
     return ret;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     /* TODO: something (maybe) */
   }
 }; /* RGWCreateBucketRequest */
@@ -1854,7 +1854,7 @@ public:
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {}
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {}
 
 }; /* RGWDeleteBucketRequest */
 
@@ -1910,13 +1910,13 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    /* XXX required in RGWOp::execute(const Span& parent_span) */
+    /* XXX required in RGWOp::execute(const jaeger_tracing::Span& parent_span) */
     s->content_length = bl.length();
 
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -1925,7 +1925,7 @@ public:
     return ret;
   }
 
-  int get_data(buffer::list& _bl, const Span& parent_span = nullptr) override {
+  int get_data(buffer::list& _bl, const jaeger_tracing::Span& parent_span = nullptr) override {
     /* XXX for now, use sharing semantics */
     _bl = std::move(bl);
     uint32_t len = _bl.length();
@@ -1933,7 +1933,7 @@ public:
     return len;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {}
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {}
 
   int verify_params() override {
     if (bl.length() > cct->_conf->rgw_max_put_size)
@@ -2007,12 +2007,12 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     return 0;
   }
 
   int send_response_data(ceph::buffer::list& bl, off_t bl_off,
-                         off_t bl_len, const Span& parent_span = nullptr) override {
+                         off_t bl_len, const jaeger_tracing::Span& parent_span = nullptr) override {
     size_t bytes;
     for (auto& bp : bl.buffers()) {
       /* if for some reason bl_off indicates the start-of-data is not at
@@ -2034,7 +2034,7 @@ public:
     return 0;
   }
 
-  int send_response_data_error(const Span& parent_span = nullptr) override {
+  int send_response_data_error(const jaeger_tracing::Span& parent_span = nullptr) override {
     /* S3 implementation just sends nothing--there is no side effect
      * to simulate here */
     return 0;
@@ -2089,7 +2089,7 @@ public:
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {}
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {}
 
 }; /* RGWDeleteObjRequest */
 
@@ -2166,23 +2166,23 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     return 0;
   }
 
   int send_response_data(ceph::buffer::list& _bl, off_t s_off,
-                         off_t e_off, const Span& parent_span = nullptr) override {
+                         off_t e_off, const jaeger_tracing::Span& parent_span = nullptr) override {
     /* NOP */
     /* XXX save attrs? */
     return 0;
   }
 
-  int send_response_data_error(const Span& parent_span = nullptr) override {
+  int send_response_data_error(const jaeger_tracing::Span& parent_span = nullptr) override {
     /* NOP */
     return 0;
   }
 
-  void execute(const Span& parent_span = nullptr) override {
+  void execute(const jaeger_tracing::Span& parent_span = nullptr) override {
     RGWGetObj::execute();
     _size = get_state()->obj_size;
   }
@@ -2243,11 +2243,11 @@ public:
     return 0;
   }
 
-  virtual int get_params(const Span& parent_span = nullptr) {
+  virtual int get_params(const jaeger_tracing::Span& parent_span = nullptr) {
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     bucket->get_creation_time() = get_state()->bucket->get_info().creation_time;
     bs.size = bucket->get_size();
     bs.size_rounded = bucket->get_size_rounded();
@@ -2316,12 +2316,12 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     max = default_max;
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     struct req_state* s = get_state();
     // try objects
     for (const auto& iter : objs) {
@@ -2430,7 +2430,7 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2439,7 +2439,7 @@ public:
     return ret;
   }
 
-  int get_data(buffer::list& _bl, const Span& parent_span = nullptr) override {
+  int get_data(buffer::list& _bl, const jaeger_tracing::Span& parent_span = nullptr) override {
     /* XXX for now, use sharing semantics */
     uint32_t len = data.length();
     _bl = std::move(data);
@@ -2460,7 +2460,7 @@ public:
   int exec_continue() override;
   int exec_finish() override;
 
-  void send_response(const Span& parent_span = nullptr) override {}
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {}
 
   int verify_params() override {
     return 0;
@@ -2543,7 +2543,7 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
@@ -2552,8 +2552,8 @@ public:
     return ret;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {}
-  void send_partial_response(off_t ofs, const Span& parent_span = nullptr) override {}
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {}
+  void send_partial_response(off_t ofs, const jaeger_tracing::Span& parent_span = nullptr) override {}
 
 }; /* RGWCopyObjRequest */
 
@@ -2600,11 +2600,11 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
     return 0;
   }
 
-  void send_response(const Span& parent_span = nullptr) override {}
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {}
 
 }; /* RGWSetAttrsRequest */
 
@@ -2639,9 +2639,9 @@ public:
     return 0;
   }
 
-  int get_params(const Span& parent_span = nullptr) override { return 0; }
+  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override { return 0; }
   bool only_bucket() override { return false; }
-  void send_response(const Span& parent_span = nullptr) override {
+  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
     stats_req.kb = stats_op.kb;
     stats_req.kb_avail = stats_op.kb_avail;
     stats_req.kb_used = stats_op.kb_used;
