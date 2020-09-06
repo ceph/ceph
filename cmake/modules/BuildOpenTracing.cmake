@@ -15,6 +15,7 @@ function(build_opentracing)
                                 -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/external)
 
     if(CMAKE_MAKE_PROGRAM MATCHES "make")
+      message(STATUS "MATCHES OPENTRACING")
       # try to inherit command line arguments passed by parent "make" job
       set(make_cmd "$(MAKE)")
     else()
@@ -25,7 +26,7 @@ function(build_opentracing)
     include(ExternalProject)
     ExternalProject_Add(OpenTracing
       GIT_REPOSITORY "https://github.com/opentracing/opentracing-cpp.git"
-      GIT_TAG "v1.5.0"
+      GIT_TAG "v1.6.0"
       UPDATE_COMMAND ""
       INSTALL_DIR "${CMAKE_BINARY_DIR}/external"
       DOWNLOAD_DIR ${OpenTracing_DOWNLOAD_DIR}

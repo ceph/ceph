@@ -44,7 +44,7 @@ function(build_jaeger)
       include(ExternalProject)
       ExternalProject_Add(Jaeger
         GIT_REPOSITORY https://github.com/jaegertracing/jaeger-client-cpp.git
-        GIT_TAG "v0.5.0"
+        GIT_TAG "v0.6.0"
         UPDATE_COMMAND ""
         INSTALL_DIR "${CMAKE_BINARY_DIR}/external"
         DOWNLOAD_DIR ${Jaeger_DOWNLOAD_DIR}

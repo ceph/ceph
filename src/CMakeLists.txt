@@ -275,10 +275,6 @@ if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
 
-if(WITH_JAEGER)
-  include(IncludeJaeger)
-endif()
-
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
@@ -388,6 +384,7 @@ set(libcommon_files
   ${mds_files})
 
 if(WITH_JAEGER)
+  include(IncludeJaeger)
   file(GLOB jager_tracing_file "common/tracer.cc")
   list(APPEND libcommon_files ${jager_tracing_file})
 endif()

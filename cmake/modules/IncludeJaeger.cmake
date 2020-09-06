@@ -2,14 +2,16 @@ include(BuildJaeger)
 include(BuildOpenTracing)
 include(Buildthrift)
 include(Buildyaml-cpp)
+include(Buildnlohmann_json)
 
 include(ExternalProjectHelper)
 
+build_nlohmann_json()
 build_thrift()
 build_yamlcpp()
 build_opentracing()
 
-set(dependencies OpenTracing thrift yaml-cpp)
+set(dependencies OpenTracing thrift yaml-cpp nlohmann_json)
 
 build_jaeger()
 
