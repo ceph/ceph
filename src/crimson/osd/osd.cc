@@ -1294,18 +1294,27 @@ OSD::get_or_create_pg(
   epoch_t epoch,
   std::unique_ptr<PGCreateInfo> info)
 {
-  auto [fut, creating] = pg_map.get_pg(pgid, bool(info));
-  if (!creating && info) {
-    pg_map.set_creating(pgid);
-    (void)handle_pg_create_info(std::move(info));
+  if (info) {
+    auto [fut, creating] = pg_map.wait_for_pg(pgid);
+    if (!creating) {
+      pg_map.set_creating(pgid);
+      (void)handle_pg_create_info(std::move(info));
+    }
+    return std::move(fut);
+  } else {
+    return make_ready_blocking_future<Ref<PG>>(pg_map.get_pg(pgid));
   }
-  return std::move(fut);
 }
 
 blocking_future<Ref<PG>> OSD::wait_for_pg(
   spg_t pgid)
 {
-  return pg_map.get_pg(pgid).first;
+  return pg_map.wait_for_pg(pgid).first;
+}
+
+Ref<PG> OSD::get_pg(spg_t pgid)
+{
+  return pg_map.get_pg(pgid);
 }
 
 seastar::future<> OSD::prepare_to_stop()
