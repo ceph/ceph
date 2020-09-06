@@ -8,6 +8,12 @@ from ceph_volume.util import disk
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 
+import queue
+import threading
+
+device_queue = queue.Queue()
+device_map_lock = threading.RLock()
+
 report_template = """
 {dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
 
@@ -22,16 +28,42 @@ def encryption_status(abspath):
     return encryption.status(abspath)
 
 
+def build_device(dev_map):
+    while True:
+        try:
+            dev = device_queue.get(block=False)
+        except queue.Empty:
+            break
+
+        d = Device(dev)
+        with device_map_lock:
+            dev_map[dev] = d
+
+
 class Devices(object):
     """
     A container for Device instances with reporting
     """
 
-    def __init__(self, devices=None):
+    def __init__(self, devices=None, num_threads=4):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
-        self.devices = [Device(k) for k in
-                            sys_info.devices.keys()]
+        
+        for dev_path in sys_info.devices.keys():
+            device_queue.put(dev_path)
+
+        dev_map = {}
+        threads = []
+
+        for n in range(num_threads):
+            t = threading.Thread(target=build_device, args=(dev_map,))
+            t.daemon = True
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.devices = [dev_map[dev_path] for dev_path in sorted(dev_map.keys())]
 
     def pretty_report(self, all=True):
         output = [
@@ -42,13 +74,13 @@ class Devices(object):
                 model='Model name',
                 available='available',
             )]
-        for device in sorted(self.devices):
+        for device in self.devices:
             output.append(device.report())
         return ''.join(output)
 
     def json_report(self):
         output = []
-        for device in sorted(self.devices):
+        for device in self.devices:
             output.append(device.json_report())
         return output
 
