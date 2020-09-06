@@ -167,7 +167,7 @@ public:
        * If the current state is not the same as "require"
        * then update the state and we are the first writer.
        *
-       * Or we are there already has one writer running or
+       * Or if there already has one writer running or
        * finished, it will let user to choose to continue
        * or just break.
        */
