@@ -629,6 +629,10 @@ public:
     get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
   }
+  seastar::future<> mark_unfound_lost(int) {
+    // TODO: see PrimaryLogPG::mark_all_unfound_lost()
+    return seastar::now();
+  }
 
 private:
   // instead of seastar::gate, we use a boolean flag to indicate
