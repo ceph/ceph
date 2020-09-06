@@ -495,6 +495,19 @@ void PG::print(ostream& out) const
   out << peering_state << " ";
 }
 
+void PG::dump_primary(Formatter* f)
+{
+  peering_state.dump_peering_state(f);
+
+  f->open_array_section("recovery_state");
+  PeeringState::QueryState q(f);
+  peering_state.handle_event(q, 0);
+  f->close_section();
+
+  // TODO: snap_trimq
+  // TODO: scrubber state
+  // TODO: agent state
+}
 
 std::ostream& operator<<(std::ostream& os, const PG& pg)
 {

@@ -529,6 +529,7 @@ public:
 			   const MOSDRepOpReply& m);
 
   void print(std::ostream& os) const;
+  void dump_primary(Formatter*);
 
 private:
   void do_peering_event(
