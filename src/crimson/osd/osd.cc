@@ -38,6 +38,7 @@
 #include "osd/PeeringState.h"
 
 #include "crimson/admin/osd_admin.h"
+#include "crimson/admin/pg_commands.h"
 #include "crimson/common/exception.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -432,7 +433,10 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SendBeaconHook>(*this)),
       asok->register_command(make_asok_hook<FlushPgStatsHook>(*this)),
       asok->register_command(make_asok_hook<DumpPGStateHistory>(std::as_const(*this))),
-      asok->register_command(make_asok_hook<SeastarMetricsHook>()));
+      asok->register_command(make_asok_hook<SeastarMetricsHook>()),
+      // PG commands
+      asok->register_command(make_asok_hook<pg::QueryCommand>(*this)),
+      asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)));
   }).then_unpack([] {
     return seastar::now();
   });
