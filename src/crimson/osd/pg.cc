@@ -918,7 +918,41 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 void PG::handle_rep_op_reply(crimson::net::Connection* conn,
 			     const MOSDRepOpReply& m)
 {
-  backend->got_rep_op_reply(m);
+  if (is_valid_rep_op_reply(m)) {
+    backend->got_rep_op_reply(m);
+  }
+}
+
+bool PG::is_valid_rep_op_reply(const MOSDRepOpReply& reply) const
+{
+  // if a repop is replied after a replica goes down in a new osdmap, and
+  // before the pg advances to this new osdmap, the repop replies before this
+  // repop can be discarded by that replica OSD, because the primary resets the
+  // connection to it when handling the new osdmap marking it down, and also
+  // resets the messenger sesssion when the replica reconnects. to avoid the
+  // out-of-order replies, the messages from that replica should be discarded.
+  const auto osdmap = peering_state.get_osdmap();
+  const int from_osd = reply.get_source().num();
+  if (osdmap->is_down(from_osd)) {
+    return false;
+  }
+  // Mostly, this overlaps with the old_peering_msg
+  // condition.  An important exception is pushes
+  // sent by replicas not in the acting set, since
+  // if such a replica goes down it does not cause
+  // a new interval.
+  if (osdmap->get_down_at(from_osd) >= reply.map_epoch) {
+    return false;
+  }
+  // same pg?
+  //  if pg changes *at all*, we reset and repeer!
+  if (epoch_t lpr = peering_state.get_last_peering_reset();
+      lpr > reply.map_epoch) {
+    logger().debug("{}: pg changed {} after {}, dropping",
+                   __func__, get_info().history, reply.map_epoch);
+    return false;
+  }
+  return true;
 }
 
 seastar::future<> PG::stop()
