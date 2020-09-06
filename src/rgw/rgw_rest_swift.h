@@ -21,10 +21,10 @@ public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() override {}
 
-  int verify_permission() override;
-  int get_params() override;
-  int send_response_data_error() override;
-  int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  int get_params(const Span& parent_span = nullptr) override;
+  int send_response_data_error(const Span& parent_span = nullptr) override;
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len, const Span& parent_span = nullptr) override;
 
   void set_custom_http_response(const int http_ret) {
     custom_http_ret = http_ret;
@@ -52,13 +52,13 @@ public:
   }
   ~RGWListBuckets_ObjStore_SWIFT() override {}
 
-  int get_params() override;
-  void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) override;
-  void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::RGWBucketList& buckets) override;
-  void send_response_data_reversed(rgw::sal::RGWBucketList& buckets);
+  int get_params(const Span& parent_span = nullptr) override;
+  void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets, const Span& parent_span = nullptr) override;
+  void send_response_begin(bool has_buckets, const Span& parent_span = nullptr) override;
+  void send_response_data(rgw::sal::RGWBucketList& buckets, const Span& parent_span = nullptr) override;
+  void send_response_data_reversed(rgw::sal::RGWBucketList& buckets, const Span& parent_span = nullptr);
   void dump_bucket_entry(const rgw::sal::RGWBucket& obj);
-  void send_response_end() override;
+  void send_response_end(const Span& parent_span = nullptr) override;
 
   bool should_get_stats() override { return need_stats; }
   bool supports_account_metadata() override { return true; }
@@ -72,8 +72,8 @@ public:
   }
   ~RGWListBucket_ObjStore_SWIFT() override {}
 
-  int get_params() override;
-  void send_response() override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_Span) override;
   bool need_container_stats() override { return true; }
 };
 
@@ -84,8 +84,8 @@ public:
   }
   ~RGWStatAccount_ObjStore_SWIFT() override {}
 
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWStatBucket_ObjStore_SWIFT : public RGWStatBucket_ObjStore {
@@ -93,7 +93,7 @@ public:
   RGWStatBucket_ObjStore_SWIFT() {}
   ~RGWStatBucket_ObjStore_SWIFT() override {}
 
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWCreateBucket_ObjStore_SWIFT : public RGWCreateBucket_ObjStore {
@@ -103,8 +103,8 @@ public:
   RGWCreateBucket_ObjStore_SWIFT() {}
   ~RGWCreateBucket_ObjStore_SWIFT() override {}
 
-  int get_params() override;
-  void send_response() override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWDeleteBucket_ObjStore_SWIFT : public RGWDeleteBucket_ObjStore {
@@ -112,7 +112,7 @@ public:
   RGWDeleteBucket_ObjStore_SWIFT() {}
   ~RGWDeleteBucket_ObjStore_SWIFT() override {}
 
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
@@ -121,11 +121,11 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
 
-  int update_slo_segment_size(rgw_slo_entry& entry);
+  int update_slo_segment_size(rgw_slo_entry& entry, const Span& parent_span = nullptr);
 
-  int verify_permission() override;
-  int get_params() override;
-  void send_response() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWPutMetadataAccount_ObjStore_SWIFT : public RGWPutMetadataAccount_ObjStore {
@@ -133,8 +133,8 @@ public:
   RGWPutMetadataAccount_ObjStore_SWIFT() {}
   ~RGWPutMetadataAccount_ObjStore_SWIFT() override {}
 
-  int get_params() override;
-  void send_response() override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWPutMetadataBucket_ObjStore_SWIFT : public RGWPutMetadataBucket_ObjStore {
@@ -142,8 +142,8 @@ public:
   RGWPutMetadataBucket_ObjStore_SWIFT() {}
   ~RGWPutMetadataBucket_ObjStore_SWIFT() override {}
 
-  int get_params() override;
-  void send_response() override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWPutMetadataObject_ObjStore_SWIFT : public RGWPutMetadataObject_ObjStore {
@@ -151,8 +151,8 @@ public:
   RGWPutMetadataObject_ObjStore_SWIFT() {}
   ~RGWPutMetadataObject_ObjStore_SWIFT() override {}
 
-  int get_params() override;
-  void send_response() override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   bool need_object_expiration() override { return true; }
 };
 
@@ -161,10 +161,10 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() override {}
 
-  int verify_permission() override;
-  int get_params() override;
+  int verify_permission(const Span& parent_span = nullptr) override;
+  int get_params(const Span& parent_span = nullptr) override;
   bool need_object_expiration() override { return true; }
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWCopyObj_ObjStore_SWIFT : public RGWCopyObj_ObjStore {
@@ -175,10 +175,10 @@ public:
   RGWCopyObj_ObjStore_SWIFT() : sent_header(false) {}
   ~RGWCopyObj_ObjStore_SWIFT() override {}
 
-  int init_dest_policy() override;
-  int get_params() override;
-  void send_response() override;
-  void send_partial_response(off_t ofs) override;
+  int init_dest_policy(const Span& parent_span = nullptr) override;
+  int get_params(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
+  void send_partial_response(off_t ofs, const Span& parent_span = nullptr) override;
 };
 
 class RGWGetACLs_ObjStore_SWIFT : public RGWGetACLs_ObjStore {
@@ -186,7 +186,7 @@ public:
   RGWGetACLs_ObjStore_SWIFT() {}
   ~RGWGetACLs_ObjStore_SWIFT() override {}
 
-  void send_response() override {}
+  void send_response(const Span& parent_span = nullptr) override {}
 };
 
 class RGWPutACLs_ObjStore_SWIFT : public RGWPutACLs_ObjStore {
@@ -194,7 +194,7 @@ public:
   RGWPutACLs_ObjStore_SWIFT() : RGWPutACLs_ObjStore() {}
   ~RGWPutACLs_ObjStore_SWIFT() override {}
 
-  void send_response() override {}
+  void send_response(const Span& parent_span = nullptr) override {}
 };
 
 class RGWOptionsCORS_ObjStore_SWIFT : public RGWOptionsCORS_ObjStore {
@@ -202,7 +202,7 @@ public:
   RGWOptionsCORS_ObjStore_SWIFT() {}
   ~RGWOptionsCORS_ObjStore_SWIFT() override {}
 
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWBulkDelete_ObjStore_SWIFT : public RGWBulkDelete_ObjStore {
@@ -212,7 +212,7 @@ public:
 
   int get_data(std::list<RGWBulkDelete::acct_path_t>& items,
                bool * is_truncated) override;
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWBulkUploadOp_ObjStore_SWIFT : public RGWBulkUploadOp_ObjStore {
@@ -227,7 +227,7 @@ public:
   ~RGWBulkUploadOp_ObjStore_SWIFT() = default;
 
   std::unique_ptr<StreamGetter> create_stream() override;
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWInfo_ObjStore_SWIFT : public RGWInfo_ObjStore {
@@ -243,8 +243,8 @@ public:
   RGWInfo_ObjStore_SWIFT() {}
   ~RGWInfo_ObjStore_SWIFT() override {}
 
-  void execute() override;
-  void send_response() override;
+  void execute(const Span& parent_span = nullptr) override;
+  void send_response(const Span& parent_span = nullptr) override;
   static void list_swift_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
@@ -277,9 +277,9 @@ public:
             req_state* s,
             RGWHandler* dialect_handler) override;
 
-  int get_params() override;
+  int get_params(const Span& parent_span = nullptr) override;
   int get_data(ceph::bufferlist& bl, bool& again) override;
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 
   static bool is_formpost_req(req_state* const s);
 };
@@ -513,7 +513,7 @@ public:
   RGWGetCrossDomainPolicy_ObjStore_SWIFT() = default;
   ~RGWGetCrossDomainPolicy_ObjStore_SWIFT() override = default;
 
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class  RGWGetHealthCheck_ObjStore_SWIFT
@@ -522,7 +522,7 @@ public:
   RGWGetHealthCheck_ObjStore_SWIFT() = default;
   ~RGWGetHealthCheck_ObjStore_SWIFT() override = default;
 
-  void send_response() override;
+  void send_response(const Span& parent_span = nullptr) override;
 };
 
 class RGWHandler_SWIFT_CrossDomain : public RGWHandler_REST {
@@ -552,7 +552,7 @@ public:
     return 0;
   }
 
-  int read_permissions(RGWOp *) override {
+  int read_permissions(RGWOp *, const Span& parent_span = nullptr) override {
     return 0;
   }
 
@@ -609,7 +609,7 @@ public:
     return 0;
   }
 
-  int read_permissions(RGWOp *) override {
+  int read_permissions(RGWOp *, const Span& parent_span = nullptr) override {
     return 0;
   }
 
@@ -666,7 +666,7 @@ public:
     return 0;
   }
 
-  int read_permissions(RGWOp *) override {
+  int read_permissions(RGWOp *, const Span& parent_span = nullptr) override {
     return 0;
   }
 };

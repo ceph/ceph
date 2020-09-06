@@ -29,7 +29,7 @@ void RGWRestUserPolicy::dump(Formatter *f) const
   encode_json("Policydocument", policy, f);
 }
 
-void RGWRestUserPolicy::send_response()
+void RGWRestUserPolicy::send_response(const Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -38,7 +38,7 @@ void RGWRestUserPolicy::send_response()
   end_header(s);
 }
 
-int RGWRestUserPolicy::verify_permission()
+int RGWRestUserPolicy::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -109,7 +109,7 @@ int RGWPutUserPolicy::get_params()
   return 0;
 }
 
-void RGWPutUserPolicy::execute()
+void RGWPutUserPolicy::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -193,7 +193,7 @@ int RGWGetUserPolicy::get_params()
   return 0;
 }
 
-void RGWGetUserPolicy::execute()
+void RGWGetUserPolicy::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -257,7 +257,7 @@ int RGWListUserPolicies::get_params()
   return 0;
 }
 
-void RGWListUserPolicies::execute()
+void RGWListUserPolicies::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -319,7 +319,7 @@ int RGWDeleteUserPolicy::get_params()
   return 0;
 }
 
-void RGWDeleteUserPolicy::execute()
+void RGWDeleteUserPolicy::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {

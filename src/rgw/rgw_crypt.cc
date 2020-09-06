@@ -471,7 +471,7 @@ int RGWGetObj_BlockDecrypt::process(bufferlist& in, size_t part_ofs, size_t size
   return res;
 }
 
-int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len, const Span& parent_span) {
   ldout(cct, 25) << "Decrypt " << bl_len << " bytes" << dendl;
   bl.begin(bl_ofs).copy(bl_len, cache);
 

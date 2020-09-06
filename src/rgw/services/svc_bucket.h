@@ -50,7 +50,7 @@ public:
                                    real_time mtime,
                                    map<string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
-                                   optional_yield y) = 0;
+                                   optional_yield y, const Span& parent_span = nullptr) = 0;
 
   virtual int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                     const string& key,
@@ -82,7 +82,7 @@ public:
                                  bool exclusive,
                                  real_time mtime,
                                  map<string, bufferlist> *pattrs,
-                                 optional_yield y) = 0;
+                                 optional_yield y, const Span& parent_span = nullptr) = 0;
 
   virtual int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   const string& key,

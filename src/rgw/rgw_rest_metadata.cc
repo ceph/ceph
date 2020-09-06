@@ -49,7 +49,7 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   }
 }
 
-void RGWOp_Metadata_Get::execute() {
+void RGWOp_Metadata_Get::execute(const Span& parent_span) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
@@ -66,16 +66,16 @@ void RGWOp_Metadata_Get::execute() {
   op_ret = 0;
 }
 
-void RGWOp_Metadata_Get_Myself::execute() {
+void RGWOp_Metadata_Get_Myself::execute(const Span& parent_span) {
   string owner_id;
 
   owner_id = s->owner.get_id().to_str();
   s->info.args.append("key", owner_id);
 
-  return RGWOp_Metadata_Get::execute();
+  return RGWOp_Metadata_Get::execute(parent_span);
 }
 
-void RGWOp_Metadata_List::execute() {
+void RGWOp_Metadata_List::execute(const Span& parent_span) {
   string marker;
   ldout(s->cct, 16) << __func__
 		    << " raw marker " << s->info.args.get("marker")
@@ -234,7 +234,7 @@ static bool string_to_sync_type(const string& sync_string,
   return true;
 }
 
-void RGWOp_Metadata_Put::execute() {
+void RGWOp_Metadata_Put::execute(const Span& parent_span) {
   bufferlist bl;
   string metadata_key;
 
@@ -276,7 +276,7 @@ void RGWOp_Metadata_Put::execute() {
     update_status = "applied";
 }
 
-void RGWOp_Metadata_Put::send_response() {
+void RGWOp_Metadata_Put::send_response(const jaeger_tracing::Span& parent_span) {
   int op_return_code = op_ret;
   if ((op_ret == STATUS_NO_APPLY) || (op_ret == STATUS_APPLIED))
     op_return_code = STATUS_NO_CONTENT;
@@ -290,7 +290,7 @@ void RGWOp_Metadata_Put::send_response() {
   end_header(s);
 }
 
-void RGWOp_Metadata_Delete::execute() {
+void RGWOp_Metadata_Delete::execute(const Span& parent_span) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);

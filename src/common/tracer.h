@@ -7,6 +7,7 @@
 #include<cstring>
 #include <arpa/inet.h>
 #include <yaml-cpp/yaml.h>
+#include<atomic>
 
 #include <jaegertracing/Tracer.h>
 #include <jaegertracing/net/IPAddress.h>
@@ -15,19 +16,19 @@
 
 typedef std::unique_ptr<opentracing::Span> Span;
 
-struct Jager_Tracer{
-    Jager_Tracer(){}
-    ~Jager_Tracer();
-  std::shared_ptr<opentracing::v2::Tracer> tracer = NULL;
+struct Jaeger_Tracer{
+    Jaeger_Tracer(){}
+    ~Jaeger_Tracer();
+  std::shared_ptr<opentracing::v3::Tracer> tracer = NULL;
 };
 
 //will be used throughout ceph to create spans
-extern Jager_Tracer tracer;
-extern std::atomic<bool> jager_initialized;
+extern Jaeger_Tracer tracer;
+extern std::atomic<bool> jaeger_initialized;
 
 
 static inline void init_tracer(const char* tracerName,const char* filePath){
-      if(jager_initialized) return;
+      if(jaeger_initialized) return;
 
       try{
           auto yaml = YAML::LoadFile(filePath);
@@ -35,7 +36,7 @@ static inline void init_tracer(const char* tracerName,const char* filePath){
 
           jaegertracing::net::Socket socket;
           socket.open(AF_INET, SOCK_STREAM);
-          const std::string serverURL = configuration.sampler().kDefaultSamplingServerURL; 
+          const std::string serverURL = configuration.sampler().samplingServerURL();
           socket.connect(serverURL); // this is used to check if the tracer is able to connect with server successfully
 
           tracer.tracer = jaegertracing::Tracer::make(
@@ -45,7 +46,7 @@ static inline void init_tracer(const char* tracerName,const char* filePath){
       }catch(...) {return;}
       opentracing::Tracer::InitGlobal(
       std::static_pointer_cast<opentracing::Tracer>(tracer.tracer));
-      jager_initialized = true;
+      jaeger_initialized = true;
   }
 
 static inline Span new_span(const char* span_name){

@@ -19,7 +19,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRestRole::verify_permission()
+int RGWRestRole::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -55,7 +55,7 @@ int RGWRestRole::verify_permission()
   return 0;
 }
 
-void RGWRestRole::send_response()
+void RGWRestRole::send_response(const Span& parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -74,7 +74,7 @@ int RGWRoleWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("roles", RGW_CAP_WRITE);
 }
 
-int RGWCreateRole::verify_permission()
+int RGWCreateRole::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -124,7 +124,7 @@ int RGWCreateRole::get_params()
   return 0;
 }
 
-void RGWCreateRole::execute()
+void RGWCreateRole::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -164,7 +164,7 @@ int RGWDeleteRole::get_params()
   return 0;
 }
 
-void RGWDeleteRole::execute()
+void RGWDeleteRole::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -184,7 +184,7 @@ void RGWDeleteRole::execute()
   s->formatter->close_section();
 }
 
-int RGWGetRole::verify_permission()
+int RGWGetRole::verify_permission(const Span& parent_span)
 {
   return 0;
 }
@@ -223,7 +223,7 @@ int RGWGetRole::get_params()
   return 0;
 }
 
-void RGWGetRole::execute()
+void RGWGetRole::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -271,7 +271,7 @@ int RGWModifyRole::get_params()
   return 0;
 }
 
-void RGWModifyRole::execute()
+void RGWModifyRole::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -288,7 +288,7 @@ void RGWModifyRole::execute()
   s->formatter->close_section();
 }
 
-int RGWListRoles::verify_permission()
+int RGWListRoles::verify_permission(const Span& parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -315,7 +315,7 @@ int RGWListRoles::get_params()
   return 0;
 }
 
-void RGWListRoles::execute()
+void RGWListRoles::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -363,7 +363,7 @@ int RGWPutRolePolicy::get_params()
   return 0;
 }
 
-void RGWPutRolePolicy::execute()
+void RGWPutRolePolicy::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -394,7 +394,7 @@ int RGWGetRolePolicy::get_params()
   return 0;
 }
 
-void RGWGetRolePolicy::execute()
+void RGWGetRolePolicy::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -432,7 +432,7 @@ int RGWListRolePolicies::get_params()
   return 0;
 }
 
-void RGWListRolePolicies::execute()
+void RGWListRolePolicies::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -466,7 +466,7 @@ int RGWDeleteRolePolicy::get_params()
   return 0;
 }
 
-void RGWDeleteRolePolicy::execute()
+void RGWDeleteRolePolicy::execute(const Span& parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {

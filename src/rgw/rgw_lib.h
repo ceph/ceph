@@ -182,7 +182,7 @@ namespace rgw {
 
     virtual bool only_bucket() = 0;
 
-    int read_permissions(RGWOp *op) override;
+    int read_permissions(RGWOp *op, const Span& parent_span = nullptr) override;
 
   }; /* RGWLibRequest */
 
