@@ -57,9 +57,9 @@ void Capability::Export::decode(ceph::buffer::list::const_iterator &p)
 void Capability::Export::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("cap_id", cap_id);
-  f->dump_unsigned("wanted", wanted);
-  f->dump_unsigned("issued", issued);
-  f->dump_unsigned("pending", pending);
+  f->dump_stream("wanted") << ccap_string(wanted);
+  f->dump_stream("issued") << ccap_string(issued);
+  f->dump_stream("pending") << ccap_string(pending);
   f->dump_unsigned("client_follows", client_follows);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("migrate_seq", mseq);
@@ -254,10 +254,12 @@ void Capability::decode(ceph::buffer::list::const_iterator &bl)
 
 void Capability::dump(ceph::Formatter *f) const
 {
+  if (inode)
+    f->dump_stream("ino") << inode->ino();
   f->dump_unsigned("last_sent", last_sent);
-  f->dump_unsigned("last_issue_stamp", last_issue_stamp);
-  f->dump_unsigned("wanted", _wanted);
-  f->dump_unsigned("pending", _pending);
+  f->dump_stream("last_issue_stamp") << last_issue_stamp;
+  f->dump_stream("wanted") << ccap_string(_wanted);
+  f->dump_stream("pending") << ccap_string(_pending);
 
   f->open_array_section("revokes");
   for (const auto &r : _revokes) {
