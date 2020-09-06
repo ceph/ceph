@@ -14,6 +14,7 @@ set_target_properties(crimson::cflags PROPERTIES
 set(crimson_common_srcs
   admin/admin_socket.cc
   admin/osd_admin.cc
+  admin/pg_commands.cc
   common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
