@@ -232,6 +232,7 @@ public:
     std::unique_ptr<PGCreateInfo> info);
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
+  Ref<PG> get_pg(spg_t pgid);
 
   bool should_restart() const;
   seastar::future<> restart();
