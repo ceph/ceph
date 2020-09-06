@@ -32,7 +32,11 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
     return maybe_pull_missing_obj(soid, need).then([this, soid](bool pulled) {
       return load_obc_for_recovery(soid, pulled);
     }).then([this, soid, need, &pops, &shards] {
-      return prep_push(soid, need, &pops, shards);
+      if (!shards.empty()) {
+	return prep_push(soid, need, &pops, shards);
+      } else {
+	return seastar::now();
+      }
     }).handle_exception([this, soid](auto e) {
       auto recovery_waiter = recovering.find(soid);
       if (auto obc = recovery_waiter->second.obc; obc) {
