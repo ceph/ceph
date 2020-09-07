@@ -5,6 +5,7 @@
 #define CEPH_CLS_RGW_OPS_H
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "include/rados/librados_fwd.hpp"
 
 struct rgw_cls_tag_timeout_op
 {
@@ -1486,5 +1487,54 @@ struct cls_rgw_get_bucket_resharding_ret  {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
+
+struct CLSRGWBilogOp {
+  const bool log_op;
+
+  const cls_rgw_obj_key& key;
+  const std::string& op_tag;
+  const rgw_zone_set* const zones_trace;
+  const uint16_t bilog_flags;
+};
+
+template <enum RGWModifyOp OpType>
+struct CLSRGWCompleteModifyOp : CLSRGWBilogOp {
+  constexpr static enum RGWModifyOp get_bilog_op_type() {
+    return OpType;
+  }
+
+  void complete_op(librados::ObjectWriteOperation& o,
+                   const rgw_bucket_entry_ver& ver,
+                   const rgw_bucket_dir_entry_meta& dir_meta,
+                   const std::list<cls_rgw_obj_key> *remove_objs) const;
+};
+
+template <bool DeleteMarkerV>
+struct CLSRGWLinkOLH : CLSRGWBilogOp {
+  constexpr static enum RGWModifyOp get_bilog_op_type() {
+    if constexpr (DeleteMarkerV) {
+      return CLS_RGW_OP_LINK_OLH_DM;
+    } else {
+      return CLS_RGW_OP_LINK_OLH;
+    }
+  }
+  void link_olh(librados::ObjectWriteOperation& op,
+                ceph::bufferlist& olh_tag,
+                const rgw_bucket_dir_entry_meta *meta,
+                uint64_t olh_epoch,
+                ceph::real_time unmod_since,
+                bool high_precision_time) const;
+};
+
+struct CLSRGWUnlinkInstance : CLSRGWBilogOp {
+  constexpr static enum RGWModifyOp get_bilog_op_type() {
+    return CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+
+  void unlink_instance(librados::ObjectWriteOperation& op,
+                       const std::string& olh_tag,
+                       uint64_t olh_epoch) const;
+};
+
 
 #endif /* CEPH_CLS_RGW_OPS_H */
