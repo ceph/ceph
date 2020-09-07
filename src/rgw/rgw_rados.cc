@@ -836,7 +836,7 @@ struct complete_op_data {
   rgw_bucket_dir_entry_meta dir_meta;
   list<cls_rgw_obj_key> remove_objs;
   bool log_op;
-  uint16_t bilog_op;
+  uint16_t bilog_flags;
   rgw_zone_set zones_trace;
 
   bool stopped{false};
@@ -906,7 +906,7 @@ int RGWIndexCompletionThread::process()
 			       librados::ObjectWriteOperation o;
 			       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
 			       cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
-							  c->log_op, c->bilog_op, &c->zones_trace);
+							  c->log_op, c->bilog_flags, &c->zones_trace);
 			       return bs->bucket_obj.operate(&o, null_yield);
                              });
     if (r < 0) {
@@ -964,7 +964,7 @@ public:
                          const cls_rgw_obj_key& key,
                          rgw_bucket_dir_entry_meta& dir_meta,
                          list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                         uint16_t bilog_op,
+                         uint16_t bilog_flags,
                          rgw_zone_set *zones_trace,
                          complete_op_data **result);
   bool handle_completion(completion_t cb, complete_op_data *arg);
@@ -1017,7 +1017,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
                                                   const cls_rgw_obj_key& key,
                                                   rgw_bucket_dir_entry_meta& dir_meta,
                                                   list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                                  uint16_t bilog_op,
+                                                  uint16_t bilog_flags,
                                                   rgw_zone_set *zones_trace,
                                                   complete_op_data **result)
 {
@@ -1034,7 +1034,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
   entry->key = key;
   entry->dir_meta = dir_meta;
   entry->log_op = log_op;
-  entry->bilog_op = bilog_op;
+  entry->bilog_flags = bilog_flags;
 
   if (remove_objs) {
     for (auto iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
