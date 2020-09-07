@@ -799,7 +799,7 @@ struct complete_op_data {
   rgw_bucket_dir_entry_meta dir_meta;
   list<cls_rgw_obj_key> remove_objs;
   bool log_op;
-  uint16_t bilog_op;
+  uint16_t bilog_flags;
   rgw_zone_set zones_trace;
 
   bool stopped{false};
@@ -809,6 +809,82 @@ struct complete_op_data {
     stopped = true;
   }
 };
+
+class RGWIndexCompletionThread : public RGWRadosThread {
+  RGWRados *store;
+
+  uint64_t interval_msec() override {
+    return 0;
+  }
+
+  list<complete_op_data *> completions;
+
+  ceph::mutex completions_lock =
+    ceph::make_mutex("RGWIndexCompletionThread::completions_lock");
+public:
+  RGWIndexCompletionThread(RGWRados *_store)
+    : RGWRadosThread(_store, "index-complete"), store(_store) {}
+
+  int process() override;
+
+  void add_completion(complete_op_data *completion) {
+    {
+      std::lock_guard l{completions_lock};
+      completions.push_back(completion);
+    }
+
+    signal();
+  }
+};
+
+int RGWIndexCompletionThread::process()
+{
+  list<complete_op_data *> comps;
+
+  {
+    std::lock_guard l{completions_lock};
+    completions.swap(comps);
+  }
+
+  for (auto c : comps) {
+    std::unique_ptr<complete_op_data> up{c};
+
+    if (going_down()) {
+      continue;
+    }
+    ldout(store->ctx(), 20) << __func__ << "(): handling completion for key=" << c->key << dendl;
+
+    RGWRados::BucketShard bs(store);
+    RGWBucketInfo bucket_info;
+
+    int r = bs.init(c->obj.bucket, c->obj, &bucket_info);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj=" << c->obj << " r=" << r << dendl;
+      /* not much to do */
+      continue;
+    }
+
+    r = store->guard_reshard(&bs, c->obj, bucket_info,
+			     [&](RGWRados::BucketShard *bs) -> int {
+			       librados::ObjectWriteOperation o;
+			       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+			       cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
+							  c->log_op, c->bilog_flags, &c->zones_trace);
+			       return bs->bucket_obj.operate(&o, null_yield);
+                             });
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): bucket index completion failed, obj=" << c->obj << " r=" << r << dendl;
+      /* ignoring error, can't do anything about it */
+      continue;
+    }
+    r = store->svc.datalog_rados->add_entry(bucket_info, bs.shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    }
+  }
+
+  return 0;
+}
 
 class RGWIndexCompletionManager {
   RGWRados* const store;
@@ -875,7 +951,7 @@ public:
                          const cls_rgw_obj_key& key,
                          rgw_bucket_dir_entry_meta& dir_meta,
                          list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                         uint16_t bilog_op,
+                         uint16_t bilog_flags,
                          rgw_zone_set *zones_trace,
                          complete_op_data **result);
 
@@ -969,7 +1045,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
                                                   const cls_rgw_obj_key& key,
                                                   rgw_bucket_dir_entry_meta& dir_meta,
                                                   list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                                  uint16_t bilog_op,
+                                                  uint16_t bilog_flags,
                                                   rgw_zone_set *zones_trace,
                                                   complete_op_data **result)
 {
@@ -986,7 +1062,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
   entry->key = key;
   entry->dir_meta = dir_meta;
   entry->log_op = log_op;
-  entry->bilog_op = bilog_op;
+  entry->bilog_flags = bilog_flags;
 
   if (remove_objs) {
     for (auto iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
