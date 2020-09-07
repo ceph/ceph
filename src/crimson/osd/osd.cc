@@ -1210,7 +1210,15 @@ seastar::future<> OSD::restart()
   bind_epoch = osdmap->get_epoch();
   // TODO: promote to shutdown if being marked down for multiple times
   // rebind messengers
-  return start_boot();
+  // i am marked down, need to check if i am marked up
+  auto check_osdmap = seastar::now();
+  if (!osdmap->is_up(whoami)) {
+    const epoch_t next_epoch = osdmap->get_epoch() + 1;
+    check_osdmap = shard_services.osdmap_subscribe(next_epoch, false);
+  }
+  return check_osdmap.then([this] {
+    return start_boot();
+  });
 }
 
 seastar::future<> OSD::shutdown()
