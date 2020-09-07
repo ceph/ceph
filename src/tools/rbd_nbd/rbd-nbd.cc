@@ -424,10 +424,9 @@ signal:
     return true;
   }
 
-  void wait_unquiesce() {
+  void wait_unquiesce(std::unique_lock<ceph::mutex> &locker) {
     dout(20) << __func__ << dendl;
 
-    std::unique_lock locker{lock};
     cond.wait(locker, [this] { return !quiesce || terminated; });
 
     dout(20) << __func__ << ": got unquiesce request" << dendl;
@@ -466,10 +465,14 @@ signal:
 
       wait_inflight_io();
 
-      // TODO: return quiesce hook exit code
-      image.quiesce_complete(quiesce_watch_handle, 0);
+      {
+        std::unique_lock locker{lock};
 
-      wait_unquiesce();
+        // TODO: return quiesce hook exit code
+        image.quiesce_complete(quiesce_watch_handle, 0);
+
+        wait_unquiesce(locker);
+      }
 
       run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "unquiesce");
     }
