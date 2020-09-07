@@ -3668,6 +3668,7 @@ void PeeringState::dump_peering_state(Formatter *f)
     p->second.dump(f);
     f->close_section();
   }
+  f->close_section();
 }
 
 void PeeringState::update_stats(

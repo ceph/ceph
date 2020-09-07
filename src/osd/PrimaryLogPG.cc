@@ -1001,7 +1001,6 @@ void PrimaryLogPG::do_command(
     f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("snap_trimq_len", snap_trimq.size());
     recovery_state.dump_peering_state(f.get());
-    f->close_section();
 
     f->open_array_section("recovery_state");
     handle_query_state(f.get());
