@@ -6845,8 +6845,8 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   return -ERR_BUSY_RESHARDING;
 }
 
+template <bool DeleteMarkerV>
 int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
-                                    bool delete_marker,
                                     const string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta,
                                     uint64_t olh_epoch,
@@ -6874,7 +6874,7 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
 		      librados::ObjectWriteOperation op;
 		      cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
 		      cls_rgw_bucket_link_olh(op, key, olh_state.olh_tag,
-                                              delete_marker, op_tag, meta, olh_epoch,
+                                              DeleteMarkerV, op_tag, meta, olh_epoch,
 					      unmod_since, high_precision_time,
 					      svc.zone->get_zone().log_data, zones_trace);
                       return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
@@ -7339,9 +7339,10 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, c
       }
       return ret;
     }
-    ret = bucket_index_link_olh(bucket_info, *state, target_obj, DeleteMarkerV,
-                                op_tag, meta, olh_epoch, unmod_since, high_precision_time,
-                                zones_trace, log_data_change);
+    ret = bucket_index_link_olh<DeleteMarkerV>(bucket_info, *state, target_obj,
+                                               op_tag, meta, olh_epoch, unmod_since,
+                                               high_precision_time, zones_trace,
+                                               log_data_change);
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)DeleteMarkerV << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
