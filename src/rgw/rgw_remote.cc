@@ -67,45 +67,59 @@ bool RGWRemoteCtl::get_access_key(const string& dest_id,
   return true;
 }
 
+void RGWRemoteCtl::init_conn(const RGWDataProvider& z, bool need_notify)
+{
+  const auto& zone_id = svc.zone->zone_id();
+
+  const rgw_zone_id& id = z.id;
+  if (id == zone_id) {
+    return;
+  }
+  if (z.endpoints.empty()) {
+    ldout(cct, 0) << "WARNING: can't generate connection for zone " << id << " id " << z.name << ": no endpoints defined" << dendl;
+    return;
+  }
+
+  std::optional<string> api_name;
+  std::shared_ptr<RGWZoneGroup> zonegroup;
+
+  auto& conns = conns_map[id];
+  ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
+  if (z.data_access_conf) {
+    conns.data = add_conn(create_conn(z.name, z.id, z.endpoints, *z.data_access_conf));
+  } else {
+    conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, api_name));
+  }
+
+  if (z.sip_conf) {
+    conns.sip = add_conn(create_conn(z.name, z.id, z.endpoints, z.sip_conf->rest_conf));
+  } else {
+    conns.sip = conns.data;
+  }
+
+  if (!need_notify) {
+    return;
+  }
+
+  auto& zone_data_notify_set = svc.zone->get_zone_data_notify_set();
+
+  zone_meta_notify_to_map[z.id] = conns.data;
+
+  if (zone_data_notify_set.find(z.id) != zone_data_notify_set.end()) {
+    zone_data_notify_to_map[z.id] = conns.data;
+  }
+}
 
 void RGWRemoteCtl::init()
 {
-  auto& zone_data_notify_set = svc.zone->get_zone_data_notify_set();
-
   const auto& zonegroup = svc.zone->get_zonegroup();
 
-  const auto& zone_id = svc.zone->zone_id();
-
   for (const auto& ziter : zonegroup.zones) {
-    const rgw_zone_id& id = ziter.first;
-    const RGWZone& z = ziter.second;
-    if (id == zone_id) {
-      continue;
-    }
-    if (z.endpoints.empty()) {
-      ldout(cct, 0) << "WARNING: can't generate connection for zone " << id << " id " << z.name << ": no endpoints defined" << dendl;
-      continue;
-    }
+    init_conn(ziter.second, true);
+  }
 
-    auto& conns = conns_map[id];
-    ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    if (z.data_access_conf) {
-      conns.data = add_conn(create_conn(z.name, z.id, z.endpoints, *z.data_access_conf));
-    } else {
-      conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints));
-    }
-
-    if (z.sip_conf) {
-      conns.sip = add_conn(create_conn(z.name, z.id, z.endpoints, z.sip_conf->rest_conf));
-    } else {
-      conns.sip = conns.data;
-    }
-
-    zone_meta_notify_to_map[z.id] = conns.data;
-
-    if (zone_data_notify_set.find(z.id) != zone_data_notify_set.end()) {
-      zone_data_notify_to_map[z.id] = conns.data;
-    }
+  for (const auto& ziter : zonegroup.foreign_zones) {
+    init_conn(ziter.second, false);
   }
 }
 

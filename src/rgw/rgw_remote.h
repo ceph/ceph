@@ -46,6 +46,8 @@ private:
                       RGWAccessKey *result,
                       optional_yield y) const;
 
+  void init_conn(const RGWDataProvider& z, bool need_notify);
+
 public:
   RGWRemoteCtl(RGWSI_Zone *_zone_svc,
                RGWUserCtl *_user_ctl);
