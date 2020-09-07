@@ -851,7 +851,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 }
 
 static void unaccount_entry(rgw_bucket_dir_header& header,
-			    rgw_bucket_dir_entry& entry)
+			    const rgw_bucket_dir_entry& entry)
 {
   rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
   stats.num_entries--;
