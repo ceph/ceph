@@ -148,9 +148,9 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Command *command, Config *cfg);
 static int netlink_resize(int nbd_index, uint64_t size);
 
-static void run_quiesce_hook(const std::string &quiesce_hook,
-                             const std::string &devpath,
-                             const std::string &command);
+static int run_quiesce_hook(const std::string &quiesce_hook,
+                            const std::string &devpath,
+                            const std::string &command);
 
 class NBDServer
 {
@@ -461,15 +461,20 @@ signal:
 
     while (wait_quiesce()) {
 
-      run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "quiesce");
+      int r = run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "quiesce");
 
       wait_inflight_io();
 
       {
         std::unique_lock locker{lock};
+        ceph_assert(quiesce == true);
 
-        // TODO: return quiesce hook exit code
-        image.quiesce_complete(quiesce_watch_handle, 0);
+        image.quiesce_complete(quiesce_watch_handle, r);
+
+        if (r < 0) {
+          quiesce = false;
+          continue;
+        }
 
         wait_unquiesce(locker);
       }
@@ -1193,9 +1198,9 @@ static int try_netlink_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
   return 0;
 }
 
-static void run_quiesce_hook(const std::string &quiesce_hook,
-                             const std::string &devpath,
-                             const std::string &command) {
+static int run_quiesce_hook(const std::string &quiesce_hook,
+                            const std::string &devpath,
+                            const std::string &command) {
   dout(10) << __func__ << ": " << quiesce_hook << " " << devpath << " "
            << command << dendl;
 
@@ -1204,18 +1209,23 @@ static void run_quiesce_hook(const std::string &quiesce_hook,
   hook.add_cmd_args(devpath.c_str(), command.c_str(), NULL);
   bufferlist err;
   int r = hook.spawn();
-  if (r != 0) {
+  if (r < 0) {
     err.append("subprocess spawn failed");
   } else {
     err.read_fd(hook.get_stderr(), 16384);
     r = hook.join();
+    if (r > 0) {
+      r = -r;
+    }
   }
-  if (r != 0) {
+  if (r < 0) {
     derr << __func__ << ": " << quiesce_hook << " " << devpath << " "
          << command << " failed: " << err.to_str() << dendl;
   } else {
     dout(10) << " succeeded: " << err.to_str() << dendl;
   }
+
+  return r;
 }
 
 static void handle_signal(int signum)
