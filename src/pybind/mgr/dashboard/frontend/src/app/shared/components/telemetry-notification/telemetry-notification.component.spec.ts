@@ -6,9 +6,9 @@ import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { UserFormModel } from '../../../core/auth/user-form/user-form.model';
 import { MgrModuleService } from '../../api/mgr-module.service';
 import { UserService } from '../../api/user.service';
+import { Permissions } from '../../models/permissions';
 import { PipesModule } from '../../pipes/pipes.module';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { NotificationService } from '../../services/notification.service';
@@ -20,35 +20,17 @@ describe('TelemetryActivationNotificationComponent', () => {
   let fixture: ComponentFixture<TelemetryNotificationComponent>;
 
   let authStorageService: AuthStorageService;
-  let userService: UserService;
   let mgrModuleService: MgrModuleService;
   let notificationService: NotificationService;
 
   let isNotificationHiddenSpy: jasmine.Spy;
-  let getUsernameSpy: jasmine.Spy;
-  let userServiceGetSpy: jasmine.Spy;
+  let getPermissionsSpy: jasmine.Spy;
   let getConfigSpy: jasmine.Spy;
 
-  const user: UserFormModel = {
-    username: 'username',
-    password: undefined,
-    name: 'User 1',
-    email: 'user1@email.com',
-    roles: ['read-only'],
-    enabled: true,
-    pwdExpirationDate: undefined,
-    pwdUpdateRequired: true
-  };
-  const admin: UserFormModel = {
-    username: 'admin',
-    password: undefined,
-    name: 'User 1',
-    email: 'user1@email.com',
-    roles: ['administrator'],
-    enabled: true,
-    pwdExpirationDate: undefined,
-    pwdUpdateRequired: true
-  };
+  const configOptPermissions: Permissions = new Permissions({
+    'config-opt': ['read', 'create', 'update', 'delete']
+  });
+  const noConfigOptPermissions: Permissions = new Permissions({});
   const telemetryEnabledConfig = {
     enabled: true
   };
@@ -66,13 +48,13 @@ describe('TelemetryActivationNotificationComponent', () => {
     fixture = TestBed.createComponent(TelemetryNotificationComponent);
     component = fixture.componentInstance;
     authStorageService = TestBed.inject(AuthStorageService);
-    userService = TestBed.inject(UserService);
     mgrModuleService = TestBed.inject(MgrModuleService);
     notificationService = TestBed.inject(NotificationService);
 
     isNotificationHiddenSpy = spyOn(component, 'isNotificationHidden').and.returnValue(false);
-    getUsernameSpy = spyOn(authStorageService, 'getUsername').and.returnValue('username');
-    userServiceGetSpy = spyOn(userService, 'get').and.returnValue(of(admin)); // Not the best name but it sounded better than `getSpy`
+    getPermissionsSpy = spyOn(authStorageService, 'getPermissions').and.returnValue(
+      configOptPermissions
+    );
     getConfigSpy = spyOn(mgrModuleService, 'getConfig').and.returnValue(
       of(telemetryDisabledConfig)
     );
@@ -89,14 +71,13 @@ describe('TelemetryActivationNotificationComponent', () => {
     expect(component.displayNotification).toBe(false);
   });
 
-  it('should not show notification for an user without administrator role', () => {
-    userServiceGetSpy.and.returnValue(of(user));
+  it('should not show notification for a user without configOpt permissions', () => {
+    getPermissionsSpy.and.returnValue(noConfigOptPermissions);
     fixture.detectChanges();
     expect(component.displayNotification).toBe(false);
   });
 
   it('should not show notification if the module is enabled already', () => {
-    getUsernameSpy.and.returnValue('admin');
     getConfigSpy.and.returnValue(of(telemetryEnabledConfig));
     fixture.detectChanges();
     expect(component.displayNotification).toBe(false);
