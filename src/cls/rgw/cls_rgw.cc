@@ -1762,6 +1762,14 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
   return 0;
 }
 
+static RGWModifyOp link_olh_get_bilog_op_type(bool delete_marker)
+{
+  if (delete_marker) {
+    return CLSRGWLinkOLH<true>::get_bilog_op_type();
+  } else {
+    return CLSRGWLinkOLH<false>::get_bilog_op_type();
+  }
+}
 /*
  * Link an object version to an olh, update the relevant index
  * entries. It will also handle the deletion marker case. We have a
@@ -1988,8 +1996,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     powner_display_name = &entry.meta.owner_display_name;
   }
 
-  RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
-  ret = log_index_operation(hctx, op.key, operation, op.op_tag,
+  ret = log_index_operation(hctx, op.key, link_olh_get_bilog_op_type(op.delete_marker), op.op_tag,
                             entry.meta.mtime, ver,
                             header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
                             powner, powner_display_name, &op.zones_trace);
@@ -2148,7 +2155,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */
-  ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
+  ret = log_index_operation(hctx, op.key, CLSRGWUnlinkInstance::get_bilog_op_type(), op.op_tag,
                             mtime, ver,
                             header.ver, header.max_marker,
                             op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);

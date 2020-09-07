@@ -169,7 +169,7 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
-                            const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
+                            const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace);
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
@@ -183,7 +183,7 @@ void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const std::string& oid,
-                            const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
+                            const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const std::string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace);
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const std::string& oid,
