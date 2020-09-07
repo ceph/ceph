@@ -202,6 +202,15 @@ class IscsiClient(RestClient):
             'disks': ','.join(image_ids)
         })
 
+    @RestClient.api_put('/api/hostgroup/{target_iqn}/{group_name}')
+    def update_group(self, target_iqn, group_name, members, image_ids, request=None):
+        logger.debug("iSCSI[%s] Creating group: %s/%s", self.gateway_name, target_iqn, group_name)
+        return request({
+            'action': 'remove',
+            'members': ','.join(members),
+            'disks': ','.join(image_ids)
+        })
+
     @RestClient.api_delete('/api/hostgroup/{target_iqn}/{group_name}')
     def delete_group(self, target_iqn, group_name, request=None):
         logger.debug("iSCSI[%s] Deleting group: %s/%s", self.gateway_name, target_iqn, group_name)
