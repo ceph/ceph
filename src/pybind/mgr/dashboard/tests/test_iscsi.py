@@ -517,6 +517,74 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         response['clients'].pop(0)
         self._update_iscsi_target(create_request, update_request, 200, None, response)
 
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_add_image_to_group_with_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        new_disk = {"pool": "rbd", "image": "lun1"}
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw21"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['groups'][0]['disks'].append(new_disk)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['groups'][0]['disks'].insert(0, new_disk)
+        for client in response['clients']:
+            client['info'] = client_info
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_add_image_to_initiator_with_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        new_disk = {"pool": "rbd", "image": "lun2"}
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw22"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'][0]['luns'].append(new_disk)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['clients'][0]['luns'].append(new_disk)
+        for client in response['clients']:
+            client['info'] = client_info
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_remove_image_from_group_with_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw23"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['groups'][0]['disks'] = []
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['groups'][0]['disks'] = []
+        for client in response['clients']:
+            client['info'] = client_info
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
     def _update_iscsi_target(self, create_request, update_request, update_response_code,
                              update_response, response):
         self._task_post('/api/iscsi/target', create_request)
@@ -838,6 +906,26 @@ class IscsiClientMock(object):
         for image_id in image_ids:
             target_config['groups'][group_name]['disks'][image_id] = {}
         target_config['groups'][group_name]['members'] = members
+
+    def update_group(self, target_iqn, group_name, members, image_ids):
+        target_config = self.config['targets'][target_iqn]
+        group = target_config['groups'][group_name]
+        old_members = group['members']
+        disks = group['disks']
+        target_config['groups'][group_name] = {
+            "disks": {},
+            "members": []
+        }
+
+        for image_id in disks.keys():
+            if image_id not in image_ids:
+                target_config['groups'][group_name]['disks'][image_id] = {}
+
+        new_members = []
+        for member_iqn in old_members:
+            if member_iqn not in members:
+                new_members.append(member_iqn)
+        target_config['groups'][group_name]['members'] = new_members
 
     def delete_group(self, target_iqn, group_name):
         target_config = self.config['targets'][target_iqn]
