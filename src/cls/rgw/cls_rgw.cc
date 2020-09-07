@@ -146,9 +146,9 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
-static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key& obj_key,
-                               RGWModifyOp op, const string& tag, real_time timestamp,
-                               const rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
+static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
+                               const string& tag, real_time& timestamp,
+                               const rgw_bucket_entry_ver& ver, uint64_t index_ver,
                                string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
 {
   bufferlist bl;
@@ -160,7 +160,7 @@ static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key&
   entry.timestamp = timestamp;
   entry.op = op;
   entry.ver = ver;
-  entry.state = state;
+  entry.state = CLS_RGW_STATE_COMPLETE;
   entry.index_ver = index_ver;
   entry.tag = tag;
   entry.bilog_flags = bilog_flags;
@@ -1256,6 +1256,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: unable to set map value at key=%s, rc=%d",
 		   __func__, escape_str(idx).c_str(), rc);
+  if (op.log_op && !header.syncstopped) {
+    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
+                             header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
+    if (rc < 0)
       return rc;
     }
   } // CLS_RGW_OP_ADD
@@ -1270,6 +1274,18 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   "ERROR: %s: log_index_operation failed with rc=%d",
 		   __func__, rc);
       return rc;
+    if (op.log_op && !header.syncstopped) {
+      ++header.ver; // increment index version, or we'll overwrite keys previously written
+      rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
+                               remove_entry.ver, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
+      if (rc < 0)
+        continue;
+    }
+
+    ret = cls_cxx_map_remove_key(hctx, k);
+    if (ret < 0) {
+      CLS_LOG(1, "rgw_bucket_complete_op(): cls_cxx_map_remove_key, failed to remove entry, name=%s instance=%s read_index_entry ret=%d\n", remove_key.name.c_str(), remove_key.instance.c_str(), rc);
+      continue;
     }
   }
 
@@ -1939,7 +1955,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
   ret = log_index_operation(hctx, op.key, operation, op.op_tag,
                             entry.meta.mtime, ver,
-                            CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
+                            header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
                             powner, powner_display_name, &op.zones_trace);
   if (ret < 0)
     return ret;
@@ -2096,7 +2112,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
                                   * instance removal context */
   ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                             mtime, ver,
-                            CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
+                            header.ver, header.max_marker,
                             op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
   if (ret < 0)
     return ret;
@@ -2432,7 +2448,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	}
         if (log_op && cur_disk.exists && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_disk.key, CLS_RGW_OP_DEL, cur_disk.tag, cur_disk.meta.mtime,
-                                    cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
+                                    cur_disk.ver, header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
             CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: failed to log operation ret=%d",
 			 __func__, ret);
@@ -2466,7 +2482,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	}
         if (log_op && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_change.key, CLS_RGW_OP_ADD, cur_change.tag, cur_change.meta.mtime,
-                                    cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
+                                    cur_change.ver, header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
 	    CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: failed to log operation ret=%d", __func__, ret);
             return ret;
