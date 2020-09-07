@@ -59,8 +59,8 @@ public:
     DEFAULT_CHOOSE_ARGS = -1
   };
 
-  std::map<int32_t, std::string> type_map; /* bucket/device type names */
-  std::map<int32_t, std::string> name_map; /* bucket/device names */
+  std::map<int32_t, std::string> type_map; // item(bucket/device) type id ==> item type name
+  std::map<int32_t, std::string> name_map; // item id ==> item name
   std::map<int32_t, std::string> rule_name_map;
 
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
@@ -787,7 +787,7 @@ public:
   /**
    * insert an item into the map at a specific position
    *
-   * Add an item as a specific location of the hierarchy.
+   * Add an item at a specific location of the hierarchy.
    * Specifically, we look for the most specific location constraint
    * for which a bucket already exists, and then create intervening
    * buckets beneath that in order to place the item.
