@@ -1364,7 +1364,6 @@ void OSDMap::get_blocklist(std::set<entity_addr_t> *bl) const
 
 void OSDMap::set_max_osd(int m)
 {
-  int o = max_osd;
   max_osd = m;
   osd_state.resize(max_osd, 0);
   osd_weight.resize(max_osd, CEPH_OSD_OUT);
