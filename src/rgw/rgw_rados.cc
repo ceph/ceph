@@ -3341,7 +3341,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   state = NULL;
 
   if (versioned_op && meta.olh_epoch) {
-    r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), target->get_target(), false, NULL, *meta.olh_epoch, real_time(), false, y, meta.zones_trace);
+    r = store->set_olh<false>(dpp, target->get_ctx(), target->get_bucket_info(), target->get_target(), obj, NULL, *meta.olh_epoch, real_time(), false, y, meta.zones_trace);
     if (r < 0) {
       return r;
     }
@@ -4276,8 +4276,8 @@ set_err_state:
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
     if (olh_epoch && *olh_epoch > 0) {
       constexpr bool log_data_change = true;
-      ret = set_olh(dpp, obj_ctx, dest_bucket->get_info(), dest_obj, false, nullptr,
-                    *olh_epoch, real_time(), false, null_yield, zones_trace, log_data_change);
+      ret = set_olh<false>(dpp, obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), nullptr,
+                           *olh_epoch, real_time(), false, null_yield, zones_trace, log_data_change);
     } else {
       // we already have the latest copy
       ret = 0;
@@ -5281,7 +5281,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
         meta.mtime = params.mtime;
       }
 
-      int r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker.get(), true, &meta, params.olh_epoch, params.unmod_since, params.high_precision_time, y, params.zones_trace);
+      int r = store->set_olh<true>(dpp, target->get_ctx(), target->get_bucket_info(), marker.get(), &meta, params.olh_epoch, params.unmod_since, params.high_precision_time, y, params.zones_trace);
       if (r < 0) {
         return r;
       }
@@ -7596,10 +7596,8 @@ int RGWRados::update_olh(const DoutPrefixProvider *dpp, RGWObjState *state, RGWB
   return 0;
 }
 
-int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
-		      RGWBucketInfo& bucket_info,
-		      rgw::sal::Object* target_obj, bool delete_marker,
-		      rgw_bucket_dir_entry_meta *meta,
+template <bool DeleteMarkerV>
+int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, rgw_bucket_dir_entry_meta *meta,
                       uint64_t olh_epoch, real_time unmod_since, bool high_precision_time,
                       optional_yield y, rgw_zone_set *zones_trace, bool log_data_change)
 {
@@ -7627,17 +7625,17 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
 
     ret = olh_init_modification(dpp, bucket_info, *state, olh_obj->get_obj(), &op_tag);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
+      ldpp_dout(dpp, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)DeleteMarkerV << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
         continue;
       }
       return ret;
     }
-    ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj->get_obj(),
-				delete_marker, op_tag, meta, olh_epoch, unmod_since,
-				high_precision_time, zones_trace, log_data_change);
+    ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj->get_obj(), DeleteMarkerV,
+                                op_tag, meta, olh_epoch, unmod_since, high_precision_time,
+                                zones_trace, log_data_change);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
+      ldpp_dout(dpp, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)DeleteMarkerV << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
         // the bucket index rejected the link_olh() due to olh tag mismatch;
         // attempt to reconstruct olh head attributes based on the bucket index
