@@ -128,12 +128,18 @@ filestore_args = {
         'help': 'Use the filestore objectstore',
     },
     '--journal': {
-        'help': '(REQUIRED) A logical volume (vg_name/lv_name), or path to a device',
+        'help': 'A logical volume (vg_name/lv_name), or path to a device',
     },
     '--journal-size': {
         'help': 'Size of journal LV in case a raw block device was passed in --journal',
         'default': '0',
         'type': disk.Size.parse
+    },
+    '--journal-slots': {
+        'help': ('Intended number of slots on journal device. The new OSD gets one'
+              'of those slots or 1/nth of the available capacity'),
+        'type': int,
+        'default': 1,
     },
 }
 
