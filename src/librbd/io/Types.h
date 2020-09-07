@@ -122,6 +122,7 @@ enum {
 
 enum {
   LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT      = 1UL << 0,
+  LIST_SNAPS_FLAG_WHOLE_OBJECT                  = 1UL << 1,
 };
 
 enum SnapshotExtentState {
