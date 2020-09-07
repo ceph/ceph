@@ -276,9 +276,14 @@ class Batch(object):
             type=int,
             help='Provision slots on WAL device, can remain unoccupied'
         )
+        def journal_size_in_mb_hack(size):
+            # give user time to adjust, then remove here
+            if size and size[-1].isdigit():
+                size += 'M'
+            return disk.Size.parse(size)
         parser.add_argument(
             '--journal-size',
-            type=disk.Size.parse,
+            type=journal_size_in_mb_hack,
             help='Override the "osd_journal_size" value, in megabytes'
         )
         parser.add_argument(
