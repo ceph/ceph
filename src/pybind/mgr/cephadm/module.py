@@ -10,7 +10,7 @@ from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator, Union
+    Any, Set, TYPE_CHECKING, cast, Iterator, Union, NamedTuple
 
 import datetime
 import os
@@ -46,7 +46,7 @@ from .schedule import HostAssignment, HostPlacementSpec
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
-from .utils import forall_hosts, CephadmNoImage, cephadmNoImage
+from .utils import forall_hosts, CephadmNoImage, cephadmNoImage, is_repo_digest
 
 try:
     import remoto
@@ -104,6 +104,12 @@ def trivial_completion(f: Callable[..., T]) -> Callable[..., CephadmCompletion[T
         return CephadmCompletion(on_complete=lambda _: f(*args, **kwargs))
 
     return wrapper
+
+
+class ContainerInspectInfo(NamedTuple):
+    image_id: str
+    ceph_version: Optional[str]
+    repo_digest: Optional[str]
 
 
 class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
@@ -250,6 +256,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'default': None,
             'desc': 'Custom repository password'
         },
+        {
+            'name': 'use_repo_digest',
+            'type': 'bool',
+            'default': False,
+            'desc': 'Automatically convert image tags to image digest. Make sure all daemons use the same image',
+        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -289,6 +301,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_url: Optional[str] = None
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
+            self.use_repo_digest = False
 
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
                                     remoto.backends.LegacyModuleExecute]] = {}
@@ -489,6 +502,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
             try:
 
+                self.convert_tags_to_repo_digest()
+
                 # refresh daemons
                 self.log.debug('refreshing hosts and daemons')
                 self._refresh_hosts_and_daemons()
@@ -518,6 +533,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
             self._serve_sleep()
         self.log.debug("serve exit")
+
+    def convert_tags_to_repo_digest(self):
+        if not self.use_repo_digest:
+            return
+        settings = self.upgrade.get_distinct_container_image_settings()
+        digests: Dict[str, ContainerInspectInfo] = {}
+        for container_image_ref in set(settings.values()):
+            if not is_repo_digest(container_image_ref):
+                image_info = self._get_container_image_info(container_image_ref)
+                if image_info.repo_digest:
+                    assert is_repo_digest(image_info.repo_digest), image_info
+                digests[container_image_ref] = image_info
+
+        for entity, container_image_ref in settings.items():
+            if not is_repo_digest(container_image_ref):
+                image_info = digests[container_image_ref]
+                if image_info.repo_digest:
+                    self.set_container_image(entity, image_info.repo_digest)
+
+    def set_container_image(self, entity: str, image):
+        self.check_mon_command({
+            'prefix': 'config set',
+            'name': 'container_image',
+            'value': image,
+            'who': entity,
+        })
 
     def _update_paused_health(self):
         if self.paused:
@@ -2510,7 +2551,7 @@ To check that the host is reachable:
     def apply_alertmanager(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
-    def _get_container_image_id(self, image_name):
+    def _get_container_image_info(self, image_name) -> ContainerInspectInfo:
         # pick a random host...
         host = None
         for host_name in self.inventory.keys():
@@ -2529,12 +2570,19 @@ To check that the host is reachable:
         if code:
             raise OrchestratorError('Failed to pull %s on %s: %s' % (
                 image_name, host, '\n'.join(out)))
-        j = json.loads('\n'.join(out))
-        image_id = j.get('image_id')
-        ceph_version = j.get('ceph_version')
-        self.log.debug('image %s -> id %s version %s' %
-                       (image_name, image_id, ceph_version))
-        return image_id, ceph_version
+        try:
+            j = json.loads('\n'.join(out))
+            r = ContainerInspectInfo(
+                j['image_id'],
+                j.get('ceph_version'),
+                j.get('repo_digest')
+            )
+            self.log.debug(f'image {image_name} -> {r}')
+            return r
+        except (ValueError, KeyError) as _:
+            msg = 'Failed to pull %s on %s: %s' % (image_name, host, '\n'.join(out))
+            self.log.exception(msg)
+            raise OrchestratorError(msg)
 
     @trivial_completion
     def upgrade_check(self, image, version) -> str:
@@ -2545,19 +2593,18 @@ To check that the host is reachable:
         else:
             raise OrchestratorError('must specify either image or version')
 
-        target_id, target_version = self._get_container_image_id(target_name)
-        self.log.debug('Target image %s id %s version %s' % (
-            target_name, target_id, target_version))
+        image_info = self._get_container_image_info(target_name)
+        self.log.debug(f'image info {image} -> {image_info}')
         r = {
             'target_name': target_name,
-            'target_id': target_id,
-            'target_version': target_version,
+            'target_id': image_info.image_id,
+            'target_version': image_info.ceph_version,
             'needs_update': dict(),
             'up_to_date': list(),
         }
         for host, dm in self.cache.daemons.items():
             for name, dd in dm.items():
-                if target_id == dd.container_image_id:
+                if image_info.image_id == dd.container_image_id:
                     r['up_to_date'].append(dd.name())
                 else:
                     r['needs_update'][dd.name()] = {
@@ -2565,6 +2612,9 @@ To check that the host is reachable:
                         'current_id': dd.container_image_id,
                         'current_version': dd.version,
                     }
+        if self.use_repo_digest:
+            r['target_digest'] = image_info.repo_digest
+
         return json.dumps(r, indent=4, sort_keys=True)
 
     @trivial_completion
