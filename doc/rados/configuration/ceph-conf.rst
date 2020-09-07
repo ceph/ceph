@@ -326,6 +326,8 @@ like
     secret = "i love \# and \["
 
 
+.. _ceph-conf-database:
+
 Monitor configuration database
 ==============================
 
