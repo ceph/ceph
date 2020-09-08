@@ -9552,8 +9552,10 @@ MDRequestRef MDCache::request_start(const cref_t<MClientRequest>& req)
   // did we win a forward race against a peer?
   if (active_requests.count(req->get_reqid())) {
     MDRequestRef& mdr = active_requests[req->get_reqid()];
-    ceph_assert(mdr);
-    if (mdr->is_peer()) {
+    if (!mdr.get()) {
+      active_requests.erase(req->get_reqid());
+      dout(10) << "request_start_has beed finished " << req->->get_reqid() << " just now, dropping new msg" << dendl;
+    } else if (mdr->is_peer()) {
       dout(10) << "request_start already had " << *mdr << ", waiting for finish" << dendl;
       mdr->more()->waiting_for_finish.push_back(new C_MDS_RetryMessage(mds, req));
     } else {
