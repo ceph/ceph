@@ -23,13 +23,19 @@ supported, for example: specifying where journals should be placed.
 
 
 
-.. _ceph-volume-lvm-batch_bluestore:
-
-``bluestore``
--------------
-The :term:`bluestore` objectstore (the default) is used when creating multiple OSDs
-with the ``batch`` sub-command. It allows a few different scenarios depending
-on the input of devices:
+Automatic sorting of disks
+--------------------------
+If ``batch`` receives only a single list of data devices and the ``--no-auto`` option
+   is *not* passed (currently the default), ``ceph-volume`` will auto-sort disks by its rotational
+   property and use non-rotating disks for ``block.db`` or ``journal`` depending
+   on the objectstore used.
+This default behavior is now DEPRECATED and will be removed in future releases. Instead
+   an ``auto`` option is introduced to retain this behavior.
+It is recommended to make use of the explicit device lists for ``block.db``,
+   ``block.wal`` and ``journal``.
+For example assuming :term:`bluestore` is used and ``--no-auto`` is not passed,
+   the deprecated behavior would deploy the following, depending on the devices
+   passed:
 
 #. Devices are all spinning HDDs: 1 OSD is created per device
 #. Devices are all SSDs: 2 OSDs are created per device
