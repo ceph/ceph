@@ -1229,6 +1229,8 @@ public:
   void bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag);
   int olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag);
+  template <class CLSRGWBucketModifyOpT, class F, class... Args>
+  int with_bilog(F&& on_flushed, Args&&... args);
   template <bool DeleteMarkerV>
   int bucket_index_link_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& olh_state,
                             const rgw_obj& obj_instance,
@@ -1317,7 +1319,8 @@ public:
                              const DoutPrefixProvider *dpp);
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj, optional_yield y, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, std::string& tag, int64_t pool, uint64_t epoch,
+  template <class CLSRGWBucketModifyOpT>
+  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch,
                           const rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, const rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
