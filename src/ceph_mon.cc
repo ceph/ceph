@@ -310,7 +310,7 @@ int main(int argc, const char **argv)
 
   auto cct = global_init(&defaults, args,
 			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
-			 flags, "mon_data");
+			 flags);
   ceph_heap_profiler_init();
 
   std::string val;
