@@ -908,6 +908,10 @@ seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 	crimson::common::system_shutdown_exception());
   }
 
+  if (can_discard_replica_op(*req)) {
+    return seastar::now();
+  }
+
   ceph::os::Transaction txn;
   auto encoded_txn = req->get_data().cbegin();
   decode(txn, encoded_txn);
