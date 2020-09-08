@@ -1996,9 +1996,30 @@ Usage example:
 
 REST API documentation
 ~~~~~~~~~~~~~~~~~~~~~~
-There is an automatically generated Swagger UI page for documentation of the REST
-API endpoints.However, by default it is not very detailed. There are two
-decorators that can be used to add more information:
+Ceph-Dashboard provides two types of documentation for the **Ceph RESTful API**:
+
+* **Static documentation**: available at :ref:`mgr-ceph-api`. This comes from a versioned specification located at ``src/pybind/mgr/dashboard/openapi.yaml``.
+* **Interactive documentation**: available from a running Ceph-Dashboard instance (top-right ``?`` icon > API Docs).
+
+If changes are made to the ``controllers/`` directory, it's very likely that
+they will result in changes to the generated OpenAPI specification. For that
+reason, a checker has been implemented to block unintended changes. This check
+is automatically triggered by the Pull Request CI (``make check``) and can be
+also manually invoked: ``tox -e openapi-check``.
+
+If that checker failed, it means that the current Pull Request is modifying the
+Ceph API and therefore:
+
+#. The versioned OpenAPI specification should be updated explicitly: ``tox -e openapi-fix``.
+#. The team @ceph/api will be requested for reviews (this is automated via Github CODEOWNERS), in order to asses the impact of changes.
+
+Additionally, Sphinx documentation can be generated from the OpenAPI
+specification with ``tox -e openapi-doc``.
+
+The Ceph RESTful OpenAPI specification is dynamically generated from the
+``Controllers`` in ``controllers/`` directory.  However, by default it is not
+very detailed, so there are two decorators that can and should be used to add
+more information:
 
 * ``@EndpointDoc()`` for documentation of endpoints. It has four optional arguments
   (explained below): ``description``, ``group``, ``parameters`` and
@@ -2312,5 +2333,3 @@ plugin could be rewritten like this:
           return self.mute
 
       return [MuteController]
-
-

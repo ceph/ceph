@@ -9,7 +9,6 @@ try:
     from functools import lru_cache
 except ImportError:
     from ..plugins.lru_cache import lru_cache
-
 import cherrypy
 from cherrypy.lib.static import serve_file
 
@@ -22,11 +21,16 @@ logger = logging.getLogger("controllers.home")
 
 class LanguageMixin(object):
     def __init__(self):
-        self.LANGUAGES = {
-            f
-            for f in os.listdir(mgr.get_frontend_path())
-            if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))
-        }
+        try:
+            self.LANGUAGES = {
+                f
+                for f in os.listdir(mgr.get_frontend_path())
+                if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))
+            }
+        except FileNotFoundError:
+            logger.exception("Build directory missing")
+            self.LANGUAGES = {}
+
         self.LANGUAGES_PATH_MAP = {
             f.lower(): {
                 'lang': f,
@@ -41,7 +45,7 @@ class LanguageMixin(object):
                     'lang': self.LANGUAGES_PATH_MAP[lang]['lang'],
                     'path': self.LANGUAGES_PATH_MAP[lang]['path']
                 }
-        with open("{}/../package.json".format(mgr.get_frontend_path()),
+        with open(os.path.normpath("{}/../package.json".format(mgr.get_frontend_path())),
                   "r") as f:
             config = json.load(f)
         self.DEFAULT_LANGUAGE = config['config']['locale']
