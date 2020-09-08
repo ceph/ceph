@@ -1,7 +1,7 @@
 """
 usage: teuthology-dispatcher --help
        teuthology-dispatcher --supervisor [-v] --bin-path BIN_PATH --job-config COFNFIG --archive-dir DIR
-       teuthology-dispatcher [-v] --archive-dir DIR --log-dir LOG_DIR --tube TUBE
+       teuthology-dispatcher [-v] [--archive-dir DIR] --log-dir LOG_DIR --tube TUBE
 
 Start a dispatcher for the specified tube. Grab jobs from a beanstalk
 queue and run the teuthology tests they describe as subprocesses. The

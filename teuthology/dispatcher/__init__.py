@@ -64,6 +64,9 @@ def main(args):
     log_dir = args["--log-dir"]
     archive_dir = args["--archive-dir"]
 
+    if archive_dir is None:
+        archive_dir = teuth_config.archive_base
+
     # setup logging for disoatcher in {log_dir}
     loglevel = logging.INFO
     if verbose:
