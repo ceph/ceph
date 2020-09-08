@@ -297,8 +297,6 @@ class Prepare(object):
             'ceph.osdspec_affinity': prepare_utils.get_osdspec_affinity()
         }
         if self.args.filestore:
-            #TODO: allow auto creation of journal on passed device, only works
-            # when physical device is passed, not LV
             if not self.args.journal:
                 logger.info(('no journal was specifed, creating journal lv '
                             'on {}').format(self.args.data))
