@@ -3542,6 +3542,12 @@ def command_ls():
 
 
 def get_enabled_ceph_units(fsid: str) -> List[str]:
+    """Use the filesystem itself to determine enabled state
+
+    Enabled units are present in the target.wants directory, so by scanning 
+    this directory we can quickly determine state for all units, avoiding
+    iterating over multiple systemctl calls
+    """
     try:
         units = os.listdir(f'/etc/systemd/system/ceph-{fsid}.target.wants')
     except FileNotFoundError:
@@ -3551,6 +3557,12 @@ def get_enabled_ceph_units(fsid: str) -> List[str]:
 
 
 def get_unit_states(fsid: str) -> Dict[str, Dict[str, str]]:
+    """Determine all systemd unit states for a given fsid
+
+    Instead of iterating over systemctl calls, one per unit, we issue a 
+    single systemctl command to return all units that match our fsid. The
+    reulting output is then parsed to provide a lookup of unit -> systemd state
+    """
     cmd = f'systemctl --all --no-legend -t service list-units ceph-{fsid}*'
     unit_states = {}
     std_out, std_err, rc = call(cmd.split(' '), verbose_on_failure=False)
@@ -3609,6 +3621,9 @@ def list_daemons(detail=True, legacy_dir=None, target_fsid=None):
                 break
         return None
 
+    # To get the version we're opting to use the daemon's API (if it has one), which is typically
+    # 10x faster than running a "exec <ID> <binary> --version" against the running container. We 
+    # only really use the "exec" form as a last resort to keep the runtime as low as possible
     def _get_grafana_version(default_port: str = '3000') -> str:
         port = _get_web_port('grafana') or default_port
         ctx = ssl.create_default_context()
