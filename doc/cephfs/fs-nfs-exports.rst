@@ -19,9 +19,9 @@ Create NFS Ganesha Cluster
 
     $ ceph nfs cluster create <type> <clusterid> [<placement>]
 
-This creates a common recovery pool for all Ganesha daemons, new user based on
-cluster_id, and a common ganesha config rados object. It can also bring up NFS
-Ganesha daemons using the enabled ceph-mgr orchestrator module (see
+This creates a common recovery pool for all NFS Ganesha daemons, new user based on
+cluster_id, and a common NFS Ganesha config rados object. It can also bring up
+NFS Ganesha daemons using the enabled ceph-mgr orchestrator module (see
 :doc:`/mgr/orchestrator`), e.g. cephadm.
 
 <type> signifies the export type, which corresponds to the NFS Ganesha file
@@ -85,8 +85,8 @@ Show NFS Ganesha Cluster Information
 
 This displays ip and port of deployed cluster.
 
-Set Customized Ganesha Configuration
-====================================
+Set Customized NFS Ganesha Configuration
+========================================
 
 .. code:: bash
 
@@ -95,8 +95,8 @@ Set Customized Ganesha Configuration
 With this the nfs cluster will use the specified config and it will have
 precedence over default config blocks.
 
-Reset Ganesha Configuration
-===========================
+Reset NFS Ganesha Configuration
+===============================
 
 .. code:: bash
 
@@ -152,7 +152,7 @@ Get CephFS Export
 
 It displays export block for a cluster based on pseudo root name (binding).
 
-Configuring NFS-Ganesha to export CephFS with vstart
+Configuring NFS Ganesha to export CephFS with vstart
 ====================================================
 
 1) Using cephadm
@@ -161,7 +161,7 @@ Configuring NFS-Ganesha to export CephFS with vstart
 
         $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d --cephadm
 
-    It can deploy only single ganesha daemon with vstart on default ganesha port.
+    It can deploy only single NFS Ganesha daemon with vstart on default NFS Ganesha port.
 
 2) Using test orchestrator
 
@@ -169,15 +169,15 @@ Configuring NFS-Ganesha to export CephFS with vstart
 
        $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
 
-    It can deploy multiple ganesha daemons on random port. But this requires
-    ganesha packages to be installed.
+    It can deploy multiple NFS Ganesha daemons on random port. But this requires
+    NFS Ganesha packages to be installed.
 
-NFS: It is the number of NFS-Ganesha clusters to be created.
+NFS: It is the number of NFS Ganesha clusters to be created.
 
 Mount
 =====
 
-After the exports are successfully created and Ganesha daemons are no longer in
+After the exports are successfully created and NFS Ganesha daemons are no longer in
 grace period. The exports can be mounted by
 
 .. code:: bash
