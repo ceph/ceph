@@ -2016,6 +2016,11 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f:
         f.write('set -e\n')
+
+        if daemon_type in Ceph.daemons:
+            install_path = find_program('install')
+            f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
+
         # pre-start cmd(s)
         if daemon_type == 'osd':
             # osds have a pre-start step
@@ -2052,10 +2057,6 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             ceph_iscsi = CephIscsi.init(fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             _write_container_cmd_to_bash(f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
-
-        if daemon_type in Ceph.daemons:
-            install_path = find_program('install')
-            f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
 
         _write_container_cmd_to_bash(f, c, '%s.%s' % (daemon_type, str(daemon_id)))
         os.fchmod(f.fileno(), 0o600)
