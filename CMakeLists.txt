@@ -183,8 +183,6 @@ if(WITH_BLUESTORE)
   if(LINUX)
     find_package(aio)
     set(HAVE_LIBAIO ${AIO_FOUND})
-    find_package(zbc)
-    set(HAVE_LIBZBC ${ZBC_FOUND})
   elseif(FREEBSD)
     # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
     set(HAVE_POSIXAIO ON)
@@ -192,6 +190,10 @@ if(WITH_BLUESTORE)
 endif()
 
 include(CMakeDependentOption)
+
+CMAKE_DEPENDENT_OPTION(WITH_ZBD "Enable libzbd bluestore backend" OFF
+  "WITH_BLUESTORE" OFF)
+
 CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" OFF
   "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
