@@ -231,7 +231,7 @@ class NFSGaneshaExports(RESTController):
             ganesha_conf.reload_daemons(export.daemons)
 
 
-@ApiController('/nfs-ganesha/daemon')
+@ApiController('/nfs-ganesha/daemon', Scope.NFS_GANESHA)
 @ControllerDoc(group="NFS-Ganesha")
 class NFSGaneshaService(RESTController):
 
@@ -266,18 +266,21 @@ class NFSGaneshaService(RESTController):
         return result
 
 
-@UiApiController('/nfs-ganesha')
+@UiApiController('/nfs-ganesha', Scope.NFS_GANESHA)
 class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/cephx/clients')
+    @ReadPermission
     def cephx_clients(self):
         return [client for client in CephX.list_clients()]
 
     @Endpoint('GET', '/fsals')
+    @ReadPermission
     def fsals(self):
         return Ganesha.fsals_available()
 
     @Endpoint('GET', '/lsdir')
-    def lsdir(self, root_dir=None, depth=1):
+    @ReadPermission
+    def lsdir(self, root_dir=None, depth=1):  # pragma: no cover
         if root_dir is None:
             root_dir = "/"
         depth = int(depth)
@@ -297,13 +300,16 @@ class NFSGaneshaUi(BaseController):
             return {'paths': []}
 
     @Endpoint('GET', '/cephfs/filesystems')
+    @ReadPermission
     def filesystems(self):
         return CephFS.list_filesystems()
 
     @Endpoint('GET', '/rgw/buckets')
+    @ReadPermission
     def buckets(self, user_id=None):
         return RgwClient.instance(user_id).get_buckets()
 
     @Endpoint('GET', '/clusters')
+    @ReadPermission
     def clusters(self):
         return Ganesha.get_ganesha_clusters()
