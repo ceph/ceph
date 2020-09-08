@@ -13,6 +13,7 @@ class RGWSI_Bucket_Sync;
 
 class RGWRealm;
 class RGWZoneGroup;
+class RGWDataProvider;
 class RGWZone;
 class RGWZoneParams;
 class RGWPeriod;
@@ -52,7 +53,9 @@ class RGWSI_Zone : public RGWServiceInstance
   std::map<std::string, RGWRESTConn *> zonegroup_conn_map;
 
   std::map<std::string, rgw_zone_id> zone_id_by_name;
-  std::map<rgw_zone_id, RGWZone> zone_by_id;
+  
+  std::map<rgw_zone_id, std::shared_ptr<RGWZone> > zone_by_id;
+  std::map<rgw_zone_id, std::shared_ptr<RGWDataProvider> > data_provider_by_id;
 
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
 

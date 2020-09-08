@@ -671,6 +671,8 @@ struct RGWDataProvider {
 WRITE_CLASS_ENCODER(RGWDataProvider::RESTConfig)
 WRITE_CLASS_ENCODER(RGWDataProvider::SIPConfig)
 
+using RGWDataProviderRef = std::shared_ptr<RGWDataProvider>;
+
 struct RGWZone : public RGWDataProvider {
   bool log_meta;
   bool log_data;
@@ -762,6 +764,8 @@ struct RGWZone : public RGWDataProvider {
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
+
+using RGWZoneRef = std::shared_ptr<RGWZone>;
 
 struct RGWForeignZone : public RGWDataProvider {
   void encode(bufferlist& bl) const {

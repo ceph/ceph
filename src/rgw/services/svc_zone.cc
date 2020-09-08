@@ -338,9 +338,12 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
     const rgw_zone_id& id = ziter.first;
-    RGWZone& z = ziter.second;
+    auto& z = ziter.second;
     zone_id_by_name[z.name] = id;
-    zone_by_id[id] = z;
+
+    auto shared_zone = std::make_shared<RGWZone>(z);
+    zone_by_id[id] = shared_zone;
+    data_provider_by_id[id] = std::static_pointer_cast<RGWDataProvider>(shared_zone);
   }
 
   if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
@@ -370,6 +373,15 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     } else {
       ldpp_dout(dpp, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
     }
+  }
+
+  /* build foreign zones index */
+  for (auto ziter : zonegroup->foreign_zones) {
+    const rgw_zone_id& id = ziter.first;
+    RGWDataProvider& z = ziter.second;
+    auto shared_zone = std::make_shared<RGWDataProvider>(z);
+    zone_id_by_name[z.name] = id;
+    data_provider_by_id[id] = shared_zone;
   }
 
   ldpp_dout(dpp, 20) << "started zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << 
@@ -1007,7 +1019,7 @@ bool RGWSI_Zone::find_zone(const rgw_zone_id& id, RGWZone **zone)
   if (iter == zone_by_id.end()) {
     return false;
   }
-  *zone = &(iter->second);
+  *zone = iter->second.get();
   return true;
 }
 
