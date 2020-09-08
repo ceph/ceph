@@ -672,6 +672,7 @@ private:
 
   template <typename MsgType>
   bool can_discard_replica_op(const MsgType& m) const;
+  bool can_discard_op(const MOSDOp& m) const;
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
