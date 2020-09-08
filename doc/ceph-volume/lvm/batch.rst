@@ -20,12 +20,12 @@ are supported.
 
 Automatic sorting of disks
 --------------------------
-If ``batch`` receives only a single list of devices and the ``--no-auto`` option
-   is not passed, ``ceph-volume`` will auto-sort disks by its rotational
+If ``batch`` receives only a single list of data devices and the ``--no-auto`` option
+   is *not* passed (currently the default), ``ceph-volume`` will auto-sort disks by its rotational
    property and use non-rotating disks for ``block.db`` or ``journal`` depending
    on the objectstore used.
-This behavior is now DEPRECATED and will be removed in future releases. Instead
-   an ``auto`` option will be introduced to retain this behavior.
+This default behavior is now DEPRECATED and will be removed in future releases. Instead
+   an ``auto`` option is introduced to retain this behavior.
 It is recommended to make use of the explicit device lists for ``block.db``,
    ``block.wal`` and ``journal``.
 For example assuming :term:`bluestore` is used and ``--no-auto`` is not passed,
