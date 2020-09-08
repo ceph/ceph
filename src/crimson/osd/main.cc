@@ -16,6 +16,7 @@
 #include "common/ceph_argparse.h"
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/fatal_signal.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "global/pidfile.h"
@@ -198,6 +199,7 @@ int main(int argc, char* argv[])
       [&, &ceph_args=ceph_args] {
       auto& config = app.configuration();
       return seastar::async([&] {
+        FatalSignal fatal_signal;
 	if (config.count("debug")) {
 	    seastar::global_logger_registry().set_all_loggers_level(
 	      seastar::log_level::debug
