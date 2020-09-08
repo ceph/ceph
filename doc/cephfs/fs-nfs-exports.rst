@@ -113,14 +113,14 @@ Create CephFS Export
 
     $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
 
-This creates export RADOS objects containing the export block.
+This creates export RADOS objects containing the export block, where
 
-<fsname> is the name of the FS volume used by the NFS Ganesha cluster that will
+``fsname`` is the name of the FS volume used by the NFS Ganesha cluster that will
 serve this export.
 
-<clusterid> is the NFS Ganesha cluster ID.
+``clusterid`` is the NFS Ganesha cluster ID.
 
-<binding> is the pseudo root path (must be an absolute path).
+``binding`` is the pseudo root path (must be an absolute path).
 
 Delete CephFS Export
 ====================
@@ -129,21 +129,24 @@ Delete CephFS Export
 
     $ ceph nfs export delete <clusterid> <binding>
 
-It deletes an export in an NFS Ganesha cluster.
+This deletes an export in an NFS Ganesha cluster, where:
 
-<clusterid> is the NFS Ganesha cluster ID.
+``clusterid`` is the NFS Ganesha cluster ID.
 
-<binding> is the pseudo root path (must be an absolute path).
+``binding`` is the pseudo root path (must be an absolute path).
 
-List CephFS Export
-==================
+List CephFS Exports
+===================
 
 .. code:: bash
 
     $ ceph nfs export ls <clusterid> [--detailed]
 
-It lists export for a cluster. With detailed option enabled it shows entire
-export block.
+It lists exports for a cluster, where:
+
+``clusterid`` is the NFS Ganesha cluster ID.
+
+With the ``--detailed`` option enabled it shows entire export block.
 
 Get CephFS Export
 =================
@@ -152,18 +155,25 @@ Get CephFS Export
 
     $ ceph nfs export get <clusterid> <binding>
 
-It displays export block for a cluster based on pseudo root name (binding).
+This displays export block for a cluster based on pseudo root name (binding),
+where:
+
+``clusterid`` is the NFS Ganesha cluster ID.
+
+``binding`` is the pseudo root path (must be an absolute path).
 
 Configuring NFS Ganesha to export CephFS with vstart
 ====================================================
 
-1) Using cephadm
+1) Using ``cephadm``
 
     .. code:: bash
 
         $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d --cephadm
 
-    It can deploy only single NFS Ganesha daemon with vstart on default NFS Ganesha port.
+    This will deploy a single NFS Ganesha daemon using ``vstart.sh``, where:
+
+    The daemon will listen on the default NFS Ganesha port.
 
 2) Using test orchestrator
 
@@ -171,10 +181,12 @@ Configuring NFS Ganesha to export CephFS with vstart
 
        $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
 
-    It can deploy multiple NFS Ganesha daemons on random port. But this requires
-    NFS Ganesha packages to be installed.
+    This will deploy multiple NFS Ganesha daemons, each listening on a random
+    port, where:
 
-NFS: It is the number of NFS Ganesha clusters to be created.
+    ``NFS`` is the number of NFS Ganesha clusters to be created.
+
+    NOTE: NFS Ganesha packages must be pre-installed for this to work.
 
 Mount
 =====
