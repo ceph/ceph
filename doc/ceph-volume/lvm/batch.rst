@@ -117,7 +117,7 @@ this is not possible, no OSDs will be deployed.
 Idempotency and disk replacements
 =================================
 `ceph-volume lvm batch` intends to be idempotent, i.e. calling the same command
-repeatedly should result in the same outcome. For example calling::
+repeatedly must result in the same outcome. For example calling::
 
     $ ceph-volume lvm batch --report /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1
 
