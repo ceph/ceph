@@ -20,7 +20,7 @@ Create NFS Ganesha Cluster
     $ ceph nfs cluster create <type> <clusterid> [<placement>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
-cluster_id, and a common NFS Ganesha config rados object. It can also bring up
+cluster_id, and a common NFS Ganesha config RADOS object. It can also bring up
 NFS Ganesha daemons using the enabled ceph-mgr orchestrator module (see
 :doc:`/mgr/orchestrator`), e.g. cephadm.
 
@@ -111,7 +111,7 @@ Create CephFS Export
 
     $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
 
-This creates export rados objects containing the export block.
+This creates export RADOS objects containing the export block.
 
 <fsname> is the name of the FS volume used by the NFS Ganesha cluster that will
 serve this export.
