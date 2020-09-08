@@ -993,4 +993,9 @@ void PG::on_change(ceph::os::Transaction &t) {
   backend->on_actingset_changed({ is_primary() });
 }
 
+bool PG::can_discard_op(const MOSDOp& m) const {
+  return __builtin_expect(m.get_map_epoch()
+      < peering_state.get_info().history.same_primary_since, false);
+}
+
 }
