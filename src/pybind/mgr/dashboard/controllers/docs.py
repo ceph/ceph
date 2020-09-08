@@ -9,8 +9,7 @@ from . import Controller, BaseController, Endpoint, ENDPOINT_MAP, \
     allow_empty_body
 from .. import mgr
 
-from ..tools import str_to_bool
-
+NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
 logger = logging.getLogger('controllers.docs')
 
@@ -44,7 +43,7 @@ class Docs(BaseController):
             if tag_name not in tag_map or not tag_map[tag_name]:
                 tag_map[tag_name] = tag_descr
 
-        tags = [{'name': k, 'description': v if v else "*No description available*"}
+        tags = [{'name': k, 'description': v if v else NO_DESCRIPTION_AVAILABLE}
                 for k, v in tag_map.items()]
         tags.sort(key=lambda e: e['name'])
         return tags
@@ -231,18 +230,15 @@ class Docs(BaseController):
                 _type = cls._type_to_str(param['type'])
             else:
                 _type = cls._gen_type(param)
-            if 'description' in param:
-                descr = param['description']
-            else:
-                descr = "*No description available*"
             res = {
                 'name': param['name'],
                 'in': location,
                 'schema': {
                     'type': _type
                 },
-                'description': descr
             }
+            if param.get('description'):
+                res['description'] = param['description']
             if param['required']:
                 res['required'] = True
             elif param['default'] is None:
@@ -273,7 +269,7 @@ class Docs(BaseController):
                 method = endpoint.method
                 func = endpoint.func
 
-                summary = "No description available"
+                summary = ''
                 resp = {}
                 p_info = []
                 if hasattr(func, 'doc_info'):
@@ -293,11 +289,12 @@ class Docs(BaseController):
 
                 methods[method.lower()] = {
                     'tags': [cls._get_tag(endpoint)],
-                    'summary': summary,
                     'description': func.__doc__,
                     'parameters': params,
                     'responses': cls._gen_responses(method, resp)
                 }
+                if summary:
+                    methods[method.lower()]['summary'] = summary
 
                 if method.lower() in ['post', 'put']:
                     if endpoint.body_params:
@@ -322,40 +319,34 @@ class Docs(BaseController):
 
         return paths
 
-    def _gen_spec(self, all_endpoints=False, base_url=""):
+    @classmethod
+    def _gen_spec(cls, all_endpoints=False, base_url="", offline=False):
         if all_endpoints:
             base_url = ""
 
-        host = cherrypy.request.base
-        host = host[host.index(':')+3:]
+        host = cherrypy.request.base.split('://', 1)[1] if not offline else 'example.com'
         logger.debug("Host: %s", host)
 
-        paths = self._gen_paths(all_endpoints)
+        paths = cls._gen_paths(all_endpoints)
 
         if not base_url:
             base_url = "/"
 
-        scheme = 'https'
-        ssl = str_to_bool(mgr.get_localized_module_option('ssl', True))
-        if not ssl:
-            scheme = 'http'
+        scheme = 'https' if offline or mgr.get_localized_module_option('ssl') else 'http'
 
         spec = {
             'openapi': "3.0.0",
             'info': {
-                'description': "Please note that this API is not an official "
-                               "Ceph REST API to be used by third-party "
-                               "applications. It's primary purpose is to serve"
-                               " the requirements of the Ceph Dashboard and is"
-                               " subject to change at any time. Use at your "
-                               "own risk.",
+                'description': "This is the official Ceph REST API",
                 'version': "v1",
-                'title': "Ceph-Dashboard REST API"
+                'title': "Ceph REST API"
             },
             'host': host,
             'basePath': base_url,
-            'servers': [{'url': "{}{}".format(cherrypy.request.base, base_url)}],
-            'tags': self._gen_tags(all_endpoints),
+            'servers': [{'url': "{}{}".format(
+                cherrypy.request.base if not offline else '',
+                base_url)}],
+            'tags': cls._gen_tags(all_endpoints),
             'schemes': [scheme],
             'paths': paths,
             'components': {
@@ -461,3 +452,30 @@ class Docs(BaseController):
     @allow_empty_body
     def _with_token(self, token, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints, token)
+
+
+if __name__ == "__main__":
+    import sys
+    import yaml
+    from . import generate_routes
+
+    def fix_null_descr(obj):
+        """
+        A hot fix for errors caused by null description values when generating
+        static documentation: better fix would be default values in source
+        to be 'None' strings: however, decorator changes didn't resolve
+        """
+        return {k: fix_null_descr(v) for k, v in obj.items() if v is not None} \
+            if isinstance(obj, dict) else obj
+
+    generate_routes("/api")
+    try:
+        with open(sys.argv[1], 'w') as f:
+            # pylint: disable=protected-access
+            yaml.dump(
+                fix_null_descr(Docs._gen_spec(all_endpoints=False, base_url="/", offline=True)),
+                f)
+    except IndexError:
+        sys.exit("Output file name missing; correct syntax is: `cmd <file.yml>`")
+    except IsADirectoryError:
+        sys.exit("Specified output is a directory; correct syntax is: `cmd <file.yml>`")

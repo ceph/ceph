@@ -168,9 +168,9 @@ class UserPasswordPolicy(RESTController):
         :param password: The password to validate.
         :param username: The name of the user (optional).
         :param old_password: The old password (optional).
-        :return: An object with the properties valid, credits and valuation.
-          'credits' contains the password complexity credits and
-          'valuation' the textual summary of the validation.
+        :return: An object with properties valid, credits and valuation.
+        'credits' contains the password complexity credits and
+        'valuation' the textual summary of the validation.
         """
         result = {'valid': False, 'credits': 0, 'valuation': None}
         try:
