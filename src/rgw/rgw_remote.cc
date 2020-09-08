@@ -75,8 +75,17 @@ void RGWRemoteCtl::init_conn(const RGWDataProvider& z, bool need_notify)
   if (id == zone_id) {
     return;
   }
-  if (z.endpoints.empty()) {
-    ldout(cct, 0) << "WARNING: can't generate connection for zone " << id << " id " << z.name << ": no endpoints defined" << dendl;
+
+  auto def_endpoints = &z.endpoints;
+  if (def_endpoints->empty() &&
+      z.data_access_conf &&
+      z.data_access_conf->endpoints &&
+      !z.data_access_conf->endpoints->empty()) {
+    def_endpoints = &(*z.data_access_conf->endpoints);
+  }
+
+  if (def_endpoints->empty()) {
+    ldout(cct, 0) << "WARNING: can't generate connection for zone " << id << " id " << z.name << ": no data endpoints defined" << dendl;
     return;
   }
 
@@ -90,13 +99,13 @@ void RGWRemoteCtl::init_conn(const RGWDataProvider& z, bool need_notify)
   auto& conns = conns_map[id];
   ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
   if (z.data_access_conf) {
-    conns.data = add_conn(create_conn(z.name, z.id, z.endpoints, *z.data_access_conf));
+    conns.data = add_conn(create_conn(z.name, z.id, *def_endpoints, *z.data_access_conf));
   } else {
     conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, api_name));
   }
 
   if (z.sip_conf) {
-    conns.sip = add_conn(create_conn(z.name, z.id, z.endpoints, z.sip_conf->rest_conf));
+    conns.sip = add_conn(create_conn(z.name, z.id, *def_endpoints, z.sip_conf->rest_conf));
   } else {
     conns.sip = conns.data;
   }
@@ -168,7 +177,7 @@ RGWRESTConn *RGWRemoteCtl::create_conn(const string& zone_name,
   }
 
   ldout(cct, 20) << __func__ << "(): remote sip connection for zone=" << zone_name << ": using access_key=" <<  access_key.id << dendl;
-  return new RGWRESTConn(cct, svc.zone, zone_id.id, def_endpoints, access_key);
+  return new RGWRESTConn(cct, svc.zone, zone_id.id, endpoints, access_key);
 }
 
 RGWRESTConn *RGWRemoteCtl::create_conn(const string& remote_id,
