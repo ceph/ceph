@@ -9862,6 +9862,7 @@ void MDCache::request_kill(MDRequestRef& mdr)
 
   mdr->killed = true;
   mdr->mark_event("killing request");
+  mdr->mark_nowarn();
 
   if (mdr->committing) {
     dout(10) << "request_kill " << *mdr << " -- already committing, remove it from sesssion requests" << dendl;
