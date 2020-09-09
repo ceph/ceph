@@ -78,7 +78,7 @@ private:
     uint32_t type;
     const char *str;
   };
-  static const std::array<str_to_entity_type_t, 6> STR_TO_ENTITY_TYPE;
+  static const std::array<str_to_entity_type_t, 7> STR_TO_ENTITY_TYPE;
 
   uint32_t type = 0;
   std::string id;

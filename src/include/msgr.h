@@ -84,6 +84,7 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_CLIENT 0x08
 #define CEPH_ENTITY_TYPE_MGR    0x10
 #define CEPH_ENTITY_TYPE_AUTH   0x20
+#define CEPH_ENTITY_TYPE_REPLICA 0x40
 
 #define CEPH_ENTITY_TYPE_ANY    0xFF
 
