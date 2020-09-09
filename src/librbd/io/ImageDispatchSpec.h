@@ -143,6 +143,14 @@ public:
     return (m_throttled_flag & RBD_QOS_MASK) == RBD_QOS_MASK;
   }
 
+  void set_blocked(uint64_t flag) {
+    m_blocked_flag |= flag;
+  }
+
+  bool was_blocked() {
+    return (m_blocked_flag & RBD_QOS_MASK) != 0;
+  }
+
 private:
   typedef boost::variant<Read,
                          Discard,
@@ -169,9 +177,11 @@ private:
   Request m_request;
   int m_op_flags;
   ZTracer::Trace m_parent_trace;
-  std::atomic<uint64_t> m_throttled_flag = 0;
+  std::atomic<uint64_t> m_blocked_flag = 0;
 
   uint64_t extents_length();
+public:
+  std::atomic<uint64_t> m_throttled_flag = 0;
 };
 
 } // namespace io

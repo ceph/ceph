@@ -144,6 +144,8 @@ private:
   void handle_blocked_writes(int r);
 
   void handle_throttle_ready(int r, ImageDispatchSpec<ImageCtxT> *item, uint64_t flag);
+  void handle_throttle_wait(ImageDispatchSpec<ImageCtxT> *item, uint64_t flag);
+  bool set_throttle_flag(std::atomic<uint64_t>* m_throttled_flag, uint64_t flag);
 };
 
 } // namespace io

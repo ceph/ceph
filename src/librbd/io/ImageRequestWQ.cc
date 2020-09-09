@@ -730,13 +730,34 @@ void ImageRequestWQ<I>::apply_qos_limit(const uint64_t flag,
 }
 
 template <typename I>
+bool ImageRequestWQ<I>::set_throttle_flag(std::atomic<uint64_t>* m_throttled_flag, uint64_t flag) {
+  uint64_t expected = m_throttled_flag->load();
+  uint64_t desired;
+  do {
+    desired = expected | flag;
+  } while (!m_throttled_flag->compare_exchange_weak(expected, desired));
+
+  return ((desired & RBD_QOS_MASK) == RBD_QOS_MASK); 
+}
+
+template <typename I>
+void ImageRequestWQ<I>::handle_throttle_wait(ImageDispatchSpec<I> *item, uint64_t flag) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 15) << "req=" << item << dendl;
+
+  if (!item->was_blocked()) {
+    ++m_io_throttled;
+  }
+  item->set_blocked(flag);
+}
+
+template <typename I>
 void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item, uint64_t flag) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
 
   ceph_assert(m_io_throttled.load() > 0);
-  item->set_throttled(flag);
-  if (item->were_all_throttled()) {
+  if (set_throttle_flag(&item->m_throttled_flag, flag)) {
     this->requeue_back(item);
     --m_io_throttled;
     this->signal();
@@ -748,6 +769,7 @@ bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) {
   uint64_t tokens = 0;
   uint64_t flag = 0;
   bool blocked = false;
+  bool all_qos_flags_set = item->m_throttled_flag.load();
   TokenBucketThrottle* throttle = nullptr;
 
   for (auto t : m_throttles) {
@@ -756,21 +778,27 @@ bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) {
       continue;
 
     if (!(m_qos_enabled_flag & flag)) {
-      item->set_throttled(flag);
+      all_qos_flags_set = set_throttle_flag(&item->m_throttled_flag, flag);
       continue;
     }
 
     throttle = t.second;
     if (item->tokens_requested(flag, &tokens) &&
         throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
+              &ImageRequestWQ<I>::handle_throttle_wait,
 	      &ImageRequestWQ<I>::handle_throttle_ready>(
 		tokens, this, item, flag)) {
+      all_qos_flags_set = item->m_throttled_flag.load();
       blocked = true;
     } else {
-      item->set_throttled(flag);
+      all_qos_flags_set = set_throttle_flag(&item->m_throttled_flag, flag);
     }
   }
-  return blocked;
+  // incase handle_throttle_ready run faster than needs_throttle
+  if (all_qos_flags_set && blocked) {
+    --m_io_throttled;
+  }
+  return !all_qos_flags_set;
 }
 
 template <typename I>
@@ -786,7 +814,6 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   if (needs_throttle(peek_item)) {
     ldout(cct, 15) << "throttling IO " << peek_item << dendl;
 
-    ++m_io_throttled;
     // dequeue the throttled item
     ThreadPool::PointerWQ<ImageDispatchSpec<I> >::_void_dequeue();
     return nullptr;
