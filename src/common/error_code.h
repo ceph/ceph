@@ -71,8 +71,8 @@ inline boost::system::error_condition make_error_condition(errc e) noexcept {
   return { static_cast<int>(e), ceph_category() };
 }
 
-boost::system::error_code to_error_code(int ret) noexcept;
-int from_error_code(boost::system::error_code e) noexcept;
+[[nodiscard]] boost::system::error_code to_error_code(int ret) noexcept;
+[[nodiscard]] int from_error_code(boost::system::error_code e) noexcept;
 }
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
