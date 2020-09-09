@@ -425,7 +425,7 @@ public:
     m_blockers.emplace_back(c, ctx);
   }
 
-  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+  template <typename T, typename I, void(T::*WF)(I*, uint64_t), void(T::*MF)(int, I*, uint64_t)>
   bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
     bool wait = false;
     uint64_t got = 0;
@@ -444,8 +444,10 @@ public:
       }
     }
 
-    if (wait)
+    if (wait) {
+      (handler->*WF)(item, flag);
       add_blocker<T, I, MF>(c - got, handler, item, flag);
+    }
 
     return wait;
   }
