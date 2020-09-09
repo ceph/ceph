@@ -950,15 +950,16 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
   return r;
 }
 
-int cls_rgw_mp_upload_part_meta(librados::IoCtx& io_ctx, const std::string& oid, const std::string& part_key,
-  const RGWUploadPartInfo& info)
+int cls_rgw_mp_upload_part_meta(librados::IoCtx& io_ctx, const std::string& oid,
+				const std::string& part_key,
+				const RGWUploadPartInfo& info)
 {
   buffer::list in, out;
   cls_rgw_mp_upload_part_op op;
 
-  // for now, there doesn't appear to be a need for an encoded
-  // result--we might in future want to return a copy of the final
-  // RGWUploadPartInfo?
+  /* for now, there doesn't appear to be a need for an encoded
+   * result--we might in future want to return a copy of the final
+   * RGWUploadPartInfo */
 
   op.info = info;
   encode(op, in);
