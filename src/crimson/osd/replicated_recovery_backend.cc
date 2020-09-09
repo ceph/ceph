@@ -245,19 +245,17 @@ seastar::future<> ReplicatedRecoveryBackend::local_recover_delete(
     }
     return seastar::make_ready_future<>();
   }).safe_then([this, soid, epoch_to_freeze, need] {
-    auto& recovery_waiter = recovering[soid];
-    auto& pi = *recovery_waiter.pi;
-    pi.recovery_info.soid = soid;
-    pi.recovery_info.version = need;
-    return on_local_recover_persist(soid, pi.recovery_info,
+    ObjectRecoveryInfo recovery_info;
+    recovery_info.soid = soid;
+    recovery_info.version = need;
+    return on_local_recover_persist(soid, recovery_info,
 	                            true, epoch_to_freeze);
   }, PGBackend::load_metadata_ertr::all_same_way(
       [this, soid, epoch_to_freeze, need] (auto e) {
-      auto& recovery_waiter = recovering[soid];
-      auto& pi = *recovery_waiter.pi;
-      pi.recovery_info.soid = soid;
-      pi.recovery_info.version = need;
-      return on_local_recover_persist(soid, pi.recovery_info,
+      ObjectRecoveryInfo recovery_info;
+      recovery_info.soid = soid;
+      recovery_info.version = need;
+      return on_local_recover_persist(soid, recovery_info,
 				      true, epoch_to_freeze);
     })
   );
