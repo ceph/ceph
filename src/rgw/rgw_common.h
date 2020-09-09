@@ -1235,6 +1235,26 @@ struct req_info {
   std::string domain;
   std::string storage_class;
 
+  /* A container for credentials of the S3's browser upload. It's necessary
+   * because: 1) the ::authenticate() method of auth engines and strategies
+   * take req_state only; 2) auth strategies live much longer than RGWOps -
+   * there is no way to pass additional data dependencies through ctors. */
+  class {
+    /* Writer. */
+    friend class RGWPostObj_ObjStore_S3;
+    /* Reader. */
+    friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
+    friend class rgw::auth::s3::STSEngine;
+
+    std::string access_key;
+    std::string signature;
+    std::string x_amz_algorithm;
+    std::string x_amz_credential;
+    std::string x_amz_date;
+    std::string x_amz_security_token;
+    ceph::bufferlist encoded_policy;
+  } s3_postobj_creds;
+
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
   void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta);
@@ -1617,26 +1637,6 @@ struct req_state : DoutPrefixProvider {
     std::unique_ptr<rgw::auth::Identity> identity;
 
     std::shared_ptr<rgw::auth::Completer> completer;
-
-    /* A container for credentials of the S3's browser upload. It's necessary
-     * because: 1) the ::authenticate() method of auth engines and strategies
-     * take req_state only; 2) auth strategies live much longer than RGWOps -
-     * there is no way to pass additional data dependencies through ctors. */
-    class {
-      /* Writer. */
-      friend class RGWPostObj_ObjStore_S3;
-      /* Reader. */
-      friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
-      friend class rgw::auth::s3::STSEngine;
-
-      std::string access_key;
-      std::string signature;
-      std::string x_amz_algorithm;
-      std::string x_amz_credential;
-      std::string x_amz_date;
-      std::string x_amz_security_token;
-      ceph::bufferlist encoded_policy;
-    } s3_postobj_creds;
   } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
