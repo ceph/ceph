@@ -263,18 +263,18 @@ This is similar to older (pre ``Octopus``) sync capabilities, but being done via
       [us-east] $ radosgw-admin sync group modify --group-id=group1 --status=enabled
       [us-east] $ radosgw-admin period update --commit
 
-      $ radosgw-admin sync info --bucket=buck
+      $ radosgw-admin sync info
       {
           "sources": [
               {
                   "id": "pipe1",
                   "source": {
                       "zone": "us-west",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                   "dest": {
                       "zone": "us-east",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                   "params": {
       ...
@@ -286,11 +286,11 @@ This is similar to older (pre ``Octopus``) sync capabilities, but being done via
                   "id": "pipe1",
                   "source": {
                       "zone": "us-east",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                   "dest": {
                       "zone": "us-west",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                  ...
               }
@@ -313,11 +313,11 @@ entries as can be seen in the example.
                   "id": "pipe1",
                   "source": {
                       "zone": "us-east",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                   "dest": {
                       "zone": "us-west",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                   ...
               }
@@ -327,11 +327,11 @@ entries as can be seen in the example.
                   "id": "pipe1",
                   "source": {
                       "zone": "us-west",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                   "dest": {
                       "zone": "us-east",
-                      "bucket": "buck:115b12b3-....4409.1"
+                      "bucket": "*"
                   },
                  ...
               }
