@@ -18,7 +18,7 @@ documentation
 for details on how to accomplish this.
 
 Finally, you need to build the dashboard frontend code. See the file
-``HACKING.rst`` in this directory for instructions on setting up the necessary
+/doc/dev/dev_guide/dash_devel.rst for instructions on setting up the necessary
 development environment.
 
 If you use the ``vstart.sh`` script to start up your development cluster, it
@@ -34,5 +34,5 @@ Working on the Dashboard Code
 -----------------------------
 
 If you're interested in helping with the development of the dashboard, please
-see the file ``HACKING.rst`` for details on how to set up a development
+see /doc/dev/dev_guide/dash_devel.rst for details on how to set up a development
 environment and other development-related topics.
