@@ -1415,7 +1415,7 @@ To check that the host is reachable:
             self.set_health_checks(self.health_checks)
 
     def _get_ceph_metadata(self) -> Dict[str, Dict[str, str]]:
-        # TODO: Add docstring
+        """Build a map of service -> service metadata"""
         service_map = {}
         for server in self.list_servers():
             for service in server.get('services', []):
