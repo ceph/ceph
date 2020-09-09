@@ -372,6 +372,9 @@
 /* Define if PWL-SSD is enabled */
 #cmakedefine WITH_RBD_SSD_CACHE
 
+/* Define if RWL cache replication is enabled */
+#cmakedefine WITH_CACHE_REPLICA
+
 /* Define if libcryptsetup version < 2.0.5 */
 #cmakedefine LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
 
