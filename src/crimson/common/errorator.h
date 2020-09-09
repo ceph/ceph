@@ -15,7 +15,7 @@ namespace crimson {
 template<typename Iterator, typename AsyncAction>
 inline auto do_for_each(Iterator begin, Iterator end, AsyncAction action) {
   using futurator = \
-    ::seastar::futurize<std::result_of_t<AsyncAction(decltype(*begin))>>;
+    ::seastar::futurize<std::invoke_result_t<AsyncAction, decltype(*begin)>>;
 
   if (begin == end) {
     return futurator::type::errorator_type::template make_ready_future<>();
