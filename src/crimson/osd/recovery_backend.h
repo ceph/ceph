@@ -152,6 +152,9 @@ protected:
     void set_pulled() {
       pulled.set_value();
     }
+    void set_push_failed(pg_shard_t shard, std::exception_ptr e) {
+      pushes.at(shard).set_exception(e);
+    }
     void interrupt(const std::string& why) {
       readable.set_exception(std::system_error(
 	    std::make_error_code(std::errc::interrupted), why));
