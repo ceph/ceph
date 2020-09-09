@@ -3472,9 +3472,15 @@ def command_shell():
     if args.keyring:
         mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
     if args.mount:
-        mount = pathify(args.mount)
-        filename = os.path.basename(mount)
-        mounts[mount] = '/mnt/{}:z'.format(filename)
+        for _mount in args.mount:
+            split_src_dst = _mount.split(':')
+            mount = pathify(split_src_dst[0])
+            filename = os.path.basename(split_src_dst[0])
+            if len(split_src_dst) > 1:
+                dst = split_src_dst[1] + ':z' if len(split_src_dst) == 3 else split_src_dst[1]
+                mounts[mount] = dst
+            else:
+                mounts[mount] = '/mnt/{}:z'.format(filename)
     if args.command:
         command = args.command
     else:
@@ -5623,7 +5629,11 @@ def _get_parser():
         help='ceph.keyring to pass through to the container')
     parser_shell.add_argument(
         '--mount', '-m',
-        help='mount a file or directory under /mnt in the container')
+        help=("mount a file or directory in the container. "
+              "Support multiple mounts. "
+              "ie: `--mount /foo /bar:/bar`. "
+              "When no destination is passed, default is /mnt"),
+              nargs='+')
     parser_shell.add_argument(
         '--env', '-e',
         action='append',
