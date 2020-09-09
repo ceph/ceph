@@ -385,7 +385,7 @@ class CephIscsi(object):
         mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config:z'
         mounts[log_dir] = '/var/log/rbd-target-api:z'
-        mounts['/dev'] = '/dev:z'
+        mounts['/dev'] = '/dev'
         return mounts
 
     @staticmethod
@@ -4699,7 +4699,7 @@ def get_ipv4_address(ifname):
                     offset,
                     struct.pack('256s', bytes(ifname[:15], 'utf-8'))
                 )[20:24])
-        
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         addr = _extract(s, 35093)  # '0x8915' = SIOCGIFADDR
@@ -4707,7 +4707,7 @@ def get_ipv4_address(ifname):
     except OSError:
         # interface does not have an ipv4 address
         return ''
-    
+
     dec_mask = sum([bin(int(i)).count('1')
                     for i in dq_mask.split('.')])
     return '{}/{}'.format(addr, dec_mask)
@@ -4735,8 +4735,8 @@ def get_ipv6_address(ifname):
 
 def bytes_to_human(num, mode='decimal'):
     # type: (float, str) -> str
-    """Convert a bytes value into it's human-readable form. 
-    
+    """Convert a bytes value into it's human-readable form.
+
     :param num: number, in bytes, to convert
     :param mode: Either decimal (default) or binary to determine divisor
     :returns: string representing the bytes value in a more readable format
@@ -4760,7 +4760,7 @@ def bytes_to_human(num, mode='decimal'):
 def read_file(path_list, file_name=''):
     # type: (List[str], str) -> str
     """Returns the content of the first file found within the `path_list`
-    
+
     :param path_list: list of file paths to search
     :param file_name: optional file_name to be applied to a file path
     :returns: content of the file or 'Unknown'
@@ -5008,7 +5008,7 @@ class HostFacts():
             if not os.path.exists(nic_path):
                 continue
             for iface in os.listdir(nic_path):
-                
+
                 lower_devs_list = [os.path.basename(link.replace("lower_", "")) for link in glob(os.path.join(nic_path, iface, "lower_*"))]
                 upper_devs_list = [os.path.basename(link.replace("upper_", "")) for link in glob(os.path.join(nic_path, iface, "upper_*"))]
 
@@ -5085,7 +5085,7 @@ class HostFacts():
         # type: () -> int
         """Determine the memory installed (kb)"""
         return self._get_mem_data('MemTotal')
-    
+
     @property
     def memory_free_kb(self):
         # type: () -> int
@@ -5132,7 +5132,7 @@ class HostFacts():
         # type: () -> float
         """Return the current time as Epoch seconds"""
         return time.time()
-    
+
     @property
     def system_uptime(self):
         # type: () -> float
@@ -5151,7 +5151,7 @@ class HostFacts():
             for selinux_path in HostFacts._selinux_path_list:
                 if os.path.exists(selinux_path):
                     selinux_config = read_file([selinux_path]).splitlines()
-                    security['type'] = 'SELinux' 
+                    security['type'] = 'SELinux'
                     for line in selinux_config:
                         if line.strip().startswith('#'):
                             continue
@@ -5186,7 +5186,7 @@ class HostFacts():
                         summary_str = ",".join(["{} {}".format(v, k) for k, v in summary.items()])
                         security = {**security, **summary} # type: ignore
                         security['description'] += "({})".format(summary_str)
-                    
+
                     return security
 
         if os.path.exists('/sys/kernel/security/lsm'):
@@ -5211,7 +5211,7 @@ class HostFacts():
         """Return the attributes of this HostFacts object as json"""
         data = {k: getattr(self, k) for k in dir(self)
                 if not k.startswith('_') and
-                isinstance(getattr(self, k), 
+                isinstance(getattr(self, k),
                            (float, int, str, list, dict, tuple))
         }
         return json.dumps(data, indent=2, sort_keys=True)
