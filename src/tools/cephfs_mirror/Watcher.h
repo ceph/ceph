@@ -81,7 +81,7 @@ private:
   mutable ceph::shared_mutex m_lock;
   State m_state;
   bool m_watch_error = false;
-  bool m_watch_blacklisted = false;
+  bool m_watch_blocklisted = false;
   uint64_t m_watch_handle;
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;
