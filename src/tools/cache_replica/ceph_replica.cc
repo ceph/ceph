@@ -50,9 +50,30 @@ using std::shared_ptr;
 
 using ceph::bufferlist;
 
+static void usage()
+{
+  cout << "usage: ceph-replica -i <ID> [below_options]" << std::endl
+       << " -m monitor_host_ip:port" << std::endl
+       << "    connect to monitor at given address" << std::endl
+       << " --debug_replica debug_level" << std::endl
+       << "    debug replica level (e.g. 10)"
+       << std::endl;
+  generic_server_usage();
+}
+
 int main(int argc, const char **argv)
 {
   ceph_pthread_setname(pthread_self(), "ceph-replica");
 
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
   return 0;
 }
