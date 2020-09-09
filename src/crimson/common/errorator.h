@@ -1084,12 +1084,10 @@ private:
   friend class future;
 };
 
-namespace internal {
 template <template <class...> class Container,
           class... Values>
 struct continuation_base_from_future<Container<::crimson::errorated_future_marker<Values...>>> {
   using type = continuation_base<Values...>;
 };
-}
 
 } // namespace seastar
