@@ -922,7 +922,9 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
         }
 
         zero_interval.intersection_of(object_interval);
-        if (!zero_interval.empty()) {
+        if (!zero_interval.empty() &&
+            ((m_list_snaps_flags &
+                LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0)) {
           ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
                          << object_extent.second << " "
                          << "zero_interval=" << zero_interval << dendl;
@@ -1003,9 +1005,13 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
   ldout(cct, 20) << "aio_comp=" << aio_comp<< ", "
                  << "parent_image_extents " << parent_image_extents << dendl;
 
+   auto list_snaps_flags = (
+     m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS);
+
   ImageListSnapsRequest<I> req(
     *image_ctx->parent, aio_comp, std::move(parent_image_extents), {0,
-    image_ctx->parent->snap_id}, 0, &m_parent_snapshot_delta, this->m_trace);
+    image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
+    this->m_trace);
   req.send();
 }
 
@@ -1059,7 +1065,8 @@ void ObjectListSnapsRequest<I>::zero_initial_extent(bool dne) {
   librados::snap_t snap_id_start = *m_snap_ids.begin();
 
   // the object does not exist -- mark the missing extents
-  if (snap_id_start == 0) {
+  if ((snap_id_start == 0) &&
+       ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0)) {
     for (auto [object_offset, object_length] : m_object_extents) {
       ldout(cct, 20) << "zeroing initial extent " << object_offset << "~"
                      << object_length << dendl;
