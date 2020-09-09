@@ -38,7 +38,7 @@ Synopsis
 | **cephadm** **run** [-h] --name NAME --fsid FSID
 
 | **cephadm** **shell** [-h] [--fsid FSID] [--name NAME] [--config CONFIG]
-                        [--keyring KEYRING] [--mount MOUNT] [--env ENV]
+                        [--keyring KEYRING] --mount [MOUNT [MOUNT ...]] [--env ENV]
                         [--] [command [command ...]]
 
 | **cephadm** **enter** [-h] [--fsid FSID] --name NAME [command [command ...]]
