@@ -7,8 +7,8 @@ Merchant, and Varman for a description of the algorithm.
 
 ## Bugs and features
 
-There is a dmclock project under https://tracker.ceph.com/ through
-which bugs can be reported and featuers requested.
+There is a [dmclock project](https://tracker.ceph.com/projects/dmclock) through
+which bugs can be reported and features requested.
 
 ## Running cmake
 
