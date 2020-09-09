@@ -51,23 +51,17 @@ std::string BackTrace::demangle(const char* name)
     int status;
     // only demangle a C++ mangled name
     if (mangled.compare(0, 2, "_Z") == 0) {
-      // just a guess, template names will go much wider
-      size_t len = 1024;
-      char* buf = (char*)malloc(len);
-      if (!buf) {
-        return {};
-      }
-      if (char* demangled = abi::__cxa_demangle(mangled.c_str(), buf, &len, &status)) {
+      // let __cxa_demangle do the malloc
+      size_t len = 0;
+      if (char* demangled = abi::__cxa_demangle(mangled.c_str(), nullptr, &len, &status)) {
         std::string full_name{OPEN};
-        full_name += demangled;
+        full_name += std::string_view(demangled, len);
         full_name += end;
         // buf could be reallocated, so free(demangled) instead
         free(demangled);
         return full_name;
-      } else {
-        // demangle failed, just pretend it's a C function with no args
-        free(buf);
       }
+      // demangle failed, just pretend it's a C function with no args
     }
     // C function
     return mangled + "()";
