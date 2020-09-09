@@ -133,7 +133,7 @@ seastar::future<> Socket::close() {
     in.close(),
     close_and_handle_errors(out)
   ).then_unpack([] {
-    return seastar::now();
+    return seastar::make_ready_future<>();
   }).handle_exception([] (auto eptr) {
     logger().error("Socket::close(): unexpected exception {}", eptr);
     ceph_abort();
@@ -159,7 +159,7 @@ seastar::future<> Socket::try_trap_pre(bp_action_t& trap) {
    default:
     ceph_abort("unexpected action from trap");
   }
-  return seastar::now();
+  return seastar::make_ready_future<>();
 }
 
 seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
@@ -175,7 +175,7 @@ seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
    default:
     ceph_abort("unexpected action from trap");
   }
-  return seastar::now();
+  return seastar::make_ready_future<>();
 }
 
 void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_) {

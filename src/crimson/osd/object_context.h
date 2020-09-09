@@ -140,10 +140,10 @@ public:
     case RWState::RWEXCL:
       return get_lock(op, [this] { return rwstate.get_excl_lock(); });
     case RWState::RWNONE:
-      return seastar::now();
+      return seastar::make_ready_future<>();
     default:
       ceph_abort_msg("invalid lock type");
-      return seastar::now();
+      return seastar::make_ready_future<>();
     }
   }
 
