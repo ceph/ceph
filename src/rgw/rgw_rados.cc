@@ -894,7 +894,6 @@ int RGWIndexCompletionThread::process()
     r = store->guard_reshard(&bs, c->obj, bucket_info,
 			     [&](RGWRados::BucketShard *bs) -> int {
 			       librados::ObjectWriteOperation o;
-			       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
                                c->bi_update(o);
 			       return bs->bucket_obj.operate(&o, null_yield);
                              });
@@ -947,13 +946,9 @@ public:
     return result;
   }
 
-  template <class CLSRGWBucketModifyOpT>
-  void create_completion(CLSRGWBucketModifyOpT&& bi_updater,
-                         const rgw_obj& obj,
-                         rgw_bucket_entry_ver& ver,
-                         rgw_bucket_dir_entry_meta& dir_meta,
-                         list<cls_rgw_obj_key> *remove_objs,
-                         complete_op_data **result);
+  complete_op_data* create_completion(
+    const rgw_obj& obj,
+    std::function<void(librados::ObjectWriteOperation& o)> bi_update);
   bool handle_completion(completion_t cb, complete_op_data *arg);
 
   int start() {
@@ -1011,13 +1006,9 @@ maybe_copy_remove_objs(std::list<cls_rgw_obj_key>* const remove_objs)
   }
 }
 
-template <class CLSRGWBucketModifyOpT>
-void RGWIndexCompletionManager::create_completion(CLSRGWBucketModifyOpT&& bi_updater,
-                                                  const rgw_obj& obj,
-                                                  rgw_bucket_entry_ver& ver,
-                                                  rgw_bucket_dir_entry_meta& dir_meta,
-                                                  list<cls_rgw_obj_key> *remove_objs,
-                                                  complete_op_data **result)
+complete_op_data* RGWIndexCompletionManager::create_completion(
+  const rgw_obj& obj,
+  std::function<void(librados::ObjectWriteOperation& o)> bi_update)
 {
   auto* const entry = new complete_op_data;
   const int shard_id = next_shard();
@@ -1025,25 +1016,12 @@ void RGWIndexCompletionManager::create_completion(CLSRGWBucketModifyOpT&& bi_upd
   entry->manager_shard_id = shard_id;
   entry->manager = this;
   entry->obj = obj;
-  entry->bi_update = \
-    [ bi_updater = std::move(bi_updater),
-      ver,
-      obj,
-      dir_meta,
-      remove_objs = maybe_copy_remove_objs(remove_objs),
-      this
-    ] (librados::ObjectWriteOperation& o) {
-      ldout(store->ctx(), 20) << "handling completion for key="
-                              << bi_updater.key << dendl;
-      std::move(bi_updater).complete_op(o, ver, dir_meta, &remove_objs);
-    };
-
-  *result = entry;
-
+  entry->bi_update = std::move(bi_update);
   entry->rados_completion = librados::Rados::aio_create_completion(entry, obj_complete_cb);
 
   std::lock_guard l{locks[shard_id]};
   completions[shard_id].insert(entry);
+  return entry;
 }
 
 bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_data *arg)
@@ -8275,24 +8253,32 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, string& t
   zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
   return with_bilog<CLSRGWBucketModifyOpT>(
     [&, this] (auto bi_updater) {
-      ObjectWriteOperation o;
-      rgw_bucket_dir_entry_meta dir_meta;
-      dir_meta = ent.meta;
+      rgw_bucket_dir_entry_meta dir_meta{ ent.meta };
       dir_meta.category = category;
-
       rgw_bucket_entry_ver ver;
       ver.pool = pool;
       ver.epoch = epoch;
-      cls_rgw_obj_key key(ent.key.name, ent.key.instance);
+
+      ObjectWriteOperation o;
       cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
       bi_updater.complete_op(o, ver, dir_meta, remove_objs);
-      complete_op_data *arg;
-      index_completion_manager->create_completion(std::move(bi_updater),
-                                                  obj,
-                                                  ver,
-                                                  dir_meta,
-                                                  remove_objs,
-                                                  &arg);
+
+      // TODO: it would be really cool to knock the completion manager
+      // out and have it replaced with boost::asio-style continuations
+      // on top of a thread pool.
+      auto* const arg = index_completion_manager->create_completion(
+        obj,
+        [ bi_updater = std::move(bi_updater),
+          ver,
+          dir_meta,
+          remove_objs = maybe_copy_remove_objs(remove_objs),
+          this
+        ] (librados::ObjectWriteOperation& o) {
+          ldout(store->ctx(), 20) << "handling completion for key="
+                                  << bi_updater.key << dendl;
+          cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+          bi_updater.complete_op(o, ver, dir_meta, &remove_objs);
+        });
       librados::AioCompletion *completion = arg->rados_completion;
       int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
       completion->release(); /* can't reference arg here, as it might have already been released */
