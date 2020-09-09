@@ -590,8 +590,6 @@ class NFSServiceSpec(ServiceSpec):
         #: RADOS namespace where NFS client recovery data is stored in the pool.
         self.namespace = namespace
 
-        self.preview_only = preview_only
-
     def validate(self):
         super(NFSServiceSpec, self).validate()
 
@@ -661,7 +659,6 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
         self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
         self.ssl = ssl
-        self.preview_only = preview_only
 
     def get_port(self):
         if self.rgw_frontend_port:
@@ -725,7 +722,6 @@ class IscsiServiceSpec(ServiceSpec):
         self.api_secure = api_secure
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
-        self.preview_only = preview_only
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
