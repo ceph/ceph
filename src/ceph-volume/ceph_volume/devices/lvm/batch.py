@@ -72,7 +72,8 @@ def get_physical_osds(devices, args):
                                      rel_data_size,
                                      abs_size,
                                      args.osds_per_device,
-                                     osd_id))
+                                     osd_id,
+                                     'dmcrypt' if args.dmcrypt else None))
     return ret
 
 
@@ -91,7 +92,8 @@ def get_lvm_osds(lvs, args):
                         100.0,
                         disk.Size(b=int(lv.lv_size)),
                         1,
-                        osd_id)
+                        osd_id,
+                        'dmcrypt' if args.dmcrypt else None)
         ret.append(osd)
     return ret
 
@@ -520,7 +522,13 @@ class Batch(object):
                               'slots',
                               'type_'])
 
-        def __init__(self, data_path, rel_size, abs_size, slots, id_):
+        def __init__(self,
+                     data_path,
+                     rel_size,
+                     abs_size,
+                     slots,
+                     id_,
+                     encryption):
             self.id_ = id_
             self.data = self.VolSpec(path=data_path,
                                 rel_size=rel_size,
@@ -529,6 +537,7 @@ class Batch(object):
                                 type_='data')
             self.fast = None
             self.very_fast = None
+            self.encryption = encryption
 
         def add_fast_device(self, path, rel_size, abs_size, slots, type_):
             self.fast = self.VolSpec(path=path,
@@ -547,7 +556,8 @@ class Batch(object):
         def _get_osd_plan(self):
             plan = {
                 'data': self.data.path,
-                'data_size': self.data.abs_size
+                'data_size': self.data.abs_size,
+                'encryption': self.encryption,
             }
             if self.fast:
                 type_ = self.fast.type_.replace('.', '_')
@@ -576,6 +586,9 @@ class Batch(object):
             if self.id_:
                 report += templates.osd_reused_id.format(
                     id_=self.id_)
+            if self.encryption:
+                report += templates.osd_encryption.format(
+                    enc=self.encryption)
             report += templates.osd_component.format(
                 _type=self.data.type_,
                 path=self.data.path,

@@ -33,6 +33,7 @@ class TestBatch(object):
                        wal_devices=[],
                        bluestore=True,
                        block_db_size="1G",
+                       dmcrypt=True,
                       )
         b = batch.Batch([])
         plan = b.get_plan(args)
@@ -44,7 +45,8 @@ class TestBatch(object):
                                           conf_ceph_stub,
                                           osds_per_device):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        args = factory(data_slots=1, osds_per_device=osds_per_device, osd_ids=[])
+        args = factory(data_slots=1, osds_per_device=osds_per_device,
+                       osd_ids=[], dmcrypt=False)
         osds = batch.get_physical_osds(mock_devices_available, args)
         assert len(osds) == len(mock_devices_available) * osds_per_device
 
@@ -52,7 +54,8 @@ class TestBatch(object):
                                           mock_devices_available,
                                           conf_ceph_stub,
                                           osds_per_device):
-        args = factory(data_slots=1, osds_per_device=osds_per_device, osd_ids=[])
+        args = factory(data_slots=1, osds_per_device=osds_per_device,
+                       osd_ids=[], dmcrypt=False)
         osds = batch.get_physical_osds(mock_devices_available, args)
         for osd in osds:
             assert osd.data[1] == 1.0 / osds_per_device
@@ -62,7 +65,8 @@ class TestBatch(object):
                                           conf_ceph_stub,
                                           osds_per_device):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        args = factory(data_slots=1, osds_per_device=osds_per_device, osd_ids=[])
+        args = factory(data_slots=1, osds_per_device=osds_per_device,
+                       osd_ids=[], dmcrypt=False)
         osds = batch.get_physical_osds(mock_devices_available, args)
         for osd, dev in zip(osds, mock_devices_available):
             assert osd.data[2] == int(dev.vg_size[0] / osds_per_device)
