@@ -3561,9 +3561,9 @@ def get_unit_states(fsid: str) -> Dict[str, Dict[str, str]]:
 
     Instead of iterating over systemctl calls, one per unit, we issue a 
     single systemctl command to return all units that match our fsid. The
-    reulting output is then parsed to provide a lookup of unit -> systemd state
+    resulting output is then parsed to provide a lookup of unit -> systemd state
     """
-    cmd = f'systemctl --all --no-legend -t service list-units ceph-{fsid}*'
+    cmd = f'systemctl --all --no-pager --no-legend -t service list-units ceph-{fsid}*'
     unit_states = {}
     std_out, std_err, rc = call(cmd.split(' '), verbose_on_failure=False)
     if not rc:
@@ -3586,11 +3586,10 @@ def list_daemons(detail=True, legacy_dir=None, target_fsid=None):
     fsid: str
     info: Dict[str, Optional[Union[str, bool]]]
 
-
     def _http_call(url: str, context: Optional[ssl.SSLContext] = None) -> str:
         try:
             with urlopen(url, context=context) as response:
-                return response.read().decode('utf-8')
+                return response.read().decode('utf-8') or ''
         except URLError:
             return ''
 
@@ -3632,13 +3631,30 @@ def list_daemons(detail=True, legacy_dir=None, target_fsid=None):
         data = _http_call(
             f"https://localhost:{port}/api/health",
             ctx)
-        return json.loads(data)['version']
+        try:
+            js_data = json.loads(data)
+        except json.decoder.JSONDecodeError:
+            # api not available yet!
+            return ''
+        
+        version = js_data.get('version', '') 
+        if not version:
+            logger.warning("Unable to determine grafana version from API response")
+        return version
 
     def _get_prometheus_version(default_port: str = '9090') -> str:
         port = _get_web_port('prometheus') or default_port
         data = _http_call(f"http://localhost:{port}/api/v1/status/buildinfo")
-        r = json.loads(data)
-        return r['data']['version']
+        try:
+            js_data = json.loads(data)
+        except json.decoder.JSONDecodeError:
+            # api not available yet!
+            return ''
+
+        version = js_data.get('data', {}).get("version", "")
+        if not version:
+            logger.warning("Unable to determine prometheus version from API response")
+        return version
 
     def _get_node_exporter_version(default_port: str = '9100') -> str:
         port = _get_web_port('node-exporter') or default_port
@@ -3660,9 +3676,6 @@ def list_daemons(detail=True, legacy_dir=None, target_fsid=None):
             return tag
         else:
             return ''
-    
-    def _get_tag(image_name: str) -> str:
-        return image_name.split(':')[-1]
 
     def _load_env(env_string: str) -> Dict[str, str]:
         env_vars = {}
