@@ -20,7 +20,7 @@ namespace mirror {
 // watch for notifications via cephfs_mirror object (in metadata
 // pool). this is used sending keepalived with keepalive payload
 // being the rados instance address (used by the manager module
-// to blacklist when needed).
+// to blocklist when needed).
 
 class MirrorWatcher : public Watcher {
 public:

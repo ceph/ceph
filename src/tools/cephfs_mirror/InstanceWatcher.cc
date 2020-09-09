@@ -107,6 +107,10 @@ void InstanceWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
   acknowledge_notify(notify_id, handle, outbl);
 }
 
+void InstanceWatcher::handle_rewatch_complete(int r) {
+  dout(20) << ": r=" << r << dendl;
+}
+
 void InstanceWatcher::create_instance() {
   dout(20) << dendl;
 

@@ -42,6 +42,7 @@ public:
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist& bl) override;
+  void handle_rewatch_complete(int r) override;
 
 private:
   librados::IoCtx &m_ioctx;
