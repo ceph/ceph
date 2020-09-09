@@ -2640,6 +2640,25 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
   Message *m = op->get_req();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
+  // Clean up the records, because we have received its message
+  auto s = m->get_orig_source();
+  if (s.is_osd()) {
+    auto sid = s.num();
+    if (failure_info.count(sid)) {
+      failure_info_t& fi = failure_info[sid];
+      for (auto& [reporter, fr] : fi.reporters) {
+	MonOpRequestRef report_op = fi.cancel_report(reporter);
+	if (report_op) {
+	  mon->no_reply(report_op);
+	}
+      }
+      ceph_assert(fi.reporters.empty());
+      dout(10) << " removing last failure_info for osd." << sid
+	       << dendl;
+      failure_info.erase(sid);
+    }
+  }
+
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
