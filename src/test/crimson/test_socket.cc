@@ -5,6 +5,8 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/core/when_all.hh>
+#include <seastar/util/later.hh>
 
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"

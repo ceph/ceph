@@ -102,10 +102,12 @@ void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
     auto *parent = maybe_get_parent(pin.range);
     assert(parent);
     if (!parent->has_ref()) {
-      logger().debug("{}: acquiring parent {}", __func__, parent);
+      logger().debug("{}: acquiring parent {}", __func__,
+		     static_cast<void*>(parent));
       parent->acquire_ref();
     } else {
-      logger().debug("{}: parent has ref {}", __func__, parent);
+      logger().debug("{}: parent has ref {}", __func__,
+		     static_cast<void*>(parent));
     }
   }
   if (maybe_get_first_child(pin.range) != nullptr) {

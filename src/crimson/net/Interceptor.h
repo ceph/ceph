@@ -59,7 +59,7 @@ class socket_blocker {
   seastar::future<> wait_blocked() {
     ceph_assert(!p_blocked);
     if (p_unblocked) {
-      return seastar::now();
+      return seastar::make_ready_future<>();
     } else {
       p_blocked = seastar::abort_source();
       return seastar::sleep_abortable(10s, *p_blocked).then([] {
