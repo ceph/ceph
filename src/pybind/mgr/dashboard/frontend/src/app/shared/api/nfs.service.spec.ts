@@ -59,8 +59,8 @@ describe('NfsService', () => {
   });
 
   it('should call lsDir', () => {
-    service.lsDir('foo_dir').subscribe();
-    const req = httpTesting.expectOne('ui-api/nfs-ganesha/lsdir?root_dir=foo_dir');
+    service.lsDir('a', 'foo_dir').subscribe();
+    const req = httpTesting.expectOne('ui-api/nfs-ganesha/lsdir/a?root_dir=foo_dir');
     expect(req.request.method).toBe('GET');
   });
 

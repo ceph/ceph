@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from functools import partial
 import logging
+import os
+from functools import partial
 
 import cherrypy
 import cephfs
@@ -12,7 +13,7 @@ from . import ApiController, RESTController, UiApiController, BaseController, \
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.cephx import CephX
-from ..services.exception import serialize_dashboard_exception
+from ..services.exception import DashboardException, serialize_dashboard_exception
 from ..services.ganesha import Ganesha, GaneshaConf, NFSException
 from ..services.rgw_client import RgwClient
 
@@ -282,21 +283,35 @@ class NFSGaneshaUi(BaseController):
 
     @Endpoint('GET', '/lsdir')
     @ReadPermission
-    def lsdir(self, root_dir=None, depth=1):  # pragma: no cover
+    def lsdir(self, fs_name, root_dir=None, depth=1):  # pragma: no cover
         if root_dir is None:
             root_dir = "/"
-        depth = int(depth)
-        if depth > 5:
-            logger.warning("Limiting depth to maximum value of 5: "
-                           "input depth=%s", depth)
-            depth = 5
-        root_dir = '{}{}'.format(root_dir.rstrip('/'), '/')
+        if not root_dir.startswith('/'):
+            root_dir = '/{}'.format(root_dir)
+        root_dir = os.path.normpath(root_dir)
+
         try:
-            cfs = CephFS()
-            root_dir = root_dir.encode()
-            paths = cfs.ls_dir(root_dir, depth)
-            # Convert (bytes => string) and prettify paths (strip slashes).
-            paths = [p.decode().rstrip('/') for p in paths if p != root_dir]
+            depth = int(depth)
+            error_msg = ''
+            if depth < 0:
+                error_msg = '`depth` must be greater or equal to 0.'
+            if depth > 5:
+                logger.warning("Limiting depth to maximum value of 5: "
+                               "input depth=%s", depth)
+                depth = 5
+        except ValueError:
+            error_msg = '`depth` must be an integer.'
+        finally:
+            if error_msg:
+                raise DashboardException(code=400,
+                                         component='nfsganesha',
+                                         msg=error_msg)
+
+        try:
+            cfs = CephFS(fs_name)
+            paths = [root_dir]
+            paths.extend([p['path'].rstrip('/')
+                          for p in cfs.ls_dir(root_dir, depth)])
         except (cephfs.ObjectNotFound, cephfs.PermissionError):
             paths = []
         return {'paths': paths}
