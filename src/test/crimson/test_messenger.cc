@@ -599,7 +599,7 @@ struct ConnResult {
                   "  cnt_accept_dispatched: {}\n"
                   "  cnt_reset_dispatched: {}\n"
                   "  cnt_remote_reset_dispatched: {}\n",
-                  this,
+                  static_cast<const void*>(this),
                   index, *conn,
                   state,
                   connect_attempts,

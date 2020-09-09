@@ -24,9 +24,10 @@ struct WorkItem {
 template<typename Func>
 struct Task final : WorkItem {
   using T = std::invoke_result_t<Func>;
-  using future_state_t = std::conditional_t<std::is_void_v<T>,
-					    seastar::future_state<>,
-					    seastar::future_state<T>>;
+  using future_stored_type_t =
+    std::conditional_t<std::is_void_v<T>,
+		       seastar::internal::future_stored_type_t<>,
+		       seastar::internal::future_stored_type_t<T>>;
   using futurator_t = seastar::futurize<T>;
 public:
   explicit Task(Func&& f)
@@ -56,7 +57,7 @@ public:
   }
 private:
   Func func;
-  future_state_t state;
+  seastar::future_state<future_stored_type_t> state;
   seastar::readable_eventfd on_done;
 };
 
