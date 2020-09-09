@@ -1,4 +1,5 @@
 import argparse
+from collections import namedtuple
 import json
 import logging
 from textwrap import dedent
@@ -512,35 +513,54 @@ class Batch(object):
         This class simply stores info about to-be-deployed OSDs and provides an
         easy way to retrieve the necessary create arguments.
         '''
+        VolSpec = namedtuple('VolSpec',
+                             ['path',
+                              'rel_size',
+                              'abs_size',
+                              'slots',
+                              'type_'])
+
         def __init__(self, data_path, rel_size, abs_size, slots, id_):
             self.id_ = id_
-            self.data = (data_path, rel_size, abs_size, slots)
+            self.data = self.VolSpec(path=data_path,
+                                rel_size=rel_size,
+                                abs_size=abs_size,
+                                slots=slots,
+                                type_='data')
             self.fast = None
             self.very_fast = None
 
         def add_fast_device(self, path, rel_size, abs_size, slots, type_):
-            self.fast = (path, rel_size, abs_size, slots, type_)
+            self.fast = self.VolSpec(path=path,
+                                rel_size=rel_size,
+                                abs_size=abs_size,
+                                slots=slots,
+                                type_=type_)
 
         def add_very_fast_device(self, path, rel_size, abs_size, slots, type_):
-            self.very_fast = (path, rel_size, abs_size, slots, type_)
+            self.fast = self.VolSpec(path=path,
+                                rel_size=rel_size,
+                                abs_size=abs_size,
+                                slots=slots,
+                                type_=type_)
 
         def _get_osd_plan(self):
             plan = {
-                'data': self.data[0],
-                'data_size': self.data[2]
+                'data': self.data.path,
+                'data_size': self.data.abs_size
             }
             if self.fast:
-                type_ = self.fast[4].replace('.', '_')
+                type_ = self.fast.type_.replace('.', '_')
                 plan.update(
                     {
-                        type_: self.fast[0],
-                        '{}_size'.format(type_): self.fast[2],
+                        type_: self.fast.path,
+                        '{}_size'.format(type_): self.fast.abs_size,
                     })
             if self.very_fast:
                 plan.update(
                     {
-                        'block_wal': self.very_fast[0],
-                        'block_wal_size': self.very_fast[2],
+                        'block_wal': self.very_fast.path,
+                        'block_wal_size': self.very_fast.abs_size,
                     })
             if self.id_:
                 plan.update({'osd_id': self.id_})
@@ -557,22 +577,22 @@ class Batch(object):
                 report += templates.osd_reused_id.format(
                     id_=self.id_)
             report += templates.osd_component.format(
-                _type='data',
-                path=self.data[0],
-                size=self.data[2],
-                percent=self.data[1])
+                _type=self.data.type_,
+                path=self.data.path,
+                size=self.data.abs_size,
+                percent=self.data.rel_size)
             if self.fast:
                 report += templates.osd_component.format(
-                    _type=self.fast[4],
-                    path=self.fast[0],
-                    size=self.fast[2],
-                    percent=self.fast[1])
+                    _type=self.fast.type_,
+                    path=self.fast.path,
+                    size=self.fast.abs_size,
+                    percent=self.fast.rel_size)
             if self.very_fast:
                 report += templates.osd_component.format(
-                    _type=self.very_fast[4],
-                    path=self.very_fast[0],
-                    size=self.very_fast[2],
-                    percent=self.very_fast[1])
+                    _type=self.very_fast.type_,
+                    path=self.very_fast.path,
+                    size=self.very_fast.abs_size,
+                    percent=self.very_fast.rel_size)
             return report
 
         def report_json(self):
