@@ -83,5 +83,10 @@ int main(int argc, const char **argv)
   auto gctx = global_init(&default_config, args,
                          CEPH_ENTITY_TYPE_REPLICA,
                          CODE_ENVIRONMENT_DAEMON, 0);
+
+  /*
+   * TODO: consider NUMA affinity
+   */
+  dout(1) << FN_NAME << " not setting numa affinity" << dendl;
   return 0;
 }
