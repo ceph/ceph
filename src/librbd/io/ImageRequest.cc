@@ -438,12 +438,6 @@ int ImageReadRequest<I>::clip_request() {
     return r;
   }
 
-  uint64_t buffer_length = 0;
-  auto &image_extents = this->m_image_extents;
-  for (auto &image_extent : image_extents) {
-    buffer_length += image_extent.second;
-  }
-  this->m_aio_comp->read_result.set_clip_length(buffer_length);
   return 0;
 }
 
@@ -471,8 +465,11 @@ void ImageReadRequest<I>::send_request() {
     buffer_ofs += extent.second;
   }
 
-  // issue the requests
   AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->read_result.set_clip_length(buffer_ofs);
+  aio_comp->read_result.set_image_extents(image_extents);
+
+  // issue the requests
   aio_comp->set_request_count(object_extents.size());
   for (auto &oe : object_extents) {
     ldout(cct, 20) << data_object_name(&image_ctx, oe.object_no) << " "

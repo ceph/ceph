@@ -214,6 +214,19 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
     return;
   }
 
+  // convert the image-extent extent map to object-extents
+  ExtentMap image_extent_map;
+  image_extent_map.swap(m_copyup_extent_map);
+  for (auto [image_offset, image_length] : image_extent_map) {
+    striper::LightweightObjectExtents object_extents;
+    Striper::file_to_extents(
+      cct, &m_image_ctx->layout, image_offset, image_length, 0, 0,
+      &object_extents);
+    for (auto& object_extent : object_extents) {
+      m_copyup_extent_map[object_extent.offset] = object_extent.length;
+    }
+  }
+
   // copyup() will affect snapshots only if parent data is not all
   // zeros.
   if (!m_copyup_is_zero) {
