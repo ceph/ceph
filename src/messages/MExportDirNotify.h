@@ -25,23 +25,22 @@ private:
   dirfrag_t base;
   bool ack;
   std::pair<__s32,__s32> old_auth, new_auth;
-  std::list<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
+  std::vector<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
 
  public:
   dirfrag_t get_dirfrag() const { return base; }
   std::pair<__s32,__s32> get_old_auth() const { return old_auth; }
   std::pair<__s32,__s32> get_new_auth() const { return new_auth; }
   bool wants_ack() const { return ack; }
-  const std::list<dirfrag_t>& get_bounds() const { return bounds; }
-  std::list<dirfrag_t>& get_bounds() { return bounds; }
+  const std::vector<dirfrag_t>& get_bounds() const { return bounds; }
 
 protected:
   MExportDirNotify() :
     MMDSOp{MSG_MDS_EXPORTDIRNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
-  MExportDirNotify(dirfrag_t i, uint64_t tid, bool a, std::pair<__s32,__s32> oa,
-		   std::pair<__s32,__s32> na) :
+  MExportDirNotify(dirfrag_t i, const std::vector<dirfrag_t>& bds, uint64_t tid,
+		   bool a, std::pair<__s32,__s32> oa, std::pair<__s32,__s32> na) :
     MMDSOp{MSG_MDS_EXPORTDIRNOTIFY, HEAD_VERSION, COMPAT_VERSION},
-    base(i), ack(a), old_auth(oa), new_auth(na) {
+    base(i), ack(a), old_auth(oa), new_auth(na), bounds(bds) {
     set_tid(tid);
   }
   ~MExportDirNotify() final {}
@@ -57,7 +56,7 @@ public:
       o << " no ack)";
   }
   
-  void copy_bounds(std::list<dirfrag_t>& ex) {
+  void copy_bounds(std::vector<dirfrag_t>& ex) {
     this->bounds = ex;
   }
   void copy_bounds(std::set<dirfrag_t>& ex) {
