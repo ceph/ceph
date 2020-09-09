@@ -75,5 +75,13 @@ int main(int argc, const char **argv)
     usage();
     exit(0);
   }
+
+  map<string, string> default_config = {
+    //overwrite "common/option" configuration here
+  };
+
+  auto gctx = global_init(&default_config, args,
+                         CEPH_ENTITY_TYPE_REPLICA,
+                         CODE_ENVIRONMENT_DAEMON, 0);
   return 0;
 }
