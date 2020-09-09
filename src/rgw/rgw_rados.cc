@@ -6794,16 +6794,47 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   return -ERR_BUSY_RESHARDING;
 }
 
+struct BILogUpdateBatchFIFO {
+  BILogUpdateBatchFIFO();
+
+  template <class CLSRGWBucketModifyOpT, class F, class... Args>
+  int add_maybe_flush(F&& on_flushed,
+                      CLSRGWBucketModifyOpT&& bi_updater,
+                      Args&&... args)
+  {
+    // 2. add to batch
+    // 3. flush
+    return std::move(on_flushed)(std::move(bi_updater));
+  }
+};
+
+BILogUpdateBatchFIFO::BILogUpdateBatchFIFO() {
+    // 1. create fifo instance
+}
+
+static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(const RGWBucketInfo& binfo)
+{
+  return {};
+}
+
+
 template <class CLSRGWBucketModifyOpT, class F, class... Args>
 int RGWRados::with_bilog(F&& on_flushed, Args&&... args)
 {
-  constexpr bool is_inindex = true;
+  constexpr bool is_inindex = false;
   if (is_inindex) {
     return std::move(on_flushed)(
       CLSRGWBucketModifyOpT{
         svc.zone->get_zone().log_data, std::forward<Args>(args)...});
   } else {
-    // TODO: the cls_fifo backend
+    return get_or_create_fifo_bilog_op(
+      RGWBucketInfo{}
+    ).add_maybe_flush(
+      std::move(on_flushed),
+      CLSRGWBucketModifyOpT{
+        svc.zone->get_zone().log_data, std::forward<Args>(args)...},
+      std::forward<Args>(args)...
+    );
   }
 }
 
