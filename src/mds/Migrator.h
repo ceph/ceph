@@ -269,6 +269,8 @@ protected:
     int state = 0;
     mds_rank_t peer = MDS_RANK_NONE;
     uint64_t tid = 0;
+    std::vector<dirfrag_t> bound_vec;
+    std::set<CDir*> bounds;
     std::set<mds_rank_t> warning_ack_waiting;
     std::set<mds_rank_t> notify_ack_waiting;
     std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
@@ -287,8 +289,9 @@ protected:
     int state = 0;
     mds_rank_t peer = 0;
     uint64_t tid = 0;
+    std::vector<dirfrag_t> bound_vec;
+    std::set<CDir*> bounds;
     std::set<mds_rank_t> bystanders;
-    std::list<dirfrag_t> bound_ls;
     std::list<ScatterLock*> updated_scatterlocks;
     std::map<client_t,pair<Session*,uint64_t> > session_map;
     std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
@@ -339,11 +342,11 @@ protected:
   void import_reverse_discovering(dirfrag_t df);
   void import_reverse_discovered(dirfrag_t df, CInode *diri);
   void import_reverse_prepping(CDir *dir, import_state_t& stat);
-  void import_remove_pins(CDir *dir, std::set<CDir*>& bounds);
+  void import_remove_pins(CDir *dir, import_state_t& stat);
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);
-  void import_notify_abort(CDir *dir, std::set<CDir*>& bounds);
-  void import_notify_finish(CDir *dir, std::set<CDir*>& bounds);
+  void import_notify_abort(CDir *dir, import_state_t& stat);
+  void import_notify_finish(CDir *dir, import_state_t& stat);
   void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
 			   std::map<client_t,pair<Session*,uint64_t> >& imported_session_map);
   void handle_export_finish(const cref_t<MExportDirFinish> &m);

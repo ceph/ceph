@@ -27,8 +27,8 @@ public:
 
 protected:
   MExportDir() : MMDSOp{MSG_MDS_EXPORTDIR} {}
-  MExportDir(dirfrag_t df, uint64_t tid) :
-    MMDSOp{MSG_MDS_EXPORTDIR}, dirfrag(df) {
+  MExportDir(dirfrag_t df, const std::vector<dirfrag_t>& bds, uint64_t tid) :
+    MMDSOp{MSG_MDS_EXPORTDIR}, dirfrag(df), bounds(bds) {
     set_tid(tid);
   }
   ~MExportDir() final {}
@@ -37,10 +37,6 @@ public:
   std::string_view get_type_name() const override { return "Ex"; }
   void print(std::ostream& o) const override {
     o << "export(" << dirfrag << ")";
-  }
-
-  void add_export(dirfrag_t df) { 
-    bounds.push_back(df); 
   }
 
   void encode_payload(uint64_t features) override {

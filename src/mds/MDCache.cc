@@ -1254,7 +1254,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const vector<dirfrag_t>& bo
   adjust_bounded_subtree_auth(dir, bounds, auth);
 }
 
-void MDCache::map_dirfrag_set(const list<dirfrag_t>& dfs, set<CDir*>& result)
+void MDCache::map_dirfrag_set(const vector<dirfrag_t>& dfs, set<CDir*>& result)
 {
   dout(10) << "map_dirfrag_set " << dfs << dendl;
 

@@ -27,7 +27,7 @@ private:
   dirfrag_t dirfrag;
 public:
   ceph::buffer::list basedir;
-  std::list<dirfrag_t> bounds;
+  std::vector<dirfrag_t> bounds;
   std::list<ceph::buffer::list> traces;
 private:
   std::set<mds_rank_t> bystanders;
@@ -35,17 +35,17 @@ private:
 
 public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
-  const std::list<dirfrag_t>& get_bounds() const { return bounds; }
-  const std::set<mds_rank_t> &get_bystanders() const { return bystanders; }
+  const std::vector<dirfrag_t>& get_bounds() const { return bounds; }
+  const std::set<mds_rank_t>& get_bystanders() const { return bystanders; }
 
   bool did_assim() const { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
 
 protected:
   MExportDirPrep() = default;
-  MExportDirPrep(dirfrag_t df, uint64_t tid) :
+  MExportDirPrep(dirfrag_t df, std::vector<dirfrag_t>& bds, uint64_t tid) :
     MMDSOp{MSG_MDS_EXPORTDIRPREP, HEAD_VERSION, COMPAT_VERSION},
-    dirfrag(df)
+    dirfrag(df), bounds(bds)
   {
     set_tid(tid);
   }
@@ -57,9 +57,6 @@ public:
     o << "export_prep(" << dirfrag << ")";
   }
 
-  void add_bound(dirfrag_t df) {
-    bounds.push_back( df );
-  }
   void add_trace(ceph::buffer::list& bl) {
     traces.push_back(bl);
   }

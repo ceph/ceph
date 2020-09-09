@@ -2969,10 +2969,8 @@ void EExport::replay(MDSRank *mds)
   ceph_assert(dir);
   
   set<CDir*> realbounds;
-  for (set<dirfrag_t>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = mds->mdcache->get_dirfrag(*p);
+  for (auto &df : bounds)
+    CDir *bd = mds->mdcache->get_dirfrag(df);
     ceph_assert(bd);
     realbounds.insert(bd);
   }
@@ -3015,10 +3013,8 @@ void EExport::dump(Formatter *f) const
   f->close_section();*/
   f->dump_stream("base dirfrag") << base;
   f->open_array_section("bounds dirfrags");
-  for (set<dirfrag_t>::const_iterator i = bounds.begin();
-      i != bounds.end(); ++i) {
-    f->dump_stream("dirfrag") << *i;
-  }
+  for (auto& df : bounds)
+    f->dump_stream("dirfrag") << df;
   f->close_section(); // bounds dirfrags
 }
 
