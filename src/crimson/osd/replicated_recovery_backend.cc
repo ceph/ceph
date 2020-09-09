@@ -62,25 +62,24 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
       });
     }).then([this, soid] {
       auto& recovery = recovering.at(soid);
-      bool error = recovery.pi->recovery_progress.error;
-      if (!error) {
-        auto push_info = recovery.pushing.begin();
-        object_stat_sum_t stat = {};
-        if (push_info != recovery.pushing.end()) {
-          stat = push_info->second.stat;
-        } else {
-          // no push happened, take pull_info's stat
-          stat = recovery.pi->stat;
-        }
-        pg.get_recovery_handler()->on_global_recover(soid, stat, false);
-        return seastar::make_ready_future<>();
+      auto push_info = recovery.pushing.begin();
+      object_stat_sum_t stat = {};
+      if (push_info != recovery.pushing.end()) {
+	stat = push_info->second.stat;
       } else {
-	if (recovery.obc)
-	  recovery.obc->drop_recovery_read();
-	recovering.erase(soid);
-	return seastar::make_exception_future<>(
-	    std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
+	// no push happened, take pull_info's stat
+	assert(recovery.pi);
+	stat = recovery.pi->stat;
       }
+      pg.get_recovery_handler()->on_global_recover(soid, stat, false);
+      return seastar::make_ready_future<>();
+    }).handle_exception([this, soid](auto e) {
+      auto& recovery = recovering.at(soid);
+      if (recovery.obc)
+	recovery.obc->drop_recovery_read();
+      recovering.erase(soid);
+      return seastar::make_exception_future<>(
+	  std::runtime_error(fmt::format("Errors during pushing for {}", soid)));
     });
   });
 }
@@ -246,19 +245,17 @@ seastar::future<> ReplicatedRecoveryBackend::local_recover_delete(
     }
     return seastar::make_ready_future<>();
   }).safe_then([this, soid, epoch_to_freeze, need] {
-    auto& recovery_waiter = recovering[soid];
-    auto& pi = *recovery_waiter.pi;
-    pi.recovery_info.soid = soid;
-    pi.recovery_info.version = need;
-    return on_local_recover_persist(soid, pi.recovery_info,
+    ObjectRecoveryInfo recovery_info;
+    recovery_info.soid = soid;
+    recovery_info.version = need;
+    return on_local_recover_persist(soid, recovery_info,
 	                            true, epoch_to_freeze);
   }, PGBackend::load_metadata_ertr::all_same_way(
       [this, soid, epoch_to_freeze, need] (auto e) {
-      auto& recovery_waiter = recovering[soid];
-      auto& pi = *recovery_waiter.pi;
-      pi.recovery_info.soid = soid;
-      pi.recovery_info.version = need;
-      return on_local_recover_persist(soid, pi.recovery_info,
+      ObjectRecoveryInfo recovery_info;
+      recovery_info.soid = soid;
+      recovery_info.version = need;
+      return on_local_recover_persist(soid, recovery_info,
 				      true, epoch_to_freeze);
     })
   );
@@ -865,7 +862,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_push_reply(
       return seastar::make_ready_future<bool>(true);
     }().handle_exception([recovering_iter, &pi, peer] (auto e) {
       pi.recovery_progress.error = true;
-      recovering_iter->second.set_pushed(peer);
+      recovering_iter->second.set_push_failed(peer, e);
       return seastar::make_ready_future<bool>(true);
     });
   }
