@@ -62,8 +62,8 @@ seastar::future<> SocketMessenger::do_bind(const entity_addrvec_t& addrs)
       return seastar::now();
     }
   }).then([this] {
-    auto listen_addr = get_myaddr();
-    logger().debug("{} do_bind: try listen {}...", *this, listen_addr.in4_addr());
+    const entity_addr_t listen_addr = get_myaddr();
+    logger().debug("{} do_bind: try listen {}...", *this, listen_addr);
     if (!listener) {
       logger().warn("{} do_bind: listener doesn't exist", *this);
       return seastar::now();
