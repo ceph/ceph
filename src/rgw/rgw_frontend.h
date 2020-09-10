@@ -15,6 +15,7 @@
 #include "rgw_civetweb_log.h"
 #include "civetweb/civetweb.h"
 #include "rgw_auth_registry.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

@@ -4,6 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_bucket.h"
+#include "rgw_sal_rados.h"
 
 #include "include/str_list.h"
 
@@ -149,7 +150,7 @@ void RGWOp_Bucket_Link::execute()
   op_state.set_new_bucket_name(new_bucket_name);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -187,7 +188,7 @@ void RGWOp_Bucket_Unlink::execute()
   op_state.set_bucket_name(bucket);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user, nullptr, data, nullptr, s->info);
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

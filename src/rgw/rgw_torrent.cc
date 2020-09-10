@@ -8,6 +8,7 @@
 
 #include "rgw_torrent.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 

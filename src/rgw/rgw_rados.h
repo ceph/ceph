@@ -26,6 +26,7 @@
 #include "rgw_sync_module.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_service.h"
+#include "rgw_sal.h"
 
 #include "services/svc_rados.h"
 #include "services/svc_bi_rados.h"
@@ -135,13 +136,6 @@ struct RGWUsageBatch {
     *account = !exists;
     m[t].aggregate(entry);
   }
-};
-
-struct RGWUsageIter {
-  string read_iter;
-  uint32_t index;
-
-  RGWUsageIter() : index(0) {}
 };
 
 class RGWGetDataCB {

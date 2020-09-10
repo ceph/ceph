@@ -241,9 +241,9 @@ TEST(LibRGW, SETUP_HIER1)
 	  std::cout << "creating: " << bucket_name << ":" << obj_name
 		    << std::endl;
 	}
-	rgw::sal::RGWRadosUser ruser(rgwlib.get_store(), *fs_private->get_user());
-	RGWPutObjRequest req(cct, &ruser, bucket_name, obj_name,
-			    bl);
+	RGWPutObjRequest req(cct,
+			     rgwlib.get_store()->get_user(fs_private->get_user()->user_id),
+			     bucket_name, obj_name, bl);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	int rc2 = req.get_ret();
 	ASSERT_EQ(rc, 0);

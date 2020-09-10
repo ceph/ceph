@@ -26,6 +26,7 @@
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
+#include "rgw_sal_rados.h"
 
 #include <numeric>
 
