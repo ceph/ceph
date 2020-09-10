@@ -93,7 +93,6 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
                                                RGWSI_RADOS::Pool *index_pool,
                                                string *bucket_oid)
 {
-  const rgw_bucket& bucket = bucket_info.bucket;
   int r = open_bucket_index_pool(bucket_info, index_pool);
   if (r < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
@@ -101,6 +100,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
     return r;
   }
 
+  const rgw_bucket& bucket = bucket_info.bucket;
   if (bucket.bucket_id.empty()) {
     ldout(cct, 0) << "ERROR: empty bucket id for bucket operation" << dendl;
     return -EIO;
