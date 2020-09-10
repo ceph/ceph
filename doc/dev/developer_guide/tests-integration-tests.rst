@@ -328,19 +328,20 @@ teuthology to construct a test matrix from yaml facets found in
 subdirectories below the directory containing the operator.
 
 For example, the `ceph-deploy suite
-<https://github.com/ceph/ceph/tree/jewel/qa/suites/ceph-deploy/>`_ is
+<https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy/>`_ is
 defined by the ``suites/ceph-deploy/`` tree, which consists of the files and
 subdirectories in the following structure
 
 .. code-block:: none
 
-  directory: ceph-deploy/basic
-      file: %
-      directory: distros
-         file: centos_7.0.yaml
-         file: ubuntu_16.04.yaml
-      directory: tasks
-         file: ceph-deploy.yaml
+  qa/suites/ceph-deploy
+  ├── %
+  ├── distros
+  │   ├── centos_latest.yaml
+  │   └── ubuntu_latest.yaml
+  └── tasks
+      ├── ceph-admin-commands.yaml
+      └── rbd_import_export.yaml
 
 This is interpreted as a 2x1 matrix consisting of two tests:
 
@@ -401,15 +402,16 @@ tree
 
 .. code-block:: none
 
-  directory: rbd/thrash
-    file: %
-    directory: clusters
-      file: +
-      file: fixed-2.yaml
-      file: openstack.yaml
-    directory: workloads
-      file: rbd_api_tests_copy_on_read.yaml
-      file: rbd_api_tests.yaml
+  qa/suites/rbd/thrash
+  ├── %
+  ├── clusters
+  │   ├── +
+  │   ├── fixed-2.yaml
+  │   └── openstack.yaml
+  └── workloads
+      ├── rbd_api_tests_copy_on_read.yaml
+      ├── rbd_api_tests.yaml
+      └── rbd_fsx_rate_limit.yaml
 
 This creates two tests:
 
