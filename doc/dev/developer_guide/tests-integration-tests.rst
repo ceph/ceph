@@ -494,7 +494,6 @@ this is rarely useful, however, because there is no way to control which
 test will be first.
 
 .. _ceph/qa sub-directory: https://github.com/ceph/ceph/tree/master/qa
-.. _Integration testing: testing-integration-tests
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology
