@@ -2150,13 +2150,19 @@ buffer::list buffer::list::static_from_string(string& s) {
 bool buffer::ptr_node::dispose_if_hypercombined(
   buffer::ptr_node* const delete_this)
 {
-  const bool is_hypercombined = static_cast<void*>(delete_this) == \
-    static_cast<void*>(&delete_this->_raw->bptr_storage);
+  // in case _raw is nullptr
+  const std::uintptr_t bptr =
+    (reinterpret_cast<std::uintptr_t>(delete_this->_raw) +
+     offsetof(buffer::raw, bptr_storage));
+  const bool is_hypercombined =
+    reinterpret_cast<std::uintptr_t>(delete_this) == bptr;
   if (is_hypercombined) {
     ceph_assert_always("hypercombining is currently disabled" == nullptr);
     delete_this->~ptr_node();
+    return true;
+  } else {
+    return false;
   }
-  return is_hypercombined;
 }
 
 std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
