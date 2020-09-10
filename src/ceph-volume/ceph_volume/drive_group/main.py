@@ -29,7 +29,6 @@ class Deploy(object):
     '''
 
     def __init__(self, argv):
-        logger.error(f'argv: {argv}')
         self.argv = argv
 
     def main(self):
