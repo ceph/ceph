@@ -70,21 +70,17 @@ std::vector<OperationRef> handle_pg_create(
     auto q = m->pg_extra.find(pgid);
     ceph_assert(q != m->pg_extra.end());
     logger().debug(
-      "{}, {} {} e{} @{} history {} pi {}",
-      __func__,
-      pgid,
-      created,
-      created_stamp,
-      q->second.first,
-      q->second.second);
+      "{}: {} e{} @{} "
+      "history {} pi {}",
+      __func__, pgid, created, created_stamp,
+      q->second.first, q->second.second);
     if (!q->second.second.empty() &&
 	m->epoch < q->second.second.get_bounds().second) {
       logger().error(
-	"got pg_create on {} epoch {} unmatched past_intervals (history {})",
-	pgid,
-	m->epoch,
-	q->second.second,
-	q->second.first);
+        "got pg_create on {} epoch {}  "
+        "unmatched past_intervals {} (history {})",
+        pgid, m->epoch,
+        q->second.second, q->second.first);
     } else {
       auto op = osd.get_shard_services().start_operation<PeeringSubEvent>(
 	  state,
