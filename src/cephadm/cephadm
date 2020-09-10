@@ -44,6 +44,7 @@ import fcntl
 import ipaddress
 import json
 import logging
+from logging.config import dictConfig
 import os
 import platform
 import pwd
@@ -93,6 +94,36 @@ cached_stdin = None
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
+# Log and console output config
+logging_config = {
+    'version': 1,
+    'disable_existing_loggers': True,
+    'formatters': {
+        'cephadm': {
+            'format': '%(asctime)s %(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'console':{
+            'level':'INFO',
+            'class':'logging.StreamHandler',
+        },
+        'log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'formatter': 'cephadm',
+            'filename': '%s/cephadm.log' % LOG_DIR,
+            'maxBytes': 1024000,
+            'backupCount': 1,
+        }
+    },
+    'loggers': {
+        '': {
+            'level': 'DEBUG',
+            'handlers': ['console', 'log_file'],
+        }
+    }
+}
 
 class termcolor:
     yellow = '\033[93m'
@@ -840,7 +871,8 @@ def call(command,  # type: List[str]
                     assert False
             except (IOError, OSError):
                 pass
-        logger.debug(desc + ':profile rt=%s, stop=%s, exit=%s, reads=%s'
+        if verbose:
+            logger.debug(desc + ':profile rt=%s, stop=%s, exit=%s, reads=%s'
                 % (time.time()-start_time, stop, process.poll(), reads))
 
     returncode = process.wait()
@@ -2587,7 +2619,7 @@ def command_bootstrap():
         raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
     mon_id = args.mon_id or hostname
     mgr_id = args.mgr_id or generate_service_id()
-    logging.info('Cluster fsid: %s' % fsid)
+    logger.info('Cluster fsid: %s' % fsid)
     ipv6 = False
 
     l = FileLock(fsid)
@@ -3486,6 +3518,7 @@ def command_list_networks():
 
 def command_ls():
     # type: () -> None
+
     ls = list_daemons(detail=not args.no_detail,
                       legacy_dir=args.legacy_dir)
     print(json.dumps(ls, indent=4))
@@ -3612,7 +3645,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
                                 else:
-                                    logging.warning('version for unknown daemon type %s' % daemon_type)
+                                    logger.warning('version for unknown daemon type %s' % daemon_type)
                         else:
                             vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
                             try:
@@ -4311,7 +4344,7 @@ class Packager(object):
 
     def query_shaman(self, distro, distro_version, branch, commit):
         # query shaman
-        logging.info('Fetching repo metadata from shaman and chacra...')
+        logger.info('Fetching repo metadata from shaman and chacra...')
         shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{branch}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
             distro=distro,
             distro_version=distro_version,
@@ -4322,13 +4355,13 @@ class Packager(object):
         try:
             shaman_response = urlopen(shaman_url)
         except HTTPError as err:
-            logging.error('repository not found in shaman (might not be available yet)')
+            logger.error('repository not found in shaman (might not be available yet)')
             raise Error('%s, failed to fetch %s' % (err, shaman_url))
         try:
             chacra_url = shaman_response.geturl()
             chacra_response = urlopen(chacra_url)
         except HTTPError as err:
-            logging.error('repository not found in chacra (might not be available yet)')
+            logger.error('repository not found in chacra (might not be available yet)')
             raise Error('%s, failed to fetch %s' % (err, chacra_url))
         return chacra_response.read().decode('utf-8')
 
@@ -4365,11 +4398,11 @@ class Apt(Packager):
 
     def add_repo(self):
         url, name = self.repo_gpgkey()
-        logging.info('Installing repo GPG key from %s...' % url)
+        logger.info('Installing repo GPG key from %s...' % url)
         try:
             response = urlopen(url)
         except HTTPError as err:
-            logging.error('failed to fetch GPG repo key from %s: %s' % (
+            logger.error('failed to fetch GPG repo key from %s: %s' % (
                 url, err))
             raise Error('failed to fetch GPG key')
         key = response.read().decode('utf-8')
@@ -4386,7 +4419,7 @@ class Apt(Packager):
             content = self.query_shaman(self.distro, self.distro_codename, self.branch,
                                         self.commit)
 
-        logging.info('Installing repo file at %s...' % self.repo_path())
+        logger.info('Installing repo file at %s...' % self.repo_path())
         with open(self.repo_path(), 'w') as f:
             f.write(content)
 
@@ -4394,28 +4427,28 @@ class Apt(Packager):
         for name in ['autobuild', 'release']:
             p = '/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name
             if os.path.exists(p):
-                logging.info('Removing repo GPG key %s...' % p)
+                logger.info('Removing repo GPG key %s...' % p)
                 os.unlink(p)
         if os.path.exists(self.repo_path()):
-            logging.info('Removing repo at %s...' % self.repo_path())
+            logger.info('Removing repo at %s...' % self.repo_path())
             os.unlink(self.repo_path())
 
     def install(self, ls):
-        logging.info('Installing packages %s...' % ls)
+        logger.info('Installing packages %s...' % ls)
         call_throws(['apt', 'install', '-y'] + ls)
 
     def install_podman(self):
         if self.distro == 'ubuntu':
-            logging.info('Setting up repo for pdoman...')
+            logger.info('Setting up repo for pdoman...')
             self.install(['software-properties-common'])
             call_throws(['add-apt-repository', '-y', 'ppa:projectatomic/ppa'])
             call_throws(['apt', 'update'])
 
-        logging.info('Attempting podman install...')
+        logger.info('Attempting podman install...')
         try:
             self.install(['podman'])
         except Error as e:
-            logging.info('Podman did not work.  Falling back to docker...')
+            logger.info('Podman did not work.  Falling back to docker...')
             self.install(['docker.io'])
 
 
@@ -4529,7 +4562,7 @@ class YumDnf(Packager):
                                         self.branch,
                                         self.commit)
 
-        logging.info('Writing repo to %s...' % self.repo_path())
+        logger.info('Writing repo to %s...' % self.repo_path())
         with open(self.repo_path(), 'w') as f:
             f.write(content)
 
@@ -4626,7 +4659,7 @@ class Zypper(Packager):
                                         self.branch,
                                         self.commit)
 
-        logging.info('Writing repo to %s...' % self.repo_path())
+        logger.info('Writing repo to %s...' % self.repo_path())
         with open(self.repo_path(), 'w') as f:
             f.write(content)
 
@@ -4699,7 +4732,7 @@ def get_ipv4_address(ifname):
                     offset,
                     struct.pack('256s', bytes(ifname[:15], 'utf-8'))
                 )[20:24])
-        
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         addr = _extract(s, 35093)  # '0x8915' = SIOCGIFADDR
@@ -4707,7 +4740,7 @@ def get_ipv4_address(ifname):
     except OSError:
         # interface does not have an ipv4 address
         return ''
-    
+
     dec_mask = sum([bin(int(i)).count('1')
                     for i in dq_mask.split('.')])
     return '{}/{}'.format(addr, dec_mask)
@@ -4735,8 +4768,8 @@ def get_ipv6_address(ifname):
 
 def bytes_to_human(num, mode='decimal'):
     # type: (float, str) -> str
-    """Convert a bytes value into it's human-readable form. 
-    
+    """Convert a bytes value into it's human-readable form.
+
     :param num: number, in bytes, to convert
     :param mode: Either decimal (default) or binary to determine divisor
     :returns: string representing the bytes value in a more readable format
@@ -4760,7 +4793,7 @@ def bytes_to_human(num, mode='decimal'):
 def read_file(path_list, file_name=''):
     # type: (List[str], str) -> str
     """Returns the content of the first file found within the `path_list`
-    
+
     :param path_list: list of file paths to search
     :param file_name: optional file_name to be applied to a file path
     :returns: content of the file or 'Unknown'
@@ -5008,7 +5041,7 @@ class HostFacts():
             if not os.path.exists(nic_path):
                 continue
             for iface in os.listdir(nic_path):
-                
+
                 lower_devs_list = [os.path.basename(link.replace("lower_", "")) for link in glob(os.path.join(nic_path, iface, "lower_*"))]
                 upper_devs_list = [os.path.basename(link.replace("upper_", "")) for link in glob(os.path.join(nic_path, iface, "upper_*"))]
 
@@ -5085,7 +5118,7 @@ class HostFacts():
         # type: () -> int
         """Determine the memory installed (kb)"""
         return self._get_mem_data('MemTotal')
-    
+
     @property
     def memory_free_kb(self):
         # type: () -> int
@@ -5132,7 +5165,7 @@ class HostFacts():
         # type: () -> float
         """Return the current time as Epoch seconds"""
         return time.time()
-    
+
     @property
     def system_uptime(self):
         # type: () -> float
@@ -5151,7 +5184,7 @@ class HostFacts():
             for selinux_path in HostFacts._selinux_path_list:
                 if os.path.exists(selinux_path):
                     selinux_config = read_file([selinux_path]).splitlines()
-                    security['type'] = 'SELinux' 
+                    security['type'] = 'SELinux'
                     for line in selinux_config:
                         if line.strip().startswith('#'):
                             continue
@@ -5186,7 +5219,7 @@ class HostFacts():
                         summary_str = ",".join(["{} {}".format(v, k) for k, v in summary.items()])
                         security = {**security, **summary} # type: ignore
                         security['description'] += "({})".format(summary_str)
-                    
+
                     return security
 
         if os.path.exists('/sys/kernel/security/lsm'):
@@ -5211,7 +5244,7 @@ class HostFacts():
         """Return the attributes of this HostFacts object as json"""
         data = {k: getattr(self, k) for k in dir(self)
                 if not k.startswith('_') and
-                isinstance(getattr(self, k), 
+                isinstance(getattr(self, k),
                            (float, int, str, list, dict, tuple))
         }
         return json.dumps(data, indent=2, sort_keys=True)
@@ -5750,18 +5783,26 @@ def _parse_args(av):
 
 
 if __name__ == "__main__":
+
+    # Logger configuration
+    if not os.path.exists(LOG_DIR):
+        os.makedirs(LOG_DIR)
+    dictConfig(logging_config)
+    logger = logging.getLogger()
+
     # allow argv to be injected
     try:
         av = injected_argv  # type: ignore
     except NameError:
         av = sys.argv[1:]
+    logger.debug("%s\ncephadm %s" % ("-" * 80, av))
     args = _parse_args(av)
 
+    # More verbose console output
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger('cephadm')
+        for handler in logger.handlers:
+          if handler.name == "console":
+               handler.setLevel(logging.DEBUG)
 
     # root?
     if os.geteuid() != 0:
