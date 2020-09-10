@@ -185,6 +185,91 @@ namespace crimson {
     } // TEST
 
 
+    TEST(dmclock_server, add_req_pushprio_queue) {
+      struct MyReq {
+        int id;
+
+        MyReq(int _id) :
+          id(_id)
+        {
+          // empty
+        }
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PushPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
+      ClientId client1 = 17;
+      ClientId client2 = 34;
+
+      dmc::ClientInfo ci(0.0, 1.0, 0.0);
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+        return &ci;
+      };
+      auto server_ready_f = [] () -> bool { return true; };
+      auto submit_req_f = [] (const ClientId& c,
+                              std::unique_ptr<MyReq> req,
+                              dmc::PhaseType phase,
+                              uint64_t req_cost) {
+        // empty; do nothing
+      };
+
+      Queue pq(client_info_f,
+               server_ready_f,
+               submit_req_f,
+               std::chrono::seconds(3),
+               std::chrono::seconds(5),
+               std::chrono::seconds(2),
+               AtLimit::Wait);
+
+      auto lock_pq = [&](std::function<void()> code) {
+        test_locked(pq.data_mtx, code);
+      };
+
+      lock_pq([&] () {
+          EXPECT_EQ(0u, pq.client_map.size()) <<
+            "client map initially has size 0";
+        });
+
+      dmc::ReqParams req_params(1, 1);
+
+      // Create a reference to a request
+      MyReqRef rr1 = MyReqRef(new MyReq(11));
+
+      // Exercise different versions of add_request()
+      EXPECT_EQ(0, pq.add_request(std::move(rr1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(22), client2, req_params));
+
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+
+      lock_pq([&] () {
+          EXPECT_EQ(2u, pq.client_map.size()) <<
+            "client map has 2 after 2 clients";
+          EXPECT_FALSE(pq.client_map.at(client1)->idle) <<
+            "initially client1 map entry shows not idle.";
+          EXPECT_FALSE(pq.client_map.at(client2)->idle) <<
+            "initially client2 map entry shows not idle.";
+        });
+
+      // Check client idle state
+      std::this_thread::sleep_for(std::chrono::seconds(6));
+      lock_pq([&] () {
+          EXPECT_TRUE(pq.client_map.at(client1)->idle) <<
+            "after idle age client1 map entry shows idle.";
+          EXPECT_TRUE(pq.client_map.at(client2)->idle) <<
+            "after idle age client2 map entry shows idle.";
+        });
+
+      // Sleep until after erase age elapses
+      std::this_thread::sleep_for(std::chrono::seconds(2));
+
+      lock_pq([&] () {
+          EXPECT_EQ(0u, pq.client_map.size()) <<
+          "client map loses its entries after erase age";
+        });
+    } // TEST
+
+
     TEST(dmclock_server, delayed_tag_calc) {
       using ClientId = int;
       constexpr ClientId client1 = 17;
@@ -596,7 +681,145 @@ namespace crimson {
     } // TEST
 
 
-    TEST(dmclock_server_pull, pull_weight) {
+    TEST(dmclock_server, add_req_ref) {
+      struct MyReq {
+        int id;
+
+        MyReq(int _id) :
+          id(_id)
+        {
+          // empty
+        }
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
+      ClientId client1 = 22;
+      ClientId client2 = 44;
+
+      dmc::ClientInfo info(0.0, 1.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+        return &info;
+      };
+
+      Queue pq(client_info_f, AtLimit::Allow);
+
+      EXPECT_EQ(0u, pq.client_count());
+      EXPECT_EQ(0u, pq.request_count());
+
+      ReqParams req_params(1,1);
+
+      MyReqRef rr1 = MyReqRef(new MyReq(1));
+      MyReqRef rr2 = MyReqRef(new MyReq(2));
+      MyReqRef rr3 = MyReqRef(new MyReq(3));
+      MyReqRef rr4 = MyReqRef(new MyReq(4));
+      MyReqRef rr5 = MyReqRef(new MyReq(5));
+      EXPECT_EQ(0, pq.add_request(std::move(rr1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(std::move(rr2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(std::move(rr3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(std::move(rr4), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(std::move(rr5), client2, req_params));
+
+      EXPECT_EQ(2u, pq.client_count());
+      EXPECT_EQ(5u, pq.request_count());
+
+      pq.remove_by_req_filter([](MyReqRef&& r) -> bool {return 0 == r->id % 2;});
+
+      EXPECT_EQ(3u, pq.request_count());
+
+      std::list<MyReq> capture;
+      pq.remove_by_req_filter(
+        [&capture] (MyReqRef&& r) -> bool {
+          if (1 == r->id % 2) {
+            capture.push_front(*r);
+            return true;
+          } else {
+            return false;
+          }
+        },
+        true);
+
+      EXPECT_EQ(0u, pq.request_count());
+      EXPECT_EQ(3u, capture.size());
+      int total = 0;
+      for (auto i : capture) {
+        total += i.id;
+      }
+      EXPECT_EQ(9, total) << " sum of captured items should be 9";
+    } // TEST
+
+
+     TEST(dmclock_server, add_req_ref_null_req_params) {
+      struct MyReq {
+        int id;
+
+        MyReq(int _id) :
+          id(_id)
+        {
+          // empty
+        }
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
+      ClientId client1 = 22;
+      ClientId client2 = 44;
+
+      dmc::ClientInfo info(0.0, 1.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+        return &info;
+      };
+
+      Queue pq(client_info_f, AtLimit::Allow);
+
+      EXPECT_EQ(0u, pq.client_count());
+      EXPECT_EQ(0u, pq.request_count());
+
+      MyReqRef&& rr1 = MyReqRef(new MyReq(1));
+      MyReqRef&& rr2 = MyReqRef(new MyReq(2));
+      MyReqRef&& rr3 = MyReqRef(new MyReq(3));
+      MyReqRef&& rr4 = MyReqRef(new MyReq(4));
+      MyReqRef&& rr5 = MyReqRef(new MyReq(5));
+      EXPECT_EQ(0, pq.add_request(std::move(rr1), client1));
+      EXPECT_EQ(0, pq.add_request(std::move(rr2), client2));
+      EXPECT_EQ(0, pq.add_request(std::move(rr3), client1));
+      EXPECT_EQ(0, pq.add_request(std::move(rr4), client2));
+      EXPECT_EQ(0, pq.add_request(std::move(rr5), client2));
+
+      EXPECT_EQ(2u, pq.client_count());
+      EXPECT_EQ(5u, pq.request_count());
+
+      pq.remove_by_req_filter([](MyReqRef&& r) -> bool {return 1 == r->id % 2;});
+
+      EXPECT_EQ(2u, pq.request_count());
+
+      std::list<MyReq> capture;
+      pq.remove_by_req_filter(
+        [&capture] (MyReqRef&& r) -> bool {
+          if (0 == r->id % 2) {
+            capture.push_front(*r);
+            return true;
+          } else {
+            return false;
+          }
+        },
+        true);
+
+      EXPECT_EQ(0u, pq.request_count());
+      EXPECT_EQ(2u, capture.size());
+      int total = 0;
+      for (auto i : capture) {
+        total += i.id;
+      }
+      EXPECT_EQ(6, total) << " sum of captured items should be 6";
+    } // TEST
+
+
+  TEST(dmclock_server_pull, pull_weight) {
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
