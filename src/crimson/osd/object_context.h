@@ -204,8 +204,9 @@ public:
     return put_lock_type(RWState::RWREAD);
   }
   seastar::future<bool> get_recovery_read(bool can_wait = false) {
-    if (!can_wait) {
-      return seastar::make_ready_future<bool>(rwstate.get_recovery_read());
+    if (bool acquired = rwstate.get_recovery_read();
+        acquired || !can_wait) {
+      return seastar::make_ready_future<bool>(acquired);
     }
     return with_queue([this] {
       return rwstate.get_recovery_read();
