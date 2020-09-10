@@ -95,18 +95,20 @@ function get_pid()
     PID=$(rbd-nbd --format xml list-mapped | $XMLSTARLET sel -t -v \
       "//devices/device[pool='${POOL}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
     test -n "${PID}"
-    ps -p ${PID} -o cmd | grep rbd-nbd
+    ps -p ${PID} -C rbd-nbd
 }
 
 unmap_device()
 {
-    local unmap_dev=$1
-    local list_dev=${2:-$1}
-    _sudo rbd-nbd unmap ${unmap_dev}
+    local dev=$1
+    local pid=$2
+    _sudo rbd-nbd unmap ${dev}
 
     for s in 0.5 1 2 4 8 16 32; do
 	sleep ${s}
-        rbd-nbd list-mapped | expect_false grep "${list_dev} *$" && return 0
+        rbd-nbd list-mapped | expect_false grep "^${pid}\\b" &&
+            ! ps -p ${pid} -C rbd-nbd &&
+            return 0
     done
     return 1
 }
@@ -138,7 +140,7 @@ get_pid
 # map test specifying the device
 expect_false _sudo rbd-nbd --device ${DEV} map ${POOL}/${IMAGE}
 dev1=${DEV}
-unmap_device ${DEV}
+unmap_device ${DEV} ${PID}
 DEV=
 # XXX: race possible when the device is reused by other process
 DEV=`_sudo rbd-nbd --device ${dev1} map ${POOL}/${IMAGE}`
@@ -183,16 +185,16 @@ test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
 
 # read-only option test
-unmap_device ${DEV}
+unmap_device ${DEV} ${PID}
 DEV=`_sudo rbd-nbd map --read-only ${POOL}/${IMAGE}`
 PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
     '$2 == pool && $3 == img && $5 == dev {print $1}')
 test -n "${PID}"
-ps -p ${PID} -o cmd | grep rbd-nbd
+ps -p ${PID} -C rbd-nbd
 
 _sudo dd if=${DEV} of=/dev/null bs=1M
 expect_false _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
-unmap_device ${DEV}
+unmap_device ${DEV} ${PID}
 
 # exclusive option test
 DEV=`_sudo rbd-nbd map --exclusive ${POOL}/${IMAGE}`
@@ -201,32 +203,29 @@ get_pid
 _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 expect_false timeout 10 \
 	rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
-unmap_device ${DEV}
+unmap_device ${DEV} ${PID}
 DEV=
 rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 # unmap by image name test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
 get_pid
-unmap_device ${IMAGE} ${DEV}
+unmap_device ${IMAGE} ${PID}
 DEV=
-ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 
 # map/unmap snap test
 rbd snap create ${POOL}/${IMAGE}@snap
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}@snap`
 get_pid
-unmap_device "${IMAGE}@snap" ${DEV}
+unmap_device "${IMAGE}@snap" ${PID}
 DEV=
-ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 
 # map/unmap namespace test
 rbd snap create ${POOL}/${NS}/${IMAGE}@snap
 DEV=`_sudo rbd-nbd map ${POOL}/${NS}/${IMAGE}@snap`
 get_pid ${NS}
-unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${DEV}
+unmap_device "${POOL}/${NS}/${IMAGE}@snap" ${PID}
 DEV=
-ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 
 # auto unmap test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
