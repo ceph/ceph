@@ -1,6 +1,7 @@
 import os
 import pytest
 from mock.mock import patch, PropertyMock, create_autospec
+from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util import device
 from ceph_volume.util.constants import ceph_disk_guids
@@ -39,6 +40,21 @@ def factory():
 @pytest.fixture
 def capture():
     return Capture()
+
+@pytest.fixture
+def mock_lv_device_generator():
+    def mock_lv():
+        size = 21474836480
+        dev = create_autospec(device.Device)
+        dev.lv_name = 'lv'
+        dev.vg_name = 'vg'
+        dev.path = '{}/{}'.format(dev.vg_name, dev.lv_name)
+        dev.used_by_ceph = False
+        dev.vg_size = [size]
+        dev.vg_free = dev.vg_size
+        dev.lvs = [lvm.Volume(vg_name=dev.vg_name, lv_name=dev.lv_name, lv_size=size, lv_tags='')]
+        return dev
+    return mock_lv
 
 
 @pytest.fixture
