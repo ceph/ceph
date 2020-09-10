@@ -53,7 +53,10 @@ set(unittest_librbd_srcs
   test_mock_Watcher.cc
   cache/test_mock_WriteAroundObjectDispatch.cc
   cache/test_mock_ParentCacheObjectDispatch.cc
+  crypto/test_mock_BlockCrypto.cc
+  crypto/test_mock_CryptoContextPool.cc
   crypto/test_mock_CryptoObjectDispatch.cc
+  crypto/openssl/test_DataCryptor.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
   deep_copy/test_mock_ObjectCopyRequest.cc

@@ -13,10 +13,8 @@ namespace crypto {
 class CryptoInterface : public RefCountedObject {
 
 public:
-  virtual void encrypt(ceph::bufferlist&& data,
-                       uint64_t image_offset) const = 0;
-  virtual void decrypt(ceph::bufferlist&& data,
-                       uint64_t image_offset) const = 0;
+  virtual int encrypt(ceph::bufferlist* data, uint64_t image_offset) = 0;
+  virtual int decrypt(ceph::bufferlist* data, uint64_t image_offset) = 0;
 
 };
 
