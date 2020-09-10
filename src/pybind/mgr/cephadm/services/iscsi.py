@@ -6,13 +6,13 @@ from mgr_module import MonCommandFailed
 from ceph.deployment.service_spec import IscsiServiceSpec
 
 from orchestrator import DaemonDescription, OrchestratorError
-from .cephadmservice import CephadmService, CephadmDaemonSpec
+from .cephadmservice import CephadmDaemonSpec, CephService
 from .. import utils
 
 logger = logging.getLogger(__name__)
 
 
-class IscsiService(CephadmService):
+class IscsiService(CephService):
     TYPE = 'iscsi'
 
     def config(self, spec: IscsiServiceSpec) -> None:
@@ -32,7 +32,7 @@ class IscsiService(CephadmService):
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': utils.name_to_auth_entity('iscsi', igw_id),
+            'entity': self.get_auth_entity(igw_id),
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blocklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
