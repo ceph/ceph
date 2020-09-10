@@ -90,7 +90,7 @@ def get_lvm_osds(lvs, args):
             osd_id = args.osd_ids.pop()
         osd = Batch.OSD("{}/{}".format(lv.vg_name, lv.lv_name),
                         100.0,
-                        disk.Size(b=int(lv.lv_size)),
+                        disk.Size(b=int(lv.lvs[0].lv_size)),
                         1,
                         osd_id,
                         'dmcrypt' if args.dmcrypt else None)
@@ -142,7 +142,7 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
 
 def get_lvm_fast_allocs(lvs):
     return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
-             disk.Size(b=int(d.lv_size)), 1) for d in lvs if not
+             disk.Size(b=int(d.lvs[0].lv_size)), 1) for d in lvs if not
             d.used_by_ceph]
 
 
