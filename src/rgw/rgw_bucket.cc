@@ -50,6 +50,7 @@
 #include "cls/user/cls_user_types.h"
 
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

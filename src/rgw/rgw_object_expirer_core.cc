@@ -30,6 +30,7 @@
 #include "rgw_usage.h"
 #include "rgw_object_expirer_core.h"
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"

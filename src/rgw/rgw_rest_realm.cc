@@ -6,6 +6,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"

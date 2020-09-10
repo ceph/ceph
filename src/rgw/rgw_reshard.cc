@@ -8,6 +8,7 @@
 #include "rgw_bucket.h"
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/errno.h"

@@ -4,6 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
+#include "rgw_sal_rados.h"
 
 #include "include/str_list.h"
 

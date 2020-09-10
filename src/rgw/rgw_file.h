@@ -1317,10 +1317,10 @@ public:
   uint32_t d_count;
   bool rcb_eof; // caller forced early stop in readdir cycle
 
-  RGWListBucketsRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWListBucketsRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
+    : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
       rcb_eof(false) {
 
@@ -1365,10 +1365,6 @@ public:
     s->info.effective_uri = "/";
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     return 0;
   }
@@ -1451,10 +1447,10 @@ public:
   uint32_t d_count;
   bool rcb_eof; // caller forced early stop in readdir cycle
 
-  RGWReaddirRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWReaddirRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 		    void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
+    : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
       rcb_eof(false) {
 
@@ -1506,10 +1502,6 @@ public:
     s->info.effective_uri = uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -1682,9 +1674,9 @@ public:
   bool valid;
   bool has_children;
 
-  RGWRMdirCheck (CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWRMdirCheck (CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		 const RGWFileHandle* _rgw_fh)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), valid(false),
+    : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), valid(false),
       has_children(false) {
     default_max = 2;
     op = this;
@@ -1714,9 +1706,6 @@ public:
     s->info.effective_uri = uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -1764,9 +1753,9 @@ class RGWCreateBucketRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
 
-  RGWCreateBucketRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWCreateBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 			std::string& _bname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname) {
     op = this;
   }
 
@@ -1802,10 +1791,6 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
-
     return 0;
   }
 
@@ -1833,9 +1818,9 @@ class RGWDeleteBucketRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
 
-  RGWDeleteBucketRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWDeleteBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 			std::string& _bname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname) {
     op = this;
   }
 
@@ -1866,10 +1851,6 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
-
     return 0;
   }
 
@@ -1889,10 +1870,10 @@ public:
   buffer::list& bl; /* XXX */
   size_t bytes_written;
 
-  RGWPutObjRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWPutObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		  const std::string& _bname, const std::string& _oname,
 		  buffer::list& _bl)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname),
       bl(_bl), bytes_written(0) {
     op = this;
   }
@@ -1931,10 +1912,6 @@ public:
 
     /* XXX required in RGWOp::execute() */
     s->content_length = bl.length();
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     return 0;
   }
@@ -1985,10 +1962,10 @@ public:
   size_t read_resid; /* initialize to len, <= sizeof(ulp_buffer) */
   bool do_hexdump = false;
 
-  RGWReadRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWReadRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		 RGWFileHandle* _rgw_fh, uint64_t off, uint64_t len,
 		 void *_ulp_buffer)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), ulp_buffer(_ulp_buffer),
+    : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), ulp_buffer(_ulp_buffer),
       nread(0), read_resid(len) {
     op = this;
 
@@ -2026,10 +2003,6 @@ public:
     s->info.effective_uri = s->relative_uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     return 0;
   }
@@ -2080,9 +2053,9 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
 
-  RGWDeleteObjRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWDeleteObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		      const std::string& _bname, const std::string& _oname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname) {
     op = this;
   }
 
@@ -2113,10 +2086,6 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
-
     return 0;
   }
 
@@ -2135,10 +2104,10 @@ public:
 
   static constexpr uint32_t FLAG_NONE = 0x000;
 
-  RGWStatObjRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWStatObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		    const std::string& _bname, const std::string& _oname,
 		    uint32_t _flags)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname),
       _size(0), flags(_flags) {
     op = this;
 
@@ -2161,7 +2130,7 @@ public:
   uint64_t get_size() { return _size; }
   real_time ctime() { return mod_time; } // XXX
   real_time mtime() { return mod_time; }
-  std::map<string, bufferlist>& get_attrs() { return attrs.attrs; }
+  std::map<string, bufferlist>& get_attrs() { return attrs; }
 
   buffer::list* get_attr(const std::string& k) {
     auto iter = attrs.find(k);
@@ -2193,10 +2162,6 @@ public:
     s->info.effective_uri = s->relative_uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     return 0;
   }
@@ -2232,10 +2197,10 @@ public:
   std::map<std::string, buffer::list> attrs;
   RGWLibFS::BucketStats& bs;
 
-  RGWStatBucketRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWStatBucketRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		       const std::string& _path,
 		       RGWLibFS::BucketStats& _stats)
-    : RGWLibRequest(_cct, _user), bs(_stats) {
+    : RGWLibRequest(_cct, std::move(_user)), bs(_stats) {
     uri = "/" + _path;
     op = this;
   }
@@ -2275,10 +2240,6 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
-
     return 0;
   }
 
@@ -2311,9 +2272,9 @@ public:
   bool is_dir;
   bool exact_matched;
 
-  RGWStatLeafRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWStatLeafRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		     RGWFileHandle* _rgw_fh, const std::string& _path)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), path(_path),
+    : RGWLibRequest(_cct, std::move(_user)), rgw_fh(_rgw_fh), path(_path),
       matched(false), is_dir(false), exact_matched(false) {
     default_max = 1000; // logical max {"foo", "foo/"}
     op = this;
@@ -2345,10 +2306,6 @@ public:
     s->info.effective_uri = uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -2429,9 +2386,9 @@ public:
   size_t bytes_written;
   bool eio;
 
-  RGWWriteRequest(rgw::sal::RGWRadosStore* store, rgw::sal::RGWUser* _user, RGWFileHandle* _fh,
-		  const std::string& _bname, const std::string& _oname)
-    : RGWLibContinuedReq(store->ctx(), _user),
+  RGWWriteRequest(rgw::sal::RGWRadosStore* store, std::unique_ptr<rgw::sal::RGWUser> _user,
+		  RGWFileHandle* _fh, const std::string& _bname, const std::string& _oname)
+    : RGWLibContinuedReq(store->ctx(), std::move(_user)),
       bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), filter(nullptr), real_ofs(0),
       bytes_written(0), eio(false) {
@@ -2469,10 +2426,6 @@ public:
     s->info.effective_uri = uri;
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
-
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
 
     return 0;
   }
@@ -2526,16 +2479,16 @@ public:
   const std::string& src_name;
   const std::string& dst_name;
 
-  RGWCopyObjRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWCopyObjRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		    RGWFileHandle* _src_parent, RGWFileHandle* _dst_parent,
 		    const std::string& _src_name, const std::string& _dst_name)
-    : RGWLibRequest(_cct, _user), src_parent(_src_parent),
+    : RGWLibRequest(_cct, std::move(_user)), src_parent(_src_parent),
       dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name) {
     /* all requests have this */
     op = this;
 
     /* allow this request to replace selected attrs */
-    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+    attrs_mod = rgw::sal::ATTRSMOD_MERGE;
   }
 
   bool only_bucket() override { return true; }
@@ -2587,10 +2540,6 @@ public:
     s->info.domain = ""; /* XXX ? */
 #endif
 
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
-
     return 0;
   }
 
@@ -2615,9 +2564,9 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
 
-  RGWSetAttrsRequest(CephContext* _cct, rgw::sal::RGWUser* _user,
+  RGWSetAttrsRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
 		     const std::string& _bname, const std::string& _oname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname), obj_name(_oname) {
     op = this;
   }
 
@@ -2648,10 +2597,6 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    // woo
-    s->user = user;
-    s->bucket_tenant = user->get_tenant();
-
     return 0;
   }
 
@@ -2670,9 +2615,9 @@ class RGWGetClusterStatReq : public RGWLibRequest,
         public RGWGetClusterStat {
 public:
   struct rados_cluster_stat_t& stats_req;
-  RGWGetClusterStatReq(CephContext* _cct,rgw::sal::RGWUser* _user,
+  RGWGetClusterStatReq(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user,
                        rados_cluster_stat_t& _stats):
-  RGWLibRequest(_cct, _user), stats_req(_stats){
+  RGWLibRequest(_cct, std::move(_user)), stats_req(_stats){
     op = this;
   }
 
@@ -2691,7 +2636,6 @@ public:
     struct req_state* s = get_state();
     s->info.method = "GET";
     s->op = OP_GET;
-    s->user = user;
     return 0;
   }
 

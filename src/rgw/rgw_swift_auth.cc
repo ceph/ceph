@@ -19,6 +19,7 @@
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
+#include "rgw_sal_rados.h"
 #include "include/str_list.h"
 
 #define dout_context g_ceph_context
