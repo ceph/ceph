@@ -443,7 +443,8 @@ int main(int argc, char* argv[])
     }
     if (op & LIST) {
       for (const auto& entry : entries) {
-	fmt::print(std::cout, "{}\t{}\n", entry.marker, entry.mtime);
+	fmt::print(std::cout, "{}\t{}\n", entry.marker, 
+		   ceph::real_clock::to_time_t(entry.mtime));
       }
       if (more) {
 	fmt::print(std::cout, "...");
