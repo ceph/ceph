@@ -21,3 +21,4 @@ Contributing to Ceph: A Guide for Developers
    Running Tests Locally <running-tests-locally>
    Running Integration Tests using Teuthology <running-tests-using-teuth>
    Running Tests in the Cloud <running-tests-in-cloud>
+   Ceph Dashboard Developer Documentation (formerly HACKING.rst) <dash-devel>
