@@ -38,7 +38,7 @@ public:
   uint64_t get_num_changes() const { return num_changes; }
   seastar::future<> stop() {
     crimson::common::local_conf().remove_observer(this);
-    return seastar::now();
+    return seastar::make_ready_future<>();
   }
 };
 
