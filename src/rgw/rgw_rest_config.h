@@ -27,11 +27,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission(const jaeger_tracing::Span& parent_span = nullptr) override {
+  int verify_permission(const jaeger_tracing::jspan* const parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
-  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override;
+  void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override;
+  void send_response(const jaeger_tracing::jspan* const parent_span = nullptr) override;
   const char* name() const override {
     if (old_format) {
       return "get_region_map";
@@ -49,11 +49,11 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission(const jaeger_tracing::Span& parent_span = nullptr) override {
+  int verify_permission(const jaeger_tracing::jspan* const parent_span = nullptr) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(const jaeger_tracing::Span& parent_span = nullptr) override {} /* store already has the info we need, just need to send response */
-  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override ;
+  void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override {} /* store already has the info we need, just need to send response */
+  void send_response(const jaeger_tracing::jspan* const parent_span = nullptr) override ;
   const char* name() const override {
     return "get_zone_config";
   }
@@ -63,7 +63,7 @@ class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get() override;
 
-  int read_permissions(RGWOp*, const jaeger_tracing::Span& parent_span = nullptr) override {
+  int read_permissions(RGWOp*, const jaeger_tracing::jspan* const parent_span = nullptr) override {
     return 0;
   }
 public:

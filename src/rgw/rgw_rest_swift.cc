@@ -39,10 +39,10 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-int RGWListBuckets_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWListBuckets_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
@@ -164,10 +164,10 @@ static void dump_account_metadata(struct req_state * const s,
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets, const jaeger_tracing::Span& parent_span)
+void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -198,9 +198,9 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets, const 
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList&& buckets, const jaeger_tracing::Span& parent_span)
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList&& buckets, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
   if (wants_reversed) {
     /* Just store in the reversal buffer. Its content will be handled later,
      * in send_response_end(). */
@@ -210,10 +210,10 @@ void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& buckets, const jaeger_tracing::Span& parent_span)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& buckets, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   if (! sent_data) {
     return;
@@ -248,10 +248,10 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWBucket&
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBucketList& buckets, const jaeger_tracing::Span& parent_span)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBucketList& buckets, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   if (! sent_data) {
     return;
@@ -277,14 +277,14 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBuc
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_end(const jaeger_tracing::Span& parent_span)
+void RGWListBuckets_ObjStore_SWIFT::send_response_end(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   if (wants_reversed) {
     for (auto& buckets : reverse_buffer) {
-      send_response_data_reversed(buckets, span);
+      send_response_data_reversed(buckets, span.get());
     }
   }
 
@@ -309,10 +309,10 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end(const jaeger_tracing::Span
   }
 }
 
-int RGWListBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWListBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
@@ -324,7 +324,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_
 
   delimiter = s->info.args.get("delimiter");
 
-  op_ret = parse_max_keys(span);
+  op_ret = parse_max_keys(span.get());
   if (op_ret < 0) {
     return op_ret;
   }
@@ -363,10 +363,10 @@ static void dump_container_metadata(struct req_state *,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
 
-void RGWListBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWListBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   vector<rgw_bucket_dir_entry>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
@@ -564,13 +564,13 @@ static void dump_container_metadata(struct req_state *s,
   dump_last_modified(s, s->bucket_mtime);
 }
 
-void RGWStatAccount_ObjStore_SWIFT::execute(const jaeger_tracing::Span& parent_span)
+void RGWStatAccount_ObjStore_SWIFT::execute(const jaeger_tracing::jspan* const parent_span)
 {
   RGWStatAccount_ObjStore::execute();
   op_ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &attrs, s->yield);
 }
 
-void RGWStatAccount_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWStatAccount_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
@@ -590,11 +590,11 @@ void RGWStatAccount_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& pa
   dump_start(s);
 }
 
-void RGWStatBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWStatBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
     dump_container_metadata(s, bucket.get(), bucket_quota,
@@ -721,10 +721,10 @@ static int get_swift_versioning_settings(
   return 0;
 }
 
-int RGWCreateBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWCreateBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   bool has_policy;
   uint32_t policy_rw_mask = 0;
@@ -768,10 +768,10 @@ static inline int handle_metadata_errors(req_state* const s, const int op_ret)
   return op_ret;
 }
 
-void RGWCreateBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWCreateBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret != op_ret) {
@@ -791,11 +791,11 @@ void RGWCreateBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& p
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void RGWDeleteBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWDeleteBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   int r = op_ret;
   if (!r)
@@ -845,12 +845,12 @@ static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_
   return 0;
 }
 
-int RGWPutObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWPutObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
-  op_ret = RGWPutObj_ObjStore::verify_permission(span);
+  op_ret = RGWPutObj_ObjStore::verify_permission(span.get());
 
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
@@ -862,9 +862,9 @@ int RGWPutObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::Span& pare
   }
 }
 
-int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry, const jaeger_tracing::Span& parent_span) {
+int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry, const jaeger_tracing::jspan* const parent_span) {
 
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   int r = 0;
   const string& path = entry.path;
@@ -891,7 +891,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry, cons
     map<string, bufferlist> bucket_attrs;
     r = store->getRados()->get_bucket_info(store->svc(), s->user->get_id().tenant,
 			       bucket_name, bucket_info, nullptr,
-			       s->yield, &bucket_attrs, span);
+			       s->yield, &bucket_attrs, span.get());
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			 << bucket_name << dendl;
@@ -950,10 +950,10 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry, cons
   return 0;
 } /* RGWPutObj_ObjStore_SWIFT::update_slo_segment_sizes */
 
-int RGWPutObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutObj_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1039,7 +1039,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span
        * the size_bytes element to be omitted from the SLO manifest, see
        * https://docs.openstack.org/swift/latest/api/large_objects.html
        */
-      r = update_slo_segment_size(entry, span);
+      r = update_slo_segment_size(entry, span.get());
       if (r < 0) {
 	return r;
       }
@@ -1060,10 +1060,10 @@ int RGWPutObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span
   return RGWPutObj_ObjStore::get_params();
 }
 
-void RGWPutObj_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWPutObj_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret) {
@@ -1121,7 +1121,7 @@ static int get_swift_account_settings(req_state * const s,
   return 0;
 }
 
-int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1142,7 +1142,7 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(const jaeger_tracing::Span&
   return 0;
 }
 
-void RGWPutMetadataAccount_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWPutMetadataAccount_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret != op_ret) {
@@ -1159,7 +1159,7 @@ void RGWPutMetadataAccount_ObjStore_SWIFT::send_response(const jaeger_tracing::S
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1178,7 +1178,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& 
   return get_swift_versioning_settings(s, swift_ver_location);
 }
 
-void RGWPutMetadataBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWPutMetadataBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret != op_ret) {
@@ -1195,7 +1195,7 @@ void RGWPutMetadataBucket_ObjStore_SWIFT::send_response(const jaeger_tracing::Sp
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWPutMetadataObject_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutMetadataObject_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1213,7 +1213,7 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& 
   return 0;
 }
 
-void RGWPutMetadataObject_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWPutMetadataObject_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   const auto meta_ret = handle_metadata_errors(s, op_ret);
   if (meta_ret != op_ret) {
@@ -1289,12 +1289,12 @@ static void bulkdelete_respond(const unsigned num_deleted,
   formatter.close_section();
 }
 
-int RGWDeleteObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWDeleteObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
-  op_ret = RGWDeleteObj_ObjStore::verify_permission(span);
+  op_ret = RGWDeleteObj_ObjStore::verify_permission(span.get());
 
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
@@ -1306,10 +1306,10 @@ int RGWDeleteObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::Span& p
   }
 }
 
-int RGWDeleteObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWDeleteObj_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   const string& mm = s->info.args.get("multipart-manifest");
   multipart_delete = (mm.compare("delete") == 0);
@@ -1317,10 +1317,10 @@ int RGWDeleteObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_s
   return RGWDeleteObj_ObjStore::get_params();
 }
 
-void RGWDeleteObj_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWDeleteObj_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   int r = op_ret;
 
@@ -1429,20 +1429,20 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state
   }
 }
 
-int RGWCopyObj_ObjStore_SWIFT::init_dest_policy(const jaeger_tracing::Span& parent_span)
+int RGWCopyObj_ObjStore_SWIFT::init_dest_policy(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   dest_policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   return 0;
 }
 
-int RGWCopyObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWCopyObj_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
@@ -1472,10 +1472,10 @@ int RGWCopyObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_spa
   return 0;
 }
 
-void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs, const jaeger_tracing::Span& parent_span)
+void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   if (! sent_header) {
     if (! op_ret)
@@ -1511,10 +1511,10 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
   dump_time_header(s, "X-Copied-From-Last-Modified", src_mtime);
 }
 
-void RGWCopyObj_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWCopyObj_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   if (! sent_header) {
     string content_type;
@@ -1535,12 +1535,12 @@ void RGWCopyObj_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent
   }
 }
 
-int RGWGetObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWGetObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
-  op_ret = RGWGetObj_ObjStore::verify_permission(span);
+  op_ret = RGWGetObj_ObjStore::verify_permission(span.get());
 
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
@@ -1552,10 +1552,10 @@ int RGWGetObj_ObjStore_SWIFT::verify_permission(const jaeger_tracing::Span& pare
   }
 }
 
-int RGWGetObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span)
+int RGWGetObj_ObjStore_SWIFT::get_params(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "gateway", "swift");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "gateway", "swift");
 
   const string& mm = s->info.args.get("multipart-manifest");
   skip_manifest = (mm.compare("get") == 0);
@@ -1563,10 +1563,10 @@ int RGWGetObj_ObjStore_SWIFT::get_params(const jaeger_tracing::Span& parent_span
   return RGWGetObj_ObjStore::get_params();
 }
 
-int RGWGetObj_ObjStore_SWIFT::send_response_data_error(const jaeger_tracing::Span& parent_span)
+int RGWGetObj_ObjStore_SWIFT::send_response_data_error(const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   std::string error_content;
   op_ret = error_handler(op_ret, &error_content);
@@ -1577,15 +1577,15 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data_error(const jaeger_tracing::Spa
 
   bufferlist error_bl;
   error_bl.append(error_content);
-  return send_response_data(error_bl, 0, error_bl.length(), span);
+  return send_response_data(error_bl, 0, error_bl.length(), span.get());
 }
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
                                                  const off_t bl_ofs,
-                                                 const off_t bl_len, const jaeger_tracing::Span& parent_span)
+                                                 const off_t bl_len, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  jaeger_tracing::set_span_tag(s->root_span, "success", "true");
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  jaeger_tracing::set_span_tag(s->root_span.get(), "success", "true");
 
   string content_type;
 
@@ -1654,7 +1654,7 @@ send_data:
   return 0;
 }
 
-void RGWOptionsCORS_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWOptionsCORS_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   string hdrs, exp_hdrs;
   uint32_t max_age = CORS_MAX_AGE_INVALID;
@@ -1724,7 +1724,7 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
   return 0;
 }
 
-void RGWBulkDelete_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWBulkDelete_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1810,7 +1810,7 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
   }
 }
 
-void RGWBulkUploadOp_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWBulkUploadOp_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1871,7 +1871,7 @@ void RGWBulkUploadOp_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& p
 }
 
 
-void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1889,7 +1889,7 @@ void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response(const jaeger_tracing:
   dump_body(s, ss.str());
 }
 
-void RGWGetHealthCheck_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWGetHealthCheck_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   set_req_state_err(s, op_ret);
   dump_errno(s);
@@ -1913,7 +1913,7 @@ const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT:
     {"tempauth", {false, RGWInfo_ObjStore_SWIFT::list_tempauth_data}},
 };
 
-void RGWInfo_ObjStore_SWIFT::execute(const jaeger_tracing::Span& parent_span)
+void RGWInfo_ObjStore_SWIFT::execute(const jaeger_tracing::jspan* const parent_span)
 {
   bool is_admin_info_enabled = false;
 
@@ -1944,7 +1944,7 @@ void RGWInfo_ObjStore_SWIFT::execute(const jaeger_tracing::Span& parent_span)
   s->formatter->close_section();
 }
 
-void RGWInfo_ObjStore_SWIFT::send_response(const jaeger_tracing::Span& parent_span)
+void RGWInfo_ObjStore_SWIFT::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret <  0) {
     op_ret = STATUS_NO_CONTENT;
@@ -2203,7 +2203,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
   }
 }
 
-int RGWFormPost::get_params(const jaeger_tracing::Span& parent_span)
+int RGWFormPost::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   /* The parentt class extracts boundary info from the Content-Type. */
   int ret = RGWPostObj_ObjStore::get_params();
@@ -2354,13 +2354,13 @@ int RGWFormPost::get_data(ceph::bufferlist& bl, bool& again)
     return r;
   }
 
-  /* Tell RGWPostObj::execute(const jaeger_tracing::Span& parent_span) that it has some data to put. */
+  /* Tell RGWPostObj::execute(const jaeger_tracing::jspan* const parent_span) that it has some data to put. */
   again = !boundary;
 
   return bl.length();
 }
 
-void RGWFormPost::send_response(const jaeger_tracing::Span& parent_span)
+void RGWFormPost::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   std::string redirect = get_part_str(ctrl_parts, "redirect");
   if (! redirect.empty()) {
@@ -2520,16 +2520,16 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
       : location(location) {
     }
 
-   int verify_permission(const jaeger_tracing::Span& parent_span = nullptr) override {
+   int verify_permission(const jaeger_tracing::jspan* const parent_span = nullptr) override {
       return 0;
     }
 
-    void execute(const jaeger_tracing::Span& parent_span = nullptr) override {
+    void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override {
       op_ret = -ERR_PERMANENT_REDIRECT;
       return;
     }
 
-    void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
+    void send_response(const jaeger_tracing::jspan* const parent_span = nullptr) override {
       set_req_state_err(s, op_ret);
       dump_errno(s);
       dump_content_length(s, 0);
@@ -2566,14 +2566,14 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
   class RGWWebsiteListing : public RGWListBucket_ObjStore_SWIFT {
     const std::string prefix_override;
 
-    int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
+    int get_params(const jaeger_tracing::jspan* const parent_span = nullptr) override {
       prefix = prefix_override;
       max = default_max;
       delimiter = "/";
       return 0;
     }
 
-    void send_response(const jaeger_tracing::Span& parent_span = nullptr) override {
+    void send_response(const jaeger_tracing::jspan* const parent_span = nullptr) override {
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);

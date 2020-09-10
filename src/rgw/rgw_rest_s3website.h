@@ -81,11 +81,11 @@ public:
   RGWGetObj_ObjStore_S3Website() : is_errordoc_request(false) {}
   explicit RGWGetObj_ObjStore_S3Website(bool is_errordoc_request) : is_errordoc_request(false) { this->is_errordoc_request = is_errordoc_request; }
   ~RGWGetObj_ObjStore_S3Website() override {}
-  int send_response_data_error(const jaeger_tracing::Span& parent_span = nullptr) override;
-  int send_response_data(bufferlist& bl, off_t ofs, off_t len, const jaeger_tracing::Span& parent_span = nullptr) override;
+  int send_response_data_error(const jaeger_tracing::jspan* const parent_span = nullptr) override;
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len, const jaeger_tracing::jspan* const parent_span = nullptr) override;
   // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
   // conditional params for error pages.
-  int get_params(const jaeger_tracing::Span& parent_span = nullptr) override {
+  int get_params(const jaeger_tracing::jspan* const parent_span = nullptr) override {
       if (is_errordoc_request) {
         range_str = NULL;
         if_mod = NULL;

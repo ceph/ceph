@@ -92,15 +92,14 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               const bool skip_retarget)
 {
   RGWOpType type = op->get_type();
-  jaeger_tracing::Span span = jaeger_tracing::new_span(op->name());
+  auto span = jaeger_tracing::new_span(op->name());
   if(type>0){
-    jaeger_tracing::set_span_tag(span, "operation_type", op->name());
-    jaeger_tracing::set_span_tag(span, "operation_id", s->req_id.c_str());
+    jaeger_tracing::set_span_tag(span.get(), "operation_type", op->name());
+    s->root_span = std::move(span);
   }
-  s->root_span = std::move(span);
 
   ldpp_dout(op, 2) << "init permissions" << dendl;
-  int ret = handler->init_permissions(op, s->root_span);
+  int ret = handler->init_permissions(op, s->root_span.get());
   if (ret < 0) {
     return ret;
   }
@@ -122,19 +121,19 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 
   /* If necessary extract object ACL and put them into req_state. */
   ldpp_dout(op, 2) << "reading permissions" << dendl;
-  ret = handler->read_permissions(op, s->root_span);
+  ret = handler->read_permissions(op, s->root_span.get());
   if (ret < 0) {
     return ret;
   }
 
   ldpp_dout(op, 2) << "init op" << dendl;
-  ret = op->init_processing(s->root_span);
+  ret = op->init_processing(s->root_span.get());
   if (ret < 0) {
     return ret;
   }
 
   ldpp_dout(op, 2) << "verifying op mask" << dendl;
-  ret = op->verify_op_mask(s->root_span);
+  ret = op->verify_op_mask(s->root_span.get());
   if (ret < 0) {
     return ret;
   }
@@ -148,7 +147,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
-  ret = op->verify_permission(s->root_span);
+  ret = op->verify_permission(s->root_span.get());
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
@@ -166,13 +165,13 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "pre-executing" << dendl;
-  op->pre_exec(s->root_span);
+  op->pre_exec(s->root_span.get());
 
   ldpp_dout(op, 2) << "executing" << dendl;
-  op->execute(s->root_span);
+  op->execute(s->root_span.get());
 
   ldpp_dout(op, 2) << "completing" << dendl;
-  op->complete(s->root_span);
+  op->complete(s->root_span.get());
 
   return 0;
 }

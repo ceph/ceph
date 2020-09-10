@@ -20,7 +20,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRestOIDCProvider::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWRestOIDCProvider::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -50,7 +50,7 @@ int RGWRestOIDCProvider::verify_permission(const jaeger_tracing::Span& parent_sp
   return 0;
 }
 
-void RGWRestOIDCProvider::send_response(const jaeger_tracing::Span& parent_span)
+void RGWRestOIDCProvider::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -69,7 +69,7 @@ int RGWRestOIDCProviderWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("oidc-provider", RGW_CAP_WRITE);
 }
 
-int RGWCreateOIDCProvider::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWCreateOIDCProvider::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -114,7 +114,7 @@ int RGWCreateOIDCProvider::get_params()
   return 0;
 }
 
-void RGWCreateOIDCProvider::execute(const jaeger_tracing::Span& parent_span)
+void RGWCreateOIDCProvider::execute(const jaeger_tracing::jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -138,7 +138,7 @@ void RGWCreateOIDCProvider::execute(const jaeger_tracing::Span& parent_span)
 
 }
 
-void RGWDeleteOIDCProvider::execute(const jaeger_tracing::Span& parent_span)
+void RGWDeleteOIDCProvider::execute(const jaeger_tracing::jspan* const parent_span)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
   op_ret = provider.delete_obj();
@@ -156,7 +156,7 @@ void RGWDeleteOIDCProvider::execute(const jaeger_tracing::Span& parent_span)
   }
 }
 
-void RGWGetOIDCProvider::execute(const jaeger_tracing::Span& parent_span)
+void RGWGetOIDCProvider::execute(const jaeger_tracing::jspan* const parent_span)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
   op_ret = provider.get();
@@ -177,7 +177,7 @@ void RGWGetOIDCProvider::execute(const jaeger_tracing::Span& parent_span)
   }
 }
 
-int RGWListOIDCProviders::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWListOIDCProviders::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -197,7 +197,7 @@ int RGWListOIDCProviders::verify_permission(const jaeger_tracing::Span& parent_s
   return 0;
 }
 
-void RGWListOIDCProviders::execute(const jaeger_tracing::Span& parent_span)
+void RGWListOIDCProviders::execute(const jaeger_tracing::jspan* const parent_span)
 {
   vector<RGWOIDCProvider> result;
   op_ret = RGWOIDCProvider::get_providers(store->getRados(), s->user->get_tenant(), result);

@@ -15,7 +15,7 @@ public:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   ~RGWHandler_Usage() override = default;
 
-  int read_permissions(RGWOp*, const jaeger_tracing::Span& parent_span = nullptr) override {
+  int read_permissions(RGWOp*, const jaeger_tracing::jspan* const parent_span = nullptr) override {
     return 0;
   }
 };

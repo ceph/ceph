@@ -9,18 +9,18 @@
         namespace jaeger_tracing
         {
             static inline void init_jaeger(){
-                init_tracer("RGW_Client_Process","/home/abhinav/Desktop/tracerConfig.yaml");
+                init_tracer("RGW_Client_Process");
             }
         }
     #else
+    #include<memory>
     namespace jaeger_tracing
     {
-        
             #define __FILENAME__ ""
-            typedef char* Span;
-            static inline Span child_span(...) {return nullptr;}
-            static inline Span new_span(...) {return nullptr;}
-            static inline void finish_trace(...) {}
+            typedef char jspan;
+            static inline std::unique_ptr<jspan> child_span(...) {return nullptr;}
+            static inline std::unique_ptr<jspan> new_span(...) {return nullptr;}
+            static inline void finish_span(...) {}
             static inline void init_jaeger(...) {}
             static inline void set_span_tag(...) {}
     }

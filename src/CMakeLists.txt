@@ -385,8 +385,7 @@ set(libcommon_files
 
 if(WITH_JAEGER)
   include(IncludeJaeger)
-  file(GLOB jager_tracing_file "common/tracer.cc")
-  list(APPEND libcommon_files ${jager_tracing_file})
+  list(APPEND libcommon_files common/tracer.cc)
 endif()
 
 set_source_files_properties(ceph_ver.c

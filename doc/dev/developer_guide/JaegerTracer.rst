@@ -33,63 +33,42 @@ Tracing a function means creating its “Span” which will be a child_span
 of the span which is passed as parameter to this function. This newly
 created span will now act like a parent_span to the function that are
 called from within this function, like this spans of function is
-calculated. But span of every function is not calculated in this way,
-suppose
+calculated.
+Example : 
 
-Func A(...){
-
-Span span;
-
-B(span);
-
-Span s;
-
-C();
-
-finsih_trace(s);
-
+void funcA(const jaeger_tracing::jspan* parent_span){
+      const auto span_1 = jaeger_tracing::child_span("span name", parent_span);
+      B(span.get()); //as the function is originating inside so B is actually child of A so I m passing A's span(span_1) as parent_span to B.
+      const auto span_2 = jaeger_tracing::child_span("name", span.get()); //span_1.get() because span is unique_ptr and we want raw pointer.
+      C();
+      jaeger_tracing::finish_span(span_2.get());
 }
 
 In the above function “span” act like parent_span for function B and C,
 but we pass span as parameter to only B and not C because we know B we
-will have its own function call which will require B’s span as their
-parent_span, but in C we know that it wont call any significant function
+will have its own function call and it can create its own span like A does, but in C we know that it wont call any significant function inside it
 so we just traced it inside function A only by invoking the span just
 before calling it and then finishing it just after it ends.
 
-**FUNCTION CALL**
+**FUNCTION CALL AND VARIABLES**
 
-**init_jaeger()** - this connected the tracer to jaeger backend server,
-called inside asio_frontend.cc
+      All functions and variables are defined under namespace jaeger_tracing
 
-**child_span(parent_span, span_name)** - returns a new childSpan by
-using the parent_span as reference as span_name as its name
+      "jspan" is defined like - typedef opentracing::Span jspan;
 
-**set_span_tag(span, key, val) -** void function sets a tag in span with
-name as key and value as val.
+      **init_jaeger()** - this connected the tracer to jaeger backend server,
+      called inside asio_main.cc (only once the server starts)
 
-**finish_trace(span)** - void functions closing the span
+      **child_span(parent_span, span_name)** - returns a new unique_ptr to "Span" by
+      using the parent_span as reference as span_name as its name
 
-**new_span(span_name) -** only used by root_span method to create the
-first initial span
+      **set_span_tag(, key, val) -** void function sets a tag in span with
+      name as key and value as val.
 
-**STRUCT AND CLASSES(Jager_Tracer)**
+      **finish_span(span)** - void functions closing the span
 
-We have made one struct “Jager_Tracer” its datamember is single
-std::shared_ptr<opentracing::v2::Tracer> tracer, this var is responsible
-for collecting all the spans sending it to jaeger server and maintaining
-the connection with server.
-
-**CTOR() -** does nothing
-
-**DTOR() -** responsible for closing the tracer successfully and also
-ensuring not double closing it otherwise it can throw segmentation fault
-
-Object of this class is extern .Along with this we have an extern
-boolean var to check whether a connection has been established or not,
-if established then init_jaeger wont waste time reconnecting with
-server, but when set to false init_jaeger will try to establish the
-connection with server.
+      **new_span(span_name) -** only used by root_span method to create the
+      first initial span
 
 **RUNNING TEST**
 

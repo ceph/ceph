@@ -53,9 +53,9 @@ class RGWStore : public DoutPrefixProvider {
 
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) = 0;
-    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket) = 0;
+    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, const jaeger_tracing::jspan* const parent_span) = 0;
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) = 0;
-    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) = 0;
+    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
@@ -69,7 +69,7 @@ class RGWStore : public DoutPrefixProvider {
 			    bool obj_lock_enabled,
 			    bool *existed,
 			    req_info& req_info,
-			    std::unique_ptr<RGWBucket>* bucket, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+			    std::unique_ptr<RGWBucket>* bucket, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual RGWBucketList* list_buckets(void) = 0;
     virtual bool is_meta_master() = 0;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
@@ -95,7 +95,7 @@ class RGWUser {
     virtual ~RGWUser() = default;
 
     virtual int list_buckets(const string& marker, const string& end_marker,
-			     uint64_t max, bool need_stats, RGWBucketList& buckets, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+			     uint64_t max, bool need_stats, RGWBucketList& buckets, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
     friend class RGWBucket;
     virtual std::string& get_display_name() { return info.display_name; }
@@ -180,11 +180,11 @@ class RGWBucket {
 
     virtual int load_by_name(const std::string& tenant, const std::string& bucket_name, const std::string bucket_instance_id, RGWSysObjectCtx *rctx, optional_yield y) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& key) = 0;
-    virtual int list(ListParams&, int, ListResults&, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int list(ListParams&, int, ListResults&, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual RGWObject* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual RGWAttrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(RGWAttrs a) { attrs = a; return 0; }
-    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(RGWAccessControlPolicy& acl, optional_yield y) = 0;
     virtual int get_bucket_info(optional_yield y) = 0;
@@ -195,16 +195,16 @@ class RGWBucket {
 				 bool *syncstopped = nullptr) = 0;
     virtual int read_bucket_stats(optional_yield y) = 0;
     virtual int sync_user_stats() = 0;
-    virtual int update_container_stats(const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int update_container_stats(const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual int check_bucket_shards(void) = 0;
     virtual int link(RGWUser* new_user, optional_yield y) = 0;
     virtual int unlink(RGWUser* new_user, optional_yield y) = 0;
     virtual int chown(RGWUser* new_user, RGWUser* old_user, optional_yield y) = 0;
-    virtual int put_instance_info(bool exclusive, ceph::real_time mtime, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int put_instance_info(bool exclusive, ceph::real_time mtime, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
-    virtual int check_empty(optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int check_empty(optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) = 0;
-    virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual int try_refresh_info(ceph::real_time *pmtime) = 0;
     virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool *is_truncated, RGWUsageIter& usage_iter,
@@ -328,9 +328,9 @@ class RGWObject {
 
       virtual ~ReadOp() = default;
 
-      virtual int prepare(optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+      virtual int prepare(optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
       virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) = 0;
-      virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+      virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
       virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) = 0;
       virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) = 0;
     };
@@ -365,7 +365,7 @@ class RGWObject {
     virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
-			      std::string& version_id,optional_yield y) = 0;
+			      std::string& version_id,optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual int copy_object(RGWObjectCtx& obj_ctx, RGWUser* user,
                req_info *info, const rgw_zone_id& source_zone,
                rgw::sal::RGWObject* dest_object, rgw::sal::RGWBucket* dest_bucket,
@@ -380,7 +380,7 @@ class RGWObject {
 	       boost::optional<ceph::real_time> delete_at,
                string *version_id, string *tag, string *etag,
                void (*progress_cb)(off_t, void *), void *progress_data,
-               const DoutPrefixProvider *dpp, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+               const DoutPrefixProvider *dpp, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     virtual void set_atomic(RGWObjectCtx *rctx) const = 0;
@@ -390,10 +390,10 @@ class RGWObject {
     const std::string &get_name() const { return key.name; }
 
     virtual int get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh = false) = 0;
-    virtual int set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) = 0;
-    virtual int get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj = nullptr, const jaeger_tracing::Span& parent_span = nullptr) = 0;
-    virtual int modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
-    virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y, const jaeger_tracing::Span& parent_span = nullptr) = 0;
+    virtual int set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
+    virtual int get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj *target_obj = nullptr, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
+    virtual int modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
+    virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y, const jaeger_tracing::jspan* const parent_span = nullptr) = 0;
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual bool is_expired() = 0;
 

@@ -29,7 +29,7 @@ void RGWRestUserPolicy::dump(Formatter *f) const
   encode_json("Policydocument", policy, f);
 }
 
-void RGWRestUserPolicy::send_response(const jaeger_tracing::Span& parent_span)
+void RGWRestUserPolicy::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -38,7 +38,7 @@ void RGWRestUserPolicy::send_response(const jaeger_tracing::Span& parent_span)
   end_header(s);
 }
 
-int RGWRestUserPolicy::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWRestUserPolicy::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
@@ -109,7 +109,7 @@ int RGWPutUserPolicy::get_params()
   return 0;
 }
 
-void RGWPutUserPolicy::execute(const jaeger_tracing::Span& parent_span)
+void RGWPutUserPolicy::execute(const jaeger_tracing::jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -193,7 +193,7 @@ int RGWGetUserPolicy::get_params()
   return 0;
 }
 
-void RGWGetUserPolicy::execute(const jaeger_tracing::Span& parent_span)
+void RGWGetUserPolicy::execute(const jaeger_tracing::jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -257,7 +257,7 @@ int RGWListUserPolicies::get_params()
   return 0;
 }
 
-void RGWListUserPolicies::execute(const jaeger_tracing::Span& parent_span)
+void RGWListUserPolicies::execute(const jaeger_tracing::jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -319,7 +319,7 @@ int RGWDeleteUserPolicy::get_params()
   return 0;
 }
 
-void RGWDeleteUserPolicy::execute(const jaeger_tracing::Span& parent_span)
+void RGWDeleteUserPolicy::execute(const jaeger_tracing::jspan* const parent_span)
 {
   op_ret = get_params();
   if (op_ret < 0) {

@@ -114,8 +114,8 @@ protected:
   STS::STSService sts;
 public:
   RGWREST_STS() = default;
- int verify_permission(const jaeger_tracing::Span& parent_span = nullptr) override;
-  void send_response(const jaeger_tracing::Span& parent_span = nullptr) override;
+ int verify_permission(const jaeger_tracing::jspan* const parent_span = nullptr) override;
+  void send_response(const jaeger_tracing::jspan* const parent_span = nullptr) override;
 };
 
 class RGWSTSAssumeRoleWithWebIdentity : public RGWREST_STS {
@@ -130,7 +130,7 @@ protected:
   string iss;
 public:
   RGWSTSAssumeRoleWithWebIdentity() = default;
-  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
+  void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "assume_role_web_identity"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE_WEB_IDENTITY; }
@@ -147,7 +147,7 @@ protected:
   string tokenCode;
 public:
   RGWSTSAssumeRole() = default;
-  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
+  void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "assume_role"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE; }
@@ -160,8 +160,8 @@ protected:
   string tokenCode;
 public:
   RGWSTSGetSessionToken() = default;
-  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
- int verify_permission(const jaeger_tracing::Span& parent_span = nullptr) override;
+  void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override;
+ int verify_permission(const jaeger_tracing::jspan* const parent_span = nullptr) override;
   int get_params();
   const char* name() const override { return "get_session_token"; }
   RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }

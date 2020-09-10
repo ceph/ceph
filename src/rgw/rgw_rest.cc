@@ -785,7 +785,7 @@ int recv_body(struct req_state* const s,
   }
 }
 
-int RGWGetObj_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWGetObj_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   range_str = s->info.env->get("HTTP_RANGE");
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
@@ -1011,7 +1011,7 @@ int RGWPutObj_ObjStore::verify_params()
   return 0;
 }
 
-int RGWPutObj_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutObj_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   /* start gettorrent */
   if (s->cct->_conf->rgw_torrent_flag)
@@ -1031,7 +1031,7 @@ int RGWPutObj_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
   return 0;
 }
 
-int RGWPutObj_ObjStore::get_data(bufferlist& bl, const jaeger_tracing::Span& parent_span)
+int RGWPutObj_ObjStore::get_data(bufferlist& bl, const jaeger_tracing::jspan* const parent_span)
 {
   size_t cl;
   uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
@@ -1389,7 +1389,7 @@ int RGWPostObj_ObjStore::verify_params()
   return 0;
 }
 
-int RGWPostObj_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPostObj_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   if (s->expect_cont) {
     /* OK, here it really gets ugly. With POST, the params are embedded in the
@@ -1434,7 +1434,7 @@ int RGWPostObj_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
 }
 
 
-int RGWPutACLs_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutACLs_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
@@ -1442,21 +1442,21 @@ int RGWPutACLs_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
   return op_ret;
 }
 
-int RGWPutLC_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutLC_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 
-int RGWPutBucketObjectLock_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutBucketObjectLock_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 
-int RGWPutObjLegalHold_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWPutObjLegalHold_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
@@ -1544,7 +1544,7 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
   return std::make_tuple(0, std::move(bl));
 }
 
-int RGWCompleteMultipart_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWCompleteMultipart_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   upload_id = s->info.args.get("uploadId");
 
@@ -1561,7 +1561,7 @@ int RGWCompleteMultipart_ObjStore::get_params(const jaeger_tracing::Span& parent
   return 0;
 }
 
-int RGWListMultipart_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWListMultipart_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   upload_id = s->info.args.get("uploadId");
 
@@ -1588,7 +1588,7 @@ int RGWListMultipart_ObjStore::get_params(const jaeger_tracing::Span& parent_spa
   return op_ret;
 }
 
-int RGWListBucketMultiparts_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWListBucketMultiparts_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
   delimiter = s->info.args.get("delimiter");
   prefix = s->info.args.get("prefix");
@@ -1618,7 +1618,7 @@ int RGWListBucketMultiparts_ObjStore::get_params(const jaeger_tracing::Span& par
   return 0;
 }
 
-int RGWDeleteMultiObj_ObjStore::get_params(const jaeger_tracing::Span& parent_span)
+int RGWDeleteMultiObj_ObjStore::get_params(const jaeger_tracing::jspan* const parent_span)
 {
 
   if (s->bucket_name.empty()) {
@@ -1635,7 +1635,7 @@ int RGWDeleteMultiObj_ObjStore::get_params(const jaeger_tracing::Span& parent_sp
 }
 
 
-void RGWRESTOp::send_response(const jaeger_tracing::Span& parent_span)
+void RGWRESTOp::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   if (!flusher.did_start()) {
     set_req_state_err(s, get_ret());
@@ -1645,7 +1645,7 @@ void RGWRESTOp::send_response(const jaeger_tracing::Span& parent_span)
   flusher.flush();
 }
 
-int RGWRESTOp::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWRESTOp::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   return check_caps(s->user->get_info().caps);
 }
@@ -1843,9 +1843,9 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_REST::init_permissions(RGWOp* op, const jaeger_tracing::Span& parent_span)
+int RGWHandler_REST::init_permissions(RGWOp* op, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
     // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
@@ -1867,12 +1867,12 @@ int RGWHandler_REST::init_permissions(RGWOp* op, const jaeger_tracing::Span& par
     return 0;
   }
 
-  return do_init_permissions(span);
+  return do_init_permissions(span.get());
 }
 
-int RGWHandler_REST::read_permissions(RGWOp* op_obj, const jaeger_tracing::Span& parent_span)
+int RGWHandler_REST::read_permissions(RGWOp* op_obj, const jaeger_tracing::jspan* const parent_span)
 {
-  jaeger_tracing::Span span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
+  [[maybe_unused]] const auto span = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
   bool only_bucket = false;
 
@@ -1896,7 +1896,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, const jaeger_tracing::Span&
     /* is it a 'create bucket' request? */
     if (op_obj->get_type() == RGW_OP_CREATE_BUCKET)
       return 0;
-    
+
     only_bucket = true;
     break;
   case OP_DELETE:
@@ -1911,7 +1911,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, const jaeger_tracing::Span&
     return -EINVAL;
   }
 
-  return do_read_permissions(op_obj, only_bucket, span);
+  return do_read_permissions(op_obj, only_bucket, span.get());
 }
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)

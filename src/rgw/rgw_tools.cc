@@ -35,16 +35,16 @@ static std::map<std::string, std::string>* ext_mime_map;
 
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
-		   bool mostly_omap, const jaeger_tracing::Span& parent_span)
-{ 
-  jaeger_tracing::Span span_1 = jaeger_tracing::child_span("rgw_tools.cc : rados->ioctx_create", parent_span);
+		   bool mostly_omap, const jaeger_tracing::jspan* const parent_span)
+{
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span("rgw_tools.cc : rados->ioctx_create", parent_span);
   int r = rados->ioctx_create(pool.name.c_str(), ioctx);
-  jaeger_tracing::finish_trace(span_1);
+  jaeger_tracing::finish_span(span_1.get());
 
-  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("rgw_tools.cc :rados->pool_create", parent_span);
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("rgw_tools.cc :rados->pool_create", parent_span);
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
-  jaeger_tracing::finish_trace(span_2);
+  jaeger_tracing::finish_span(span_2.get());
     if (r == -ERANGE) {
       dout(0)
         << __func__
@@ -69,7 +69,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
     if (mostly_omap) {
       // set pg_autoscale_bias
-      jaeger_tracing::Span span_3 = jaeger_tracing::child_span("rados->mon_command:rgw_rados_pool_autoscale_bias", parent_span);
+      [[maybe_unused]] const auto span_3 = jaeger_tracing::child_span("rados->mon_command:rgw_rados_pool_autoscale_bias", parent_span);
       bufferlist inbl;
       float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
       int r = rados->mon_command(
@@ -77,12 +77,12 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
-      jaeger_tracing::finish_trace(span_3);
+      jaeger_tracing::finish_span(span_3.get());
       if (r < 0) {
 	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
-      jaeger_tracing::Span span_4 = jaeger_tracing::child_span("rados->mon_command:rgw_rados_pool_autoscale_bias", parent_span);
+      [[maybe_unused]] const auto span_4 = jaeger_tracing::child_span("rados->mon_command:rgw_rados_pool_autoscale_bias", parent_span);
       // set pg_num_min
       int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
       r = rados->mon_command(
@@ -90,20 +90,20 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
-      jaeger_tracing::finish_trace(span_4);
+      jaeger_tracing::finish_span(span_4.get());
       if (r < 0) {
 	dout(10) << __func__ << " warning: failed to set pg_num_min on "
 		 << pool.name << dendl;
       }
       // set recovery_priority
-      jaeger_tracing::Span span_5 = jaeger_tracing::child_span("rgw_rados_pool_recovery_priority", parent_span);
+      [[maybe_unused]] const auto span_5 = jaeger_tracing::child_span("rgw_rados_pool_recovery_priority", parent_span);
       int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"recovery_priority\": \"" +
 	stringify(p) + "\"}",
 	inbl, NULL, NULL);
-      jaeger_tracing::finish_trace(span_5);
+      jaeger_tracing::finish_span(span_5.get());
       if (r < 0) {
 	dout(10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
@@ -259,12 +259,9 @@ thread_local bool is_asio_thread = false;
 
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y, int flags, const jaeger_tracing::Span& parent_span)
+                      optional_yield y, int flags, const jaeger_tracing::jspan* parent_span)
 {
-   
-   
-  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
 #ifdef HAVE_BOOST_CONTEXT
   // given a yield_context, call async_operate() to yield the coroutine instead
@@ -285,18 +282,15 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
-  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("librados_cxx.cc IoCtx::operate()", span_1);
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("librados_cxx.cc IoCtx::operate()", span_1.get());
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
-		      int flags, const jaeger_tracing::Span& parent_span)
+		      int flags, const jaeger_tracing::jspan* parent_span)
 {
-   
-      
-  jaeger_tracing::Span span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
-  
+  [[maybe_unused]] const auto span_1 = jaeger_tracing::child_span(__PRETTY_FUNCTION__, parent_span);
 
 #ifdef HAVE_BOOST_CONTEXT
   if (y) {
@@ -310,7 +304,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
-  jaeger_tracing::Span span_2 = jaeger_tracing::child_span("librados_cxx.cc IoCtx::operate()", span_1);
+  [[maybe_unused]] const auto span_2 = jaeger_tracing::child_span("librados_cxx.cc IoCtx::operate()", span_1.get());
   return ioctx.operate(oid, op, flags);
 }
 

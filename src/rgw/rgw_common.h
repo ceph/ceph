@@ -1632,7 +1632,7 @@ struct req_state : DoutPrefixProvider {
   string bucket_instance_id;
   int bucket_instance_shard_id{-1};
   string redirect_zone_endpoint;
-  jaeger_tracing::Span root_span;
+  std::unique_ptr<jaeger_tracing::jspan> root_span;
 
   string redirect;
 
@@ -2212,7 +2212,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
                             const rgw::ARN& res,
-                            const uint64_t op, const jaeger_tracing::Span& parent_span = nullptr);
+                            const uint64_t op, const jaeger_tracing::jspan* const parent_span = nullptr);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct req_state * const s,
                                       int perm);

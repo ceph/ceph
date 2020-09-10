@@ -299,8 +299,8 @@ public:
   RGW_SWIFT_Auth_Get() {}
   ~RGW_SWIFT_Auth_Get() override {}
 
-  int verify_permission(const jaeger_tracing::Span& parent_span = nullptr) override { return 0; }
-  void execute(const jaeger_tracing::Span& parent_span = nullptr) override;
+  int verify_permission(const jaeger_tracing::jspan* const parent_span = nullptr) override { return 0; }
+  void execute(const jaeger_tracing::jspan* const parent_span = nullptr) override;
   const char* name() const override { return "swift_auth_get"; }
   dmc::client_id dmclock_client() override { return dmc::client_id::auth; }
 };
@@ -314,7 +314,7 @@ public:
   int init(rgw::sal::RGWRadosStore *store, struct req_state *state, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override { return 0; }
-  int read_permissions(RGWOp *op, const jaeger_tracing::Span& parent_span = nullptr) override { return 0; }
+  int read_permissions(RGWOp *op, const jaeger_tracing::jspan* const parent_span = nullptr) override { return 0; }
 
   virtual RGWAccessControlPolicy *alloc_policy() { return NULL; }
   virtual void free_policy(RGWAccessControlPolicy *policy) {}

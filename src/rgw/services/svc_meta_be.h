@@ -80,7 +80,7 @@ public:
 
   struct Context { /*
                     * A single metadata operation context. Will be holding info about
-                    * backend and operation itself; operation might jaeger_tracing::Span multiple backend
+                    * backend and operation itself; operation might jaeger_tracing::jspan multiple backend
                     * calls.
                     */
     virtual ~Context() = 0;

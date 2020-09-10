@@ -355,7 +355,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
 
 } // namespace rgw::auth::sts
 
-int RGWREST_STS::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWREST_STS::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   STS::STSService _sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
@@ -393,7 +393,7 @@ int RGWREST_STS::verify_permission(const jaeger_tracing::Span& parent_span)
   return 0;
 }
 
-void RGWREST_STS::send_response(const jaeger_tracing::Span& parent_span)
+void RGWREST_STS::send_response(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
@@ -402,7 +402,7 @@ void RGWREST_STS::send_response(const jaeger_tracing::Span& parent_span)
   end_header(s);
 }
 
-int RGWSTSGetSessionToken::verify_permission(const jaeger_tracing::Span& parent_span)
+int RGWSTSGetSessionToken::verify_permission(const jaeger_tracing::jspan* const parent_span)
 {
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
@@ -440,7 +440,7 @@ int RGWSTSGetSessionToken::get_params()
   return 0;
 }
 
-void RGWSTSGetSessionToken::execute(const jaeger_tracing::Span& parent_span)
+void RGWSTSGetSessionToken::execute(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -493,7 +493,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   return 0;
 }
 
-void RGWSTSAssumeRoleWithWebIdentity::execute(const jaeger_tracing::Span& parent_span)
+void RGWSTSAssumeRoleWithWebIdentity::execute(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
@@ -552,7 +552,7 @@ int RGWSTSAssumeRole::get_params()
   return 0;
 }
 
-void RGWSTSAssumeRole::execute(const jaeger_tracing::Span& parent_span)
+void RGWSTSAssumeRole::execute(const jaeger_tracing::jspan* const parent_span)
 {
   if (op_ret = get_params(); op_ret < 0) {
     return;
