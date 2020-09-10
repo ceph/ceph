@@ -6144,7 +6144,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
 
-  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
+  ret = store->cls_obj_complete_add(target->get_bucket_info(), *bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
 
   int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
   if (r < 0) {
@@ -6171,7 +6171,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
     return ret;
   }
 
-  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace);
+  ret = store->cls_obj_complete_del(target->get_bucket_info(), *bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace);
 
   int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
   if (r < 0) {
@@ -6190,8 +6190,8 @@ int RGWRados::Bucket::UpdateIndex::cancel()
   RGWRados *store = target->get_store();
   BucketShard *bs;
 
-  int ret = guard_reshard(&bs, [&](BucketShard *bs) -> int {
-				 return store->cls_obj_complete_cancel(*bs, optag, obj, zones_trace);
+  int ret = guard_reshard(&bs, [&](RGWRados::BucketShard *bs) -> int {
+				 return store->cls_obj_complete_cancel(target->get_bucket_info(), *bs, optag, obj, zones_trace);
 			       });
 
   /*
@@ -6827,7 +6827,9 @@ static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(const RGWBucketInfo& bin
 
 
 template <class CLSRGWBucketModifyOpT, class F, class... Args>
-int RGWRados::with_bilog(F&& on_flushed, Args&&... args)
+int RGWRados::with_bilog(F&& on_flushed,
+                         const RGWBucketInfo& bucket_info,
+                         Args&&... args)
 {
   constexpr bool is_inindex = false;
   if (is_inindex) {
@@ -6890,6 +6892,7 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info,
           return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
        });
     },
+    bucket_info,
     cls_rgw_obj_key {
       obj_instance.key.get_index_key_name(), obj_instance.key.instance},
     op_tag,
@@ -6944,6 +6947,7 @@ int RGWRados::bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, con
           return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
         });
     },
+    bucket_info,
     cls_rgw_obj_key {
       obj_instance.key.get_index_key_name(), obj_instance.key.instance },
     op_tag,
@@ -8280,7 +8284,8 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
 }
 
 template <class CLSRGWBucketModifyOpT>
-int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, string& tag,
+int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info,
+                                  BucketShard& bs, const rgw_obj& obj, string& tag,
                                   int64_t pool, uint64_t epoch,
                                   const rgw_bucket_dir_entry& ent, RGWObjCategory category,
 				  list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *_zones_trace)
@@ -8323,21 +8328,25 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, string& t
       completion->release(); /* can't reference arg here, as it might have already been released */
       return ret;
     },
+    bucket_info,
     cls_rgw_obj_key { ent.key.name, ent.key.instance },
     tag,
     &zones_trace,
     bilog_flags);
 }
 
-int RGWRados::cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& tag,
+int RGWRados::cls_obj_complete_add(const RGWBucketInfo& bucket_info,
+                                   BucketShard& bs, const rgw_obj& obj, string& tag,
                                    int64_t pool, uint64_t epoch,
                                    const rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                    list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace)
 {
-  return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_ADD>>(bs, obj, tag, pool, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
+  return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_ADD>>(
+    bucket_info, bs, obj, tag, pool, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
 }
 
-int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
+int RGWRados::cls_obj_complete_del(const RGWBucketInfo& bucket_info,
+                                   BucketShard& bs, string& tag,
                                    int64_t pool, uint64_t epoch,
                                    rgw_obj& obj,
                                    real_time& removed_mtime,
@@ -8348,12 +8357,17 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
   rgw_bucket_dir_entry ent;
   ent.meta.mtime = removed_mtime;
   obj.key.get_index_key(&ent.key);
-  return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_DEL>>(bs, obj, tag, pool, epoch,
-			     ent, RGWObjCategory::None, remove_objs,
-			     bilog_flags, zones_trace);
+  return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_DEL>>(
+    bucket_info, bs, obj, tag, pool, epoch,
+    ent, RGWObjCategory::None, remove_objs,
+    bilog_flags, zones_trace);
 }
 
-int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, rgw_zone_set *zones_trace)
+int RGWRados::cls_obj_complete_cancel(const RGWBucketInfo& bucket_info,
+                                      BucketShard& bs,
+                                      string& tag,
+                                      rgw_obj& obj,
+                                      rgw_zone_set *zones_trace)
 {
   rgw_bucket_dir_entry ent;
   obj.key.get_index_key(&ent.key);
@@ -8362,10 +8376,11 @@ int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj
   // of BI completion share the same `rgw_cls_obj_complete_op` structure
   // for client-OSD transport. However, this is just a nasty but private
   // implementation detail and shouldn't be exposed to upper layers.
-  return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_CANCEL>>(bs, obj, tag,
-			     -1 /* pool id */, 0, ent,
-			     RGWObjCategory::None, nullptr, 0 /* bilog_flags */,
-			     zones_trace);
+  return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_CANCEL>>(
+    bucket_info, bs, obj, tag,
+    -1 /* pool id */, 0, ent,
+    RGWObjCategory::None, nullptr, 0 /* bilog_flags */,
+    zones_trace);
 }
 
 int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout)
