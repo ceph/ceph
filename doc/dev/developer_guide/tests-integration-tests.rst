@@ -3,7 +3,7 @@
 Testing - Integration Tests
 ===========================
 
-Ceph has two types of tests: `make check`_ tests and integration tests.
+Ceph has two types of tests: :ref:`make check <make-check>` tests and integration tests.
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
 is deemed to be an integration test. Integration tests are organized into
@@ -495,7 +495,6 @@ test will be first.
 
 .. _ceph/qa sub-directory: https://github.com/ceph/ceph/tree/master/qa
 .. _Integration testing: testing-integration-tests
-.. _make check:
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology
