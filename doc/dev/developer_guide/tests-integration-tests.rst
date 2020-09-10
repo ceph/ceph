@@ -56,9 +56,7 @@ Nightlies are often half-finished and cancelled due to the volume of testing
 done so your jobs may never finish. Therefore, it is common to select a
 priority less than 1000.
 
-Any priority may be selected when submitting jobs. But, in order to be
-sensitive to the workings of other developers that also need to do testing,
-the following recommendations should be followed:
+Job priority should be selected based on the following recommendations:
 
 * **Priority < 10:** Use this if the sky is falling and some group of tests
   must be run ASAP.
@@ -86,6 +84,10 @@ In case you don't know how many jobs would be triggered by
 ``teuthology-suite`` command, use ``--dry-run`` to get a count first and then
 issue ``teuthology-suite`` command again, this time without ``--dry-run`` and
 with ``-p`` and an appropriate number as an argument to it.
+
+To skip the priority check, use ``--force-priority``. In order to be sensitive
+to the runs of other developers who also need to do testing, please use it in
+emergency only.
 
 Suites Inventory
 ----------------
