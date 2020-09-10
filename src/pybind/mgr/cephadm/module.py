@@ -1941,30 +1941,6 @@ To check that the host is reachable:
                 deps.append(dd.name())
         return sorted(deps)
 
-    def _get_config_and_keyring(self, daemon_type, daemon_id, host,
-                                keyring=None,
-                                extra_ceph_config=None):
-        # type: (str, str, str, Optional[str], Optional[str]) -> Dict[str, Any]
-        # keyring
-        if not keyring:
-            ename = utils.name_to_auth_entity(daemon_type, daemon_id, host=host)
-            ret, keyring, err = self.check_mon_command({
-                'prefix': 'auth get',
-                'entity': ename,
-            })
-
-        # generate config
-        ret, config, err = self.check_mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
-        if extra_ceph_config:
-            config += extra_ceph_config
-
-        return {
-            'config': config,
-            'keyring': keyring,
-        }
-
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonSpec,
                        reconfig=False,
