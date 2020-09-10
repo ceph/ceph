@@ -115,3 +115,14 @@ class TestBatch(object):
         expected_assignment_on_used_devices = sum([slots - len(d.lvs) for d in devs if len(d.lvs) > 0])
         assert len([f for f in fast if f[0] == '/dev/bar']) == expected_assignment_on_used_devices
         assert len([f for f in fast if f[0] != '/dev/bar']) == expected_num_osds - expected_assignment_on_used_devices
+
+    def test_get_lvm_osds_return_len(self, factory,
+                                     mock_lv_device_generator,
+                                     conf_ceph_stub,
+                                     osds_per_device):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        args = factory(data_slots=1, osds_per_device=osds_per_device,
+                       osd_ids=[], dmcrypt=False)
+        mock_lvs = [mock_lv_device_generator()]
+        osds = batch.get_lvm_osds(mock_lvs, args)
+        assert len(osds) == 1
