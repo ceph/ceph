@@ -173,7 +173,7 @@ class TestCephadm(object):
     def test_list_daemons(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
-            cephadm_module._refresh_host_daemons('test')
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
             assert wait(cephadm_module, c)[0].name() == 'rgw.myrgw.foobar'
 
@@ -492,7 +492,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
     def test_remove_osds(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
-            cephadm_module._refresh_host_daemons('test')
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
             wait(cephadm_module, c)
 
@@ -548,7 +548,7 @@ class TestCephadm(object):
     ))
     def test_remove_daemon(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
-            cephadm_module._refresh_host_daemons('test')
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
             wait(cephadm_module, c)
             c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'])
