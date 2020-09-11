@@ -2035,14 +2035,14 @@ To check that the host is reachable:
         Remove a daemon
         """
         (daemon_type, daemon_id) = name.split('.', 1)
+        daemon = orchestrator.DaemonDescription(
+            daemon_type=daemon_type,
+            daemon_id=daemon_id,
+            hostname=host)
 
-        with set_exception_subject('service', orchestrator.DaemonDescription(
-                daemon_type=daemon_type,
-                daemon_id=daemon_id,
-                hostname=host,
-        ).service_id(), overwrite=True):
+        with set_exception_subject('service', daemon.service_id(), overwrite=True):
 
-            self.cephadm_services[daemon_type].pre_remove(daemon_id)
+            self.cephadm_services[daemon_type].pre_remove(daemon)
 
             args = ['--name', name, '--force']
             self.log.info('Removing daemon %s from %s' % (name, host))
@@ -2053,7 +2053,7 @@ To check that the host is reachable:
                 self.cache.rm_daemon(host, name)
             self.cache.invalidate_host_daemons(host)
 
-            self.cephadm_services[daemon_type].post_remove(daemon_id)
+            self.cephadm_services[daemon_type].post_remove(daemon)
 
             return "Removed {} from host '{}'".format(name, host)
 
