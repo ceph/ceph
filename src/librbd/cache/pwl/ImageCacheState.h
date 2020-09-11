@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H
-#define CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H 
+#define CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H
 
 #include "librbd/ImageCtx.h"
 #include "librbd/cache/Types.h"
