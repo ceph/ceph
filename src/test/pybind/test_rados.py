@@ -3,7 +3,7 @@ from nose import SkipTest
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
-                   ObjectNotFound, ObjectBusy, NotConnected, requires, opt,
+                   ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO)
 from datetime import timedelta
@@ -46,37 +46,6 @@ def test_parse_argv_empty_str():
     r = Rados()
     eq(args, r.conf_parse_argv(args))
 
-class TestRequires(object):
-    @requires(('foo', str), ('bar', int), ('baz', int))
-    def _method_plain(self, foo, bar, baz):
-        ok(isinstance(foo, str))
-        ok(isinstance(bar, int))
-        ok(isinstance(baz, int))
-        return (foo, bar, baz)
-
-    def test_method_plain(self):
-        assert_raises(TypeError, self._method_plain, 42, 42, 42)
-        assert_raises(TypeError, self._method_plain, '42', '42', '42')
-        assert_raises(TypeError, self._method_plain, foo='42', bar='42', baz='42')
-        eq(self._method_plain('42', 42, 42), ('42', 42, 42))
-        eq(self._method_plain(foo='42', bar=42, baz=42), ('42', 42, 42))
-
-    @requires(('opt_foo', opt(str)), ('opt_bar', opt(int)), ('baz', int))
-    def _method_with_opt_arg(self, foo, bar, baz):
-        ok(isinstance(foo, str) or foo is None)
-        ok(isinstance(bar, int) or bar is None)
-        ok(isinstance(baz, int))
-        return (foo, bar, baz)
-
-    def test_method_with_opt_args(self):
-        assert_raises(TypeError, self._method_with_opt_arg, 42, 42, 42)
-        assert_raises(TypeError, self._method_with_opt_arg, '42', '42', 42)
-        assert_raises(TypeError, self._method_with_opt_arg, None, None, None)
-        eq(self._method_with_opt_arg(None, 42, 42), (None, 42, 42))
-        eq(self._method_with_opt_arg('42', None, 42), ('42', None, 42))
-        eq(self._method_with_opt_arg(None, None, 42), (None, None, 42))
-
-
 class TestRadosStateError(object):
     def _requires_configuring(self, rados):
         assert_raises(RadosStateError, rados.connect)
@@ -87,7 +56,7 @@ class TestRadosStateError(object):
         assert_raises(RadosStateError, rados.conf_parse_env)
         assert_raises(RadosStateError, rados.conf_get, 'opt')
         assert_raises(RadosStateError, rados.conf_set, 'opt', 'val')
-        assert_raises(RadosStateError, rados.ping_monitor, 0)
+        assert_raises(RadosStateError, rados.ping_monitor, '0')
 
     def _requires_connected(self, rados):
         assert_raises(RadosStateError, rados.pool_exists, 'foo')
@@ -152,6 +121,10 @@ class TestRados(object):
                 buf = json.loads(output)
                 if buf.get('health'):
                     break
+
+    def test_annotations(self):
+        with assert_raises(TypeError):
+            self.rados.create_pool(0xf00)
 
     def test_create(self):
         self.rados.create_pool('foo')
