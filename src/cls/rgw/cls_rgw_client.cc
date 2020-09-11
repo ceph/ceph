@@ -98,16 +98,15 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const st
   o.exec(RGW_CLASS, RGW_BUCKET_PREPARE_OP, in);
 }
 
-template <enum RGWModifyOp OpType>
-void CLSRGWCompleteModifyOp<OpType>::complete_op(librados::ObjectWriteOperation& o,
-                                                 const rgw_bucket_entry_ver& ver,
-                                                 const rgw_bucket_dir_entry_meta& dir_meta,
-                                                 const std::list<cls_rgw_obj_key> *remove_objs,
-                                                 const std::string& obj_locator) const
+void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
+                                             const rgw_bucket_entry_ver& ver,
+                                             const rgw_bucket_dir_entry_meta& dir_meta,
+                                             const std::list<cls_rgw_obj_key> *remove_objs,
+                                             const std::string& obj_locator) const
 {
   bufferlist in;
   rgw_cls_obj_complete_op call;
-  call.op = get_bilog_op_type();
+  call.op = this->op_type;
   call.tag = this->op_tag;
   call.key = this->key;
   call.ver = ver;
@@ -281,20 +280,19 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
   return 0;
 }
 
-template <bool DeleteMarkerV>
-void CLSRGWLinkOLH<DeleteMarkerV>::link_olh(librados::ObjectWriteOperation& op,
-                                            bufferlist& olh_tag,
-                                            const rgw_bucket_dir_entry_meta *meta,
-                                            uint64_t olh_epoch,
-                                            ceph::real_time unmod_since,
-                                            bool high_precision_time) const
+void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
+                                 ceph::bufferlist& olh_tag,
+                                 const rgw_bucket_dir_entry_meta *meta,
+                                 uint64_t olh_epoch,
+                                 ceph::real_time unmod_since,
+                                 bool high_precision_time) const
 {
   bufferlist in, out;
   rgw_cls_link_olh_op call;
   call.key = this->key;
   call.olh_tag = std::string(olh_tag.c_str(), olh_tag.length());
   call.op_tag = this->op_tag;
-  call.delete_marker = DeleteMarkerV;
+  call.delete_marker = this->op_type;
   if (meta) {
     call.meta = *meta;
   }

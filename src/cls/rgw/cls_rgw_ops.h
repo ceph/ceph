@@ -1793,11 +1793,8 @@ struct CLSRGWBilogOp {
   const uint16_t bilog_flags;
 };
 
-template <enum RGWModifyOp OpType>
-struct CLSRGWCompleteModifyOp : CLSRGWBilogOp {
-  constexpr static enum RGWModifyOp get_bilog_op_type() {
-    return OpType;
-  }
+struct CLSRGWCompleteModifyOpBase : CLSRGWBilogOp {
+  const enum RGWModifyOp op_type;
 
   void complete_op(librados::ObjectWriteOperation& o,
                    const rgw_bucket_entry_ver& ver,
@@ -1806,8 +1803,27 @@ struct CLSRGWCompleteModifyOp : CLSRGWBilogOp {
                    const std::string& obj_locator) const;
 };
 
+template <enum RGWModifyOp OpType>
+struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
+  template <class... Args>
+  CLSRGWCompleteModifyOp(Args&&... args)
+    : CLSRGWCompleteModifyOpBase{ std::forward<Args>(args)..., OpType } {
+  }
+};
+
+struct CLSRGWLinkOLHBase : CLSRGWBilogOp {
+  const enum RGWModifyOp op_type;
+
+  void link_olh(librados::ObjectWriteOperation& op,
+                ceph::bufferlist& olh_tag,
+                const rgw_bucket_dir_entry_meta *meta,
+                uint64_t olh_epoch,
+                ceph::real_time unmod_since,
+                bool high_precision_time) const;
+};
+
 template <bool DeleteMarkerV>
-struct CLSRGWLinkOLH : CLSRGWBilogOp {
+struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
   constexpr static enum RGWModifyOp get_bilog_op_type() {
     if constexpr (DeleteMarkerV) {
       return CLS_RGW_OP_LINK_OLH_DM;
@@ -1815,12 +1831,11 @@ struct CLSRGWLinkOLH : CLSRGWBilogOp {
       return CLS_RGW_OP_LINK_OLH;
     }
   }
-  void link_olh(librados::ObjectWriteOperation& op,
-                bufferlist& olh_tag,
-                const rgw_bucket_dir_entry_meta *meta,
-                uint64_t olh_epoch,
-                ceph::real_time unmod_since,
-                bool high_precision_time) const;
+
+  template <class... Args>
+  CLSRGWLinkOLH(Args&&... args)
+    : CLSRGWLinkOLHBase { std::forward<Args>(args)..., get_bilog_op_type() } {
+  }
 };
 
 struct CLSRGWUnlinkInstance : CLSRGWBilogOp {
