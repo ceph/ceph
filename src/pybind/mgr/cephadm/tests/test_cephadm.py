@@ -6,6 +6,7 @@ from unittest.mock import ANY
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDQueue
 
 try:
@@ -832,14 +833,14 @@ class TestCephadm(object):
             cephadm_module.config_notify()
             assert cephadm_module.manage_etc_ceph_ceph_conf == True
 
-            cephadm_module._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
 
             assert not cephadm_module.cache.host_needs_new_etc_ceph_ceph_conf('test')
 
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
-            cephadm_module._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _check.assert_called_with(
                 ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'\n\n[mon]\nk=v\n')
 
