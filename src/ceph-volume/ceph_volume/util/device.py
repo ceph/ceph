@@ -4,7 +4,7 @@ import os
 from functools import total_ordering
 from ceph_volume import sys_info, process
 from ceph_volume.api import lvm
-from ceph_volume.util import disk
+from ceph_volume.util import disk, system
 from ceph_volume.util.constants import ceph_disk_guids
 
 report_template = """
@@ -26,13 +26,15 @@ class Devices(object):
     A container for Device instances with reporting
     """
 
-    def __init__(self, devices=None):
+    def __init__(self, devices=None, filter_for_batch=False):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.devices = [Device(k) for k in
                             sys_info.devices.keys()]
+        if filter_for_batch:
+            self.devices = [d for d in self.devices if d.available_lvm_batch]
 
-    def pretty_report(self, all=True):
+    def pretty_report(self):
         output = [
             report_template.format(
                 dev='Device Path',
@@ -479,6 +481,14 @@ class Device(object):
             rejected.append('LVM detected')
 
         return len(rejected) == 0, rejected
+
+    @property
+    def available_lvm_batch(self):
+        if self.sys_api.get("partitions"):
+            return False
+        if system.device_is_mounted(self.path):
+            return False
+        return self.is_device or self.is_lv
 
 
 class CephDiskDevice(object):
