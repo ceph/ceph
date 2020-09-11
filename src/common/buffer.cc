@@ -2147,13 +2147,17 @@ buffer::list buffer::list::static_from_string(string& s) {
   // const makes me generally sad.
 }
 
+// buffer::raw is not a standard layout type.
+#define BUF_OFFSETOF(type, field)					\
+  (reinterpret_cast<std::uintptr_t>(&(((type*)1024)->field)) - 1024u)
+
 bool buffer::ptr_node::dispose_if_hypercombined(
   buffer::ptr_node* const delete_this)
 {
   // in case _raw is nullptr
   const std::uintptr_t bptr =
     (reinterpret_cast<std::uintptr_t>(delete_this->_raw) +
-     offsetof(buffer::raw, bptr_storage));
+     BUF_OFFSETOF(buffer::raw, bptr_storage));
   const bool is_hypercombined =
     reinterpret_cast<std::uintptr_t>(delete_this) == bptr;
   if (is_hypercombined) {
