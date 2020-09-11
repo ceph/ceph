@@ -91,4 +91,8 @@ struct BucketLayout {
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f=0);
 void decode(BucketLayout& l, bufferlist::const_iterator& bl);
 
+inline uint32_t current_num_shards(const BucketLayout& layout) {
+  return std::max(layout.current_index.layout.normal.num_shards, 1u);
+  }
+
 } // namespace rgw
