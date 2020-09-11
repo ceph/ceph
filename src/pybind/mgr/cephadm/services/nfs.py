@@ -88,7 +88,7 @@ class NFSService(CephService):
 
         return get_cephadm_config(), deps
 
-    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
 
         def get_set_cmd_dicts(out: str) -> List[dict]:
             locations: Set[str] = set()
