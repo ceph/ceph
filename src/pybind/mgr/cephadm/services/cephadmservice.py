@@ -242,6 +242,10 @@ class CephService(CephadmService):
 
         return cephadm_config, []
 
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        super().post_remove(daemon)
+        self.remove_keyring(daemon)
+
     def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
         """
         Map the daemon id to a cephx keyring entity name
@@ -285,6 +289,18 @@ class CephService(CephadmService):
             'config': config,
             'keyring': keyring,
         }
+
+    def remove_keyring(self, daemon: DaemonDescription):
+        daemon_id: str = daemon.daemon_id
+        host: str = daemon.hostname
+
+        entity = self.get_auth_entity(daemon_id, host=host)
+
+        logger.info(f'Remove keyring: {entity}')
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'auth rm',
+            'entity': entity,
+        })
 
 
 class MonService(CephService):
