@@ -1363,38 +1363,6 @@ To check that the host is reachable:
         self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
         return True
 
-    def _refresh_host_devices(self, host) -> Optional[str]:
-        try:
-            out, err, code = self._run_cephadm(
-                host, 'osd',
-                'ceph-volume',
-                ['--', 'inventory', '--format=json', '--filter-for-batch'])
-            if code:
-                return 'host %s ceph-volume inventory returned %d: %s' % (
-                    host, code, err)
-        except Exception as e:
-            return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        devices = json.loads(''.join(out))
-        try:
-            out, err, code = self._run_cephadm(
-                host, 'mon',
-                'list-networks',
-                [],
-                no_fsid=True)
-            if code:
-                return 'host %s list-networks returned %d: %s' % (
-                    host, code, err)
-        except Exception as e:
-            return 'host %s list-networks failed: %s' % (host, e)
-        networks = json.loads(''.join(out))
-        self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
-            host, len(devices), len(networks)))
-        devices = inventory.Devices.from_json(devices)
-        self.cache.update_host_devices_networks(host, devices.devices, networks)
-        self.update_osdspec_previews(host)
-        self.cache.save_host(host)
-        return None
-
     def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
         config = self.get_minimal_ceph_conf()
 
