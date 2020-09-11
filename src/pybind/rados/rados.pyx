@@ -283,7 +283,8 @@ cdef extern from "rados/librados.h" nogil:
     int rados_aio_remove(rados_ioctx_t io, const char * oid, rados_completion_t completion)
     int rados_aio_read(rados_ioctx_t io, const char * oid, rados_completion_t completion, char * buf, size_t len, uint64_t off)
     int rados_aio_flush(rados_ioctx_t io)
-
+    int rados_aio_cmpext(rados_ioctx_t io, const char *o, rados_completion_t completion,  const char *cmp_buf, size_t cmp_len, uint64_t off)
+    
     int rados_aio_get_return_value(rados_completion_t c)
     int rados_aio_wait_for_complete_and_cb(rados_completion_t c)
     int rados_aio_wait_for_complete(rados_completion_t c)
@@ -2756,6 +2757,45 @@ cdef class Ioctx(object):
             ret = rados_aio_flush(self.io)
         if ret < 0:
             raise make_ex(ret, "error flushing")
+
+    @requires(('object_name', str), ('cmp_buf', bytes), ('offset', int))
+    def aio_cmpext(self, object_name, cmp_buf, offset=0, oncomplete=None):
+        """
+        Asynchronously compare an on-disk object range with a buffer
+        :param object_name: the name of the object
+        :type object_name: str
+        :param cmp_buf: buffer containing bytes to be compared with object contents
+        :type cmp_buf: bytes
+        :param offset: object byte offset at which to start the comparison
+        :type offset: int
+        :param oncomplete: what to do when the write is safe and complete in memory
+            on all replicas
+        :type oncomplete: completion
+
+        :raises: :class:`TypeError`
+        returns: 0 - on success, negative error code on failure,
+                 (-MAX_ERRNO - mismatch_off) on mismatch
+        """
+        object_name = cstr(object_name, 'object_name')
+
+        cdef:
+            Completion completion
+            char* _object_name = object_name
+            char* _cmp_buf = cmp_buf
+            size_t _cmp_buf_len = len(cmp_buf)
+            uint64_t _offset = offset
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+
+        with nogil:
+            ret = rados_aio_cmpext(self.io, _object_name, completion.rados_comp,
+                                   _cmp_buf, _cmp_buf_len, _offset)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "failed to compare %s" % object_name)
+        return completion
 
     @requires(('object_name', str), ('length', int), ('offset', int),
               ('oncomplete', opt(Callable)))
