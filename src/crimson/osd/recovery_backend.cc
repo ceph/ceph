@@ -30,7 +30,7 @@ hobject_t RecoveryBackend::get_temp_recovery_object(
 }
 
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
-			       const std::string& why)
+			       std::string_view why)
 {
   for (auto& soid : temp_contents) {
     t.remove(pg.get_collection_ref()->get_cid(),
