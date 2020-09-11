@@ -174,8 +174,7 @@ boost::intrusive_ptr<CephContext>
 global_init(const std::map<std::string,std::string> *defaults,
 	    std::vector < const char* >& args,
 	    uint32_t module_type, code_environment_t code_env,
-	    int flags,
-	    const char *data_dir_option, bool run_pre_init)
+	    int flags, bool run_pre_init)
 {
   // Ensure we're not calling the global init functions multiple times.
   static bool first_run = true;
