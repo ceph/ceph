@@ -94,6 +94,28 @@ enum {
   l_pq_last
 };
 
+struct PurgeItemCommitOp {
+public:
+  enum PurgeType : uint8_t {
+    PURGE_OP_RANGE = 0,
+    PURGE_OP_REMOVE = 1,
+    PURGE_OP_ZERO
+  };
+
+  PurgeItemCommitOp(PurgeItem _item, PurgeType _type, int _flags)
+    : item(_item), type(_type), flags(_flags) {}
+
+  PurgeItemCommitOp(PurgeItem _item, PurgeType _type, int _flags,
+                    object_t _oid, object_locator_t _oloc)
+    : item(_item), type(_type), flags(_flags), oid(_oid), oloc(_oloc) {}
+
+  PurgeItem item;
+  PurgeType type;
+  int flags;
+  object_t oid;
+  object_locator_t oloc;
+};
+
 /**
  * A persistent queue of PurgeItems.  This class both writes and reads
  * to the queue.  There is one of these per MDS rank.
@@ -130,6 +152,8 @@ public:
   // Submit one entry to the work queue.  Call back when it is persisted
   // to the queue (there is no callback for when it is executed)
   void push(const PurgeItem &pi, Context *completion);
+
+  void _commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_vec, uint64_t expire_to);
 
   // If the on-disk queue is empty and we are not currently processing
   // anything.
