@@ -847,27 +847,29 @@ class TestIoctx(object):
         r, _, _ = self.rados.mon_command(json.dumps(cmd), b'')
         eq(r, 0)
 
-    @attr('thrash')
-    def test_aio_read(self):
+    def test_aio_read_wait_for_complete(self):
+        # use wait_for_complete() and wait for cb by
+        # watching retval[0]
+
         # this is a list so that the local cb() can modify it
+        payload = b"bar\000frob"
+        self.ioctx.write("foo", payload)
+        self._take_down_acting_set('test_pool', 'foo')
+
         retval = [None]
         lock = threading.Condition()
         def cb(_, buf):
             with lock:
                 retval[0] = buf
                 lock.notify()
-        payload = b"bar\000frob"
-        self.ioctx.write("foo", payload)
 
-        # test1: use wait_for_complete() and wait for cb by
-        # watching retval[0]
-        self._take_down_acting_set('test_pool', 'foo')
         comp = self.ioctx.aio_read("foo", len(payload), 0, cb)
         eq(False, comp.is_complete())
         time.sleep(3)
         eq(False, comp.is_complete())
         with lock:
             eq(None, retval[0])
+
         self._let_osds_back_up()
         comp.wait_for_complete()
         loops = 0
@@ -880,30 +882,48 @@ class TestIoctx(object):
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
 
-        # test2: use wait_for_complete_and_cb(), verify retval[0] is
+    def test_aio_read_wait_for_complete_and_cb(self):
+        # use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
+        payload = b"bar\000frob"
+        self.ioctx.write("foo", payload)
 
-        retval[0] = None
         self._take_down_acting_set('test_pool', 'foo')
+        # this is a list so that the local cb() can modify it
+        retval = [None]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                retval[0] = buf
+                lock.notify()
         comp = self.ioctx.aio_read("foo", len(payload), 0, cb)
         eq(False, comp.is_complete())
         time.sleep(3)
         eq(False, comp.is_complete())
         with lock:
             eq(None, retval[0])
-        self._let_osds_back_up()
 
+        self._let_osds_back_up()
         comp.wait_for_complete_and_cb()
         assert(retval[0] is not None)
         eq(retval[0], payload)
         eq(sys.getrefcount(comp), 2)
 
-        # test3: error case, use wait_for_complete_and_cb(), verify retval[0] is
+    def test_aio_read_wait_for_complete_and_cb_error(self):
+        # error case, use wait_for_complete_and_cb(), verify retval[0] is
         # set by the time we regain control
-
-        retval[0] = 1
         self._take_down_acting_set('test_pool', 'bar')
-        comp = self.ioctx.aio_read("bar", len(payload), 0, cb)
+
+        # this is a list so that the local cb() can modify it
+        retval = [1]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                retval[0] = buf
+                lock.notify()
+
+        # read from a DNE object
+        comp = self.ioctx.aio_read("bar", 3, 0, cb)
         eq(False, comp.is_complete())
         time.sleep(3)
         eq(False, comp.is_complete())
@@ -915,8 +935,6 @@ class TestIoctx(object):
         eq(None, retval[0])
         assert(comp.get_return_value() < 0)
         eq(sys.getrefcount(comp), 2)
-
-        [i.remove() for i in self.ioctx.list_objects()]
 
     def test_lock(self):
         self.ioctx.lock_exclusive("foo", "lock", "locker", "desc_lock",
