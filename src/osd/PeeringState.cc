@@ -2672,12 +2672,13 @@ void PeeringState::share_pg_info()
 }
 
 void PeeringState::merge_log(
-  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t&& olog,
   pg_shard_t from)
 {
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.merge_log(
-    oinfo, olog, from, info, rollbacker.get(), dirty_info, dirty_big_info);
+    oinfo, std::move(olog), from, info, rollbacker.get(),
+    dirty_info, dirty_big_info);
 }
 
 void PeeringState::rewind_divergent_log(
@@ -2714,7 +2715,7 @@ void PeeringState::proc_primary_info(
 
 void PeeringState::proc_master_log(
   ObjectStore::Transaction& t, pg_info_t &oinfo,
-  pg_log_t &olog, pg_missing_t& omissing, pg_shard_t from)
+  pg_log_t&& olog, pg_missing_t&& omissing, pg_shard_t from)
 {
   psdout(10) << "proc_master_log for osd." << from << ": "
 	     << olog << " " << omissing << dendl;
@@ -2724,7 +2725,7 @@ void PeeringState::proc_master_log(
   // make any adjustments to their missing map; we are taking their
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
-  merge_log(t, oinfo, olog, from);
+  merge_log(t, oinfo, std::move(olog), from);
   peer_info[from] = oinfo;
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
@@ -2743,13 +2744,13 @@ void PeeringState::proc_master_log(
   ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	 info.last_epoch_started >= info.history.last_epoch_started);
 
-  peer_missing[from].claim(omissing);
+  peer_missing[from].claim(std::move(omissing));
 }
 
 void PeeringState::proc_replica_log(
   pg_info_t &oinfo,
   const pg_log_t &olog,
-  pg_missing_t& omissing,
+  pg_missing_t&& omissing,
   pg_shard_t from)
 {
   psdout(10) << "proc_replica_log for osd." << from << ": "
@@ -2769,7 +2770,7 @@ void PeeringState::proc_replica_log(
 	       << " need " << i->second.need
 	       << " have " << i->second.have << dendl;
   }
-  peer_missing[from].claim(omissing);
+  peer_missing[from].claim(std::move(omissing));
 }
 
 void PeeringState::fulfill_info(
@@ -5740,7 +5741,7 @@ boost::statechart::result PeeringState::Active::react(const MLogRec& logevt)
   psdout(10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
   ps->proc_replica_log(
-    logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
+    logevt.msg->info, logevt.msg->log, std::move(logevt.msg->missing), logevt.from);
   bool got_missing = ps->search_for_missing(
     ps->peer_info[logevt.from],
     ps->peer_missing[logevt.from],
@@ -6042,7 +6043,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   DECLARE_LOCALS;
   psdout(10) << "received log from " << logevt.from << dendl;
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
-  ps->merge_log(t, logevt.msg->info, logevt.msg->log, logevt.from);
+  ps->merge_log(t, logevt.msg->info, std::move(logevt.msg->log), logevt.from);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -6148,7 +6149,7 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
 
     ps->pg_log.reset_backfill();
   } else {
-    ps->merge_log(t, msg->info, msg->log, logevt.from);
+    ps->merge_log(t, msg->info, std::move(msg->log), logevt.from);
   }
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -6580,7 +6581,7 @@ boost::statechart::result PeeringState::GetLog::react(const GotLog&)
   if (msg) {
     psdout(10) << "processing master log" << dendl;
     ps->proc_master_log(context<PeeringMachine>().get_cur_transaction(),
-			msg->info, msg->log, msg->missing,
+			msg->info, std::move(msg->log), std::move(msg->missing),
 			auth_log_shard);
   }
   ps->start_flush(context< PeeringMachine >().get_cur_transaction());
@@ -6892,7 +6893,10 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
   DECLARE_LOCALS;
 
   peer_missing_requested.erase(logevt.from);
-  ps->proc_replica_log(logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
+  ps->proc_replica_log(logevt.msg->info,
+		       logevt.msg->log,
+		       std::move(logevt.msg->missing),
+		       logevt.from);
 
   if (peer_missing_requested.empty()) {
     if (ps->need_up_thru) {
@@ -6965,7 +6969,7 @@ boost::statechart::result PeeringState::WaitUpThru::react(const MLogRec& logevt)
 {
   DECLARE_LOCALS;
   psdout(10) << "Noting missing from osd." << logevt.from << dendl;
-  ps->peer_missing[logevt.from].claim(logevt.msg->missing);
+  ps->peer_missing[logevt.from].claim(std::move(logevt.msg->missing));
   ps->peer_info[logevt.from] = logevt.msg->info;
   return discard_event();
 }
