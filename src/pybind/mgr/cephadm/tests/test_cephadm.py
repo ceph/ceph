@@ -926,7 +926,7 @@ class TestCephadm(object):
             if use_repo_digest:
                 cephadm_module.use_repo_digest = True
 
-            cephadm_module.convert_tags_to_repo_digest()
+                CephadmServe(cephadm_module).convert_tags_to_repo_digest()
 
             _, image, _ = cephadm_module.check_mon_command({
                 'prefix': 'config get',
