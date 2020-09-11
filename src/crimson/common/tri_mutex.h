@@ -35,6 +35,16 @@ public:
 
   bool is_acquired() const;
 
+  /// pass the provided exception to any waiting waiters
+  template<typename Exception>
+  void abort(Exception ex) {
+    while (!waiters.empty()) {
+      auto& waiter = waiters.front();
+      waiter.pr.set_exception(std::make_exception_ptr(ex));
+      waiters.pop_front();
+    }
+  }
+
 private:
   void wake();
   unsigned readers = 0;
