@@ -540,19 +540,19 @@ AdminSocket::find_matched_hook(std::string& prefix,
   // hook takes the same lock that was held during calls to
   // register/unregister, and set in_hook to allow unregister to wait for us
   // before removing this hook.
-  auto p = hooks.find(prefix);
-  if (p == hooks.cend()) {
+  auto [hooks_begin, hooks_end] = hooks.equal_range(prefix);
+  if (hooks_begin == hooks_end) {
     return {ENOENT, nullptr};
   }
   // make sure one of the registered commands with this prefix validates.
   stringstream errss;
-  if (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
-    if (p->first != prefix) {
-      return {EINVAL, nullptr};
+  for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
+    if (validate_cmd(m_cct, hook->second.desc, cmdmap, errss)) {
+      in_hook = true;
+      return {0, hook->second.hook};
     }
   }
-  in_hook = true;
-  return {0, p->second.hook};
+  return {EINVAL, nullptr};
 }
 
 void AdminSocket::queue_tell_command(cref_t<MCommand> m)
