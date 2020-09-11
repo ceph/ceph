@@ -2051,7 +2051,9 @@ private:
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
-  Allocator *alloc = nullptr;
+
+  bluefs_shared_alloc_context_t shared_alloc;
+
   uuid_d fsid;
   int path_fd = -1;  ///< open handle to $path
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
@@ -2353,24 +2355,19 @@ private:
 
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
-  int _open_bluefs(bool create);
+  int _open_bluefs(bool create, bool read_only);
   void _close_bluefs(bool cold_close);
-
-  // Limited (u)mount intended for BlueFS operations only
-  int _mount_for_bluefs();
-  void _umount_for_bluefs();
-
 
   int _is_bluefs(bool create, bool* ret);
   /*
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
   */
-  int _open_db_and_around(bool read_only);
+  int _open_db_and_around(bool read_only, bool to_repair = false);
   void _close_db_and_around(bool read_only);
+
   int _prepare_db_environment(bool create, bool read_only,
 			      std::string* kv_dir, std::string* kv_backend);
-  int _close_db_environment();
 
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
@@ -2383,7 +2380,8 @@ private:
   int _open_fm(KeyValueDB::Transaction t, bool read_only);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
-  int _open_alloc();
+  int _create_alloc();
+  int _init_alloc();
   void _close_alloc();
   int _open_collections();
   void _fsck_collections(int64_t* errors);
@@ -2600,27 +2598,20 @@ public:
   bool test_mount_in_use() override;
 
 private:
-  int _mount(bool kv_only, bool open_db=true);
+  int _mount();
 public:
   int mount() override {
-    return _mount(false);
+    return _mount();
   }
   int umount() override;
 
-  int start_kv_only(KeyValueDB **pdb, bool open_db=true) {
-    int r = _mount(true, open_db);
-    if (r < 0)
-      return r;
-    *pdb = db;
-    return 0;
-  }
-
-  int open_db_environment(KeyValueDB **pdb);
+  int open_db_environment(KeyValueDB **pdb, bool to_repair);
   int close_db_environment();
 
   int write_meta(const std::string& key, const std::string& value) override;
   int read_meta(const std::string& key, std::string *value) override;
 
+  // open in read-only and limited mode
   int cold_open();
   int cold_close();
 

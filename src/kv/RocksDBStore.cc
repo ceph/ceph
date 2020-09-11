@@ -887,6 +887,7 @@ int RocksDBStore::do_open(ostream &out,
 				       &sharding_recreate_text);
     bool recreate_mode = status.ok() && sharding_recreate_text == "1";
 
+    ceph_assert(!recreate_mode || !open_readonly);
     if (recreate_mode == false && missing_cfs.size() != 0) {
       derr << __func__ << " missing column families: " << missing_cfs_shard << dendl;
       return -EIO;
@@ -895,9 +896,9 @@ int RocksDBStore::do_open(ostream &out,
     if (existing_cfs.empty()) {
       // no column families
       if (open_readonly) {
-	status = rocksdb::DB::Open(opt, path, &db);
+        status = rocksdb::DB::OpenForReadOnly(opt, path, &db);
       } else {
-	status = rocksdb::DB::OpenForReadOnly(opt, path, &db);
+        status = rocksdb::DB::Open(opt, path, &db);
       }
       if (!status.ok()) {
 	derr << status.ToString() << dendl;
@@ -1075,6 +1076,12 @@ int RocksDBStore::repair(std::ostream &out)
       derr << __func__ << " cannot write to " << sharding_recreate << dendl;
       return -1;
     }
+    // fiinalize sharding recreate
+    if (do_open(out, false, false)) {
+      derr << __func__ << " cannot finalize repair" << dendl;
+      return -1;
+    }
+    close();
   }
 
   if (repaired && status.ok()) {
