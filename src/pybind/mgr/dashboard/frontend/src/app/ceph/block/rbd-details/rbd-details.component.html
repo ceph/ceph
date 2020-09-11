@@ -143,6 +143,17 @@
         <cd-rbd-configuration-table [data]="selection['configuration']"></cd-rbd-configuration-table>
       </ng-template>
     </li>
+
+    <li ngbNavItem="performance">
+      <a ngbNavLink
+         i18n>Performance</a>
+      <ng-template ngbNavContent>
+        <cd-grafana [grafanaPath]="rbdDashboardUrl"
+                    uid="YhCYGcuZz"
+                    grafanaStyle="one">
+        </cd-grafana>
+      </ng-template>
+    </li>
   </ul>
 
   <div [ngbNavOutlet]="nav"></div>
