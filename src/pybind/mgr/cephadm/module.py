@@ -1345,30 +1345,6 @@ To check that the host is reachable:
         self.log.info(msg)
         return msg
 
-    def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
-        config = self.get_minimal_ceph_conf()
-
-        try:
-            with self._remote_connection(host) as tpl:
-                conn, connr = tpl
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['mkdir', '-p', '/etc/ceph'])
-                if code:
-                    return f'failed to create /etc/ceph on {host}: {err}'
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['dd', 'of=/etc/ceph/ceph.conf'],
-                    stdin=config.encode('utf-8')
-                )
-                if code:
-                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
-                self.cache.update_last_etc_ceph_ceph_conf(host)
-                self.cache.save_host(host)
-        except OrchestratorError as e:
-            return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
-        return None
-
     def get_minimal_ceph_conf(self) -> str:
         _, config, _ = self.check_mon_command({
             "prefix": "config generate-minimal-conf",

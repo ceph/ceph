@@ -3,6 +3,11 @@ import json
 import logging
 from typing import TYPE_CHECKING, Optional
 
+try:
+    import remoto
+except ImportError:
+    remoto = None
+
 from ceph.deployment import inventory
 
 import orchestrator
@@ -115,7 +120,7 @@ class CephadmServe:
 
             if self.mgr.cache.host_needs_new_etc_ceph_ceph_conf(host):
                 self.log.debug(f"deploying new /etc/ceph/ceph.conf on `{host}`")
-                r = self.mgr._deploy_etc_ceph_ceph_conf(host)
+                r = self._deploy_etc_ceph_ceph_conf(host)
                 if r:
                     bad_hosts.append(r)
 
@@ -269,3 +274,27 @@ class CephadmServe:
         self.mgr.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.remove(search_host)
+
+    def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
+        config = self.mgr.get_minimal_ceph_conf()
+
+        try:
+            with self.mgr._remote_connection(host) as tpl:
+                conn, connr = tpl
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['mkdir', '-p', '/etc/ceph'])
+                if code:
+                    return f'failed to create /etc/ceph on {host}: {err}'
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['dd', 'of=/etc/ceph/ceph.conf'],
+                    stdin=config.encode('utf-8')
+                )
+                if code:
+                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
+                self.mgr.cache.update_last_etc_ceph_ceph_conf(host)
+                self.mgr.cache.save_host(host)
+        except OrchestratorError as e:
+            return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
+        return None
