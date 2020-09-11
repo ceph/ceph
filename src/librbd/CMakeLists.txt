@@ -242,10 +242,6 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   target_link_libraries(rbd_internal PRIVATE
     StdFilesystem::filesystem)
 endif()
-if(WITH_RBD_RWL)
-  target_link_libraries(rbd_types
-    PUBLIC blk)
-endif()
 add_custom_target(librbd_plugins)
 set(librbd_plugins_dir ${CEPH_INSTALL_PKGLIBDIR}/librbd)
 
