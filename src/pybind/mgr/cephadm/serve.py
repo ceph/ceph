@@ -3,6 +3,8 @@ import json
 import logging
 from typing import TYPE_CHECKING, Optional
 
+from ceph.deployment import inventory
+
 import orchestrator
 from cephadm.utils import forall_hosts, cephadmNoImage, str_to_datetime
 from orchestrator import OrchestratorError
@@ -101,7 +103,7 @@ class CephadmServe:
 
             if self.mgr.cache.host_needs_device_refresh(host):
                 self.log.debug('refreshing %s devices' % host)
-                r = self.mgr._refresh_host_devices(host)
+                r = self._refresh_host_devices(host)
                 if r:
                     failures.append(r)
 
@@ -215,5 +217,37 @@ class CephadmServe:
             dm[sd.name()] = sd
         self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
         self.mgr.cache.update_host_daemons(host, dm)
+        self.mgr.cache.save_host(host)
+        return None
+
+    def _refresh_host_devices(self, host) -> Optional[str]:
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, 'osd',
+                'ceph-volume',
+                ['--', 'inventory', '--format=json', '--filter-for-batch'])
+            if code:
+                return 'host %s ceph-volume inventory returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s ceph-volume inventory failed: %s' % (host, e)
+        devices = json.loads(''.join(out))
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, 'mon',
+                'list-networks',
+                [],
+                no_fsid=True)
+            if code:
+                return 'host %s list-networks returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s list-networks failed: %s' % (host, e)
+        networks = json.loads(''.join(out))
+        self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
+            host, len(devices), len(networks)))
+        devices = inventory.Devices.from_json(devices)
+        self.mgr.cache.update_host_devices_networks(host, devices.devices, networks)
+        self.mgr.update_osdspec_previews(host)
         self.mgr.cache.save_host(host)
         return None
