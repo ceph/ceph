@@ -157,4 +157,19 @@ struct BucketLayout {
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f=0);
 void decode(BucketLayout& l, bufferlist::const_iterator& bl);
 
+
+inline uint32_t num_shards(const bucket_index_normal_layout& index) {
+  return index.num_shards;
+}
+inline uint32_t num_shards(const bucket_index_layout& index) {
+  ceph_assert(index.type == BucketIndexType::Normal);
+  return num_shards(index.normal);
+}
+inline uint32_t num_shards(const bucket_index_layout_generation& index) {
+  return num_shards(index.layout);
+}
+inline uint32_t current_num_shards(const BucketLayout& layout) {
+  return num_shards(layout.current_index);
+}
+
 } // namespace rgw

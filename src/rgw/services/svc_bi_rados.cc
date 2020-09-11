@@ -469,7 +469,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   bool old_sync_enabled = orig_info.datasync_flag_enabled();
 
   if (old_sync_enabled != new_sync_enabled) {
-    int shards_num = info.layout.current_index.layout.normal.num_shards? info.layout.current_index.layout.normal.num_shards : 1;
+    int shards_num = rgw::current_num_shards(info.layout);
     int shard_id = info.layout.current_index.layout.normal.num_shards? 0 : -1;
     const auto& log_layout = info.layout.logs.back();
 
