@@ -531,6 +531,19 @@ def test_dd_octopus(dd_json):
         ),
         True
     ),
+    (
+        # fixed daemon id for teuthology.
+        IscsiServiceSpec(
+            service_type='iscsi',
+            service_id='iscsi',
+        ),
+        DaemonDescription(
+            daemon_type='iscsi',
+            daemon_id="iscsi.a",
+            hostname="host1",
+        ),
+        True
+    ),
 ])
 def test_daemon_description_service_name(spec: ServiceSpec,
                                          dd: DaemonDescription,
