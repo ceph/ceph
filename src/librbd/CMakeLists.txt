@@ -42,8 +42,10 @@ set(librbd_internal_srcs
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
+  cache/pwl/DiscardRequest.cc
   cache/pwl/InitRequest.cc
   cache/pwl/ShutdownRequest.cc
+  cache/Utils.cc
   cache/WriteAroundObjectDispatch.cc
   crypto/BlockCrypto.cc
   crypto/CryptoContextPool.cc
@@ -222,6 +224,8 @@ target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
 if(WITH_RBD_RWL)
   target_link_libraries(rbd_internal
     PUBLIC blk)
+  target_link_libraries(rbd_internal PRIVATE
+    StdFilesystem::filesystem)
 endif()
 
 add_custom_target(librbd_plugins)

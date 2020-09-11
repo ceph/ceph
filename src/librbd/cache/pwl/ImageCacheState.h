@@ -47,8 +47,11 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
+  static ImageCacheState<ImageCtxT>* create_image_cache_state(
+    ImageCtxT* image_ctx, int &r);
+
   static ImageCacheState<ImageCtxT>* get_image_cache_state(
-      ImageCtxT* image_ctx, int &r);
+    ImageCtxT* image_ctx);
 
   bool is_valid();
 };
