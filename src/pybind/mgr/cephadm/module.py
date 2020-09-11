@@ -24,7 +24,7 @@ import subprocess
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, RGWSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
+    NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
     CustomContainerSpec
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
@@ -51,7 +51,7 @@ from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
 from .utils import forall_hosts, CephadmNoImage, cephadmNoImage, \
-    str_to_datetime, datetime_to_str, is_repo_digest
+    str_to_datetime, datetime_to_str
 
 try:
     import remoto
@@ -439,24 +439,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         serve = CephadmServe(self)
         serve.serve()
-
-    def convert_tags_to_repo_digest(self):
-        if not self.use_repo_digest:
-            return
-        settings = self.upgrade.get_distinct_container_image_settings()
-        digests: Dict[str, ContainerInspectInfo] = {}
-        for container_image_ref in set(settings.values()):
-            if not is_repo_digest(container_image_ref):
-                image_info = self._get_container_image_info(container_image_ref)
-                if image_info.repo_digest:
-                    assert is_repo_digest(image_info.repo_digest), image_info
-                digests[container_image_ref] = image_info
-
-        for entity, container_image_ref in settings.items():
-            if not is_repo_digest(container_image_ref):
-                image_info = digests[container_image_ref]
-                if image_info.repo_digest:
-                    self.set_container_image(entity, image_info.repo_digest)
 
     def set_container_image(self, entity: str, image):
         self.check_mon_command({
