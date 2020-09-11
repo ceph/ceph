@@ -9041,8 +9041,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
   }
 
   bool need_resharding = false;
-  uint32_t num_source_shards =
-    (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
+  uint32_t num_source_shards = rgw::current_num_shards(bucket_info.layout);
   const uint32_t max_dynamic_shards =
     uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
 
@@ -9080,7 +9079,7 @@ int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t n
 {
   RGWReshard reshard(this->store, dpp);
 
-  uint32_t num_source_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
+  uint32_t num_source_shards = rgw::current_num_shards(bucket_info.layout);
 
   new_num_shards = std::min(new_num_shards, get_max_bucket_shards());
   if (new_num_shards <= num_source_shards) {
