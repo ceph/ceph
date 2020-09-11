@@ -367,6 +367,15 @@ class RGWHTTPArgs {
   std::map<std::string, std::string>& get_params() {
     return val_map;
   }
+  const std::map<std::string, std::string>& get_params() const {
+    return val_map;
+  }
+  std::map<std::string, std::string>& get_sys_params() {
+    return sys_val_map;
+  }
+  const std::map<std::string, std::string>& get_sys_params() const {
+    return sys_val_map;
+  }
   const std::map<std::string, std::string>& get_sub_resources() const {
     return sub_resources;
   }

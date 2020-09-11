@@ -74,7 +74,7 @@ public:
   virtual void notify(uint64_t pending_size) = 0;
 };
 
-class RGWRESTGenerateHTTPHeaders {
+class RGWRESTGenerateHTTPHeaders : public DoutPrefix {
   CephContext *cct;
   RGWEnv *new_env;
   req_info *new_info;
@@ -83,8 +83,9 @@ class RGWRESTGenerateHTTPHeaders {
   string resource;
 
 public:
-  RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info) : cct(_cct), new_env(_env), new_info(_info) {}
-  void init(const string& method, const string& url, const string& resource, const param_vec_t& params);
+  RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info);
+  void init(const string& method, const string& host, const string& resource_prefix,
+            const string& url, const string& resource, const param_vec_t& params);
   void set_extra_headers(const map<string, string>& extra_headers);
   int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
   void set_http_attrs(const map<string, string>& http_attrs);

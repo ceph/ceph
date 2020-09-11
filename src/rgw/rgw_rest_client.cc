@@ -233,38 +233,30 @@ void RGWHTTPSimpleRequest::get_out_headers(map<string, string> *pheaders)
   out_headers.clear();
 }
 
-static int sign_request(CephContext *cct, RGWAccessKey& key, RGWEnv& env, req_info& info)
+static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
   /* don't sign if no key is provided */
   if (key.key.empty()) {
     return 0;
   }
 
+  auto cct = dpp->get_cct();
+
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (const auto& i: env.get_map()) {
-      ldout(cct, 20) << "> " << i.first << " -> " << rgw::crypt_sanitize::x_meta_map{i.first, i.second} << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "():> " << i.first << " -> " << rgw::crypt_sanitize::x_meta_map{i.first, i.second} << dendl;
     }
   }
 
-  string canonical_header;
-  if (!rgw_create_s3_canonical_header(info, NULL, canonical_header, false)) {
-    ldout(cct, 0) << "failed to create canonical s3 header" << dendl;
-    return -EINVAL;
+  rgw::auth::s3::AWSSignerV4 signer(dpp);
+
+  auto sigv4_data = signer.prepare(key.id, info, true);
+  auto sigv4_headers = sigv4_data.signature_factory(dpp, key.key, sigv4_data);
+
+  for (auto& entry : sigv4_headers) {
+    ldout(cct, 20) << __func__ << "(): sigv4 header: " << entry.first << ": " << entry.second << dendl;
+    env.set(entry.first, entry.second);
   }
-
-  ldout(cct, 10) << "generated canonical header: " << canonical_header << dendl;
-
-  string digest;
-  try {
-    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
-  } catch (int ret) {
-    return ret;
-  }
-
-  string auth_hdr = "AWS " + key.id + ":" + digest;
-  ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
-  
-  env.set("AUTHORIZATION", auth_hdr);
 
   return 0;
 }
@@ -288,6 +280,11 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   else
     request_uri_encode = string("/") + bucket_encode;
   new_info.request_uri = request_uri_encode;
+
+  for (auto& param : params) {
+    new_info.args.append(param.first, param.second);
+  }
+
   new_env.set("HTTP_DATE", date_str.c_str());
   const char* const content_md5 = info.env->get("HTTP_CONTENT_MD5");
   if (content_md5) {
@@ -450,7 +447,15 @@ static void add_grants_headers(map<int, string>& grants, RGWEnv& env, meta_map_t
   }
 }
 
-void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& _url, const string& resource, const param_vec_t& params)
+RGWRESTGenerateHTTPHeaders::RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info) :
+                                                DoutPrefix(_cct, dout_subsys, "rest gen http headers: "),
+                                                cct(_cct),
+                                                new_env(_env),
+                                                new_info(_info) {
+}
+
+void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host, const string& resource_prefix,
+                                      const string& _url, const string& resource, const param_vec_t& params)
 {
   string params_str;
   map<string, string>& args = new_info->args.get_params();
@@ -467,11 +472,13 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& _url,
   get_gmt_date_str(date_str);
 
   new_env->set("HTTP_DATE", date_str.c_str());
+  new_env->set("HTTP_HOST", host);
 
   method = _method;
   new_info->method = method.c_str();
 
   new_info->script_uri = "/";
+  new_info->script_uri.append(resource_prefix);
   new_info->script_uri.append(resource);
   new_info->request_uri = new_info->script_uri;
 }
@@ -573,12 +580,17 @@ void RGWRESTStreamS3PutObj::send_init(rgw::sal::RGWObject* obj)
   string resource_str;
   string resource;
   string new_url = url;
+  string new_host = host;
+
+   const auto& bucket_name = obj->get_bucket()->get_name();
 
   if (host_style == VirtualStyle) {
     resource_str = obj->get_oid();
-    new_url = obj->get_bucket()->get_name() + "."  + new_url;
+
+    new_url = bucket_name + "."  + new_url;
+    new_host = bucket_name + "." + new_host;
   } else {
-    resource_str = obj->get_bucket()->get_name() + "/" + obj->get_oid();
+    resource_str = bucket_name + "/" + obj->get_oid();
   }
 
   //do not encode slash in object key name
@@ -588,7 +600,7 @@ void RGWRESTStreamS3PutObj::send_init(rgw::sal::RGWObject* obj)
     new_url.append("/");
 
   method = "PUT";
-  headers_gen.init(method, new_url, resource, params);
+  headers_gen.init(method, new_host, resource_prefix, new_url, resource, params);
 
   url = headers_gen.get_url();
 }
@@ -738,7 +750,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   }
 
   if (host_style == VirtualStyle) {
-    new_url = bucket_name + "." + new_url;
+    new_url = protocol + "://" + bucket_name + "." + host;
     if(pos == string::npos) {
       new_resource = "";
     } else {
@@ -748,7 +760,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
 
   RGWRESTGenerateHTTPHeaders headers_gen(cct, &new_env, &new_info);
 
-  headers_gen.init(method, new_url, new_resource, params);
+  headers_gen.init(method, host, resource_prefix, new_url, new_resource, params);
 
   headers_gen.set_http_attrs(extra_headers);
 

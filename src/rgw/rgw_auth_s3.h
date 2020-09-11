@@ -466,6 +466,9 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 			 const bool using_qs,                    /* in  */
                          const DoutPrefixProvider *dpp);         /* in */
 
+string gen_v4_scope(const ceph::real_time& timestamp,
+                    const string& region);
+
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
   if ((c >= 'a' && c <= 'z') ||
@@ -515,6 +518,22 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
    * approach that boto library. See auth.py:canonical_uri(...). */
 
   std::string canonical_uri = aws4_uri_recode(info.request_uri_aws4, false);
+
+  if (canonical_uri.empty()) {
+    canonical_uri = "/";
+  } else {
+    boost::replace_all(canonical_uri, "+", "%20");
+  }
+
+  return canonical_uri;
+}
+
+static inline std::string gen_v4_canonical_uri(const req_info& info) {
+  /* The code should normalize according to RFC 3986 but S3 does NOT do path
+   * normalization that SigV4 typically does. This code follows the same
+   * approach that boto library. See auth.py:canonical_uri(...). */
+
+  std::string canonical_uri = aws4_uri_recode(info.request_uri, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
@@ -581,11 +600,17 @@ static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
+std::string gen_v4_canonical_qs(const req_info& info);
+
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
                          const std::string_view& signedheaders,
                          bool using_qs,
                          bool force_boto2_compat);
+
+std::string gen_v4_canonical_headers(const req_info& info,
+                                     const map<string, string>& extra_headers,
+                                     string *signed_hdrs);
 
 extern sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
