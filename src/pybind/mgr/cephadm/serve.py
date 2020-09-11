@@ -109,7 +109,7 @@ class CephadmServe:
 
             if self.mgr.cache.host_needs_osdspec_preview_refresh(host):
                 self.log.debug(f"refreshing OSDSpec previews for {host}")
-                r = self.mgr._refresh_host_osdspec_previews(host)
+                r = self._refresh_host_osdspec_previews(host)
                 if r:
                     failures.append(r)
 
@@ -248,6 +248,24 @@ class CephadmServe:
             host, len(devices), len(networks)))
         devices = inventory.Devices.from_json(devices)
         self.mgr.cache.update_host_devices_networks(host, devices.devices, networks)
-        self.mgr.update_osdspec_previews(host)
+        self.update_osdspec_previews(host)
         self.mgr.cache.save_host(host)
         return None
+
+    def _refresh_host_osdspec_previews(self, host) -> bool:
+        self.update_osdspec_previews(host)
+        self.mgr.cache.save_host(host)
+        self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
+        return True
+
+    def update_osdspec_previews(self, search_host: str = ''):
+        # Set global 'pending' flag for host
+        self.mgr.cache.loading_osdspec_preview.add(search_host)
+        previews = []
+        # query OSDSpecs for host <search host> and generate/get the preview
+        # There can be multiple previews for one host due to multiple OSDSpecs.
+        previews.extend(self.mgr.osd_service.get_previews(search_host))
+        self.log.debug(f"Loading OSDSpec previews to HostCache")
+        self.mgr.cache.osdspec_previews[search_host] = previews
+        # Unset global 'pending' flag for host
+        self.mgr.cache.loading_osdspec_preview.remove(search_host)
