@@ -1,7 +1,10 @@
+import datetime
+import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from cephadm.utils import forall_hosts, cephadmNoImage
+import orchestrator
+from cephadm.utils import forall_hosts, cephadmNoImage, str_to_datetime
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -85,7 +88,7 @@ class CephadmServe:
                     bad_hosts.append(r)
             if self.mgr.cache.host_needs_daemon_refresh(host):
                 self.log.debug('refreshing %s daemons' % host)
-                r = self.mgr._refresh_host_daemons(host)
+                r = self._refresh_host_daemons(host)
                 if r:
                     failures.append(r)
 
@@ -161,3 +164,56 @@ class CephadmServe:
         except Exception as e:
             self.log.debug(' host %s failed check' % host)
             return 'host %s failed check: %s' % (host, e)
+
+    def _refresh_host_daemons(self, host) -> Optional[str]:
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, 'mon', 'ls', [], no_fsid=True)
+            if code:
+                return 'host %s cephadm ls returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s scrape failed: %s' % (host, e)
+        ls = json.loads(''.join(out))
+        dm = {}
+        for d in ls:
+            if not d['style'].startswith('cephadm'):
+                continue
+            if d['fsid'] != self.mgr._cluster_fsid:
+                continue
+            if '.' not in d['name']:
+                continue
+            sd = orchestrator.DaemonDescription()
+            sd.last_refresh = datetime.datetime.utcnow()
+            for k in ['created', 'started', 'last_configured', 'last_deployed']:
+                v = d.get(k, None)
+                if v:
+                    setattr(sd, k, str_to_datetime(d[k]))
+            sd.daemon_type = d['name'].split('.')[0]
+            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
+            sd.hostname = host
+            sd.container_id = d.get('container_id')
+            if sd.container_id:
+                # shorten the hash
+                sd.container_id = sd.container_id[0:12]
+            sd.container_image_name = d.get('container_image_name')
+            sd.container_image_id = d.get('container_image_id')
+            sd.version = d.get('version')
+            if sd.daemon_type == 'osd':
+                sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
+            if 'state' in d:
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': 1,
+                    'stopped': 0,
+                    'error': -1,
+                    'unknown': -1,
+                }[d['state']]
+            else:
+                sd.status_desc = 'unknown'
+                sd.status = None
+            dm[sd.name()] = sd
+        self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
+        self.mgr.cache.update_host_daemons(host, dm)
+        self.mgr.cache.save_host(host)
+        return None
