@@ -207,6 +207,11 @@ private:
       : hook(hook), desc(desc), help(help) {}
   };
 
+  /// find the first hook which matches the given prefix and cmdmap
+  std::pair<int, AdminSocketHook*> find_matched_hook(
+    std::string& prefix,
+    const cmdmap_t& cmdmap);
+
   std::multimap<std::string, hook_info, std::less<>> hooks;
 
   friend class AdminSocketTest;
