@@ -1345,24 +1345,6 @@ To check that the host is reachable:
         self.log.info(msg)
         return msg
 
-    def update_osdspec_previews(self, search_host: str = ''):
-        # Set global 'pending' flag for host
-        self.cache.loading_osdspec_preview.add(search_host)
-        previews = []
-        # query OSDSpecs for host <search host> and generate/get the preview
-        # There can be multiple previews for one host due to multiple OSDSpecs.
-        previews.extend(self.osd_service.get_previews(search_host))
-        self.log.debug(f"Loading OSDSpec previews to HostCache")
-        self.cache.osdspec_previews[search_host] = previews
-        # Unset global 'pending' flag for host
-        self.cache.loading_osdspec_preview.remove(search_host)
-
-    def _refresh_host_osdspec_previews(self, host) -> bool:
-        self.update_osdspec_previews(host)
-        self.cache.save_host(host)
-        self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
-        return True
-
     def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
         config = self.get_minimal_ceph_conf()
 
