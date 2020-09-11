@@ -505,12 +505,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 }
         self.set_health_checks(self.health_checks)
 
-    def _serve_sleep(self):
-        sleep_interval = 600
-        self.log.debug('Sleeping for %d seconds', sleep_interval)
-        ret = self.event.wait(sleep_interval)
-        self.event.clear()
-
     def serve(self) -> None:
         """
         The main loop of cephadm.
