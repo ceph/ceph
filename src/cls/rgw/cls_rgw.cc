@@ -1751,19 +1751,29 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header); /* updates header version */
 }
 
+static std::pair<int, rgw_cls_unlink_instance_op>
+decode_unlink_instance_op(const ceph::bufferlist* in)
+{
+  rgw_cls_unlink_instance_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_rm_obj_instance_op(): failed to decode request\n");
+    return { -EINVAL, {} };
+  }
+  return { 0, std::move(op) };
+}
+
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string olh_data_idx;
   string instance_idx;
 
   // decode request
-  rgw_cls_unlink_instance_op op;
-  auto iter = in->cbegin();
-  try {
-    decode(op, iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_bucket_rm_obj_instance_op(): failed to decode request\n");
-    return -EINVAL;
+  const auto [ decode_ret, op ] = decode_unlink_instance_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
   }
 
   cls_rgw_obj_key dest_key = op.key;
