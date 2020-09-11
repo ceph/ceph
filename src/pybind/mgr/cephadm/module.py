@@ -1979,22 +1979,6 @@ To check that the host is reachable:
             r = False
         return r
 
-    def _apply_all_services(self):
-        r = False
-        specs = []  # type: List[ServiceSpec]
-        for sn, spec in self.spec_store.specs.items():
-            specs.append(spec)
-        for spec in specs:
-            try:
-                if self._apply_service(spec):
-                    r = True
-            except Exception as e:
-                self.log.exception('Failed to apply %s spec %s: %s' % (
-                    spec.service_name(), spec, e))
-                self.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
-
-        return r
-
     def _check_pool_exists(self, pool, service_name):
         logger.info(f'Checking pool "{pool}" exists for service {service_name}')
         if not self.rados.pool_exists(pool):
