@@ -223,10 +223,7 @@ def ceph_log(ctx, config):
                 f.seek(0, 0)
 
             for remote in ctx.cluster.remotes.keys():
-                teuthology.write_file(remote=remote,
-                                      path=remote_logrotate_conf,
-                                      data=BytesIO(conf.encode())
-                                      )
+                remote.write_file(remote_logrotate_conf, BytesIO(conf.encode()))
                 remote.run(
                     args=[
                         'sudo',
@@ -748,29 +745,14 @@ def cluster(ctx, config):
     )
 
     log.info('Copying monmap to all nodes...')
-    keyring = teuthology.get_file(
-        remote=mon0_remote,
-        path=keyring_path,
-    )
-    monmap = teuthology.get_file(
-        remote=mon0_remote,
-        path=monmap_path,
-    )
+    keyring = mon0_remote.read_file(keyring_path)
+    monmap = mon0_remote.read_file(monmap_path)
 
     for rem in ctx.cluster.remotes.keys():
         # copy mon key and initial monmap
         log.info('Sending monmap to node {remote}'.format(remote=rem))
-        teuthology.sudo_write_file(
-            remote=rem,
-            path=keyring_path,
-            data=keyring,
-            perms='0644'
-        )
-        teuthology.write_file(
-            remote=rem,
-            path=monmap_path,
-            data=monmap,
-        )
+        rem.write_file(keyring_path, keyring, mode='0644', sudo=True)
+        rem.write_file(monmap_path, monmap)
 
     log.info('Setting up mon nodes...')
     mons = ctx.cluster.only(teuthology.is_type('mon', cluster_name))
@@ -991,9 +973,8 @@ def cluster(ctx, config):
                 continue
             for role in teuthology.cluster_roles_of_type(roles_for_host, type_, cluster_name):
                 _, _, id_ = teuthology.split_role(role)
-                data = teuthology.get_file(
-                    remote=remote,
-                    path=os.path.join(
+                data = remote.read_file(
+                    os.path.join(
                         DATA_PATH.format(
                             type_=type_, id_=id_, cluster=cluster_name),
                         'keyring',
@@ -1005,9 +986,8 @@ def cluster(ctx, config):
     for remote, roles_for_host in ctx.cluster.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            data = teuthology.get_file(
-                remote=remote,
-                path='/etc/ceph/{cluster}.client.{id}.keyring'.format(id=id_, cluster=cluster_name)
+            data = remote.read_file(
+                '/etc/ceph/{cluster}.client.{id}.keyring'.format(id=id_, cluster=cluster_name)
             )
             keys.append(('client', id_, data))
             keys_fp.write(data)
@@ -1335,11 +1315,8 @@ def run_daemon(ctx, config, type_):
             if type_ == 'osd':
                 datadir='/var/lib/ceph/osd/{cluster}-{id}'.format(
                     cluster=cluster_name, id=id_)
-                osd_uuid = teuthology.get_file(
-                    remote=remote,
-                    path=datadir + '/fsid',
-                    sudo=True,
-                ).decode().strip()
+                osd_uuid = remote.read_file(
+                    datadir + '/fsid', sudo=True).decode().strip()
                 osd_uuids[id_] = osd_uuid
     for osd_id in range(len(osd_uuids)):
         id_ = str(osd_id)
