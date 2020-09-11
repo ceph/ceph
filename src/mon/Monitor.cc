@@ -2923,10 +2923,13 @@ void Monitor::log_health(
   }
 }
 
-void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
+void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
+				 MonSession *session)
 {
   if (f)
     f->open_object_section("status");
+
+  const auto&& fs_names = session->get_allowed_fs_names();
 
   mono_clock::time_point now = mono_clock::now();
   if (f) {
@@ -2957,7 +2960,14 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     mgrstatmon()->print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
-    mdsmon()->get_fsmap().print_summary(f, NULL);
+
+    FSMap fsmap_copy = mdsmon()->get_fsmap();
+    if (!fs_names.empty()) {
+      fsmap_copy.filter(fs_names);
+    }
+    const FSMap *fsmapp = &fsmap_copy;
+
+    fsmapp->print_summary(f, NULL);
     f->close_section();
     f->open_object_section("mgrmap");
     mgrmon()->get_map().print_summary(f, nullptr);
@@ -3009,9 +3019,17 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	mgrmon()->get_map().print_summary(nullptr, &ss);
 	ss << "\n";
       }
-      if (mdsmon()->should_print_status()) {
-        ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
+
+      FSMap fsmap_copy = mdsmon()->get_fsmap();
+      if (!fs_names.empty()) {
+	fsmap_copy.filter(fs_names);
       }
+      const FSMap *fsmapp = &fsmap_copy;
+
+      if (fsmapp->filesystem_count() > 0 and mdsmon()->should_print_status()){
+        ss << "    mds: " << spacing << *fsmapp << "\n";
+      }
+
       ss << "    osd: " << spacing;
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
       ss << "\n";
@@ -3551,7 +3569,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
     if (prefix == "status") {
       // get_cluster_status handles f == NULL
-      get_cluster_status(ds, f.get());
+      get_cluster_status(ds, f.get(), session);
 
       if (f) {
         f->flush(ds);

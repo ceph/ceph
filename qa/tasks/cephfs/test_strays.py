@@ -39,17 +39,17 @@ class TestStrays(CephFSTestCase):
         create_script = dedent("""
             import os
 
-            mount_path = "{mount_path}"
+            mountpoint = "{mountpoint}"
             subdir = "delete_me"
             size = {size}
             file_count = {file_count}
-            os.mkdir(os.path.join(mount_path, subdir))
+            os.mkdir(os.path.join(mountpoint, subdir))
             for i in range(0, file_count):
                 filename = "{{0}}_{{1}}.bin".format(i, size)
-                with open(os.path.join(mount_path, subdir, filename), 'w') as f:
+                with open(os.path.join(mountpoint, subdir, filename), 'w') as f:
                     f.write(size * 'x')
         """.format(
-            mount_path=self.mount_a.mountpoint,
+            mountpoint=self.mount_a.mountpoint,
             size=1024,
             file_count=file_count
         ))
@@ -145,18 +145,18 @@ class TestStrays(CephFSTestCase):
         create_script = dedent("""
             import os
 
-            mount_path = "{mount_path}"
+            mountpoint = "{mountpoint}"
             subdir = "delete_me"
             size_unit = {size_unit}
             file_multiplier = {file_multiplier}
-            os.mkdir(os.path.join(mount_path, subdir))
+            os.mkdir(os.path.join(mountpoint, subdir))
             for i in range(0, file_multiplier):
                 for size in range(0, {size_range}*size_unit, size_unit):
                     filename = "{{0}}_{{1}}.bin".format(i, size // size_unit)
-                    with open(os.path.join(mount_path, subdir, filename), 'w') as f:
+                    with open(os.path.join(mountpoint, subdir, filename), 'w') as f:
                         f.write(size * 'x')
         """.format(
-            mount_path=self.mount_a.mountpoint,
+            mountpoint=self.mount_a.mountpoint,
             size_unit=size_unit,
             file_multiplier=file_multiplier,
             size_range=self.throttle_workload_size_range
