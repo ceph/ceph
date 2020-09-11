@@ -86,6 +86,8 @@ public:
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) override;
 
+  bool invalidate_cache(Context* on_finish) override;
+
 private:
   ImageCtxT* m_image_ctx;
   pwl::AbstractWriteLog<ImageCtx> *m_image_cache;
