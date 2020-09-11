@@ -771,7 +771,7 @@ class TestCephadm(object):
             assert out == HostSpec('test', 'test', status='Offline').to_json()
 
             _get_connection.side_effect = None
-            assert cephadm_module._check_host('test') is None
+            assert CephadmServe(cephadm_module)._check_host('test') is None
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test').to_json()
 
