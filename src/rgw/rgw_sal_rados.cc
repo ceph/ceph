@@ -925,6 +925,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				    pmaster_bucket, pmaster_num_shards, exclusive);
     if (ret == -EEXIST) {
       *existed = true;
+      ret = 0;
     } else if (ret != 0) {
       return ret;
     }
