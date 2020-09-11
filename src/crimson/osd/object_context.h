@@ -11,6 +11,7 @@
 
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
+#include "crimson/common/exception.h"
 #include "crimson/osd/osd_operation.h"
 
 namespace ceph {
@@ -83,18 +84,48 @@ public:
     loaded = true;
   }
 
+  void interrupt(std::exception_ptr ex) {
+    if (wake) {
+      wake->set_exception(ex);
+    }
+    if (!wait_queue.try_lock()) {
+      interrupted = std::move(ex);
+      return;
+    } else {
+      wait_queue.unlock();
+    }
+    if (rwstate.recovery_read_marker) {
+      drop_recovery_read();
+    }
+  }
+
 private:
   RWState rwstate;
   seastar::shared_mutex wait_queue;
+  uint64_t wait_queue_waiters = 0;
   std::optional<seastar::shared_promise<>> wake;
-
+  std::optional<std::exception_ptr> interrupted;
+  
   template <typename F>
   seastar::future<> with_queue(F &&f) {
+    wait_queue_waiters++;
     return wait_queue.lock().then([this, f=std::move(f)] {
+      if (interrupted) {
+	auto fut = seastar::make_exception_future<>(*interrupted);
+	if ((--wait_queue_waiters) == 0) {
+	  interrupted.reset();
+	}
+	return fut;
+      }
       ceph_assert(!wake);
       return seastar::repeat([this, f=std::move(f)]() {
+	if (interrupted) {
+	  return seastar::make_exception_future<
+		  seastar::stop_iteration>(*interrupted);
+	}
 	if (f()) {
 	  wait_queue.unlock();
+	  wait_queue_waiters--;
 	  return seastar::make_ready_future<seastar::stop_iteration>(
 	    seastar::stop_iteration::yes);
 	} else {
@@ -107,10 +138,14 @@ private:
 	      seastar::stop_iteration::no);
 	  });
 	}
+      }).handle_exception([this](auto e) {
+	if ((--wait_queue_waiters) == 0) {
+	  interrupted.reset();
+	}
+	return seastar::make_exception_future<>(e);
       });
     });
   }
-
 
   const char *get_type_name() const final {
     return "ObjectContext";
@@ -208,7 +243,11 @@ public:
       return seastar::make_ready_future<bool>(rwstate.get_recovery_read());
     }
     return with_queue([this] {
-      return rwstate.get_recovery_read();
+      bool r = rwstate.get_recovery_read();
+      if (!r) {
+	rwstate.recovery_read_marker = false;
+      }
+      return r;
     }).then([] {return seastar::make_ready_future<bool>(true); });
   }
   void drop_recovery_read() {

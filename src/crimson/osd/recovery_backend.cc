@@ -42,7 +42,9 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
     if ((recovery_waiter.pi && recovery_waiter.pi->is_complete())
 	|| (!recovery_waiter.pi
 	  && recovery_waiter.obc && recovery_waiter.obc->obs.exists)) {
-      recovery_waiter.obc->drop_recovery_read();
+      recovery_waiter.obc->interrupt(
+	  std::make_exception_ptr(::crimson::common::actingset_changed(
+	      pg.is_primary())));
       recovery_waiter.interrupt(why);
     }
   }
