@@ -508,9 +508,8 @@ static void cache_list_dump_helper(Formatter* f,
 class RGWSI_SysObj_Cache_ASocketHook : public AdminSocketHook {
   RGWSI_SysObj_Cache *svc;
 
-  static constexpr const char* admin_commands[4][3] = {
-    { "cache list",
-      "cache list name=filter,type=CephString,req=false",
+  static constexpr char* admin_commands[][2] = {
+    { "cache list name=filter,type=CephString,req=false",
       "cache list [filter_str]: list object cache, possibly matching substrings" },
     { "cache inspect name=target,type=CephString,req=true",
       "cache inspect target: print cache element" },
