@@ -145,18 +145,10 @@ filestore_args = {
 
 def get_default_args():
     defaults = {}
-    defaults.update({name.strip('-').replace('-', '_').replace('.', '_'): val['default'] for name, val in common_args.items()
-                     if 'default' in val})
-    defaults.update({name.strip('-').replace('-', '_').replace('.', '_'): val['default'] for name, val in filestore_args.items()
-                     if 'default' in val})
-    defaults.update({name.strip('-').replace('-', '_').replace('.', '_'): val['default'] for name, val in bluestore_args.items()
-                     if 'default' in val})
-    defaults.update({name.strip('-').replace('-', '_').replace('.', '_'): None for name, val in common_args.items()
-                     if 'default' not in val})
-    defaults.update({name.strip('-').replace('-', '_').replace('.', '_'): None for name, val in filestore_args.items()
-                     if 'default' not in val})
-    defaults.update({name.strip('-').replace('-', '_').replace('.', '_'): None for name, val in bluestore_args.items()
-                     if 'default' not in val})
+    def format_name(name):
+        return name.strip('-').replace('-', '_').replace('.', '_')
+    for argset in (common_args, filestore_args, bluestore_args):
+        defaults.update({format_name(name): val.get('default', None) for name, val in argset.items()})
     return defaults
 
 

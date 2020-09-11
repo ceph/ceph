@@ -117,7 +117,8 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
             continue
         # any LV present is considered a taken slot
         occupied_slots = len(dev.lvs)
-        # TODO this only looks at the first vg on device
+        # this only looks at the first vg on device, unsure if there is a better
+        # way
         dev_size = dev.vg_size[0]
         abs_size = disk.Size(b=int(dev_size / requested_slots))
         free_size = dev.vg_free[0]
@@ -289,8 +290,12 @@ class Batch(object):
             help='Provision slots on WAL device, can remain unoccupied'
         )
         def journal_size_in_mb_hack(size):
-            # give user time to adjust, then remove here
+            # TODO give user time to adjust, then remove this
             if size and size[-1].isdigit():
+                mlogger.warning('DEPRECATION NOTICE')
+                mlogger.warning('--journal-size as integer is parsed as megabytes')
+                mlogger.warning('A future release will parse integers as bytes')
+                mlogger.warning('Add a "M" to explicitly pass a megabyte size')
                 size += 'M'
             return disk.Size.parse(size)
         parser.add_argument(
