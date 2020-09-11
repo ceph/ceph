@@ -1322,7 +1322,7 @@ int RGWBucketAdminOp::set_quota(rgw::sal::Store* store, RGWBucketAdminOpState& o
 static int purge_bucket_instance(rgw::sal::Store* store, const RGWBucketInfo& bucket_info, const DoutPrefixProvider *dpp)
 {
   const auto& index = bucket_info.layout.current_index;
-  int max_shards = index.layout.normal.num_shards;
+  const int max_shards = num_shards(index);
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
     int ret = bs.init(bucket_info.bucket, i, index, nullptr, dpp);
