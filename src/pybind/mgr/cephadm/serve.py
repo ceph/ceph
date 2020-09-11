@@ -54,7 +54,7 @@ class CephadmServe:
 
                 self._check_for_strays()
 
-                self.mgr._update_paused_health()
+                self._update_paused_health()
 
                 if not self.mgr.paused:
                     self.mgr.rm_util.process_removal_queue()
@@ -83,6 +83,20 @@ class CephadmServe:
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         ret = self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
+
+    def _update_paused_health(self):
+        if self.mgr.paused:
+            self.mgr.health_checks['CEPHADM_PAUSED'] = {
+                'severity': 'warning',
+                'summary': 'cephadm background work is paused',
+                'count': 1,
+                'detail': ["'ceph orch resume' to resume"],
+            }
+            self.mgr.set_health_checks(self.mgr.health_checks)
+        else:
+            if 'CEPHADM_PAUSED' in self.mgr.health_checks:
+                del self.mgr.health_checks['CEPHADM_PAUSED']
+                self.mgr.set_health_checks(self.mgr.health_checks)
 
     def _refresh_hosts_and_daemons(self) -> None:
         bad_hosts = []

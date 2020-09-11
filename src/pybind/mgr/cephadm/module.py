@@ -466,20 +466,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'who': entity,
         })
 
-    def _update_paused_health(self):
-        if self.paused:
-            self.health_checks['CEPHADM_PAUSED'] = {
-                'severity': 'warning',
-                'summary': 'cephadm background work is paused',
-                'count': 1,
-                'detail': ["'ceph orch resume' to resume"],
-            }
-            self.set_health_checks(self.health_checks)
-        else:
-            if 'CEPHADM_PAUSED' in self.health_checks:
-                del self.health_checks['CEPHADM_PAUSED']
-                self.set_health_checks(self.health_checks)
-
     def config_notify(self):
         """
         This method is called whenever one of our config options is changed.
