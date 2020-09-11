@@ -2153,7 +2153,9 @@ To check that the host is reachable:
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
 
-            self.cephadm_services[daemon_type].create(daemon_spec)
+            daemon_spec = self.cephadm_services[daemon_type].prepare_create(daemon_spec)
+
+            self._create_daemon(daemon_spec)
 
             # add to daemon list so next name(s) will also be unique
             sd = orchestrator.DaemonDescription(
@@ -2281,7 +2283,7 @@ To check that the host is reachable:
                 self._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
 
     def _add_daemon(self, daemon_type, spec,
-                    create_func: Callable[..., T], config_func=None) -> List[T]:
+                    create_func: Callable[..., CephadmDaemonSpec], config_func=None) -> List[str]:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
@@ -2297,7 +2299,7 @@ To check that the host is reachable:
 
     def _create_daemons(self, daemon_type, spec, daemons,
                         hosts, count,
-                        create_func: Callable[..., T], config_func=None) -> List[T]:
+                        create_func: Callable[..., CephadmDaemonSpec], config_func=None) -> List[str]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
@@ -2333,7 +2335,8 @@ To check that the host is reachable:
 
         @forall_hosts
         def create_func_map(*args):
-            return create_func(*args)
+            daemon_spec = create_func(*args)
+            return self._create_daemon(daemon_spec)
 
         return create_func_map(args)
 
@@ -2344,12 +2347,12 @@ To check that the host is reachable:
     @trivial_completion
     def add_mon(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mon', spec, self.mon_service.create)
+        return self._add_daemon('mon', spec, self.mon_service.prepare_create)
 
     @trivial_completion
     def add_mgr(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mgr', spec, self.mgr_service.create)
+        return self._add_daemon('mgr', spec, self.mgr_service.prepare_create)
 
     def _apply(self, spec: GenericSpec) -> str:
         self.migration.verify_no_migration()
@@ -2449,7 +2452,7 @@ To check that the host is reachable:
 
     @trivial_completion
     def add_mds(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('mds', spec, self.mds_service.create, self.mds_service.config)
+        return self._add_daemon('mds', spec, self.mds_service.prepare_create, self.mds_service.config)
 
     @trivial_completion
     def apply_mds(self, spec: ServiceSpec) -> str:
@@ -2457,7 +2460,7 @@ To check that the host is reachable:
 
     @trivial_completion
     def add_rgw(self, spec) -> List[str]:
-        return self._add_daemon('rgw', spec, self.rgw_service.create, self.rgw_service.config)
+        return self._add_daemon('rgw', spec, self.rgw_service.prepare_create, self.rgw_service.config)
 
     @trivial_completion
     def apply_rgw(self, spec) -> str:
@@ -2466,7 +2469,7 @@ To check that the host is reachable:
     @trivial_completion
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec, self.iscsi_service.create, self.iscsi_service.config)
+        return self._add_daemon('iscsi', spec, self.iscsi_service.prepare_create, self.iscsi_service.config)
 
     @trivial_completion
     def apply_iscsi(self, spec) -> str:
@@ -2474,7 +2477,7 @@ To check that the host is reachable:
 
     @trivial_completion
     def add_rbd_mirror(self, spec) -> List[str]:
-        return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.create)
+        return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.prepare_create)
 
     @trivial_completion
     def apply_rbd_mirror(self, spec) -> str:
@@ -2482,7 +2485,7 @@ To check that the host is reachable:
 
     @trivial_completion
     def add_nfs(self, spec) -> List[str]:
-        return self._add_daemon('nfs', spec, self.nfs_service.create, self.nfs_service.config)
+        return self._add_daemon('nfs', spec, self.nfs_service.prepare_create, self.nfs_service.config)
 
     @trivial_completion
     def apply_nfs(self, spec) -> str:
@@ -2494,7 +2497,7 @@ To check that the host is reachable:
 
     @trivial_completion
     def add_prometheus(self, spec) -> List[str]:
-        return self._add_daemon('prometheus', spec, self.prometheus_service.create)
+        return self._add_daemon('prometheus', spec, self.prometheus_service.prepare_create)
 
     @trivial_completion
     def apply_prometheus(self, spec) -> str:
@@ -2504,7 +2507,7 @@ To check that the host is reachable:
     def add_node_exporter(self, spec):
         # type: (ServiceSpec) -> List[str]
         return self._add_daemon('node-exporter', spec,
-                                self.node_exporter_service.create)
+                                self.node_exporter_service.prepare_create)
 
     @trivial_completion
     def apply_node_exporter(self, spec) -> str:
@@ -2514,7 +2517,7 @@ To check that the host is reachable:
     def add_crash(self, spec):
         # type: (ServiceSpec) -> List[str]
         return self._add_daemon('crash', spec,
-                                self.crash_service.create)
+                                self.crash_service.prepare_create)
 
     @trivial_completion
     def apply_crash(self, spec) -> str:
@@ -2523,7 +2526,7 @@ To check that the host is reachable:
     @trivial_completion
     def add_grafana(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('grafana', spec, self.grafana_service.create)
+        return self._add_daemon('grafana', spec, self.grafana_service.prepare_create)
 
     @trivial_completion
     def apply_grafana(self, spec: ServiceSpec) -> str:
@@ -2532,7 +2535,7 @@ To check that the host is reachable:
     @trivial_completion
     def add_alertmanager(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('alertmanager', spec, self.alertmanager_service.create)
+        return self._add_daemon('alertmanager', spec, self.alertmanager_service.prepare_create)
 
     @trivial_completion
     def apply_alertmanager(self, spec: ServiceSpec) -> str:

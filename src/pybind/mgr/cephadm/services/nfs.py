@@ -26,7 +26,7 @@ class NFSService(CephService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         assert daemon_spec.spec
 
@@ -36,7 +36,7 @@ class NFSService(CephService):
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
