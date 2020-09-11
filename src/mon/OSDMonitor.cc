@@ -2133,6 +2133,19 @@ void OSDMonitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
+void OSDMonitor::get_versions(std::map<string, list<string> > &versions)
+{
+  for (int osd = 0; osd < osdmap.get_max_osd(); ++osd) {
+    if (osdmap.is_up(osd)) {
+      map<string,string> meta;
+      load_metadata(osd, meta, nullptr);
+      auto p = meta.find("ceph_version_short");
+      if (p == meta.end()) continue;
+      versions[p->second].push_back(string("osd.") + stringify(osd));
+    }
+  }
+}
+
 int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
 {
   map<string, string> metadata;
