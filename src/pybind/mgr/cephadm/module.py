@@ -1541,7 +1541,7 @@ To check that the host is reachable:
             out, err, code = self._run_cephadm(
                 host, 'osd',
                 'ceph-volume',
-                ['--', 'inventory', '--format=json'])
+                ['--', 'inventory', '--format=json', '--filter-for-batch'])
             if code:
                 return 'host %s ceph-volume inventory returned %d: %s' % (
                     host, code, err)
