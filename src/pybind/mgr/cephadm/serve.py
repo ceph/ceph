@@ -16,11 +16,11 @@ from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, RGWSpec
 import orchestrator
 from cephadm.schedule import HostAssignment
 from cephadm.upgrade import CEPH_UPGRADE_ORDER
-from cephadm.utils import forall_hosts, cephadmNoImage, str_to_datetime
+from cephadm.utils import forall_hosts, cephadmNoImage, str_to_datetime, is_repo_digest
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
-    from cephadm.module import CephadmOrchestrator
+    from cephadm.module import CephadmOrchestrator, ContainerInspectInfo
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class CephadmServe:
 
             try:
 
-                self.mgr.convert_tags_to_repo_digest()
+                self.convert_tags_to_repo_digest()
 
                 # refresh daemons
                 self.log.debug('refreshing hosts and daemons')
@@ -614,3 +614,21 @@ class CephadmServe:
             if daemon_type in self.mgr.requires_post_actions:
                 self.mgr.requires_post_actions.remove(daemon_type)
                 self.mgr._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
+
+    def convert_tags_to_repo_digest(self):
+        if not self.mgr.use_repo_digest:
+            return
+        settings = self.mgr.upgrade.get_distinct_container_image_settings()
+        digests: Dict[str, ContainerInspectInfo] = {}
+        for container_image_ref in set(settings.values()):
+            if not is_repo_digest(container_image_ref):
+                image_info = self.mgr._get_container_image_info(container_image_ref)
+                if image_info.repo_digest:
+                    assert is_repo_digest(image_info.repo_digest), image_info
+                digests[container_image_ref] = image_info
+
+        for entity, container_image_ref in settings.items():
+            if not is_repo_digest(container_image_ref):
+                image_info = digests[container_image_ref]
+                if image_info.repo_digest:
+                    self.mgr.set_container_image(entity, image_info.repo_digest)
