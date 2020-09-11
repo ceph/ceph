@@ -1151,7 +1151,7 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, rgw_buck
 }
 
 static void update_olh_log(rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
-                           cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
+                           const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
   vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
   rgw_bucket_olh_log_entry log_entry;
@@ -1231,7 +1231,7 @@ public:
     return instance_entry;
   }
 
-  void init_as_delete_marker(rgw_bucket_dir_entry_meta& meta) {
+  void init_as_delete_marker(const rgw_bucket_dir_entry_meta& meta) {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = key;
     instance_entry.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
@@ -1408,7 +1408,7 @@ public:
     return olh_data_entry;
   }
 
-  void update(cls_rgw_obj_key& key, bool delete_marker) {
+  void update(const cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
   }
@@ -1424,7 +1424,7 @@ public:
     return 0;
   }
 
-  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
+  void update_log(OLHLogOp op, const string& op_tag, const cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
     if (epoch == 0) {
       epoch = olh_data_entry.epoch;
     }
@@ -1525,6 +1525,21 @@ static RGWModifyOp link_olh_get_bilog_op_type(bool delete_marker)
     return CLSRGWLinkOLH<false>::get_bilog_op_type();
   }
 }
+
+static std::pair<int, rgw_cls_link_olh_op>
+decode_link_olh_op(const ceph::bufferlist* in)
+{
+  rgw_cls_link_olh_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_link_olh_op(): failed to decode request\n");
+    return { -EINVAL, {} };
+  }
+  return { 0, std::move(op) };
+}
+
 /*
  * Link an object version to an olh, update the relevant index
  * entries. It will also handle the deletion marker case. We have a
@@ -1547,13 +1562,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string instance_idx;
 
   // decode request
-  rgw_cls_link_olh_op op;
-  auto iter = in->cbegin();
-  try {
-    decode(op, iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_bucket_link_olh_op(): failed to decode request\n");
-    return -EINVAL;
+  const auto [ decode_ret, op ] = decode_link_olh_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
   }
 
   BIVerObjEntry obj(hctx, op.key);
