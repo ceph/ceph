@@ -212,11 +212,19 @@ class CephadmService(metaclass=ABCMeta):
         logger.info(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
-    def pre_remove(self, daemon_id: str) -> None:
+    def pre_remove(self, daemon: DaemonDescription) -> None:
         """
         Called before the daemon is removed.
         """
-        pass
+        assert self.TYPE == daemon.daemon_type
+        logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called after the daemon is removed.
+        """
+        assert self.TYPE == daemon.daemon_type
+        logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
 
 class CephService(CephadmService):
@@ -233,6 +241,10 @@ class CephService(CephadmService):
             cephadm_config.update({'files': daemon_spec.extra_config})
 
         return cephadm_config, []
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        super().post_remove(daemon)
+        self.remove_keyring(daemon)
 
     def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
         """
@@ -277,6 +289,22 @@ class CephService(CephadmService):
             'config': config,
             'keyring': keyring,
         }
+
+    def remove_keyring(self, daemon: DaemonDescription):
+        daemon_id: str = daemon.daemon_id
+        host: str = daemon.hostname
+
+        if daemon_id == 'mon':
+            # do not remove the mon keyring
+            return
+
+        entity = self.get_auth_entity(daemon_id, host=host)
+
+        logger.info(f'Remove keyring: {entity}')
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'auth rm',
+            'entity': entity,
+        })
 
 
 class MonService(CephService):
@@ -353,7 +381,10 @@ class MonService(CephService):
         raise OrchestratorError(
             'Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
 
-    def pre_remove(self, daemon_id: str) -> None:
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        super().pre_remove(daemon)
+
+        daemon_id: str = daemon.daemon_id
         self._check_safe_to_destroy(daemon_id)
 
         # remove mon from quorum before we destroy the daemon
