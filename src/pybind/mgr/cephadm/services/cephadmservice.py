@@ -294,6 +294,10 @@ class CephService(CephadmService):
         daemon_id: str = daemon.daemon_id
         host: str = daemon.hostname
 
+        if daemon_id == 'mon':
+            # do not remove the mon keyring
+            return
+
         entity = self.get_auth_entity(daemon_id, host=host)
 
         logger.info(f'Remove keyring: {entity}')
