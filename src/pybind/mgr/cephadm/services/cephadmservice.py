@@ -212,17 +212,19 @@ class CephadmService(metaclass=ABCMeta):
         logger.info(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
-    def pre_remove(self, daemon_id: str) -> None:
+    def pre_remove(self, daemon: DaemonDescription) -> None:
         """
         Called before the daemon is removed.
         """
-        logger.debug(f'Pre remove daemon {self.TYPE}.{daemon_id}')
+        assert self.TYPE == daemon.daemon_type
+        logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-    def post_remove(self, daemon_id: str) -> None:
+    def post_remove(self, daemon: DaemonDescription) -> None:
         """
         Called after the daemon is removed.
         """
-        logger.debug(f'Post remove daemon {self.TYPE}.{daemon_id}')
+        assert self.TYPE == daemon.daemon_type
+        logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
 
 class CephService(CephadmService):
@@ -359,8 +361,10 @@ class MonService(CephService):
         raise OrchestratorError(
             'Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
 
-    def pre_remove(self, daemon_id: str) -> None:
-        super().pre_remove(daemon_id)
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        super().pre_remove(daemon)
+
+        daemon_id: str = daemon.daemon_id
         self._check_safe_to_destroy(daemon_id)
 
         # remove mon from quorum before we destroy the daemon
