@@ -9,6 +9,7 @@ from cephadm.inventory import SPEC_STORE_PREFIX
 from cephadm.utils import DATEFMT
 from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
 from orchestrator import OrchestratorError
+from cephadm.serve import CephadmServe
 from tests import mock
 
 
@@ -32,7 +33,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             # assert we need all daemons.
             assert cephadm_module.migration_current == 0
 
-            cephadm_module._refresh_hosts_and_daemons()
+            CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             cephadm_module.migration.migrate()
 
             cephadm_module._apply_all_services()
