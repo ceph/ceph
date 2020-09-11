@@ -79,6 +79,7 @@ struct ImageDispatchInterface {
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) = 0;
 
+  virtual bool invalidate_cache(Context* on_finish) = 0;
 };
 
 } // namespace io
