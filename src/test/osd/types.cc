@@ -996,7 +996,7 @@ TEST(pg_missing_t, claim)
   pg_missing_t other;
   EXPECT_FALSE(other.have_missing());
 
-  other.claim(missing);
+  other.claim(std::move(missing));
   EXPECT_TRUE(other.have_missing());
 }
 
