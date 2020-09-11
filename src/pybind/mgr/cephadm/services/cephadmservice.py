@@ -216,7 +216,13 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called before the daemon is removed.
         """
-        pass
+        logger.debug(f'Pre remove daemon {self.TYPE}.{daemon_id}')
+
+    def post_remove(self, daemon_id: str) -> None:
+        """
+        Called after the daemon is removed.
+        """
+        logger.debug(f'Post remove daemon {self.TYPE}.{daemon_id}')
 
 
 class CephService(CephadmService):
@@ -354,6 +360,7 @@ class MonService(CephService):
             'Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
 
     def pre_remove(self, daemon_id: str) -> None:
+        super().pre_remove(daemon_id)
         self._check_safe_to_destroy(daemon_id)
 
         # remove mon from quorum before we destroy the daemon
