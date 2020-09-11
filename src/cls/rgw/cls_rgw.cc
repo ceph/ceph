@@ -123,10 +123,14 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
-static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
-                               string& tag, real_time& timestamp,
+static int log_index_operation(cls_method_context_t hctx,
+                               const cls_rgw_obj_key& obj_key,
+                               RGWModifyOp op,
+                               const string& tag,
+                               real_time& timestamp,
                                rgw_bucket_entry_ver& ver, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
+                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name,
+                               const rgw_zone_set *zones_trace)
 {
   bufferlist bl;
 
@@ -148,7 +152,7 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
     entry.owner_display_name = *owner_display_name;
   }
   if (zones_trace) {
-    entry.zones_trace = std::move(*zones_trace);
+    entry.zones_trace = *zones_trace;
   }
 
   string key;
@@ -794,8 +798,10 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header);
 }
 
-static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
-			  string *idx, rgw_bucket_dir_entry *entry,
+static int read_key_entry(cls_method_context_t hctx,
+                          const cls_rgw_obj_key& key,
+                          string *idx,
+                          rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name = false);
 
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -906,8 +912,10 @@ static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
   return 0;
 }
 
-static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
-			  string *idx, rgw_bucket_dir_entry *entry,
+static int read_key_entry(cls_method_context_t hctx,
+                          const cls_rgw_obj_key& key,
+                          string *idx,
+                          rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name)
 {
   encode_obj_index_key(key, idx);
@@ -940,17 +948,28 @@ static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
   return 0;
 }
 
-int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static std::pair<int, rgw_cls_obj_complete_op>
+decode_complete_op(const ceph::bufferlist* in)
 {
-  // decode request
   rgw_cls_obj_complete_op op;
-  auto iter = in->cbegin();
   try {
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode request\n");
-    return -EINVAL;
+    return { -EINVAL, {} };
   }
+  return {0, std::move(op) };
+}
+
+int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  const auto [ decode_ret, op ] = decode_complete_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
+  }
+
   CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s instance=%s ver=%lu:%llu tag=%s\n",
           op.op, op.key.name.c_str(), op.key.instance.c_str(),
           (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
@@ -1043,7 +1062,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     break;
   case CLS_RGW_OP_ADD:
     {
-      rgw_bucket_dir_entry_meta& meta = op.meta;
+      const rgw_bucket_dir_entry_meta& meta = op.meta;
       rgw_bucket_category_stats& stats = header.stats[meta.category];
       entry.meta = meta;
       entry.key = op.key;
@@ -1070,8 +1089,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d\n", (int)op.remove_objs.size());
-  for (auto remove_iter = op.remove_objs.begin(); remove_iter != op.remove_objs.end(); ++remove_iter) {
-    cls_rgw_obj_key& remove_key = *remove_iter;
+  for (const auto& remove_key : op.remove_objs) {
     CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s\n",
             remove_key.name.c_str(), remove_key.instance.c_str());
     rgw_bucket_dir_entry remove_entry;
