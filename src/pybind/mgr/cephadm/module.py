@@ -2052,6 +2052,9 @@ To check that the host is reachable:
                 # remove item from cache
                 self.cache.rm_daemon(host, name)
             self.cache.invalidate_host_daemons(host)
+
+            self.cephadm_services[daemon_type].post_remove(daemon_id)
+
             return "Removed {} from host '{}'".format(name, host)
 
     def _config_fn(self, service_type) -> Optional[Callable[[ServiceSpec], None]]:
