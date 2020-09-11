@@ -393,7 +393,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'iscsi': self.iscsi_service,
         }
 
-        self.template = TemplateMgr()
+        self.template = TemplateMgr(self)
 
         self.requires_post_actions = set()
 
@@ -1838,11 +1838,7 @@ To check that the host is reachable:
                 'path': path
             }
 
-            custom_template = self.get_store('lsmcli_blink_lights_cmd', None)
-            if custom_template:
-                lsmcli_blink_lights_cmd = self.template.engine.render_plain(custom_template, j2_ctx)
-            else:
-                lsmcli_blink_lights_cmd = self.template.render('lsmcli_blink_lights_cmd.j2', j2_ctx)
+            lsmcli_blink_lights_cmd = self.template.render('lsmcli_blink_lights_cmd.j2', j2_ctx)
 
             cmd = shlex.split(lsmcli_blink_lights_cmd)
 
