@@ -51,11 +51,7 @@ class NFSService(CephService):
 
         # create the keyring
         user = f'{daemon_type}.{daemon_id}'
-        entity = self.get_auth_entity(daemon_id)
-        keyring = self.get_or_create_keyring(entity)
-
-        # update the caps after get-or-create, the keyring might already exist!
-        self.update_keyring_caps(entity, spec)
+        keyring = self.create_keyring(daemon_spec)
 
         # create the rados config object
         self.create_rados_config_obj(spec)
@@ -118,28 +114,26 @@ class NFSService(CephService):
             get_set_cmd_dicts=get_set_cmd_dicts
         )
 
-    def get_or_create_keyring(self, entity: str) -> str:
+    def create_keyring(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert daemon_spec.spec
+        daemon_id = daemon_spec.daemon_id
+        spec = daemon_spec.spec
+
+        entity = self.get_auth_entity(daemon_id)
         logger.info('Create keyring: %s' % entity)
 
-        ret, keyring, err = self.mgr.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': entity,
-        })
-
-        return keyring
-
-    def update_keyring_caps(self, entity: str, spec: NFSServiceSpec) -> None:
         osd_caps = 'allow rw pool=%s' % (spec.pool)
         if spec.namespace:
             osd_caps = '%s namespace=%s' % (osd_caps, spec.namespace)
 
-        logger.info('Updating keyring caps: %s' % entity)
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'auth caps',
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
             'entity': entity,
             'caps': ['mon', 'allow r',
                      'osd', osd_caps],
         })
+
+        return keyring
 
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
