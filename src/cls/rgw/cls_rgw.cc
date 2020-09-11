@@ -146,10 +146,14 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
-static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
-                               const string& tag, real_time& timestamp,
-                               const rgw_bucket_entry_ver& ver, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
+static int log_index_operation(cls_method_context_t hctx,
+                               const cls_rgw_obj_key& obj_key,
+                               RGWModifyOp op,
+                               const string& tag,
+                               real_time& timestamp,
+                               rgw_bucket_entry_ver& ver, uint64_t index_ver,
+                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name,
+                               const rgw_zone_set *zones_trace)
 {
   bufferlist bl;
 
@@ -171,7 +175,7 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
     entry.owner_display_name = *owner_display_name;
   }
   if (zones_trace) {
-    entry.zones_trace = std::move(*zones_trace);
+    entry.zones_trace = *zones_trace;
   }
 
   string key;
@@ -854,8 +858,10 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header);
 }
 
-static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
-			  string *idx, rgw_bucket_dir_entry *entry,
+static int read_key_entry(cls_method_context_t hctx,
+                          const cls_rgw_obj_key& key,
+                          string *idx,
+                          rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name = false);
 
 static std::string modify_op_str(RGWModifyOp op) {
@@ -1009,8 +1015,10 @@ static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
   return 0;
 }
 
-static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
-			  string *idx, rgw_bucket_dir_entry *entry,
+static int read_key_entry(cls_method_context_t hctx,
+                          const cls_rgw_obj_key& key,
+                          string *idx,
+                          rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name)
 {
   encode_obj_index_key(key, idx);
@@ -1093,9 +1101,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
+static std::pair<int, rgw_cls_obj_complete_op>
+decode_complete_op(const ceph::bufferlist* in)
+{
   rgw_cls_obj_complete_op op;
-  auto iter = in->cbegin();
   try {
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (ceph::buffer::error& err) {
     CLS_LOG_BITX(bitx_inst, 1, "ERROR: %s: failed to decode request", __func__);
@@ -1108,6 +1119,24 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       modify_op_str(op.op).c_str(), op.key.to_string().c_str(),
 	       (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
 	       op.tag.c_str());
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode request\n");
+    return { -EINVAL, {} };
+  }
+  return {0, std::move(op) };
+}
+
+int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  const auto [ decode_ret, op ] = decode_complete_op(in);
+  if (decode_ret < 0) {
+    return decode_ret;
+  }
+
+  CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s instance=%s ver=%lu:%llu tag=%s\n",
+          op.op, op.key.name.c_str(), op.key.instance.c_str(),
+          (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
+          op.tag.c_str());
 
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -1176,6 +1205,38 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       CLS_LOG_BITX(bitx_inst, 20,
 		   "INFO: %s: setting map entry at key=%s",
 		   __func__, escape_str(idx).c_str());
+  switch ((int)op.op) {
+  case CLS_RGW_OP_DEL:
+    entry.meta = op.meta;
+    if (ondisk) {
+      if (!entry.pending_map.size()) {
+	int ret = cls_cxx_map_remove_key(hctx, idx);
+	if (ret < 0)
+	  return ret;
+      } else {
+        entry.exists = false;
+        bufferlist new_key_bl;
+        encode(entry, new_key_bl);
+	int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+	if (ret < 0)
+	  return ret;
+      }
+    } else {
+      return -ENOENT;
+    }
+    break;
+  case CLS_RGW_OP_ADD:
+    {
+      const rgw_bucket_dir_entry_meta& meta = op.meta;
+      rgw_bucket_category_stats& stats = header.stats[meta.category];
+      entry.meta = meta;
+      entry.key = op.key;
+      entry.exists = true;
+      entry.tag = op.tag;
+      stats.num_entries++;
+      stats.total_size += meta.accounted_size;
+      stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+      stats.actual_size += meta.size;
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
       rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1261,6 +1322,19 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
                              header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
     if (rc < 0)
       return rc;
+  }
+
+  CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d\n", (int)op.remove_objs.size());
+  for (const auto& remove_key : op.remove_objs) {
+    CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s\n",
+            remove_key.name.c_str(), remove_key.instance.c_str());
+    rgw_bucket_dir_entry remove_entry;
+    string k;
+    int ret = read_key_entry(hctx, remove_key, &k, &remove_entry);
+    if (ret < 0) {
+      CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s ret=%d\n",
+            remove_key.name.c_str(), remove_key.instance.c_str(), ret);
+      continue;
     }
   } // CLS_RGW_OP_ADD
 
