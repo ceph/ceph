@@ -200,7 +200,7 @@ class TestCephadm(object):
                 }
                 cephadm_module.notify('mon_map', None)
 
-                cephadm_module._check_daemons()
+                CephadmServe(cephadm_module)._check_daemons()
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
@@ -219,7 +219,7 @@ class TestCephadm(object):
                     })
                     cephadm_module.notify('mon_map', None)
 
-                    cephadm_module._check_daemons()
+                    CephadmServe(cephadm_module)._check_daemons()
 
                     evs = [e.message for e in cephadm_module.events.get_for_daemon(
                         f'rgw.{daemon_id}')]
@@ -247,7 +247,7 @@ class TestCephadm(object):
                 assert cephadm_module.cache.get_scheduled_daemon_action(
                     'test', daemon_name) == action
 
-                cephadm_module._check_daemons()
+                CephadmServe(cephadm_module)._check_daemons()
 
                 assert cephadm_module.cache.get_scheduled_daemon_action('test', daemon_name) is None
 
@@ -280,7 +280,7 @@ class TestCephadm(object):
 
                 cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
 
-                cephadm_module._check_daemons()
+                CephadmServe(cephadm_module)._check_daemons()
 
                 _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
                                                 '--name', 'mon.test', '--reconfig', '--config-json', '-'],
@@ -303,8 +303,7 @@ class TestCephadm(object):
                 })
 
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
-
-                    cephadm_module._check_daemons()
+                    CephadmServe(cephadm_module)._check_daemons()
                     _mon_cmd.assert_any_call(
                         {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://test:3000'})
 
