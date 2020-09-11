@@ -713,29 +713,25 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
 
   return new LambdaContext(
     [this, request, timeout](int r) {
-      if (r < 0) {
-        std::unique_lock async_request_locker{m_async_request_lock};
-        m_async_pending.erase(request);
-      } else {
-        auto unquiesce_ctx = new LambdaContext(
-          [this, request](int r) {
-            if (r == 0) {
-              ldout(m_image_ctx.cct, 10) << this << " quiesce request "
-                                         << request << " timed out" << dendl;
-            }
+      auto unquiesce_ctx = new LambdaContext(
+        [this, request](int r) {
+          if (r == 0) {
+            ldout(m_image_ctx.cct, 10) << this << " quiesce request "
+                                       << request << " timed out" << dendl;
+          }
 
-            auto on_finish = new LambdaContext(
-              [this, request](int r) {
-                std::unique_lock async_request_locker{m_async_request_lock};
-                m_async_pending.erase(request);
-              });
+          auto on_finish = new LambdaContext(
+            [this, request](int r) {
+              std::unique_lock async_request_locker{m_async_request_lock};
+              m_async_pending.erase(request);
+            });
 
-            m_image_ctx.state->notify_unquiesce(on_finish);
-          });
+          m_image_ctx.state->notify_unquiesce(on_finish);
+        });
 
-        m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
-                                         timeout, unquiesce_ctx);
-      }
+      m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
+                                       timeout, unquiesce_ctx);
+
       auto ctx = remove_async_request(request);
       ceph_assert(ctx != nullptr);
       ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));
@@ -750,12 +746,16 @@ Context *ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &reques
     std::unique_lock async_request_locker{m_async_request_lock};
     bool found = m_async_pending.erase(request);
     if (!found) {
+      ldout(m_image_ctx.cct, 20) << this << " " << request
+                                 << ": not found in pending" << dendl;
       return nullptr;
     }
   }
 
   bool canceled = m_task_finisher->cancel(Task(TASK_CODE_QUIESCE, request));
   if (!canceled) {
+    ldout(m_image_ctx.cct, 20) << this << " " << request
+                               << ": timer task not found" << dendl;
     return nullptr;
   }
 

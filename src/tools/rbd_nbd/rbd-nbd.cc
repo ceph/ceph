@@ -154,6 +154,9 @@ static void run_quiesce_hook(const std::string &quiesce_hook,
 
 class NBDServer
 {
+public:
+  uint64_t quiesce_watch_handle = 0;
+
 private:
   int fd;
   librbd::Image &image;
@@ -463,7 +466,8 @@ signal:
 
       wait_inflight_io();
 
-      image.quiesce_complete(0); // TODO: return quiesce hook exit code
+      // TODO: return quiesce hook exit code
+      image.quiesce_complete(quiesce_watch_handle, 0);
 
       wait_unquiesce();
 
@@ -1415,9 +1419,9 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   {
     NBDQuiesceWatchCtx quiesce_watch_ctx(server);
-    uint64_t quiesce_watch_handle;
     if (cfg->quiesce) {
-      r = image.quiesce_watch(&quiesce_watch_ctx, &quiesce_watch_handle);
+      r = image.quiesce_watch(&quiesce_watch_ctx,
+                              &server->quiesce_watch_handle);
       if (r < 0) {
         goto close_nbd;
       }
@@ -1436,7 +1440,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     run_server(forker, server, use_netlink);
 
     if (cfg->quiesce) {
-      r = image.quiesce_unwatch(quiesce_watch_handle);
+      r = image.quiesce_unwatch(server->quiesce_watch_handle);
       ceph_assert(r == 0);
     }
 
