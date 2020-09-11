@@ -430,61 +430,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return f"Host {host} failed to login to {url} as {username} with given password"
         return
 
-    def _check_for_strays(self):
-        self.log.debug('_check_for_strays')
-        for k in ['CEPHADM_STRAY_HOST',
-                  'CEPHADM_STRAY_DAEMON']:
-            if k in self.health_checks:
-                del self.health_checks[k]
-        if self.warn_on_stray_hosts or self.warn_on_stray_daemons:
-            ls = self.list_servers()
-            managed = self.cache.get_daemon_names()
-            host_detail = []     # type: List[str]
-            host_num_daemons = 0
-            daemon_detail = []  # type: List[str]
-            for item in ls:
-                host = item.get('hostname')
-                daemons = item.get('services')  # misnomer!
-                missing_names = []
-                for s in daemons:
-                    name = '%s.%s' % (s.get('type'), s.get('id'))
-                    if s.get('type') == 'rbd-mirror':
-                        defaults = defaultdict(lambda: None, {'id': None})
-                        metadata = self.get_metadata("rbd-mirror", s.get('id'), default=defaults)
-                        if metadata['id']:
-                            name = '%s.%s' % (s.get('type'), metadata['id'])
-                        else:
-                            self.log.debug(
-                                "Failed to find daemon id for rbd-mirror service %s" % (s.get('id')))
-                    if host not in self.inventory:
-                        missing_names.append(name)
-                        host_num_daemons += 1
-                    if name not in managed:
-                        daemon_detail.append(
-                            'stray daemon %s on host %s not managed by cephadm' % (name, host))
-                if missing_names:
-                    host_detail.append(
-                        'stray host %s has %d stray daemons: %s' % (
-                            host, len(missing_names), missing_names))
-            if self.warn_on_stray_hosts and host_detail:
-                self.health_checks['CEPHADM_STRAY_HOST'] = {
-                    'severity': 'warning',
-                    'summary': '%d stray host(s) with %s daemon(s) '
-                    'not managed by cephadm' % (
-                        len(host_detail), host_num_daemons),
-                    'count': len(host_detail),
-                    'detail': host_detail,
-                }
-            if self.warn_on_stray_daemons and daemon_detail:
-                self.health_checks['CEPHADM_STRAY_DAEMON'] = {
-                    'severity': 'warning',
-                    'summary': '%d stray daemons(s) not managed by cephadm' % (
-                        len(daemon_detail)),
-                    'count': len(daemon_detail),
-                    'detail': daemon_detail,
-                }
-        self.set_health_checks(self.health_checks)
-
     def serve(self) -> None:
         """
         The main loop of cephadm.
