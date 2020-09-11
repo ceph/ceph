@@ -49,7 +49,7 @@ host name:
     domain name (the part after the first dot). You can check the FQDN
     using ``hostname --fqdn`` or the domain name using ``dnsdomainname``.
 
-    ::
+    .. code-block:: none
 
           You cannot change the FQDN with hostname or dnsdomainname.
 
