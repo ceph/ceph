@@ -430,26 +430,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return f"Host {host} failed to login to {url} as {username} with given password"
         return
 
-    def _check_host(self, host):
-        if host not in self.inventory:
-            return
-        self.log.debug(' checking %s' % host)
-        try:
-            out, err, code = self._run_cephadm(
-                host, cephadmNoImage, 'check-host', [],
-                error_ok=True, no_fsid=True)
-            self.cache.update_last_host_check(host)
-            self.cache.save_host(host)
-            if code:
-                self.log.debug(' host %s failed check' % host)
-                if self.warn_on_failed_host_check:
-                    return 'host %s failed check: %s' % (host, err)
-            else:
-                self.log.debug(' host %s ok' % host)
-        except Exception as e:
-            self.log.debug(' host %s failed check' % host)
-            return 'host %s failed check: %s' % (host, e)
-
     def _check_for_strays(self):
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
@@ -896,7 +876,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._reconfig_ssh()
 
         host = self.cache.get_hosts()[0]
-        r = self._check_host(host)
+        r = CephadmServe(self)._check_host(host)
         if r is not None:
             # connection failed reset user
             self.set_store('ssh_user', current_user)

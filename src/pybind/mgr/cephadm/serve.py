@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from cephadm.utils import forall_hosts
+from cephadm.utils import forall_hosts, cephadmNoImage
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -80,7 +80,7 @@ class CephadmServe:
         @forall_hosts
         def refresh(host):
             if self.mgr.cache.host_needs_check(host):
-                r = self.mgr._check_host(host)
+                r = self._check_host(host)
                 if r is not None:
                     bad_hosts.append(r)
             if self.mgr.cache.host_needs_daemon_refresh(host):
@@ -141,3 +141,23 @@ class CephadmServe:
             health_changed = True
         if health_changed:
             self.mgr.set_health_checks(self.mgr.health_checks)
+
+    def _check_host(self, host):
+        if host not in self.mgr.inventory:
+            return
+        self.log.debug(' checking %s' % host)
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, cephadmNoImage, 'check-host', [],
+                error_ok=True, no_fsid=True)
+            self.mgr.cache.update_last_host_check(host)
+            self.mgr.cache.save_host(host)
+            if code:
+                self.log.debug(' host %s failed check' % host)
+                if self.mgr.warn_on_failed_host_check:
+                    return 'host %s failed check: %s' % (host, err)
+            else:
+                self.log.debug(' host %s ok' % host)
+        except Exception as e:
+            self.log.debug(' host %s failed check' % host)
+            return 'host %s failed check: %s' % (host, e)
