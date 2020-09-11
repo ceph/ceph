@@ -65,9 +65,7 @@ def get_tests(ctx, config, role, remote, testdir):
             run.Raw('>{tdir}/restarts.list'.format(tdir=testdir)),
             ],
         )
-    restarts = sorted(teuthology.get_file(
-                        remote,
-                        '{tdir}/restarts.list'.format(tdir=testdir)).split('\0'))
+    restarts = sorted(remote.read_file(f'{testdir}/restarts.list').decode().split('\0'))
     return (srcdir, restarts)
 
 def task(ctx, config):

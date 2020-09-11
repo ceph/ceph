@@ -206,8 +206,9 @@ class CBT(Task):
         self.log.info('cbt configuration is %s', self.cbt_config)
         self.cbt_dir = os.path.join(misc.get_archive_dir(self.ctx), 'cbt')
         self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', self.cbt_dir])
-        misc.write_file(self.first_mon, os.path.join(self.cbt_dir, 'cbt_config.yaml'),
-                        yaml.safe_dump(self.cbt_config, default_flow_style=False))
+        self.first_mon.write_file(
+                os.path.join(self.cbt_dir, 'cbt_config.yaml'),
+                yaml.safe_dump(self.cbt_config, default_flow_style=False))
         self.checkout_cbt()
         self.install_dependencies()
 

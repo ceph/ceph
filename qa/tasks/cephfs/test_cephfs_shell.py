@@ -10,7 +10,6 @@ from tempfile import mkstemp as tempfile_mkstemp
 import math
 from time import sleep
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.misc import sudo_write_file
 from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -39,9 +38,8 @@ class TestCephFSShell(CephFSTestCase):
         super(TestCephFSShell, self).setUp()
 
         conf_contents = "[cephfs-shell]\ncolors = False\ndebug = True\n"
-        confpath = self.mount_a.run_shell(args=['mktemp']).stdout.\
-            getvalue().strip()
-        sudo_write_file(self.mount_a.client_remote, confpath, conf_contents)
+        confpath = self.mount_a.client_remote.sh('mktemp').strip()
+        self.mount_a.client_remote.write_file(confpath, conf_contents)
         self.default_shell_conf_path = confpath
 
     def run_cephfs_shell_cmd(self, cmd, mount_x=None, shell_conf_path=None,
@@ -516,7 +514,8 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_regfiles(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+        self.mount_a.client_remote.write_file(regfile_abspath,
+                                              'somedata', sudo=True)
 
         size = humansize(self.mount_a.stat(regfile_abspath)['st_size'])
         expected_output = r'{}{}{}'.format(size, " +", regfilename)
@@ -530,7 +529,8 @@ class TestDU(TestCephFSShell):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(dir_abspath, regfilename)
         self.mount_a.run_shell('mkdir ' + dir_abspath)
-        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+        self.mount_a.client_remote.write_file(regfile_abspath,
+                                              'somedata', sudo=True)
 
         # XXX: we stat `regfile_abspath` here because ceph du reports a non-empty
         # directory's size as sum of sizes of all files under it.
@@ -555,8 +555,8 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_hardlinks(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        sudo_write_file(self.mount_a.client_remote, regfile_abspath,
-                        'somedata')
+        self.mount_a.client_remote.write_file(regfile_abspath,
+                                              'somedata', sudo=True)
         hlinkname = 'some_hardlink'
         hlink_abspath = path.join(self.mount_a.mountpoint, hlinkname)
         self.mount_a.run_shell(['sudo', 'ln', regfile_abspath,
@@ -571,7 +571,8 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_softlinks_to_files(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+        self.mount_a.client_remote.write_file(regfile_abspath,
+                                              'somedata', sudo=True)
         slinkname = 'some_softlink'
         slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
         self.mount_a.run_shell(['ln', '-s', regfile_abspath, slink_abspath])
@@ -626,10 +627,10 @@ class TestDU(TestCephFSShell):
         self.mount_a.run_shell('mkdir -p ' + dir21_abspath)
         self.mount_a.run_shell('touch ' + regfile121_abspath)
 
-        sudo_write_file(self.mount_a.client_remote, regfile_abspath,
-            'somedata')
-        sudo_write_file(self.mount_a.client_remote, regfile121_abspath,
-            'somemoredata')
+        self.mount_a.client_remote.write_file(regfile_abspath,
+                                              'somedata', sudo=True)
+        self.mount_a.client_remote.write_file(regfile121_abspath,
+                                              'somemoredata', sudo=True)
 
         # TODO: is there a way to trigger/force update ceph.dir.rbytes?
         # wait so that attr ceph.dir.rbytes gets a chance to be updated.
@@ -817,8 +818,8 @@ class TestQuota(TestCephFSShell):
         file_abspath = path.join(dir_abspath, filename)
         try:
             # Write should fail as bytes quota is set to 6
-            sudo_write_file(self.mount_a.client_remote, file_abspath,
-                    'Disk raise Exception')
+            self.mount_a.client_remote.write_file(file_abspath,
+                    'Disk raise Exception', sudo=True)
             raise Exception("Write should have failed")
         except CommandFailedError:
             # Test should pass only when write command fails
@@ -944,7 +945,7 @@ class TestShellOpts(TestCephFSShell):
     def write_tempconf(self, confcontents):
         self.tempconfpath = self.mount_a.client_remote.mktemp(
             suffix='cephfs-shell.conf')
-        sudo_write_file(self.mount_a.client_remote, self.tempconfpath,
+        self.mount_a.client_remote.write_file(self.tempconfpath,
                          confcontents)
 
     def test_reading_conf(self):

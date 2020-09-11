@@ -133,7 +133,6 @@ class XFSTestsDev(CephFSTestCase):
     def write_local_config(self):
         from os.path import join
         from textwrap import dedent
-        from teuthology.misc import sudo_write_file
 
         mon_sock = self.fs.mon_manager.get_msgrv1_mon_socks()[0]
         self.test_dev = mon_sock + ':/' + self.test_dirname
@@ -149,8 +148,8 @@ class XFSTestsDev(CephFSTestCase):
             ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
                         self.scratch_dirs_mount_path, self.get_admin_key())
 
-        sudo_write_file(self.mount_a.client_remote, join(
-            self.repo_path, 'local.config'), xfstests_config_contents)
+        self.mount_a.client_remote.write_file(join(self.repo_path, 'local.config'),
+                                              xfstests_config_contents, sudo=True)
 
     def tearDown(self):
         self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
