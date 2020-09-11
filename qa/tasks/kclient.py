@@ -89,12 +89,11 @@ def task(ctx, config):
             continue
 
         kernel_mount = KernelMount(
-            ctx,
-            test_dir,
-            id_,
-            remote,
-            ctx.teuthology_config.get('brxnet', None),
-        )
+            ctx=ctx,
+            test_dir=test_dir,
+            client_id=id_,
+            client_remote=remote,
+            brxnet=ctx.teuthology_config.get('brxnet', None))
 
         mounts[id_] = kernel_mount
 

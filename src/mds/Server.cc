@@ -494,6 +494,12 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
     return;
   }
 
+  std::string_view fs_name = mds->get_fs_name();
+  if (!fs_name.empty() && !session->fs_name_capable(fs_name, MAY_READ)) {
+    dout(0) << " dropping message not allowed for this fs_name: " << *m << dendl;
+    return;
+  }
+
   if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -519,6 +525,16 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
     auto reply = make_message<MClientSession>(CEPH_SESSION_REJECT);
     reply->metadata["error_string"] = "sessionless";
     mds->send_message(reply, m->get_connection());
+    return;
+  }
+
+  std::string_view fs_name = mds->get_fs_name();
+  if (!fs_name.empty() && !session->fs_name_capable(fs_name, MAY_READ)) {
+    dout(0) << " dropping message not allowed for this fs_name: " << *m << dendl;
+    auto reply = make_message<MClientSession>(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "client doesn't have caps for FS \"" +
+				      std::string(fs_name) + "\"";
+    mds->send_message(std::move(reply), m->get_connection());
     return;
   }
 

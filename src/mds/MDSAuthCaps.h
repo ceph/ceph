@@ -23,6 +23,8 @@
 #include "include/types.h"
 #include "common/debug.h"
 
+#include "mdstypes.h"
+
 // unix-style capabilities
 enum {
   MAY_READ	= (1 << 0),
@@ -89,14 +91,24 @@ private:
 struct MDSCapMatch {
   static const int64_t MDS_AUTH_UID_ANY = -1;
 
-  MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
-  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
+  MDSCapMatch() : uid(MDS_AUTH_UID_ANY), fs_name(std::string()) {}
+
+  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) :
+    uid(uid_), gids(gids_), fs_name(std::string()) {}
+
   explicit MDSCapMatch(const std::string &path_)
-    : uid(MDS_AUTH_UID_ANY), path(path_) {
+    : uid(MDS_AUTH_UID_ANY), path(path_), fs_name(std::string()) {
     normalize_path();
   }
+
+  explicit MDSCapMatch(std::string path, std::string fs_name) :
+    uid(MDS_AUTH_UID_ANY), path(std::move(path)), fs_name(std::move(fs_name))
+  {
+    normalize_path();
+  }
+
   MDSCapMatch(const std::string& path_, int64_t uid_, std::vector<gid_t>& gids_)
-    : uid(uid_), gids(gids_), path(path_) {
+    : uid(uid_), gids(gids_), path(path_), fs_name(std::string()) {
     normalize_path();
   }
 
@@ -124,6 +136,7 @@ struct MDSCapMatch {
   int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
   std::vector<gid_t> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "" or "/" for any)
+  std::string fs_name;
 };
 
 struct MDSCapGrant {
@@ -172,6 +185,27 @@ public:
 		  unsigned mask, uid_t new_uid, gid_t new_gid,
 		  const entity_addr_t& addr) const;
   bool path_capable(std::string_view inode_path) const;
+
+  bool fs_name_capable(std::string_view fs_name, unsigned mask) const {
+    if (allow_all()) {
+      return true;
+    }
+
+    for (const MDSCapGrant &g : grants) {
+      if (g.match.fs_name == fs_name || g.match.fs_name.empty() ||
+	  g.match.fs_name == "*") {
+	if (mask & MAY_READ && g.spec.allow_read()) {
+	  return true;
+	}
+
+	if (mask & MAY_WRITE && g.spec.allow_write()) {
+	  return true;
+	}
+      }
+    }
+
+    return false;
+  }
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 private:

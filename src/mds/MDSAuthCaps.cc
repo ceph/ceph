@@ -23,6 +23,7 @@
 
 #include "common/debug.h"
 #include "MDSAuthCaps.h"
+#include "mdstypes.h"
 #include "include/ipaddr.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -61,16 +62,21 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
       lexeme[lit("'") >> *(char_ - '\'') >> '\''];
     unquoted_path %= +char_("a-zA-Z0-9_./-");
     network_str %= +char_("/.:a-fA-F0-9][");
+    fs_name_str %= +char_("a-zA-Z0-9-_.");
 
     // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
     path %= (spaces >> lit("path") >> lit('=') >> (quoted_path | unquoted_path));
     uid %= (spaces >> lit("uid") >> lit('=') >> uint_);
     uintlist %= (uint_ % lit(','));
     gidlist %= -(spaces >> lit("gids") >> lit('=') >> uintlist);
+    fs_name %= -(spaces >> lit("fsname") >> lit('=') >> fs_name_str);
     match = -(
 	     (uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] |
 	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
-             (path)[_val = phoenix::construct<MDSCapMatch>(_1)]);
+             (fs_name >> path)[_val = phoenix::construct<MDSCapMatch>(_2, _1)] |
+             (path)[_val = phoenix::construct<MDSCapMatch>(_1)] |
+             (fs_name)[_val = phoenix::construct<MDSCapMatch>(std::string(),
+							      _1)]);
 
     // capspec = * | r[w][p][s]
     capspec = spaces >> (
@@ -97,8 +103,8 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   }
   qi::rule<Iterator> spaces;
   qi::rule<Iterator, string()> quoted_path, unquoted_path, network_str;
+  qi::rule<Iterator, string()> fs_name_str, fs_name, path;
   qi::rule<Iterator, MDSCapSpec()> capspec;
-  qi::rule<Iterator, string()> path;
   qi::rule<Iterator, uint32_t()> uid;
   qi::rule<Iterator, std::vector<uint32_t>() > uintlist;
   qi::rule<Iterator, std::vector<uint32_t>() > gidlist;
