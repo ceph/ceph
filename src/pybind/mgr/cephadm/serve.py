@@ -10,6 +10,7 @@ except ImportError:
     remoto = None
 
 from ceph.deployment import inventory
+from ceph.deployment.service_spec import ServiceSpec
 
 import orchestrator
 from cephadm.utils import forall_hosts, cephadmNoImage, str_to_datetime
@@ -63,7 +64,7 @@ class CephadmServe:
                     if self.mgr.migration.is_migration_ongoing():
                         continue
 
-                    if self.mgr._apply_all_services():
+                    if self._apply_all_services():
                         continue  # did something, refresh
 
                     self.mgr._check_daemons()
@@ -369,3 +370,19 @@ class CephadmServe:
                     'detail': daemon_detail,
                 }
         self.mgr.set_health_checks(self.mgr.health_checks)
+
+    def _apply_all_services(self) -> bool:
+        r = False
+        specs = []  # type: List[ServiceSpec]
+        for sn, spec in self.mgr.spec_store.specs.items():
+            specs.append(spec)
+        for spec in specs:
+            try:
+                if self.mgr._apply_service(spec):
+                    r = True
+            except Exception as e:
+                self.log.exception('Failed to apply %s spec %s: %s' % (
+                    spec.service_name(), spec, e))
+                self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
+
+        return r

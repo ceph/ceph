@@ -26,7 +26,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
             # with pytest.raises(OrchestratorError, match="cephadm migration still ongoing. Please wait, until the migration is complete."):
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             cephadm_module.migration_current = 0
             cephadm_module.migration.migrate()
@@ -36,7 +36,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             cephadm_module.migration.migrate()
 
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             out = {o.hostname for o in wait(cephadm_module, cephadm_module.list_daemons())}
             assert out == {'host1', 'host2'}

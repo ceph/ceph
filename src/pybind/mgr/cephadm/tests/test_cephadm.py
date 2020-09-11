@@ -409,7 +409,7 @@ class TestCephadm(object):
 
             _run_cephadm.return_value = (['{}'], '', 0)
 
-            assert cephadm_module._apply_all_services() == False
+            assert CephadmServe(cephadm_module)._apply_all_services() == False
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
@@ -738,7 +738,7 @@ class TestCephadm(object):
             c = cephadm_module.apply_mds(spec)
             out = wait(cephadm_module, c)
             match_glob(out, "Scheduled mds.fsname update...")
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             [daemon] = cephadm_module.cache.daemons['host1'].keys()
 
@@ -749,7 +749,7 @@ class TestCephadm(object):
             c = cephadm_module.apply_mds(spec)
             out = wait(cephadm_module, c)
             match_glob(out, "Scheduled mds.fsname update...")
-            cephadm_module._apply_all_services()
+            CephadmServe(cephadm_module)._apply_all_services()
 
             ok_to_stop.assert_called_with([daemon[4:]])
 
