@@ -11,6 +11,7 @@
 
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
+#include "crimson/common/exception.h"
 #include "crimson/common/tri_mutex.h"
 #include "crimson/osd/osd_operation.h"
 
@@ -82,6 +83,15 @@ public:
     obs = std::move(_obs);
     head = _head;
     loaded = true;
+  }
+
+  /// pass the provided exception to any waiting consumers of this ObjectContext
+  template<typename Exception>
+  void interrupt(Exception ex) {
+    rwlock.abort(std::move(ex));
+    if (recovery_read_marker) {
+      drop_recovery_read();
+    }
   }
 
 private:
