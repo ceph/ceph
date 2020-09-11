@@ -31,18 +31,18 @@
 #define dout_subsys ceph_subsys_rgw
 
 void RGWOp_ZoneGroupMap_Get::execute() {
-  http_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj);
-  if (http_ret < 0) {
+  op_ret = zonegroup_map.read(g_ceph_context, store->svc()->sysobj);
+  if (op_ret < 0) {
     dout(5) << "failed to read zone_group map" << dendl;
   }
 }
 
 void RGWOp_ZoneGroupMap_Get::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   if (old_format) {
@@ -61,11 +61,11 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
 void RGWOp_ZoneConfig_Get::send_response() {
   const RGWZoneParams& zone_params = store->svc()->zone->get_zone_params();
 
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   encode_json("zone_params", zone_params, s->formatter);
