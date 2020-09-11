@@ -299,7 +299,7 @@ class Prepare(object):
         if self.args.filestore:
             if not self.args.journal:
                 logger.info(('no journal was specifed, creating journal lv '
-                            'on {}').format(self.args.data))
+                             'on {}').format(self.args.data))
                 self.args.journal = self.args.data
                 self.args.journal_size = disk.Size(g=5)
                 # need to adjust data size/slots for colocated journal
@@ -308,9 +308,9 @@ class Prepare(object):
                 if self.args.data_slots == 1:
                     self.args.data_slots = 0
                 else:
-                    raise RuntimeError(('Can\'t handle multiple filestore OSDs '
+                    raise RuntimeError('Can\'t handle multiple filestore OSDs '
                                        'with colocated journals yet. Please '
-                                       'create journal LVs manually'))
+                                       'create journal LVs manually')
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
             tags['ceph.encrypted'] = encrypted
 
