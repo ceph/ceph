@@ -1,4 +1,3 @@
-import pytest
 from ceph_volume.devices.lvm import common
 
 
