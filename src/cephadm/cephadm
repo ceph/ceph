@@ -414,9 +414,9 @@ class CephIscsi(object):
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
-        mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config:z'
+        mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
         mounts[log_dir] = '/var/log/rbd-target-api:z'
-        mounts['/dev'] = '/dev:z'
+        mounts['/dev'] = '/dev'
         return mounts
 
     @staticmethod
