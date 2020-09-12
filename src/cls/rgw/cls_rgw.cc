@@ -1517,15 +1517,6 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
   return 0;
 }
 
-static RGWModifyOp link_olh_get_bilog_op_type(bool delete_marker)
-{
-  if (delete_marker) {
-    return CLSRGWLinkOLH<true>::get_bilog_op_type();
-  } else {
-    return CLSRGWLinkOLH<false>::get_bilog_op_type();
-  }
-}
-
 static std::pair<int, rgw_cls_link_olh_op>
 decode_link_olh_op(const ceph::bufferlist* in)
 {
@@ -1741,7 +1732,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     powner_display_name = &entry.meta.owner_display_name;
   }
 
-  ret = log_index_operation(hctx, op.key, link_olh_get_bilog_op_type(op.delete_marker), op.op_tag,
+  ret = log_index_operation(hctx, op.key, CLSRGWLinkOLHBase::get_bilog_op_type(op.delete_marker), op.op_tag,
                             entry.meta.mtime, ver,
                             header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
                             powner, powner_display_name, &op.zones_trace);
