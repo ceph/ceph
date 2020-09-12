@@ -282,8 +282,8 @@ class CephSalt(Task):
                                       loc=ceph_salt_ctx['registry_location'],
                                       insec=ceph_salt_ctx['registry_insecure']
                                       ))
-        self.master_remote.sh("sudo ceph-salt config /containers/images/ceph "
-                              "set {}"
+        self.master_remote.sh("sudo ceph-salt config "
+                              "/cephadm_bootstrap/ceph_image_path set {}"
                               .format(ceph_salt_ctx['container_image']))
         self.ctx.ceph[self.cluster].image = ceph_salt_ctx['container_image']
         self.master_remote.sh("sudo ceph-salt "
