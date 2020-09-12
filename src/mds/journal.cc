@@ -153,29 +153,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  // leader ops with possibly uncommitted peers
-  for (set<metareqid_t>::iterator p = uncommitted_leaders.begin();
-       p != uncommitted_leaders.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for peers to ack commit on " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_leader(*p, gather_bld.new_sub());
-  }
-
-  // peer ops that haven't been committed
-  for (set<metareqid_t>::iterator p = uncommitted_peers.begin();
-       p != uncommitted_peers.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for leader to ack OP_FINISH on " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_peer(*p, gather_bld.new_sub());
-  }
-
-  // uncommitted fragments
-  for (set<dirfrag_t>::iterator p = uncommitted_fragments.begin();
-       p != uncommitted_fragments.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for uncommitted fragment " << *p << dendl;
-    mds->mdcache->wait_for_uncommitted_fragment(*p, gather_bld.new_sub());
-  }
+  // uncommitted leader/peers/fragments
+  if (is_any_uncommitted())
+    uncommitted_waiters.push_back(gather_bld.new_sub());
 
   // nudge scatterlocks
   for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
@@ -2208,7 +2188,7 @@ void EUpdate::update_segment()
     segment->sessionmapv = cmapv;
 
   if (had_peers)
-    segment->uncommitted_leaders.insert(reqid);
+    segment->uncommitted_leaders_peers.insert(reqid);
 }
 
 void EUpdate::replay(MDSRank *mds)
@@ -2218,7 +2198,7 @@ void EUpdate::replay(MDSRank *mds)
   
   if (had_peers) {
     dout(10) << "EUpdate.replay " << reqid << " had peers, expecting a matching ECommitted" << dendl;
-    segment->uncommitted_leaders.insert(reqid);
+    segment->uncommitted_leaders_peers.insert(reqid);
     set<mds_rank_t> peers;
     mds->mdcache->add_uncommitted_leader(reqid, segment, peers, true);
   }
@@ -2326,7 +2306,7 @@ void ECommitted::replay(MDSRank *mds)
 {
   if (mds->mdcache->uncommitted_leaders.count(reqid)) {
     dout(10) << "ECommitted.replay " << reqid << dendl;
-    mds->mdcache->uncommitted_leaders[reqid].ls->uncommitted_leaders.erase(reqid);
+    mds->mdcache->uncommitted_leaders[reqid].ls->uncommitted_leaders_peers.erase(reqid);
     mds->mdcache->uncommitted_leaders.erase(reqid);
   } else {
     dout(10) << "ECommitted.replay " << reqid << " -- didn't see original op" << dendl;

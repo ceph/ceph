@@ -2449,10 +2449,13 @@ void MDCache::log_leader_commit(metareqid_t reqid)
 void MDCache::_logged_leader_commit(metareqid_t reqid)
 {
   dout(10) << "_logged_leader_commit " << reqid << dendl;
-  ceph_assert(uncommitted_leaders.count(reqid));
-  uncommitted_leaders[reqid].ls->uncommitted_leaders.erase(reqid);
-  mds->queue_waiters(uncommitted_leaders[reqid].waiters);
-  uncommitted_leaders.erase(reqid);
+  auto it = uncommitted_leaders.find(reqid);
+  ceph_assert(it != uncommitted_leaders.end());
+  auto &u = it->second;
+  u.ls->uncommitted_leaders_peers.erase(reqid);
+  if (!u.ls->is_any_uncommitted())
+    mds->queue_waiters(u.ls->uncommitted_waiters);
+  uncommitted_leaders.erase(it);
 }
 
 // while active...
@@ -3500,7 +3503,7 @@ void MDCache::add_uncommitted_peer(metareqid_t reqid, LogSegment *ls, mds_rank_t
                                                std::forward_as_tuple(reqid),
                                                std::forward_as_tuple());
   ceph_assert(ret.second);
-  ls->uncommitted_peers.insert(reqid);
+  ls->uncommitted_leaders_peers.insert(reqid);
   upeer &u = ret.first->second;
   u.leader = leader;
   u.ls = ls;
@@ -3524,10 +3527,10 @@ void MDCache::finish_uncommitted_peer(metareqid_t reqid, bool assert_exist)
   upeer &u = it->second;
   MDPeerUpdate* su = u.su;
 
-  if (!u.waiters.empty()) {
-    mds->queue_waiters(u.waiters);
-  }
-  u.ls->uncommitted_peers.erase(reqid);
+  u.ls->uncommitted_leaders_peers.erase(reqid);
+  if (!u.ls->is_any_uncommitted())
+    mds->queue_waiters(u.ls->uncommitted_waiters);
+
   uncommitted_peers.erase(it);
 
   if (su == nullptr) {
@@ -12194,7 +12197,8 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
-      mds->queue_waiters(uf.waiters);
+      if (!uf.ls->is_any_uncommitted())
+	mds->queue_waiters(uf.ls->uncommitted_waiters);
       uncommitted_fragments.erase(it);
     }
   }

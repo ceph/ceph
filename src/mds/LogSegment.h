@@ -88,9 +88,15 @@ class LogSegment {
   MDSContext* purged_cb = nullptr;
 
   map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
-  set<metareqid_t> uncommitted_leaders;
-  set<metareqid_t> uncommitted_peers;
+
+  set<metareqid_t> uncommitted_leaders_peers;
   set<dirfrag_t> uncommitted_fragments;
+
+  MDSContext::vec uncommitted_waiters;
+
+  bool is_any_uncommitted() const {
+    return !uncommitted_leaders_peers.empty() || !uncommitted_fragments.empty();
+  }
 
   // client request ids
   map<int, ceph_tid_t> last_client_tids;
