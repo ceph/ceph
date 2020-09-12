@@ -133,7 +133,6 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
             except ValueError as e:
                 # logging?
                 raise e
-        host_spec.validate()
         return host_spec
 
     def validate(self):
@@ -162,8 +161,6 @@ class PlacementSpec(object):
 
         #: fnmatch patterns to select hosts. Can also be a single host.
         self.host_pattern = host_pattern  # type: Optional[str]
-
-        self.validate()
 
     def is_empty(self):
         return self.label is None and \
@@ -249,7 +246,6 @@ class PlacementSpec(object):
             for host in hosts:
                 c['hosts'].append(HostPlacementSpec.from_json(host))
         _cls = cls(**c)
-        _cls.validate()
         return _cls
 
     def to_json(self):
@@ -503,7 +499,6 @@ class ServiceSpec(object):
                 continue
             args.update({k: v})
         _cls = cls(**args)
-        _cls.validate()
         return _cls
 
     def service_name(self):

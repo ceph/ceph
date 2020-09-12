@@ -58,8 +58,6 @@ class DeviceSelection(object):
         #: Matches all devices. Can only be used for data devices
         self.all = all
 
-        self.validate()
-
     def validate(self):
         # type: () -> None
         props = [self.model, self.vendor, self.size, self.rotational]  # type: List[Any]

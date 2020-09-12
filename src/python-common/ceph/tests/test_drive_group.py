@@ -74,7 +74,8 @@ def test_drive_selection():
     assert spec.data_devices.paths[0].path == '/dev/sda'
 
     with pytest.raises(DriveGroupValidationError, match='exclusive'):
-        DeviceSelection(paths=['/dev/sda'], rotational=False)
+        ds = DeviceSelection(paths=['/dev/sda'], rotational=False)
+        ds.validate()
 
 
 def test_ceph_volume_command_0():
