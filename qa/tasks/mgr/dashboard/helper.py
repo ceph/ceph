@@ -155,6 +155,8 @@ class DashboardTestCase(MgrTestCase):
 
             # To avoid any issues with e.g. unlink bugs, we destroy and recreate
             # the filesystem rather than just doing a rm -rf of files
+            cls.mds_cluster.mds_stop()
+            cls.mds_cluster.mds_fail()
             cls.mds_cluster.delete_all_filesystems()
             cls.fs = None  # is now invalid!
 

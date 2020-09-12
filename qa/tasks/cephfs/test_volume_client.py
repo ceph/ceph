@@ -56,7 +56,7 @@ vc.disconnect()
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def _configure_guest_auth(self, volumeclient_mount, guest_mount,
-                              guest_entity, cephfs_mntpt,
+                              guest_entity, mount_path,
                               namespace_prefix=None, readonly=False,
                               tenant_id=None):
         """
@@ -66,7 +66,7 @@ vc.disconnect()
                                    volumeclient.
         :param guest_mount: mount used by the guest client.
         :param guest_entity: auth ID used by the guest client.
-        :param cephfs_mntpt: path of the volume.
+        :param mount_path: path of the volume.
         :param namespace_prefix: name prefix of the RADOS namespace, which
                                  is used for the volume's layout.
         :param readonly: defaults to False. If set to 'True' only read-only
@@ -74,7 +74,7 @@ vc.disconnect()
         :param tenant_id: (OpenStack) tenant ID of the guest client.
         """
 
-        head, volume_id = os.path.split(cephfs_mntpt)
+        head, volume_id = os.path.split(mount_path)
         head, group_id = os.path.split(head)
         head, volume_prefix = os.path.split(head)
         volume_prefix = "/" + volume_prefix
@@ -177,7 +177,7 @@ vc.disconnect()
 
         # Create a 100MB volume
         volume_size = 100
-        cephfs_mntpt = self._volume_client_python(self.mount_b, dedent("""
+        mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*{volume_size})
             print(create_result['mount_path'])
@@ -193,8 +193,8 @@ vc.disconnect()
         # Authorize and configure credentials for the guest to mount the
         # the volume.
         self._configure_guest_auth(self.mount_b, self.mounts[2], guest_entity,
-                                   cephfs_mntpt, namespace_prefix)
-        self.mounts[2].mount_wait(cephfs_mntpt=cephfs_mntpt)
+                                   mount_path, namespace_prefix)
+        self.mounts[2].mount_wait(mount_path=mount_path)
 
         # The kernel client doesn't have the quota-based df behaviour,
         # or quotas at all, so only exercise the client behaviour when
@@ -418,7 +418,7 @@ vc.disconnect()
 
         guest_entity = "guest"
         group_id = "grpid"
-        cephfs_mntpts = []
+        mount_paths = []
         volume_ids = []
 
         # Create two volumes. Authorize 'guest' auth ID to mount the two
@@ -426,7 +426,7 @@ vc.disconnect()
         for i in range(2):
             # Create volume.
             volume_ids.append("volid_{0}".format(str(i)))
-            cephfs_mntpts.append(
+            mount_paths.append(
                 self._volume_client_python(volumeclient_mount, dedent("""
                     vp = VolumePath("{group_id}", "{volume_id}")
                     create_result = vc.create_volume(vp, 10 * 1024 * 1024)
@@ -438,12 +438,12 @@ vc.disconnect()
 
             # Authorize 'guest' auth ID to mount the volume.
             self._configure_guest_auth(volumeclient_mount, guest_mounts[i],
-                                       guest_entity, cephfs_mntpts[i])
+                                       guest_entity, mount_paths[i])
 
             # Mount the volume.
             guest_mounts[i].mountpoint_dir_name = 'mnt.{id}.{suffix}'.format(
                 id=guest_entity, suffix=str(i))
-            guest_mounts[i].mount_wait(cephfs_mntpt=cephfs_mntpts[i])
+            guest_mounts[i].mount_wait(mount_path=mount_paths[i])
             guest_mounts[i].write_n_mb("data.bin", 1)
 
 
@@ -510,7 +510,7 @@ vc.disconnect()
         volume_id = u"volid"
 
         # Create
-        cephfs_mntpt = self._volume_client_python(self.mount_b, dedent("""
+        mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", u"{volume_id}")
             create_result = vc.create_volume(vp, 10)
             print(create_result['mount_path'])
@@ -520,14 +520,14 @@ vc.disconnect()
         )))
 
         # Strip leading "/"
-        cephfs_mntpt = cephfs_mntpt[1:]
+        mount_path = mount_path[1:]
 
         # A file with non-ascii characters
-        self.mount_a.run_shell(["touch", os.path.join(cephfs_mntpt, u"b\u00F6b")])
+        self.mount_a.run_shell(["touch", os.path.join(mount_path, u"b\u00F6b")])
 
         # A file with no permissions to do anything
-        self.mount_a.run_shell(["touch", os.path.join(cephfs_mntpt, "noperms")])
-        self.mount_a.run_shell(["chmod", "0000", os.path.join(cephfs_mntpt, "noperms")])
+        self.mount_a.run_shell(["touch", os.path.join(mount_path, "noperms")])
+        self.mount_a.run_shell(["chmod", "0000", os.path.join(mount_path, "noperms")])
 
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", u"{volume_id}")
@@ -560,7 +560,7 @@ vc.disconnect()
         volume_id = "volid"
 
         # Create a volume.
-        cephfs_mntpt = self._volume_client_python(volumeclient_mount, dedent("""
+        mount_path = self._volume_client_python(volumeclient_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10)
             print(create_result['mount_path'])
@@ -571,11 +571,11 @@ vc.disconnect()
 
         # Authorize and configure credentials for the guest to mount the
         # the volume with read-write access.
-        self._configure_guest_auth(volumeclient_mount, guest_mount,
-                                   guest_entity, cephfs_mntpt, readonly=False)
+        self._configure_guest_auth(volumeclient_mount, guest_mount, guest_entity,
+                                   mount_path, readonly=False)
 
         # Mount the volume, and write to it.
-        guest_mount.mount_wait(cephfs_mntpt=cephfs_mntpt)
+        guest_mount.mount_wait(mount_path=mount_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # Change the guest auth ID's authorization to read-only mount access.
@@ -588,13 +588,13 @@ vc.disconnect()
             guest_entity=guest_entity
         )))
         self._configure_guest_auth(volumeclient_mount, guest_mount, guest_entity,
-                                   cephfs_mntpt, readonly=True)
+                                   mount_path, readonly=True)
 
         # The effect of the change in access level to read-only is not
         # immediate. The guest sees the change only after a remount of
         # the volume.
         guest_mount.umount_wait()
-        guest_mount.mount_wait(cephfs_mntpt=cephfs_mntpt)
+        guest_mount.mount_wait(mount_path=mount_path)
 
         # Read existing content of the volume.
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
@@ -1029,7 +1029,7 @@ vc.disconnect()
         # Create a volume
         group_id = "grpid"
         volume_id = "volid"
-        cephfs_mntpt = self._volume_client_python(vc_mount, dedent("""
+        mount_path = self._volume_client_python(vc_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10)
             print(create_result['mount_path'])
@@ -1047,11 +1047,11 @@ vc.disconnect()
         guest_mount.umount_wait()
 
         # Set auth caps for the auth ID using the volumeclient
-        self._configure_guest_auth(vc_mount, guest_mount, guest_id, cephfs_mntpt)
+        self._configure_guest_auth(vc_mount, guest_mount, guest_id, mount_path)
 
         # Mount the volume in the guest using the auth ID to assert that the
         # auth caps are valid
-        guest_mount.mount_wait(cephfs_mntpt=cephfs_mntpt)
+        guest_mount.mount_wait(mount_path=mount_path)
 
     def test_volume_without_namespace_isolation(self):
         """

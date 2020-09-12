@@ -49,7 +49,7 @@ protected:
       bool force,
       std::stringstream *ss) const;
 
-  virtual std::string const &get_prefix() const {return prefix;}
+  virtual std::string const &get_prefix() {return prefix;}
 
 public:
   FileSystemCommandHandler(const std::string &prefix_)
@@ -59,21 +59,9 @@ public:
   virtual ~FileSystemCommandHandler()
   {}
 
-  int is_op_allowed(const MonOpRequestRef& op, const FSMap& fsmap,
-		    const cmdmap_t& cmdmap, std::stringstream &ss) const;
-
-  int can_handle(std::string const &prefix_, MonOpRequestRef& op, FSMap& fsmap,
-	         const cmdmap_t& cmdmap, std::stringstream &ss) const
+  bool can_handle(std::string const &prefix_)
   {
-    if (get_prefix() != prefix_) {
-      return 0;
-    }
-
-    if (get_prefix() == "fs new" || get_prefix() == "fs flag set") {
-      return 1;
-    }
-
-    return is_op_allowed(op, fsmap, cmdmap, ss);
+    return get_prefix() == prefix_;
   }
 
   static std::list<std::shared_ptr<FileSystemCommandHandler> > load(Paxos *paxos);

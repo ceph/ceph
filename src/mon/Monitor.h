@@ -753,8 +753,7 @@ protected:
 
 public:
 
-  void get_cluster_status(std::stringstream &ss, ceph::Formatter *f,
-			  MonSession *session);
+  void get_cluster_status(std::stringstream &ss, ceph::Formatter *f);
 
   void reply_command(MonOpRequestRef op, int rc, const std::string &rs, version_t version);
   void reply_command(MonOpRequestRef op, int rc, const std::string &rs, ceph::buffer::list& rdata, version_t version);

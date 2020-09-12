@@ -51,7 +51,6 @@ using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
-using std::string_view;
 using std::stringstream;
 using std::to_string;
 using std::vector;
@@ -937,6 +936,8 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
 
+  const auto &fsmap = get_fsmap();
+
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
@@ -956,11 +957,6 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
-
-  // to use const qualifier filter fsmap beforehand
-  FSMap _fsmap_copy = get_fsmap();
-  _fsmap_copy.filter(session->get_allowed_fs_names());
-  const auto& fsmap = _fsmap_copy;
 
   if (prefix == "mds stat") {
     if (f) {
@@ -1347,35 +1343,28 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
 
   bool batched_propose = false;
   for (const auto &h : handlers) {
-    r = h->can_handle(prefix, op, pending, cmdmap, ss);
-    if (r == 1) {
-      ; // pass, since we got the right handler.
-    } else if (r == 0) {
-      continue;
-    } else {
-      goto out;
-    }
-
-    batched_propose = h->batched_propose();
-    if (batched_propose) {
-      paxos->plug();
-    }
-    r = h->handle(mon, pending, op, cmdmap, ss);
-    if (batched_propose) {
-      paxos->unplug();
-    }
-
-    if (r == -EAGAIN) {
-      // message has been enqueued for retry; return.
-      dout(4) << __func__ << " enqueue for retry by prepare_command" << dendl;
-      return false;
-    } else {
-      if (r == 0) {
-	// On successful updates, print the updated map
-	print_map(pending);
+    if (h->can_handle(prefix)) {
+      batched_propose = h->batched_propose();
+      if (batched_propose) {
+        paxos->plug();
       }
-      // Successful or not, we're done: respond.
-      goto out;
+      r = h->handle(mon, pending, op, cmdmap, ss);
+      if (batched_propose) {
+        paxos->unplug();
+      }
+
+      if (r == -EAGAIN) {
+        // message has been enqueued for retry; return.
+        dout(4) << __func__ << " enqueue for retry by prepare_command" << dendl;
+        return false;
+      } else {
+        if (r == 0) {
+          // On successful updates, print the updated map
+          print_map(pending);
+        }
+        // Successful or not, we're done: respond.
+        goto out;
+      }
     }
   }
 
@@ -1441,7 +1430,7 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap.at("state")) << "'";
       return -EINVAL;
     }
-    if (fsmap.gid_exists(gid, op->get_session()->get_allowed_fs_names())) {
+    if (fsmap.gid_exists(gid)) {
       fsmap.modify_daemon(gid, [state](auto& info) {
         info.state = state;
       });
@@ -1454,21 +1443,6 @@ int MDSMonitor::filesystem_command(
     cmd_getval(cmdmap, "role_or_gid", who);
 
     MDSMap::mds_info_t failed_info;
-    mds_gid_t gid = gid_from_arg(fsmap, who, ss);
-    if (gid == MDS_GID_NONE) {
-      return -EINVAL;
-    }
-    if(!fsmap.gid_exists(gid, op->get_session()->get_allowed_fs_names())) {
-      ss << "MDS named '" << who << "' does not exist, is not up or you "
-	 << "lack the permission to see.";
-      return -EINVAL;
-    }
-    string_view fs_name = fsmap.fs_name_from_gid(gid);
-    if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
-      ss << "Permission denied.";
-      return -EPERM;
-    }
-
     r = fail_mds(fsmap, ss, who, &failed_info);
     if (r < 0 && r == -EAGAIN) {
       mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
@@ -1487,25 +1461,21 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
-    if (!fsmap.gid_exists(gid, op->get_session()->get_allowed_fs_names())) {
+    if (!fsmap.gid_exists(gid)) {
       ss << "mds gid " << gid << " does not exist";
-      return 0;
-    }
-    string_view fs_name = fsmap.fs_name_from_gid(gid);
-    if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
-      ss << "Permission denied.";
-      return -EPERM;
-    }
-    const auto &info = fsmap.get_info_gid(gid);
-    MDSMap::DaemonState state = info.state;
-    if (state > 0) {
-    ss << "cannot remove active mds." << info.name
-	<< " rank " << info.rank;
-    return -EBUSY;
+      r = 0;
     } else {
-    fsmap.erase(gid, {});
-    ss << "removed mds gid " << gid;
-    return 0;
+      const auto &info = fsmap.get_info_gid(gid);
+      MDSMap::DaemonState state = info.state;
+      if (state > 0) {
+        ss << "cannot remove active mds." << info.name
+           << " rank " << info.rank;
+        return -EBUSY;
+      } else {
+        fsmap.erase(gid, {});
+        ss << "removed mds gid " << gid;
+        return 0;
+      }
     }
   } else if (prefix == "mds rmfailed") {
     bool confirm = false;
@@ -1519,16 +1489,10 @@ int MDSMonitor::filesystem_command(
     std::string role_str;
     cmd_getval(cmdmap, "role", role_str);
     mds_role_t role;
-    const auto fs_names = op->get_session()->get_allowed_fs_names();
-    int r = fsmap.parse_role(role_str, &role, ss, fs_names);
+    int r = fsmap.parse_role(role_str, &role, ss);
     if (r < 0) {
       ss << "invalid role '" << role_str << "'";
       return -EINVAL;
-    }
-    string_view fs_name = fsmap.get_filesystem(role.fscid)->mds_map.get_fs_name();
-    if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
-      ss << "Permission denied.";
-      return -EPERM;
     }
 
     fsmap.modify_filesystem(
@@ -1576,15 +1540,9 @@ int MDSMonitor::filesystem_command(
     std::string role_str;
     cmd_getval(cmdmap, "role", role_str);
     mds_role_t role;
-    const auto fs_names = op->get_session()->get_allowed_fs_names();
-    r = fsmap.parse_role(role_str, &role, ss, fs_names);
+    r = fsmap.parse_role(role_str, &role, ss);
     if (r < 0) {
       return r;
-    }
-    string_view fs_name = fsmap.get_filesystem(role.fscid)->mds_map.get_fs_name();
-    if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
-      ss << "Permission denied.";
-      return -EPERM;
     }
 
     bool modified = fsmap.undamaged(role.fscid, role.rank);
@@ -1601,12 +1559,6 @@ int MDSMonitor::filesystem_command(
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
     if (gid == MDS_GID_NONE) {
       return -EINVAL;
-    }
-
-    string_view fs_name = fsmap.fs_name_from_gid(gid);
-    if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
-      ss << "Permission denied.";
-      return -EPERM;
     }
 
     bool freeze = false;
@@ -1675,10 +1627,7 @@ void MDSMonitor::check_sub(Subscription *sub)
 {
   dout(20) << __func__ << ": " << sub->type << dendl;
 
-  // to use const qualifier filter fsmap beforehand
-  FSMap _fsmap_copy = get_fsmap();
-  _fsmap_copy.filter(sub->session->get_allowed_fs_names());
-  const auto& fsmap = _fsmap_copy;
+  const auto &fsmap = get_fsmap();
 
   if (sub->type == "fsmap") {
     if (sub->next <= fsmap.get_epoch()) {
@@ -1790,8 +1739,7 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = make_message<MMDSMap>(mon->monmap->fsid, *mds_map,
-			             mds_map->fs_name);
+    auto msg = make_message<MMDSMap>(mon->monmap->fsid, *mds_map);
 
     sub->session->con->send_message(msg.detach());
     if (sub->onetime) {
@@ -2136,7 +2084,7 @@ bool MDSMonitor::check_health(FSMap& fsmap, bool* propose_osdmap)
     auto info = fsmap.get_info_gid(gid);
     const mds_info_t* rep_info = nullptr;
     if (info.rank >= 0) {
-      auto fscid = fsmap.fscid_from_gid(gid);
+      auto fscid = fsmap.gid_fscid(gid);
       rep_info = fsmap.find_replacement_for({fscid, info.rank});
     }
     bool dropped = drop_mds(fsmap, gid, rep_info, propose_osdmap);

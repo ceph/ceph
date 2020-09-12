@@ -22,13 +22,12 @@
 
 class MMDSMap : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
   uuid_d fsid;
   epoch_t epoch = 0;
   ceph::buffer::list encoded;
-  std::string map_fs_name;
 
   version_t get_epoch() const { return epoch; }
   const ceph::buffer::list& get_encoded() const { return encoded; }
@@ -36,15 +35,12 @@ public:
 protected:
   MMDSMap() : 
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
-
-  MMDSMap(const uuid_d &f, const MDSMap &mm,
-          const std::string mf = std::string()) :
+  MMDSMap(const uuid_d &f, const MDSMap &mm) :
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
-    fsid(f), map_fs_name(mf) {
+    fsid(f) {
     epoch = mm.get_epoch();
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
-
   ~MMDSMap() override {}
 
 public:
@@ -60,9 +56,6 @@ public:
     decode(fsid, p);
     decode(epoch, p);
     decode(encoded, p);
-    if (header.version >= 2) {
-      decode(map_fs_name, p);
-    }
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -79,7 +72,6 @@ public:
       m.encode(encoded, features);
     }
     encode(encoded, payload);
-    encode(map_fs_name, payload);
   }
 private:
   template<class T, typename... Args>
