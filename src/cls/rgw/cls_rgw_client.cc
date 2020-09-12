@@ -278,6 +278,18 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const st
   o.exec(RGW_CLASS, RGW_BUCKET_PREPARE_OP, in);
 }
 
+CLSRGWCompleteModifyOpBase
+CLSRGWCompleteModifyOpBase::from_call(const rgw_cls_obj_complete_op& call)
+{
+  return { call.log_op,
+           call.key,
+           call.tag,
+           &call.zones_trace,
+           call.bilog_flags,
+           call.op
+  };
+}
+
 void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
                                              const rgw_bucket_entry_ver& ver,
                                              const rgw_bucket_dir_entry_meta& dir_meta,
@@ -513,6 +525,18 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
   return 0;
 }
 
+CLSRGWLinkOLHBase
+CLSRGWLinkOLHBase::from_call(const rgw_cls_link_olh_op& call)
+{
+  return { call.log_op,
+           call.key,
+           call.op_tag,
+           &call.zones_trace,
+           call.bilog_flags,
+           CLSRGWLinkOLHBase::get_bilog_op_type(call.delete_marker)
+  };
+}
+
 void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
                                  ceph::bufferlist& olh_tag,
                                  const rgw_bucket_dir_entry_meta *meta,
@@ -539,19 +563,15 @@ void CLSRGWLinkOLHBase::link_olh(librados::ObjectWriteOperation& op,
   op.exec(RGW_CLASS, RGW_BUCKET_LINK_OLH, in);
 }
 
-void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
-                            const bufferlist& olh_tag, bool delete_marker,
-                            const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
+CLSRGWUnlinkInstance
+CLSRGWUnlinkInstance::from_call(const rgw_cls_unlink_instance_op& call)
 {
-  rgw_cls_link_olh_op call;
-  if (meta) {
-    call.meta = *meta;
-  if (delete_marker) {
-    CLSRGWLinkOLH<true>{log_op, key, op_tag, &zones_trace}.link_olh(op, olh_tag, meta, olh_epoch, unmod_since, high_precision_time);
-  } else {
-    CLSRGWLinkOLH<false>{log_op, key, op_tag, &zones_trace}.link_olh(op, olh_tag, meta, olh_epoch, unmod_since, high_precision_time);
-  }
+  return { call.log_op,
+           call.key,
+           call.op_tag,
+           &call.zones_trace,
+           call.bilog_flags
+  };
 }
 
 void CLSRGWUnlinkInstance::unlink_instance(librados::ObjectWriteOperation& op,

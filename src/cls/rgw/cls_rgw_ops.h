@@ -1532,6 +1532,9 @@ struct CLSRGWBilogOp {
 struct CLSRGWCompleteModifyOpBase : CLSRGWBilogOp {
   const enum RGWModifyOp op_type;
 
+  static CLSRGWCompleteModifyOpBase from_call(
+    const rgw_cls_obj_complete_op& call);
+
   void complete_op(librados::ObjectWriteOperation& o,
                    const rgw_bucket_entry_ver& ver,
                    const rgw_bucket_dir_entry_meta& dir_meta,
@@ -1549,6 +1552,13 @@ struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
 struct CLSRGWLinkOLHBase : CLSRGWBilogOp {
   const enum RGWModifyOp op_type;
 
+  static CLSRGWLinkOLHBase from_call(const rgw_cls_link_olh_op& call);
+
+  static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
+     return delete_marker ? CLS_RGW_OP_LINK_OLH_DM
+                          : CLS_RGW_OP_LINK_OLH;
+  }
+
   void link_olh(librados::ObjectWriteOperation& op,
                 ceph::bufferlist& olh_tag,
                 const rgw_bucket_dir_entry_meta *meta,
@@ -1560,11 +1570,7 @@ struct CLSRGWLinkOLHBase : CLSRGWBilogOp {
 template <bool DeleteMarkerV>
 struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
   constexpr static enum RGWModifyOp get_bilog_op_type() {
-    if constexpr (DeleteMarkerV) {
-      return CLS_RGW_OP_LINK_OLH_DM;
-    } else {
-      return CLS_RGW_OP_LINK_OLH;
-    }
+    return CLSRGWLinkOLHBase::get_bilog_op_type(DeleteMarkerV);
   }
 
   template <class... Args>
@@ -1577,6 +1583,8 @@ struct CLSRGWUnlinkInstance : CLSRGWBilogOp {
   constexpr static enum RGWModifyOp get_bilog_op_type() {
     return CLS_RGW_OP_UNLINK_INSTANCE;
   }
+
+  static CLSRGWUnlinkInstance from_call(const rgw_cls_unlink_instance_op& call);
 
   void unlink_instance(librados::ObjectWriteOperation& op,
                        const std::string& olh_tag,
