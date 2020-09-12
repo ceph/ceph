@@ -170,7 +170,6 @@ public:
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
     , quiesce_thread(*this, &NBDServer::quiesce_entry)
-    , started(false)
   {
     std::vector<librbd::config_option_t> options;
     image.config_list(&options);
@@ -504,8 +503,8 @@ signal:
     }
   } reader_thread, writer_thread, quiesce_thread;
 
-  bool started;
-  bool quiesce;
+  bool started = false;
+  bool quiesce = false;
 
 public:
   void start()
