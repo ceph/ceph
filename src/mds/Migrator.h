@@ -115,7 +115,7 @@ public:
   
   // -- status --
   int is_exporting(CDir *dir) const {
-    auto it = export_state.find(dir);
+    auto it = export_state.find(dir->dirfrag());
     if (it != export_state.end()) return it->second.state;
     return 0;
   }
@@ -149,7 +149,7 @@ public:
   }
 
   int get_export_state(CDir *dir) const {
-    auto it = export_state.find(dir);
+    auto it = export_state.find(dir->dirfrag());
     ceph_assert(it != export_state.end());
     return it->second.state;
   }
@@ -158,21 +158,21 @@ public:
   // be warned of ambiguous auth.
   // only returns meaningful results during EXPORT_WARNING state.
   bool export_has_warned(CDir *dir, mds_rank_t who) {
-    auto it = export_state.find(dir);
+    auto it = export_state.find(dir->dirfrag());
     ceph_assert(it != export_state.end());
     ceph_assert(it->second.state == EXPORT_WARNING);
     return (it->second.warning_ack_waiting.count(who) == 0);
   }
 
   bool export_has_notified(CDir *dir, mds_rank_t who) const {
-    auto it = export_state.find(dir);
+    auto it = export_state.find(dir->dirfrag());
     ceph_assert(it != export_state.end());
     ceph_assert(it->second.state == EXPORT_NOTIFYING);
     return (it->second.notify_ack_waiting.count(who) == 0);
   }
 
   void export_freeze_inc_num_waiters(CDir *dir) {
-    auto it = export_state.find(dir);
+    auto it = export_state.find(dir->dirfrag());
     ceph_assert(it != export_state.end());
     it->second.num_remote_waiters++;
   }
@@ -265,6 +265,7 @@ protected:
   // export fun
   struct export_state_t {
     export_state_t() {}
+    CDir *base = nullptr;
 
     int state = 0;
     mds_rank_t peer = MDS_RANK_NONE;
@@ -298,7 +299,7 @@ protected:
     MutationRef mut;
   };
 
-  typedef map<CDir*, export_state_t>::iterator export_state_iterator;
+  typedef map<dirfrag_t, export_state_t>::iterator export_state_iterator;
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
@@ -313,21 +314,21 @@ protected:
   friend class C_M_LoggedImportCaps;
 
   void handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m);
-  void export_frozen(CDir *dir, uint64_t tid);
+  void export_frozen(dirfrag_t df, uint64_t tid);
   void handle_export_prep_ack(const cref_t<MExportDirPrepAck> &m);
-  void export_sessions_flushed(CDir *dir, uint64_t tid);
-  void export_go(CDir *dir);
-  void export_go_synced(CDir *dir, uint64_t tid);
+  void export_sessions_flushed(dirfrag_t df, uint64_t tid);
+  void export_go(export_state_t& stat);
+  void export_go_synced(dirfrag_t df, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
   void export_cancel_finish(export_state_iterator& it);
-  void export_reverse(CDir *dir, export_state_t& stat);
-  void export_notify_abort(CDir *dir, export_state_t& stat, std::set<CDir*>& bounds);
+  void export_reverse(export_state_t& stat);
+  void export_notify_abort(export_state_t& stat, std::set<CDir*>& bounds);
   void handle_export_ack(const cref_t<MExportDirAck> &m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m);
   void export_finish(CDir *dir);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
-  void encode_export_prep_trace(bufferlist& bl, CDir *bound, CDir *dir, export_state_t &es,
+  void encode_export_prep_trace(bufferlist& bl, CDir *bound, export_state_t &stat,
                                set<inodeno_t> &inodes_added, set<dirfrag_t> &dirfrags_added);
   void decode_export_prep_trace(bufferlist::const_iterator& blp, mds_rank_t oldauth, MDSContext::vec &finished);
 
@@ -361,7 +362,7 @@ protected:
   // bystander
   void handle_export_notify(const cref_t<MExportDirNotify> &m);
 
-  std::map<CDir*, export_state_t>  export_state;
+  std::map<dirfrag_t, export_state_t> export_state;
 
   uint64_t total_exporting_size = 0;
   unsigned num_locking_exports = 0; // exports in locking state (approx_size == 0)
