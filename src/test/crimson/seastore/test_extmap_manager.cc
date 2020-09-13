@@ -71,8 +71,8 @@ struct extentmap_manager_test_t : public seastar_test_suite_t {
     EXPECT_EQ(lo, extent.logical_offset);
     EXPECT_EQ(val.laddr, extent.laddr);
     EXPECT_EQ(val.length, extent.length);
-    test_ext_mappings.emplace(std::make_pair(extent.logical_offset,
-      lext_map_val_t{extent.laddr, extent.length}));
+    test_ext_mappings.emplace(extent.logical_offset,
+			      lext_map_val_t{extent.laddr, extent.length});
     return extent;
   }
 
@@ -104,16 +104,16 @@ struct extentmap_manager_test_t : public seastar_test_suite_t {
     lext_map_val_t val ) {
     auto ret = extmap_manager->rm_lextent(extmap_root, t, lo, val).unsafe_get0();
     EXPECT_TRUE(ret);
-    test_ext_mappings.erase(test_ext_mappings.find(lo));
+    test_ext_mappings.erase(lo);
   }
 
   void check_mappings(extmap_root_t &extmap_root, Transaction &t) {
-    for (auto &&i: test_ext_mappings){
-      auto ret_list = find_extent(extmap_root, t, i.first, i.second.length);
+    for (const auto& [lo, ext]: test_ext_mappings){
+      auto ret_list = find_extent(extmap_root, t, lo, ext.length);
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.laddr, ret.laddr);
-      EXPECT_EQ(i.second.length, ret.length);
+      EXPECT_EQ(ext.laddr, ret.laddr);
+      EXPECT_EQ(ext.length, ret.length);
     }
   }
 
@@ -218,9 +218,9 @@ TEST_F(extentmap_manager_test_t, force_split_merge)
     }
     auto t = tm.create_transaction();
     int i = 0;
-    for (auto &e: test_ext_mappings) {
+    for (const auto& [lo, ext]: test_ext_mappings) {
       if (i % 3 != 0) {
-	rm_extent(extmap_root, *t, e.first, e.second);
+	rm_extent(extmap_root, *t, lo, ext);
       }
 
       if (i % 10 == 0) {
@@ -269,9 +269,9 @@ TEST_F(extentmap_manager_test_t, force_split_balanced)
     }
     auto t = tm.create_transaction();
     int i = 0;
-    for (auto &e: test_ext_mappings) {
+    for (const auto& [lo, ext]: test_ext_mappings) {
       if (i < 100) {
-        rm_extent(extmap_root, *t, e.first, e.second);
+        rm_extent(extmap_root, *t, lo, ext);
       }
 
       if (i % 10 == 0) {
