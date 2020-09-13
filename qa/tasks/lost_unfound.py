@@ -14,7 +14,7 @@ def task(ctx, config):
     """
     Test handling of lost objects.
 
-    A pretty rigid cluseter is brought up andtested by this task
+    A pretty rigid cluster is brought up and tested by this task
     """
     POOL = 'unfound_pool'
     if config is None:
