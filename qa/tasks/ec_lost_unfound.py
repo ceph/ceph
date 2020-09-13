@@ -14,7 +14,7 @@ def task(ctx, config):
     """
     Test handling of lost objects on an ec pool.
 
-    A pretty rigid cluster is brought up andtested by this task
+    A pretty rigid cluster is brought up and tested by this task
     """
     if config is None:
         config = {}
