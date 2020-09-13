@@ -105,7 +105,7 @@ class RGWRadosObject : public RGWObject {
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     int set_acl(const RGWAccessControlPolicy& acl) { acls = acl; return 0; }
     virtual void set_atomic(RGWObjectCtx *rctx) const;
-    virtual void set_prefetch_data(RGWObjectCtx *rctx);
+    virtual void set_prefetch_data(RGWObjectCtx *rctx, prefetch_range prefetch);
 
     virtual int get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
     virtual int set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) override;

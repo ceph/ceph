@@ -4883,7 +4883,8 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   obj_ctx.set_atomic(obj);
-  obj_ctx.set_prefetch_data(obj);
+  prefetch_range prefetch{0, static_cast<uint64_t>(s->cct->_conf->rgw_max_chunk_size)};
+  obj_ctx.set_prefetch_data(obj, prefetch);
 
   RGWObjState* state = nullptr;
   if (store->getRados()->get_obj_state(&obj_ctx, s->bucket->get_info(), obj, &state, false, s->yield) < 0) {

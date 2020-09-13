@@ -97,7 +97,7 @@ RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_,
 int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   ldout(cct, 10) << "Compression for rgw is enabled, decompress part "
-      << "bl_ofs="<< bl_ofs << bl_len << dendl;
+      << "bl_ofs="<< bl_ofs << " bl_len=" << bl_len << dendl;
 
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return decompressed data?

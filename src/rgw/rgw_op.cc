@@ -331,7 +331,8 @@ static int get_obj_head(struct req_state *s,
 			bufferlist *pbl)
 {
   std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op = obj->get_read_op(s->obj_ctx);
-  obj->set_prefetch_data(s->obj_ctx);
+  prefetch_range prefetch{0, static_cast<uint64_t>(s->cct->_conf->rgw_max_chunk_size)};
+  s->obj_ctx->set_prefetch_data(obj->get_obj(), prefetch);
 
   int ret = read_op->prepare(s->yield);
   if (ret < 0) {
@@ -705,7 +706,7 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-			      bool prefetch_data, optional_yield y)
+			      const prefetch_range* prefetch, optional_yield y)
 {
   int ret = 0;
 
@@ -718,8 +719,8 @@ int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *
     s->object->set_bucket(s->bucket.get());
       
     s->object->set_atomic(s->obj_ctx);
-    if (prefetch_data) {
-      s->object->set_prefetch_data(s->obj_ctx);
+    if (prefetch) {
+      s->obj_ctx->set_prefetch_data(s->object->get_obj(), *prefetch);
     }
     ret = read_obj_policy(store, s, s->bucket->get_info(), s->bucket_attrs,
 			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
@@ -887,10 +888,6 @@ int retry_raced_bucket_write(rgw::sal::RGWBucket* b, const F& f) {
 int RGWGetObj::verify_permission(optional_yield y)
 {
   s->object->set_atomic(s->obj_ctx);
-
-  if (get_data) {
-    s->object->set_prefetch_data(s->obj_ctx);
-  }
 
   if (torrent.get_flag()) {
     if (s->object->get_instance().empty()) {
@@ -1520,7 +1517,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::RGWBucket* bucket,
       << " end=" << cur_end << dendl;
 
   part->set_atomic(&obj_ctx);
-  part->set_prefetch_data(&obj_ctx);
+  obj_ctx.set_prefetch_data(part->get_obj(), prefetch);
 
   std::unique_ptr<rgw::sal::RGWObject::ReadOp> read_op = part->get_read_op(&obj_ctx);
 
@@ -2030,21 +2027,26 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
-bool RGWGetObj::prefetch_data()
+const prefetch_range* RGWGetObj::prefetch_data()
 {
   /* HEAD request, stop prefetch*/
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
-    return false;
+    return nullptr;
   }
 
   range_str = s->info.env->get("HTTP_RANGE");
-  // TODO: add range prefetch
+  prefetch.off = 0;
+  prefetch.len = s->cct->_conf->rgw_max_chunk_size;
   if (range_str) {
     parse_range();
-    return false;
+    if (partial_content && range_parsed) {
+      prefetch.off = ofs;
+      if (end - ofs + 1 < s->cct->_conf->rgw_max_chunk_size)
+        prefetch.len = end - ofs + 1;
+    }
   }
 
-  return get_data;
+  return &prefetch;
 }
 
 void RGWGetObj::pre_exec()
@@ -3477,7 +3479,7 @@ int RGWPutObj::verify_permission(optional_yield y)
       cs_bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
 
     cs_object->set_atomic(s->obj_ctx);
-    cs_object->set_prefetch_data(s->obj_ctx);
+    s->obj_ctx->set_prefetch_data(s->object->get_obj(), prefetch);
 
     /* check source object permissions */
     if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
@@ -4974,7 +4976,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
     src_object->set_atomic(s->obj_ctx);
-    src_object->set_prefetch_data(s->obj_ctx);
+    s->obj_ctx->set_prefetch_data(src_object->get_obj(), prefetch);
 
     rgw_placement_rule src_placement;
 

@@ -906,7 +906,7 @@ int RGWAsyncStatObj::_send_request()
   rgw_raw_obj raw_obj;
   store->getRados()->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
   return store->getRados()->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
-                             nullptr, nullptr, objv_tracker, null_yield);
+                             nullptr, nullptr, std::nullopt, objv_tracker, null_yield);
 }
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, rgw::sal::RGWRadosStore *store,

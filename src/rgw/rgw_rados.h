@@ -169,13 +169,12 @@ struct RGWObjState {
   string shadow_obj;
   bool has_data{false};
   bufferlist data;
-  bool prefetch_data{false};
   bool keep_tail{false};
   bool is_olh{false};
   bufferlist olh_tag;
   uint64_t pg_ver{false};
   uint32_t zone_short_id{0};
-
+  std::optional<prefetch_range> prefetch;
   /* important! don't forget to update copy constructor */
 
   RGWObjVersionTracker objv_tracker;
@@ -245,7 +244,7 @@ public:
   RGWObjState *get_state(const rgw_obj& obj);
 
   void set_atomic(rgw_obj& obj);
-  void set_prefetch_data(const rgw_obj& obj);
+  void set_prefetch_data(const rgw_obj& obj, prefetch_range prefetch);
   void invalidate(const rgw_obj& obj);
 };
 
@@ -1273,7 +1272,7 @@ public:
    */
 
   int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, ceph::real_time *pmtime, uint64_t *epoch,
-                   map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                   map<string, bufferlist> *attrs, bufferlist *first_chunk, std::optional<prefetch_range> prefetch,
                    RGWObjVersionTracker *objv_tracker, optional_yield y);
 
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
@@ -1331,9 +1330,9 @@ public:
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_atomic(obj);
   }
-  void set_prefetch_data(void *ctx, const rgw_obj& obj) {
+  void set_prefetch_data(void *ctx, const rgw_obj& obj, prefetch_range prefetch) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->set_prefetch_data(obj);
+    rctx->set_prefetch_data(obj, prefetch);
   }
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,

@@ -626,6 +626,8 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_user &u) {
   u.to_str(s);
   return out << s;
 }
-
-
+struct prefetch_range {
+  size_t off = 0;
+  uint64_t len = 0;
+};
 #endif

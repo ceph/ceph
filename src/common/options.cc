@@ -6452,12 +6452,6 @@ std::vector<Option> get_rgw_options() {
     .set_description("RGW object read window size")
     .set_long_description("The window size in bytes for a single object read request"),
 
-    Option("rgw_get_obj_max_req_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(4_M)
-    .set_description("RGW object read chunk size")
-    .set_long_description(
-        "The maximum request size of a single object read operation sent to RADOS"),
-
     Option("rgw_relaxed_s3_bucket_names", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("RGW enable relaxed S3 bucket names")

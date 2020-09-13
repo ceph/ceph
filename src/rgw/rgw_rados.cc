@@ -228,11 +228,12 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   if (rhs.data.length()) {
     data = rhs.data;
   }
-  prefetch_data = rhs.prefetch_data;
+  prefetch = rhs.prefetch;
   keep_tail = rhs.keep_tail;
   is_olh = rhs.is_olh;
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
+  prefetch = rhs.prefetch;
 }
 
 RGWObjState *RGWObjectCtx::get_state(const rgw_obj& obj) {
@@ -258,10 +259,10 @@ void RGWObjectCtx::set_atomic(rgw_obj& obj) {
   assert (!obj.empty());
   objs_state[obj].is_atomic = true;
 }
-void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj) {
+void RGWObjectCtx::set_prefetch_data(const rgw_obj& obj, prefetch_range prefetch) {
   std::unique_lock wl{lock};
   assert (!obj.empty());
-  objs_state[obj].prefetch_data = true;
+  objs_state[obj].prefetch = prefetch;
 }
 
 void RGWObjectCtx::invalidate(const rgw_obj& obj) {
@@ -271,14 +272,14 @@ void RGWObjectCtx::invalidate(const rgw_obj& obj) {
     return;
   }
   bool is_atomic = iter->second.is_atomic;
-  bool prefetch_data = iter->second.prefetch_data;
+  auto prefetch = iter->second.prefetch;
 
   objs_state.erase(iter);
 
-  if (is_atomic || prefetch_data) {
+  if (is_atomic || prefetch) {
     auto& state = objs_state[obj];
     state.is_atomic = is_atomic;
-    state.prefetch_data = prefetch_data;
+    state.prefetch = prefetch;
   }
 }
 
@@ -5297,7 +5298,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   bool need_follow_olh = follow_olh && obj.key.instance.empty();
 
   RGWObjState *s = rctx->get_state(obj);
-  ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
+  ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << (bool)s->prefetch << dendl;
   *state = s;
   if (s->has_attrs) {
     if (s->is_olh && need_follow_olh) {
@@ -5314,7 +5315,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   int r = -ENOENT;
 
   if (!assume_noent) {
-    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL, y);
+    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch ? &s->data : NULL),  s->prefetch, NULL, y);
   }
 
   if (r == -ENOENT) {
@@ -6232,7 +6233,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
     if (r < 0)
       return r;
 
-    if (astate && astate->prefetch_data) {
+    if (astate && astate->prefetch) {
       if (!ofs && astate->data.length() >= len) {
         bl = astate->data;
         return bl.length();
@@ -6363,21 +6364,19 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
     int r = append_atomic_test(astate, op);
     if (r < 0)
       return r;
-
-    if (astate &&
-        obj_ofs < astate->data.length()) {
-      unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
-
-      r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
+    if (astate && astate->prefetch
+      && astate->prefetch->off == obj_ofs) {
+      // diff is mainly for compression where the len could be smaller than data length
+      auto diff = std::min((unsigned int)len, astate->data.length());
+      r = d->client_cb->handle_data(astate->data, 0, diff);
       if (r < 0)
         return r;
-
-      len -= chunk_len;
-      d->offset += chunk_len;
-      read_ofs += chunk_len;
-      obj_ofs += chunk_len;
+      d->offset = (obj_ofs + diff);
+      len -= diff;
       if (!len)
-	  return 0;
+        return 0;
+      obj_ofs = d->offset;
+      read_ofs += diff;
     }
   }
 
@@ -6395,7 +6394,6 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
   auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
-
   return d->flush(std::move(completed));
 }
 
@@ -6405,7 +6403,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
   RGWObjectCtx& obj_ctx = source->get_ctx();
-  const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
+  const uint64_t chunk_size = cct->_conf->rgw_max_chunk_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
   auto aio = rgw::make_throttle(window_size, y);
@@ -7499,7 +7497,7 @@ int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx
 }
 
 int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                           map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                           map<string, bufferlist> *attrs, bufferlist *first_chunk, std::optional<prefetch_range> prefetch,
                            RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   rgw_rados_ref ref;
@@ -7522,8 +7520,8 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
   if (psize || pmtime) {
     op.stat2(&size, &mtime_ts, NULL);
   }
-  if (first_chunk) {
-    op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
+  if (first_chunk && prefetch) {
+      op.read(prefetch->off, prefetch->len, first_chunk, NULL);
   }
   bufferlist outbl;
   r = rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);

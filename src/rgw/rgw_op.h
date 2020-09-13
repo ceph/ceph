@@ -136,6 +136,7 @@ protected:
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
   int op_ret;
+  prefetch_range prefetch;
   int do_aws4_auth_completion();
 
   virtual int init_quota();
@@ -172,7 +173,7 @@ public:
   bool generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age);
 
   virtual int verify_params() { return 0; }
-  virtual bool prefetch_data() { return false; }
+  virtual const prefetch_range* prefetch_data() { return nullptr; }
 
   /* Authenticate requester -- verify its identity.
    *
@@ -296,7 +297,6 @@ protected:
   uint64_t cur_ofs;
   bufferlist waiting;
   uint64_t action = 0;
-
   bool get_retention;
   bool get_legal_hold;
 
@@ -331,7 +331,7 @@ public:
     get_legal_hold = false;
  }
 
-  bool prefetch_data() override;
+  const prefetch_range* prefetch_data() override;
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
@@ -1962,7 +1962,7 @@ public:
 
 extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y);
 extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-				     bool prefetch_data, optional_yield y);
+				     const prefetch_range *prefetch, optional_yield y);
 extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
 extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
