@@ -110,7 +110,7 @@ struct extentmap_manager_test_t : public seastar_test_suite_t {
   void check_mappings(extmap_root_t &extmap_root, Transaction &t) {
     for (const auto& [lo, ext]: test_ext_mappings){
       const auto ext_list = find_extent(extmap_root, t, lo, ext.length);
-      EXPECT_EQ(ext_list.size(), 1);
+      ASSERT_EQ(ext_list.size(), 1);
       const auto& ext_map = ext_list.front();
       EXPECT_EQ(ext.laddr, ext_map.laddr);
       EXPECT_EQ(ext.length, ext_map.length);
