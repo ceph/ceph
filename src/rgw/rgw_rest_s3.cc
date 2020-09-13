@@ -2770,9 +2770,11 @@ int RGWPostObj_ObjStore_S3::get_params()
 
 
   min_len = post_policy.min_length;
-  max_len = post_policy.max_length;
-
-
+  max_len = (off_t)(s->cct->_conf->rgw_max_put_size);
+  if (max_len > post_policy.max_length) {
+    ldout(s->cct, 20) << "INFO: reset max_len to post_policy.max_length, max_len=" << post_policy.max_length << dendl;
+    max_len = post_policy.max_length;
+  }
 
   return 0;
 }
