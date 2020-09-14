@@ -73,6 +73,10 @@ export abstract class PageHelper {
     return cy.get('.nav.nav-tabs li');
   }
 
+  getTab(tabName: string) {
+    return cy.contains('.nav.nav-tabs li', new RegExp(`^${tabName}$`));
+  }
+
   getTabText(index: number) {
     return this.getTabs().its(index).text();
   }
@@ -123,42 +127,29 @@ export abstract class PageHelper {
     return cy.get('cd-table .dataTables_wrapper');
   }
 
-  getTableTotalCount() {
-    this.waitDataTableToLoad();
+  private getTableCountSpan(spanType: 'selected' | 'found' | 'total') {
+    return cy.contains('.datatable-footer-inner .page-count span', spanType);
+  }
 
-    return cy.get('.datatable-footer-inner .page-count span').then(($elem) => {
+  // Get 'selected', 'found', or 'total' row count of a table.
+  getTableCount(spanType: 'selected' | 'found' | 'total') {
+    this.waitDataTableToLoad();
+    return this.getTableCountSpan(spanType).then(($elem) => {
       const text = $elem
-        .filter((_i, e) => e.innerText.includes('total'))
+        .filter((_i, e) => e.innerText.includes(spanType))
         .first()
         .text();
 
-      return Number(text.match(/(\d+)\s+total/)[1]);
+      return Number(text.match(/(\d+)\s+\w*/)[1]);
     });
   }
 
-  getTableSelectedCount() {
+  // Wait until selected', 'found', or 'total' row count of a table equal to a number.
+  expectTableCount(spanType: 'selected' | 'found' | 'total', count: number) {
     this.waitDataTableToLoad();
-
-    return cy.get('.datatable-footer-inner .page-count span').then(($elem) => {
-      const text = $elem
-        .filter((_i, e) => e.innerText.includes('selected'))
-        .first()
-        .text();
-
-      return Number(text.match(/(\d+)\s+selected/)[1]);
-    });
-  }
-
-  getTableFoundCount() {
-    this.waitDataTableToLoad();
-
-    return cy.get('.datatable-footer-inner .page-count span').then(($elem) => {
-      const text = $elem
-        .filter((_i, e) => e.innerText.includes('found'))
-        .first()
-        .text();
-
-      return Number(text.match(/(\d+)\s+found/)[1]);
+    this.getTableCountSpan(spanType).should(($elem) => {
+      const text = $elem.first().text();
+      expect(Number(text.match(/(\d+)\s+\w*/)[1])).to.equal(count);
     });
   }
 
@@ -188,6 +179,15 @@ export abstract class PageHelper {
     } else {
       return cy.get('.datatable-body-cell-label').first();
     }
+  }
+
+  getTableCell(columnIndex: number, exactContent: string) {
+    this.waitDataTableToLoad();
+    this.seachTable(exactContent);
+    return cy.contains(
+      `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
+      new RegExp(`^${exactContent}$`)
+    );
   }
 
   getExpandCollapseElement(content?: string) {
@@ -226,10 +226,14 @@ export abstract class PageHelper {
     cy.contains(`.tc_filter_option .dropdown-item`, option).click();
   }
 
+  setPageSize(size: string) {
+    cy.get('cd-table .dataTables_paginate input').first().clear().type(size);
+  }
+
   seachTable(text: string) {
     this.waitDataTableToLoad();
 
-    cy.get('cd-table .dataTables_paginate input').first().clear().type('10');
+    this.setPageSize('10');
     cy.get('cd-table .search input').first().clear().type(text);
   }
 
@@ -239,18 +243,28 @@ export abstract class PageHelper {
     return cy.get('cd-table .search button').click();
   }
 
+  // Click the action button
+  clickActionButton(action: string) {
+    cy.get('.table-actions button.dropdown-toggle').first().click(); // open submenu
+    cy.get(`button.${action}`).click(); // click on "action" menu item
+  }
+
   /**
    * This is a generic method to delete table rows.
    * It will select the first row that contains the provided name and delete it.
    * After that it will wait until the row is no longer displayed.
+   * @param name The string to search in table cells.
+   * @param columnIndex If provided, search string in columnIndex column.
    */
-  delete(name: string) {
+  delete(name: string, columnIndex?: number) {
     // Selects row
-    this.getFirstTableCell(name).click();
+    const getRow = columnIndex
+      ? this.getTableCell.bind(this, columnIndex)
+      : this.getFirstTableCell.bind(this);
+    getRow(name).click();
 
     // Clicks on table Delete button
-    cy.get('.table-actions button.dropdown-toggle').first().click(); // open submenu
-    cy.get('button.delete').click(); // click on "delete" menu item
+    this.clickActionButton('delete');
 
     // Confirms deletion
     cy.get('cd-modal .custom-control-label').click();
@@ -260,6 +274,6 @@ export abstract class PageHelper {
     cy.get('cd-modal').should('not.exist');
 
     // Waits for item to be removed from table
-    this.getFirstTableCell(name).should('not.exist');
+    getRow(name).should('not.exist');
   }
 }
