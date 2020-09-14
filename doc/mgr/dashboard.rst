@@ -468,6 +468,14 @@ More details can be found in the documentation of the :ref:`mgr-prometheus`.
     [security]
     allow_embedding = true
 
+Enabling RBD-Image monitoring
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Due to performance reasons, monitoring of RBD images is disabled by default. For
+more information please see :ref:`prometheus-rbd-io-statistics`. If disabled,
+the overview and details dashboards will stay empty in Grafana and the metrics
+will not be visible in Prometheus.
+
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Dashboard will use to access Grafana.
 
