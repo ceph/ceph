@@ -28,6 +28,12 @@ def _run_cephadm(ret):
     return foo
 
 
+def _get_ceph_metadata(ret):
+    def foo(*args, **kwargs):
+        return ret
+    return foo
+
+
 def match_glob(val, pat):
     ok = fnmatch.fnmatchcase(val, pat)
     if not ok:
