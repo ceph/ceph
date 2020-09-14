@@ -1,0 +1,17 @@
+use_shaman
+
+tasks:
+  - install:
+      project: ceph-iscsi
+      branch: master
+      sha1: latest
+  - install:
+      project: tcmu-runner
+      branch: master
+      sha1: latest
+  - install:
+      extra_packages:
+        rpm:
+        - tcmu-runner
+        - ceph-iscsi
+        - iscsi-initiator-utils

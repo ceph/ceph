@@ -1,0 +1,4 @@
+tasks:
+- iscsi_gwcli:
+    gateways: [gateway.0, gateway.1]
+    clients: [client.0]
