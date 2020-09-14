@@ -245,9 +245,9 @@ rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}"
 QUIESCE_HOOK=${TEMPDIR}/quiesce.sh
 DEV=`_sudo rbd-nbd map --quiesce --quiesce-hook ${QUIESCE_HOOK} ${POOL}/${IMAGE}`
 
-# test it does not fail if the hook does not exists
+# test it fails if the hook does not exists
 test ! -e ${QUIESCE_HOOK}
-rbd snap create ${POOL}/${IMAGE}@quiesce1
+expect_false rbd snap create ${POOL}/${IMAGE}@quiesce1
 _sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
 
 # test the hook is executed
@@ -258,20 +258,20 @@ cat > ${QUIESCE_HOOK} <<EOF
 echo "test the hook is executed" >&2
 echo \$1 > ${TEMPDIR}/\$2
 EOF
-rbd snap create ${POOL}/${IMAGE}@quiesce2
+rbd snap create ${POOL}/${IMAGE}@quiesce1
 _sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
 test "$(cat ${TEMPDIR}/quiesce)" = ${DEV}
 test "$(cat ${TEMPDIR}/unquiesce)" = ${DEV}
 
-# test it does not fail if the hook fails
+# test snap create fails if the hook fails
 touch ${QUIESCE_HOOK}
 chmod +x ${QUIESCE_HOOK}
 cat > ${QUIESCE_HOOK} <<EOF
 #/bin/sh
-echo "test it does not fail if the hook fails" >&2
-exit 1
+echo "test snap create fails if the hook fails" >&2
+exit 22
 EOF
-rbd snap create ${POOL}/${IMAGE}@quiesce3
+expect_false rbd snap create ${POOL}/${IMAGE}@quiesce2
 _sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
 
 # test the hook is slow
@@ -280,7 +280,7 @@ cat > ${QUIESCE_HOOK} <<EOF
 echo "test the hook is slow" >&2
 sleep 7
 EOF
-rbd snap create ${POOL}/${IMAGE}@quiesce4
+rbd snap create ${POOL}/${IMAGE}@quiesce2
 _sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
 
 # test rbd-nbd_quiesce hook that comes with distribution
@@ -296,7 +296,7 @@ fi
 _sudo mkfs ${DEV}
 mkdir ${TEMPDIR}/mnt
 _sudo mount ${DEV} ${TEMPDIR}/mnt
-rbd snap create ${POOL}/${IMAGE}@quiesce5
+rbd snap create ${POOL}/${IMAGE}@quiesce3
 _sudo dd if=${DATA} of=${TEMPDIR}/mnt/test bs=1M count=1 oflag=direct
 _sudo umount ${TEMPDIR}/mnt
 unmap_device ${DEV}
