@@ -2114,7 +2114,7 @@ To check that the host is reachable:
 
         ha = HostAssignment(
             spec=spec,
-            get_hosts_func=self._get_hosts,
+            hosts=self.inventory.all_specs(),
             get_daemons_func=self.cache.get_daemons_by_service,
             filter_new_host=matches_network if daemon_type == 'mon' else None,
         )
@@ -2375,7 +2375,7 @@ To check that the host is reachable:
 
         ha = HostAssignment(
             spec=spec,
-            get_hosts_func=self._get_hosts,
+            hosts=self.inventory.all_specs(),
             get_daemons_func=self.cache.get_daemons_by_service,
         )
         ha.validate()
@@ -2429,7 +2429,7 @@ To check that the host is reachable:
 
         HostAssignment(
             spec=spec,
-            get_hosts_func=self._get_hosts,
+            hosts=self.inventory.all_specs(),
             get_daemons_func=self.cache.get_daemons_by_service,
         ).validate()
 
