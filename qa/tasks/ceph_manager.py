@@ -1357,10 +1357,6 @@ class CephManager:
         """
         Start ceph on a cluster.  Return success or failure information.
         """
-        if self.cephadm:
-            return shell(self.ctx, self.cluster, self.controller, args=args,
-                         check_status=False).existatus
-
         kwargs['args'], kwargs['check_status'] = args, False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
