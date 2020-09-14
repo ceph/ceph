@@ -3092,6 +3092,11 @@ void RGWCreateBucket::execute()
   s->bucket_exists = (op_ret != -ENOENT);
 
   if (s->bucket_exists) {
+    if (!s->system_request &&
+        store->svc()->zone->get_zonegroup().get_id() != s->bucket->get_info().zonegroup) {
+      op_ret = -EEXIST;
+      return;
+    }
     /* Initialize info from req_state */
     info = s->bucket->get_info();
   }
