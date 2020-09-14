@@ -1651,22 +1651,14 @@ To check that the host is reachable:
 
     @trivial_completion
     def service_action(self, action, service_name) -> List[str]:
-        args = []
-        for host, dm in self.cache.daemons.items():
-            for name, d in dm.items():
-                if d.matches_service(service_name):
-                    args.append((d.daemon_type, d.daemon_id,
-                                 d.hostname, action))
+        if action == 'stop':
+            raise OrchestratorError("Unable to stop all daemons of a service. Too dangerous.")
+        dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
         self.log.info('%s service %s' % (action.capitalize(), service_name))
-        return self._daemon_actions(args)
-
-    @forall_hosts
-    def _daemon_actions(self, daemon_type, daemon_id, host, action) -> str:
-        with set_exception_subject('daemon', DaemonDescription(
-            daemon_type=daemon_type,
-            daemon_id=daemon_id
-        ).name()):
-            return self._daemon_action(daemon_type, daemon_id, host, action)
+        return [
+            self._schedule_daemon_action(dd.name(), action)
+            for dd in dds
+        ]
 
     def _daemon_action(self, daemon_type, daemon_id, host, action, image=None):
         daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
