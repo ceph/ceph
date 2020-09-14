@@ -105,7 +105,9 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
 
   ldout(m_cct, 20) << "snapshot_delta=" << m_snapshot_delta << dendl;
 
+  compute_dst_object_may_exist();
   compute_read_ops();
+
   send_read();
 }
 
@@ -206,6 +208,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
     if (!dst_may_exist_it->second && !write_ops.empty()) {
       // if the object cannot exist, the only valid op is to remove it
+      ldout(m_cct, 20) << "object DNE: src_snap_seq=" << src_snap_seq << dendl;
       ceph_assert(write_ops.size() == 1U);
       ceph_assert(write_ops.begin()->type == WRITE_OP_TYPE_REMOVE);
     }
@@ -419,6 +422,24 @@ void ObjectCopyRequest<I>::compute_read_ops() {
   // read from our parent
   for (auto& [key, image_intervals] : m_snapshot_delta) {
     io::WriteReadSnapIds write_read_snap_ids{key};
+
+    // advance the src write snap id to the first valid snap id
+    if (write_read_snap_ids != io::INITIAL_WRITE_READ_SNAP_IDS) {
+      // don't attempt to read from snapshots that shouldn't exist in
+      // case the OSD fails to give a correct snap list
+      auto snap_map_it = m_snap_map.find(write_read_snap_ids.first);
+      ceph_assert(snap_map_it != m_snap_map.end());
+      auto dst_snap_seq = snap_map_it->second.front();
+
+      auto dst_may_exist_it = m_dst_object_may_exist.find(dst_snap_seq);
+      ceph_assert(dst_may_exist_it != m_dst_object_may_exist.end());
+      if (!dst_may_exist_it->second) {
+        ldout(m_cct, 20) << "DNE snapshot: " << write_read_snap_ids.first
+                         << dendl;
+        continue;
+      }
+    }
+
     for (auto& image_interval : image_intervals) {
       auto state = image_interval.get_val().state;
       switch (state) {
@@ -547,8 +568,6 @@ void ObjectCopyRequest<I>::merge_write_ops() {
 
 template <typename I>
 void ObjectCopyRequest<I>::compute_zero_ops() {
-  compute_dst_object_may_exist();
-
   ldout(m_cct, 20) << dendl;
 
   m_src_image_ctx->image_lock.lock_shared();
@@ -739,6 +758,9 @@ void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
     m_dst_object_may_exist[snap_id] =
       (m_dst_object_number < m_dst_image_ctx->get_object_count(snap_id));
   }
+
+  ldout(m_cct, 20) << "dst_object_may_exist=" << m_dst_object_may_exist
+                   << dendl;
 }
 
 } // namespace deep_copy
