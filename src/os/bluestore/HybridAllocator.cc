@@ -204,7 +204,7 @@ void HybridAllocator::_spillover_range(uint64_t start, uint64_t end)
     bmap_alloc = new BitmapAllocator(cct,
       get_capacity(),
       get_block_size(),
-      get_name());
+      get_name() + ".fallback");
   }
   bmap_alloc->init_add_free(start, size);
 }
