@@ -20,7 +20,7 @@ describe('Configuration page', () => {
     });
 
     it('should verify that selected footer increases when an entry is clicked', () => {
-      configuration.getTableSelectedCount().should('eq', 1);
+      configuration.getTableCount('selected').should('eq', 1);
     });
 
     it('should check that details table opens (w/o tab header)', () => {
@@ -54,12 +54,12 @@ describe('Configuration page', () => {
 
     it('should show only modified configurations', () => {
       configuration.filterTable('Modified', 'yes');
-      configuration.getTableFoundCount().should('eq', 1);
+      configuration.getTableCount('found').should('eq', 1);
     });
 
     it('should hide all modified configurations', () => {
       configuration.filterTable('Modified', 'no');
-      configuration.getTableFoundCount().should('gt', 1);
+      configuration.getTableCount('found').should('gt', 1);
     });
   });
 });
