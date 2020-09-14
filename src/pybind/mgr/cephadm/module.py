@@ -1669,6 +1669,11 @@ To check that the host is reachable:
 
         self._daemon_action_set_image(action, image, daemon_type, daemon_id)
 
+        if action in ['restart', 'redeploy']:
+            ok_to_stop = self.cephadm_services[daemon_type].ok_to_stop([daemon_id])
+            if not ok_to_stop:
+                raise OrchestratorError(f'Daemon is not OK to stop: {ok_to_stop.stderr}')
+
         if action == 'redeploy':
             if self.daemon_is_self(daemon_type, daemon_id):
                 self.mgr_service.fail_over()

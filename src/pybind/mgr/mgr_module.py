@@ -101,6 +101,9 @@ class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout',
         """
         return super(HandleCommandResult, cls).__new__(cls, retval, stdout, stderr)
 
+    def __bool__(self):
+        return self.retval == 0
+
 
 class MonCommandFailed(RuntimeError): pass
 
