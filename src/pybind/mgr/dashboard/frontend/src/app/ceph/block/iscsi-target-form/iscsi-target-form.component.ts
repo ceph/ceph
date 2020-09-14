@@ -581,7 +581,37 @@ export class IscsiTargetFormComponent implements OnInit {
   }
 
   removeGroup(index) {
+    // Remove group and disk selections
     this.groups.removeAt(index);
+
+    const selectedMembers = this.groupMembersSelections[index].filter((value) => value.selected);
+    const membersIqn = selectedMembers.map((value) => value.name);
+
+    const selectedDisks = this.groupDiskSelections[index].filter((value) => value.selected);
+    const disksId = selectedDisks.map((value) => value.name);
+
+    // Free initiator from group
+    selectedMembers.forEach((selection) => {
+      selection.selected = false;
+      this.onGroupMemberSelection({ option: selection });
+    });
+
+    // Add group's images to initiator
+    this.initiators.controls.forEach((initiator: CdFormGroup, initiator_index) => {
+      const client_iqn = initiator.getValue('client_iqn');
+      if (membersIqn.includes(client_iqn)) {
+        const luns = _.cloneDeep(disksId);
+        initiator.patchValue({ luns: luns });
+
+        this.imagesInitiatorSelections[initiator_index].forEach((value) => {
+          if (disksId.includes(value.name)) {
+            value.selected = true;
+          }
+        });
+      }
+    });
+
+    this.groupMembersSelections.splice(index, 1);
     this.groupDiskSelections.splice(index, 1);
   }
 

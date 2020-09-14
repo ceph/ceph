@@ -367,8 +367,8 @@ class IscsiTarget(RESTController):
                 group = IscsiTarget._get_group(new_groups, group_id)
 
                 old_group_disks = set(target_config['groups'][group_id]['disks'].keys())
-                new_group_disks = set(map(lambda x: '{}/{}'.format(x['pool'], x['image']),
-                                          group['disks']))
+                new_group_disks = set(['{}/{}'.format(x['pool'], x['image'])
+                                       for x in group['disks']])
                 local_deleted_disks = list(old_group_disks - new_group_disks)
 
                 old_group_members = set(target_config['groups'][group_id]['members'])
@@ -481,7 +481,7 @@ class IscsiTarget(RESTController):
         if not was_in_group and is_in_group:
             return True
 
-        if is_in_group or was_in_group:
+        if is_in_group:
             return False
 
         new_lun = IscsiTarget._get_disk(new_client.get('luns', []), image_id)
@@ -794,8 +794,8 @@ class IscsiTarget(RESTController):
                     group_disks = []
                     for group in groups:
                         if client_iqn in group['members']:
-                            group_disks = list(map(lambda x: '{}/{}'.format(x['pool'], x['image']),
-                                                   group['disks']))
+                            group_disks = list(['{}/{}'.format(x['pool'], x['image'])
+                                                for x in group['disks']])
                     if not target_config or client_iqn not in target_config['clients'] or \
                             (image_id not in target_config['clients'][client_iqn]['luns']
                              and image_id not in group_disks):
