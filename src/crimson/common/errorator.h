@@ -835,6 +835,9 @@ private:
   class futurize {
     using vanilla_futurize = seastar::futurize<T>;
 
+    // explicit specializations for nested type is not allowed unless both
+    // the member template and the enclosing template are specialized. see
+    // section temp.expl.spec, N4659
     template <class Stored, int Dummy = 0>
     struct stored_to_future {
       using type = future<Stored>;
@@ -1080,9 +1083,19 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   [[gnu::always_inline]]
   static inline type invoke(Func&& func, FuncArgs&&... args) noexcept {
     try {
-        return func(std::forward<FuncArgs>(args)...);
+      return func(std::forward<FuncArgs>(args)...);
     } catch (...) {
-        return make_exception_future(std::current_exception());
+      return make_exception_future(std::current_exception());
+    }
+  }
+
+  template <class Func>
+  [[gnu::always_inline]]
+  static type invoke(Func&& func, seastar::internal::monostate) noexcept {
+    try {
+      return func();
+    } catch (...) {
+      return make_exception_future(std::current_exception());
     }
   }
 
