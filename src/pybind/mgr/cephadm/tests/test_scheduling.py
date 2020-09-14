@@ -85,8 +85,8 @@ def get_result(key, results):
     return [v for k, v in results
      if match(k)][0]
 
-def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
 
+def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
 
     if spec_section == 'hosts':
         mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
@@ -112,16 +112,15 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
     else:
         assert False
 
-    def mk_hosts(*_, **__):
-        return [
+    hosts = [
             HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
             for h in hosts
         ]
 
-    return mk_spec, mk_hosts
+    return mk_spec, hosts
 
 
-def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_elems):
+def run_scheduler_test(results, mk_spec, hosts, get_daemons_func, key_elems):
     key = ' '.join('N' if e is None else str(e) for e in key_elems)
     try:
         assert_res = get_result(k(key), results)
@@ -130,7 +129,7 @@ def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_e
             spec = mk_spec()
             host_res = HostAssignment(
                 spec=spec,
-                hosts=get_hosts_func(),
+                hosts=hosts,
                 get_daemons_func=get_daemons_func).place()
             if isinstance(host_res, list):
                 e = ', '.join(repr(h.hostname) for h in host_res)
@@ -144,7 +143,7 @@ def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_e
             spec = mk_spec()
             host_res = HostAssignment(
                 spec=spec,
-                hosts=get_hosts_func(),
+                hosts=hosts,
                 get_daemons_func=get_daemons_func).place()
 
             assert_res(sorted([h.hostname for h in host_res]))
@@ -216,11 +215,11 @@ def test_explicit_scheduler(host_key, hosts,
                             count,
                             spec_section_key, spec_section):
 
-    mk_spec, mk_hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
+    mk_spec, hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
     run_scheduler_test(
         results=test_explicit_scheduler_results,
         mk_spec=mk_spec,
-        get_hosts_func=mk_hosts,
+        hosts=hosts,
         get_daemons_func=lambda _: [],
         key_elems=(host_key, explicit_key, count, spec_section_key)
     )
@@ -303,7 +302,7 @@ def test_scheduler_daemons(host_key, hosts,
                            count,
                            daemons_key, daemons,
                            spec_section_key, spec_section):
-    mk_spec, mk_hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
+    mk_spec, hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
     dds = [
         DaemonDescription('mon', d, d)
         for d in daemons
@@ -311,7 +310,7 @@ def test_scheduler_daemons(host_key, hosts,
     run_scheduler_test(
         results=test_scheduler_daemons_results,
         mk_spec=mk_spec,
-        get_hosts_func=mk_hosts,
+        hosts=hosts,
         get_daemons_func=lambda _: dds,
         key_elems=(host_key, explicit_key, count, daemons_key, spec_section_key)
     )
