@@ -542,6 +542,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadError) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
