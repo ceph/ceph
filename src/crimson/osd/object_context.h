@@ -203,14 +203,16 @@ public:
   void drop_read() {
     return put_lock_type(RWState::RWREAD);
   }
-  seastar::future<bool> get_recovery_read(bool can_wait = false) {
-    if (bool acquired = rwstate.get_recovery_read();
-        acquired || !can_wait) {
-      return seastar::make_ready_future<bool>(acquired);
+  bool get_recovery_read() {
+    return rwstate.get_recovery_read();
+  }
+  seastar::future<> wait_recovery_read() {
+    if (rwstate.get_recovery_read()) {
+      return seastar::make_ready_future<>();
     }
     return with_queue([this] {
       return rwstate.get_recovery_read();
-    }).then([] {return seastar::make_ready_future<bool>(true); });
+    });
   }
   void drop_recovery_read() {
     ceph_assert(rwstate.recovery_read_marker);
