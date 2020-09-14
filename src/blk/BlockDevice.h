@@ -64,6 +64,8 @@
 #define  WRITE_LIFE_MAX  	1
 #endif
 
+bool const BUFFEREDFD = true;		// to be used in the buffered parameter
+bool const DIRECTFD = false;
 
 /// track in-flight io
 struct IOContext {
