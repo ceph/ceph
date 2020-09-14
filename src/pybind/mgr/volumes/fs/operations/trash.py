@@ -36,7 +36,7 @@ class Trash(GroupTemplate):
             with self.fs.opendir(self.path) as d:
                 entry = self.fs.readdir(d)
                 while entry:
-                    if entry.d_name not in exclude_list and entry.is_dir():
+                    if entry.d_name not in exclude_list:
                         return entry.d_name
                     entry = self.fs.readdir(d)
             return None
@@ -52,7 +52,7 @@ class Trash(GroupTemplate):
         """
         return self._get_single_dir_entry(exclude_list)
 
-    def purge(self, trash_entry, should_cancel):
+    def purge(self, trashpath, should_cancel):
         """
         purge a trash entry.
 
@@ -82,7 +82,6 @@ class Trash(GroupTemplate):
             if not should_cancel():
                 self.fs.rmdir(root_path)
 
-        trashpath = os.path.join(self.path, trash_entry)
         # catch any unlink errors
         try:
             rmtree(trashpath)
@@ -98,6 +97,20 @@ class Trash(GroupTemplate):
         """
         try:
             self.fs.rename(path, self.unique_trash_path)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def link(self, path, bname):
+        pth = os.path.join(self.path, bname)
+        try:
+            self.fs.symlink(path, pth)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def delink(self, bname):
+        pth = os.path.join(self.path, bname)
+        try:
+            self.fs.unlink(pth)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 

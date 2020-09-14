@@ -35,9 +35,9 @@ static string get_key_oid(const rgw_obj_key& key)
   return oid;
 }
 
-static string obj_to_aws_path(const rgw_obj& obj)
+static string obj_to_aws_path(rgw::sal::RGWObject* obj)
 {
-  string path = obj.bucket.name + "/" + get_key_oid(obj.key);
+  string path = obj->get_bucket()->get_name() + "/" + get_key_oid(obj->get_key());
 
 
   return path;
@@ -717,7 +717,7 @@ class RGWRESTStreamGetCRF : public RGWStreamReadHTTPResourceCRF
 {
   RGWDataSyncCtx *sc;
   RGWRESTConn *conn;
-  rgw_obj src_obj;
+  rgw::sal::RGWObject* src_obj;
   RGWRESTConn::get_obj_params req_params;
 
   rgw_sync_aws_src_obj_properties src_properties;
@@ -727,9 +727,9 @@ public:
                                RGWCoroutine *_caller,
                                RGWDataSyncCtx *_sc,
                                RGWRESTConn *_conn,
-                               rgw_obj& _src_obj,
+                               rgw::sal::RGWObject* _src_obj,
                                const rgw_sync_aws_src_obj_properties& _src_properties) : RGWStreamReadHTTPResourceCRF(_cct, _env, _caller,
-                                                                                                                      _sc->env->http_manager, _src_obj.key),
+                                                                                                                      _sc->env->http_manager, _src_obj->get_key()),
                                                                                  sc(_sc), conn(_conn), src_obj(_src_obj),
                                                                                  src_properties(_src_properties) {
   }
@@ -796,7 +796,7 @@ class RGWAWSStreamPutCRF : public RGWStreamWriteHTTPResourceCRF
   RGWDataSyncCtx *sc;
   rgw_sync_aws_src_obj_properties src_properties;
   std::shared_ptr<AWSSyncConfig_Profile> target;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* dest_obj;
   string etag;
 public:
   RGWAWSStreamPutCRF(CephContext *_cct,
@@ -805,7 +805,7 @@ public:
                                RGWDataSyncCtx *_sc,
                                const rgw_sync_aws_src_obj_properties&  _src_properties,
                                std::shared_ptr<AWSSyncConfig_Profile>& _target,
-                               rgw_obj& _dest_obj) : RGWStreamWriteHTTPResourceCRF(_cct, _env, _caller, _sc->env->http_manager),
+                               rgw::sal::RGWObject* _dest_obj) : RGWStreamWriteHTTPResourceCRF(_cct, _env, _caller, _sc->env->http_manager),
                                                      sc(_sc), src_properties(_src_properties), target(_target), dest_obj(_dest_obj) {
   }
 
@@ -993,8 +993,8 @@ class RGWAWSStreamObjToCloudPlainCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWRESTConn *source_conn;
   std::shared_ptr<AWSSyncConfig_Profile> target;
-  rgw_obj src_obj;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* src_obj;
+  rgw::sal::RGWObject* dest_obj;
 
   rgw_sync_aws_src_obj_properties src_properties;
 
@@ -1004,10 +1004,10 @@ class RGWAWSStreamObjToCloudPlainCR : public RGWCoroutine {
 public:
   RGWAWSStreamObjToCloudPlainCR(RGWDataSyncCtx *_sc,
                                 RGWRESTConn *_source_conn,
-                                const rgw_obj& _src_obj,
+                                rgw::sal::RGWObject* _src_obj,
                                 const rgw_sync_aws_src_obj_properties& _src_properties,
                                 std::shared_ptr<AWSSyncConfig_Profile> _target,
-                                const rgw_obj& _dest_obj) : RGWCoroutine(_sc->cct),
+                                rgw::sal::RGWObject* _dest_obj) : RGWCoroutine(_sc->cct),
                                                    sc(_sc),
                                                    source_conn(_source_conn),
                                                    target(_target),
@@ -1042,8 +1042,8 @@ class RGWAWSStreamObjToCloudMultipartPartCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWRESTConn *source_conn;
   std::shared_ptr<AWSSyncConfig_Profile> target;
-  rgw_obj src_obj;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* src_obj;
+  rgw::sal::RGWObject* dest_obj;
 
   rgw_sync_aws_src_obj_properties src_properties;
 
@@ -1059,9 +1059,9 @@ class RGWAWSStreamObjToCloudMultipartPartCR : public RGWCoroutine {
 public:
   RGWAWSStreamObjToCloudMultipartPartCR(RGWDataSyncCtx *_sc,
                                 RGWRESTConn *_source_conn,
-                                const rgw_obj& _src_obj,
+                                rgw::sal::RGWObject* _src_obj,
                                 std::shared_ptr<AWSSyncConfig_Profile>& _target,
-                                const rgw_obj& _dest_obj,
+                                rgw::sal::RGWObject* _dest_obj,
                                 const rgw_sync_aws_src_obj_properties& _src_properties,
                                 const string& _upload_id,
                                 const rgw_sync_aws_multipart_part_info& _part_info,
@@ -1111,14 +1111,14 @@ public:
 class RGWAWSAbortMultipartCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWRESTConn *dest_conn;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* dest_obj;
 
   string upload_id;
 
 public:
   RGWAWSAbortMultipartCR(RGWDataSyncCtx *_sc,
                         RGWRESTConn *_dest_conn,
-                        const rgw_obj& _dest_obj,
+                        rgw::sal::RGWObject* _dest_obj,
                         const string& _upload_id) : RGWCoroutine(_sc->cct),
                                                    sc(_sc),
                                                    dest_conn(_dest_conn),
@@ -1150,7 +1150,7 @@ public:
 class RGWAWSInitMultipartCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWRESTConn *dest_conn;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* dest_obj;
 
   uint64_t obj_size;
   map<string, string> attrs;
@@ -1174,7 +1174,7 @@ class RGWAWSInitMultipartCR : public RGWCoroutine {
 public:
   RGWAWSInitMultipartCR(RGWDataSyncCtx *_sc,
                         RGWRESTConn *_dest_conn,
-                        const rgw_obj& _dest_obj,
+                        rgw::sal::RGWObject* _dest_obj,
                         uint64_t _obj_size,
                         const map<string, string>& _attrs,
                         string *_upload_id) : RGWCoroutine(_sc->cct),
@@ -1240,7 +1240,7 @@ public:
 class RGWAWSCompleteMultipartCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWRESTConn *dest_conn;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* dest_obj;
 
   bufferlist out_bl;
 
@@ -1278,7 +1278,7 @@ class RGWAWSCompleteMultipartCR : public RGWCoroutine {
 public:
   RGWAWSCompleteMultipartCR(RGWDataSyncCtx *_sc,
                         RGWRESTConn *_dest_conn,
-                        const rgw_obj& _dest_obj,
+                        rgw::sal::RGWObject* _dest_obj,
                         string _upload_id,
                         const map<int, rgw_sync_aws_multipart_part_info>& _parts) : RGWCoroutine(_sc->cct),
                                                    sc(_sc),
@@ -1350,7 +1350,7 @@ public:
 class RGWAWSStreamAbortMultipartUploadCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWRESTConn *dest_conn;
-  const rgw_obj dest_obj;
+  rgw::sal::RGWObject* dest_obj;
   const rgw_raw_obj status_obj;
 
   string upload_id;
@@ -1359,7 +1359,7 @@ public:
 
   RGWAWSStreamAbortMultipartUploadCR(RGWDataSyncCtx *_sc,
                                 RGWRESTConn *_dest_conn,
-                                const rgw_obj& _dest_obj,
+                                rgw::sal::RGWObject* _dest_obj,
                                 const rgw_raw_obj& _status_obj,
                                 const string& _upload_id) : RGWCoroutine(_sc->cct), sc(_sc),
                                                             dest_conn(_dest_conn),
@@ -1392,8 +1392,8 @@ class RGWAWSStreamObjToCloudMultipartCR : public RGWCoroutine {
   AWSSyncConfig& conf;
   RGWRESTConn *source_conn;
   std::shared_ptr<AWSSyncConfig_Profile> target;
-  rgw_obj src_obj;
-  rgw_obj dest_obj;
+  rgw::sal::RGWObject* src_obj;
+  rgw::sal::RGWObject* dest_obj;
 
   uint64_t obj_size;
   string src_etag;
@@ -1415,9 +1415,9 @@ public:
 				    rgw_bucket_sync_pipe& _sync_pipe,
                                 AWSSyncConfig& _conf,
                                 RGWRESTConn *_source_conn,
-                                const rgw_obj& _src_obj,
+                                rgw::sal::RGWObject* _src_obj,
                                 std::shared_ptr<AWSSyncConfig_Profile>& _target,
-                                const rgw_obj& _dest_obj,
+                                rgw::sal::RGWObject* _dest_obj,
                                 uint64_t _obj_size,
                                 const rgw_sync_aws_src_obj_properties& _src_properties,
                                 const rgw_rest_obj& _rest_obj) : RGWCoroutine(_sc->cct),
@@ -1658,13 +1658,15 @@ public:
       }
 
       yield {
-        rgw_obj src_obj(src_bucket, key);
+	rgw::sal::RGWRadosBucket bucket(sync_env->store, src_bucket);
+        rgw::sal::RGWRadosObject src_obj(sync_env->store, key, &bucket);
 
         /* init output */
         rgw_bucket target_bucket;
         target_bucket.name = target_bucket_name; /* this is only possible because we only use bucket name for
                                                     uri resolution */
-        rgw_obj dest_obj(target_bucket, target_obj_name);
+	rgw::sal::RGWRadosBucket dest_bucket(sync_env->store, target_bucket);
+        rgw::sal::RGWRadosObject dest_obj(sync_env->store, rgw_obj_key(target_obj_name), &dest_bucket);
 
 
         rgw_sync_aws_src_obj_properties src_properties;
@@ -1675,10 +1677,10 @@ public:
         src_properties.versioned_epoch = versioned_epoch;
 
         if (size < instance.conf.s3.multipart_sync_threshold) {
-          call(new RGWAWSStreamObjToCloudPlainCR(sc, source_conn, src_obj,
+          call(new RGWAWSStreamObjToCloudPlainCR(sc, source_conn, &src_obj,
                                                  src_properties,
                                                  target,
-                                                 dest_obj));
+                                                 &dest_obj));
         } else {
           rgw_rest_obj rest_obj;
           rest_obj.init(key);
@@ -1686,8 +1688,8 @@ public:
             ldout(sc->cct, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);
           }
-          call(new RGWAWSStreamObjToCloudMultipartCR(sc, sync_pipe, instance.conf, source_conn, src_obj,
-                                                     target, dest_obj, size, src_properties, rest_obj));
+          call(new RGWAWSStreamObjToCloudMultipartCR(sc, sync_pipe, instance.conf, source_conn, &src_obj,
+                                                     target, &dest_obj, size, src_properties, rest_obj));
         }
       }
       if (retcode < 0) {

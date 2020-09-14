@@ -500,7 +500,7 @@ void Client::tick()
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
-                                       active_con->renew_rotating_keyring());
+                                       active_con->renew_rotating_keyring()).then_unpack([] {});
     } else {
       return seastar::now();
     }
@@ -796,7 +796,7 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
       logger().info("handle_monmap: renewing tickets");
       return seastar::when_all_succeed(
 	active_con->renew_tickets(),
-	active_con->renew_rotating_keyring()).then([](){
+	active_con->renew_rotating_keyring()).then_unpack([](){
 	  logger().info("handle_mon_map: renewed tickets");
 	});
     } else {
@@ -903,10 +903,6 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
   }
   vector<unsigned> ranks;
   for (auto [name, info] : monmap.mon_info) {
-    // TODO: #msgr-v2
-    if (info.public_addrs.legacy_addr().is_blank_ip()) {
-      continue;
-    }
     if (info.priority == min_priority) {
       ranks.push_back(monmap.get_rank(name));
     }
@@ -956,8 +952,13 @@ seastar::future<> Client::reopen_session(int rank)
   }
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
-#warning fixme
-    auto peer = monmap.get_addrs(rank).front();
+    // TODO: connect to multiple addrs
+    auto peer = monmap.get_addrs(rank).pick_addr(msgr.get_myaddr().get_type());
+    if (peer == entity_addr_t{}) {
+      // crimson msgr only uses the first bound addr
+      logger().warn("mon.{} does not have an addr compatible with me", rank);
+      return seastar::now();
+    }
     logger().info("connecting to mon.{}", rank);
     return seastar::futurize_invoke(
         [peer, this] () -> seastar::future<Connection::AuthResult> {

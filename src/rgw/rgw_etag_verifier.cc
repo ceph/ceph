@@ -55,7 +55,7 @@ int RGWPutObj_ETagVerifier_MPU::process(bufferlist&& in, uint64_t logical_offset
   uint64_t bl_end = in.length() + logical_offset;
 
   /* Handle the last MPU part */
-  if (next_part_index == part_ofs.size()) {
+  if (size_t(next_part_index) == part_ofs.size()) {
     hash.Update((const unsigned char *)in.c_str(), in.length());
     goto done;
   }
@@ -73,7 +73,7 @@ int RGWPutObj_ETagVerifier_MPU::process(bufferlist&& in, uint64_t logical_offset
      * If we've moved to the last part of the MPU, avoid usage of
      * parts_ofs[next_part_index] as it will lead to our-of-range access.
      */
-    if (next_part_index == part_ofs.size())
+    if (size_t(next_part_index) == part_ofs.size())
       goto done;
   } else {
     hash.Update((const unsigned char *)in.c_str(), in.length());

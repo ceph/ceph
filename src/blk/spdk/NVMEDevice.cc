@@ -47,8 +47,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
-thread_local SharedDriverQueueData *queue_t;
-
 static constexpr uint16_t data_buffer_default_num = 1024;
 
 static constexpr uint32_t data_buffer_size = 8192;
@@ -555,6 +553,12 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
     }
   }
 
+  struct spdk_pci_addr pci_addr;
+  int rc = spdk_pci_addr_parse(&pci_addr, trid.traddr);
+  if (rc < 0) {
+    derr << __func__ << " invalid transport address: " << trid.traddr << dendl;
+    return -ENOENT;
+  }
   auto coremask_arg = g_conf().get_val<std::string>("bluestore_spdk_coremask");
   int m_core_arg = find_first_bitset(coremask_arg);
   // at least one core is needed for using spdk
@@ -569,8 +573,9 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
 
   if (!dpdk_thread.joinable()) {
     dpdk_thread = std::thread(
-      [this, coremask_arg, m_core_arg, mem_size_arg]() {
-        static struct spdk_env_opts opts;
+      [this, coremask_arg, m_core_arg, mem_size_arg, pci_addr]() {
+        struct spdk_env_opts opts;
+        struct spdk_pci_addr addr = pci_addr;
         int r;
 
         spdk_env_opts_init(&opts);
@@ -578,6 +583,8 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
         opts.core_mask = coremask_arg.c_str();
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
+        opts.pci_whitelist = &addr;
+        opts.num_pci_addr = 1;
         spdk_env_init(&opts);
         spdk_unaffinitize_thread();
 
@@ -689,6 +696,20 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 {
 }
 
+bool NVMEDevice::support(const std::string& path)
+{
+  char buf[PATH_MAX + 1];
+  int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
+  if (r >= 0) {
+    buf[r] = '\0';
+    char *bname = ::basename(buf);
+    if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int NVMEDevice::open(const string& p)
 {
   dout(1) << __func__ << " path " << p << dendl;
@@ -734,8 +755,6 @@ void NVMEDevice::close()
 {
   dout(1) << __func__ << dendl;
 
-  delete queue_t;
-  queue_t = nullptr;
   name.clear();
   driver->remove_device(this);
 
@@ -773,9 +792,9 @@ void NVMEDevice::aio_submit(IOContext *ioc)
     ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
     // Only need to push the first entry
     ioc->nvme_task_first = ioc->nvme_task_last = nullptr;
-    if (!queue_t)
-	queue_t = new SharedDriverQueueData(this, driver);
-    queue_t->_aio_handle(t, ioc);
+
+    thread_local SharedDriverQueueData queue_t = SharedDriverQueueData(this, driver);
+    queue_t._aio_handle(t, ioc);
   }
 }
 
@@ -903,11 +922,11 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   bufferptr p = buffer::create_small_page_aligned(len);
   char *buf = p.c_str();
 
-  ceph_assert(ioc->nvme_task_first == nullptr);
-  ceph_assert(ioc->nvme_task_last == nullptr);
-  make_read_tasks(this, off, ioc, buf, len, &t, off, len);
+  // for sync read, need to control IOContext in itself
+  IOContext read_ioc(cct, nullptr);
+  make_read_tasks(this, off, &read_ioc, buf, len, &t, off, len);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  aio_submit(ioc);
+  aio_submit(&read_ioc);
 
   pbl->push_back(std::move(p));
   return t.return_code;

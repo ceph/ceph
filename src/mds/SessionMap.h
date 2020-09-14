@@ -113,7 +113,7 @@ public:
     }
   }
 
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, bool cap_dump=false) const;
   void push_pv(version_t pv)
   {
     ceph_assert(projected.empty() || projected.back() != pv);
@@ -352,6 +352,10 @@ public:
   }
   bool have_completed_flush(ceph_tid_t tid) const {
     return info.completed_flushes.count(tid);
+  }
+
+  uint64_t get_num_caps() const {
+    return caps.size();
   }
 
   unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }

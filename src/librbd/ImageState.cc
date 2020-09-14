@@ -7,7 +7,9 @@
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "common/WorkQueue.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/image/CloseRequest.h"
@@ -218,8 +220,9 @@ private:
       ThreadPoolSingleton>("librbd::ImageUpdateWatchers::thread_pool",
 			   false, m_cct);
     m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::work_queue",
-				 m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
-				 &thread_pool);
+                                 ceph::make_timespan(
+                                   m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout")),
+                                 &thread_pool);
   }
 
   void destroy_work_queue() {
@@ -233,11 +236,11 @@ private:
 
 class QuiesceWatchers {
 public:
-  explicit QuiesceWatchers(CephContext *cct)
+  explicit QuiesceWatchers(CephContext *cct, asio::ContextWQ* work_queue)
     : m_cct(cct),
+      m_work_queue(work_queue),
       m_lock(ceph::make_mutex(util::unique_lock_name(
         "librbd::QuiesceWatchers::m_lock", this))) {
-    ImageCtx::get_work_queue(m_cct, &m_work_queue);
   }
 
   ~QuiesceWatchers() {
@@ -423,7 +426,8 @@ ImageState<I>::ImageState(I *image_ctx)
     m_lock(ceph::make_mutex(util::unique_lock_name("librbd::ImageState::m_lock", this))),
     m_last_refresh(0), m_refresh_seq(0),
     m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)),
-    m_quiesce_watchers(new QuiesceWatchers(image_ctx->cct)) {
+    m_quiesce_watchers(new QuiesceWatchers(
+      image_ctx->cct, image_ctx->asio_engine->get_work_queue())) {
 }
 
 template <typename I>
@@ -439,9 +443,6 @@ int ImageState<I>::open(uint64_t flags) {
   open(flags, &ctx);
 
   int r = ctx.wait();
-  if (r < 0) {
-    delete m_image_ctx;
-  }
   return r;
 }
 
@@ -466,7 +467,6 @@ int ImageState<I>::close() {
   close(&ctx);
 
   int r = ctx.wait();
-  delete m_image_ctx;
   return r;
 }
 
@@ -761,11 +761,23 @@ void ImageState<I>::complete_action_unlock(State next_state, int r) {
   m_state = next_state;
   m_lock.unlock();
 
-  for (auto ctx : action_contexts.second) {
-    ctx->complete(r);
-  }
+  if (next_state == STATE_CLOSED ||
+      (next_state == STATE_UNINITIALIZED && r < 0)) {
+    // the ImageCtx must be deleted outside the scope of its callback threads
+    auto ctx = new LambdaContext(
+      [image_ctx=m_image_ctx, contexts=std::move(action_contexts.second)]
+      (int r) {
+        delete image_ctx;
+        for (auto ctx : contexts) {
+          ctx->complete(r);
+        }
+      });
+    TaskFinisherSingleton::get_singleton(m_image_ctx->cct).queue(ctx, r);
+  } else {
+    for (auto ctx : action_contexts.second) {
+      ctx->complete(r);
+    }
 
-  if (next_state != STATE_UNINITIALIZED && next_state != STATE_CLOSED) {
     m_lock.lock();
     if (!is_transition_state() && !m_actions_contexts.empty()) {
       execute_next_action_unlock();
@@ -981,6 +993,8 @@ void ImageState<I>::notify_unquiesce(Context *on_finish) {
 
 template <typename I>
 void ImageState<I>::quiesce_complete(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << __func__ << ": r=" << r << dendl;
   m_quiesce_watchers->quiesce_complete(r);
 }
 

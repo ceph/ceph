@@ -273,8 +273,8 @@ MESSAGE(MMDSResolve)
 #include "messages/MMDSResolveAck.h"
 MESSAGE(MMDSResolveAck)
 
-#include "messages/MMDSSlaveRequest.h"
-MESSAGE(MMDSSlaveRequest)
+#include "messages/MMDSPeerRequest.h"
+MESSAGE(MMDSPeerRequest)
 
 #include "messages/MMDSSnapUpdate.h"
 MESSAGE(MMDSSnapUpdate)

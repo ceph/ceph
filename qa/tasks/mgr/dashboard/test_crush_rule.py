@@ -2,8 +2,6 @@
 
 from __future__ import absolute_import
 
-import six
-
 from .helper import DashboardTestCase, JObj, JList
 
 
@@ -15,7 +13,7 @@ class CrushRuleTest(DashboardTestCase):
         'max_size': int,
         'min_size': int,
         'rule_id': int,
-        'rule_name': six.string_types,
+        'rule_name': str,
         'ruleset': int,
         'steps': JList(JObj({}, allow_unknown=True))
     }, allow_unknown=True)
@@ -83,7 +81,7 @@ class CrushRuleTest(DashboardTestCase):
         self._get('/ui-api/crush_rule/info')
         self.assertStatus(200)
         self.assertSchemaBody(JObj({
-            'names': JList(six.string_types),
+            'names': JList(str),
             'nodes': JList(JObj({}, allow_unknown=True))
         }))
 

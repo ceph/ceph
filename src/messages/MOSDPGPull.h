@@ -43,8 +43,8 @@ public:
   void take_pulls(std::vector<PullOp> *outpulls) {
     outpulls->swap(pulls);
   }
-  void set_pulls(std::vector<PullOp> *inpulls) {
-    inpulls->swap(pulls);
+  void set_pulls(std::vector<PullOp>&& pull_ops) {
+    pulls = std::move(pull_ops);
   }
 
   MOSDPGPull()

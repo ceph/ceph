@@ -262,7 +262,7 @@ Build the Code Documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Run ``npm run doc-build`` to generate code docs in the ``documentation/``
-directory. To make them accesible locally for a web browser, run
+directory. To make them accessible locally for a web browser, run
 ``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
 With ``npm run compodoc -- <opts>`` you may
 `fully configure it <https://compodoc.app/guides/usage.html>`_.
@@ -284,6 +284,34 @@ We added 2 npm scripts to help run these tools:
 
 - ``npm run lint``, will check frontend files against all linters
 - ``npm run fix``, will try to fix all the detected linting errors
+
+Ceph Dashboard and Bootstrap
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Currently we are using Bootstrap on the Ceph Dashboard as a CSS framework. This means that most of our SCSS and HTML
+code can make use of all the utilities and other advantages Bootstrap is offering. In the past we often have used our
+own custom styles and this lead to more and more variables with a single use and double defined variables which
+sometimes are forgotten to be removed or it led to styling be inconsistent because people forgot to change a color or to
+adjust a custom SCSS class.
+
+To get the current version of Bootstrap used inside Ceph please refer to the ``package.json`` and search for:
+
+- ``bootstrap``: For the Bootstrap version used.
+- ``@ng-bootstrap``: For the version of the Angular bindings which we are using.
+
+So for the future please do the following when visiting a component:
+
+- Does this HTML/SCSS code use custom code? - If yes: Is it needed? --> Clean it up before changing the things you want
+  to fix or change.
+- If you are creating a new component: Please make use of Bootstrap as much as reasonably possible! Don't try to
+  reinvent the wheel.
+- If possible please look up if Bootstrap has guidelines on how to extend it properly to do achieve what you want to
+  achieve.
+
+The more bootstrap alike our code is the easier it is to theme, to maintain and the less bugs we will have. Also since
+Bootstrap is a framework which tries to have usability and user experience in mind we increase both points
+exponentially. The biggest benefit of all is that there is less code for us to maintain which makes it easier to read
+for beginners and even more easy for people how are already familiar with the code.
 
 Writing Unit Tests
 ~~~~~~~~~~~~~~~~~~
@@ -580,7 +608,7 @@ created during a test and the pool and its properties should be displayed in the
 Angular Unit Tests:
 
 Unit tests, as the name suggests, are tests for smaller units of the code.
-Those tests are designed for testing all kinds of Angulars' components (e.g. services, pipes etc.).
+Those tests are designed for testing all kinds of Angular components (e.g. services, pipes etc.).
 They do not require a connection to the backend, hence those tests are independent of it.
 The expected data of the backend is mocked in the frontend and by using this data
 the functionality of the frontend can be tested without having to have real data from the backend.
@@ -826,7 +854,7 @@ To do that, check the settings in the i18n config file
 ``src/pybind/mgr/dashboard/frontend/i18n.config.json``:: and make sure that the
 organization is *ceph*, the project is *ceph-dashboard* and the resource is
 the one you want to pull from and push to e.g. *Master:master*. To find a list
-of avaiable resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
+of available resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
 
 After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend`` and run::
 

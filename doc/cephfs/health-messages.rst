@@ -59,8 +59,8 @@ by the setting ``mds_log_max_segments``, and when the number of segments
 exceeds that setting the MDS starts writing back metadata so that it
 can remove (trim) the oldest segments.  If this writeback is happening
 too slowly, or a software bug is preventing trimming, then this health
-message may appear.  The threshold for this message to appear is for the
-number of segments to be double ``mds_log_max_segments``.
+message may appear.  The threshold for this message to appear is controlled by
+the config option ``mds_log_warn_factor``, the default is 2.0.
 
 Message: "Client *name* failing to respond to capability release"
 Code: MDS_HEALTH_CLIENT_LATE_RELEASE, MDS_HEALTH_CLIENT_LATE_RELEASE_MANY

@@ -12,12 +12,14 @@ export class UsageBarComponent implements OnChanges {
   used: number;
   @Input()
   isBinary = true;
+  @Input()
+  decimals = 0;
 
   usedPercentage: number;
   freePercentage: number;
 
   ngOnChanges() {
-    this.usedPercentage = this.total > 0 ? Math.round((this.used / this.total) * 100) : 0;
+    this.usedPercentage = this.total > 0 ? (this.used / this.total) * 100 : 0;
     this.freePercentage = 100 - this.usedPercentage;
   }
 }

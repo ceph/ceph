@@ -16,7 +16,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -32,6 +32,8 @@ using util::create_rados_callback;
 
 using ceph::encode;
 using ceph::decode;
+
+using namespace boost::placeholders;
 
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
@@ -87,6 +89,9 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
 
   cancel_async_requests();
 
+  on_finish = new LambdaContext([this, on_finish](int r) {
+    m_async_op_tracker.wait_for_ops(on_finish);
+  });
   auto ctx = new LambdaContext([this, on_finish](int r) {
     m_task_finisher->cancel_all(on_finish);
   });
@@ -128,6 +133,7 @@ int ImageWatcher<I>::notify_async_progress(const AsyncRequestId &request,
 template <typename I>
 void ImageWatcher<I>::schedule_async_complete(const AsyncRequestId &request,
                                               int r) {
+  m_async_op_tracker.start_op();
   auto ctx = new LambdaContext(
     boost::bind(&ImageWatcher<I>::notify_async_complete, this, request, r));
   m_task_finisher->queue(ctx);
@@ -153,13 +159,16 @@ void ImageWatcher<I>::handle_async_complete(const AsyncRequestId &request,
   if (ret_val < 0) {
     lderr(m_image_ctx.cct) << this << " failed to notify async complete: "
 			   << cpp_strerror(ret_val) << dendl;
-    if (ret_val == -ETIMEDOUT) {
+    if (ret_val == -ETIMEDOUT && !is_unregistered()) {
       schedule_async_complete(request, r);
+      m_async_op_tracker.finish_op();
+      return;
     }
-  } else {
-    std::unique_lock async_request_locker{m_async_request_lock};
-    m_async_pending.erase(request);
   }
+
+  std::unique_lock async_request_locker{m_async_request_lock};
+  m_async_pending.erase(request);
+  m_async_op_tracker.finish_op();
 }
 
 template <typename I>

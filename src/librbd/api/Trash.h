@@ -22,7 +22,7 @@ namespace api {
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Trash {
   typedef std::set<cls::rbd::TrashImageSource> TrashImageSources;
-  static const TrashImageSources RESTORE_SOURCE_WHITELIST;
+  static const TrashImageSources ALLOWED_RESTORE_SOURCES;
 
   static int move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                   const std::string &image_name, uint64_t delay);

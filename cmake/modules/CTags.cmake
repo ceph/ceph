@@ -31,7 +31,7 @@ function(add_tags name)
     list(APPEND exclude_args --exclude=${exclude})
   endforeach()
   add_custom_target(${name}
-    COMMAND ${CTAGS_EXECUTABLE} -R --c++-kinds=+p --fields=+iaS --extra=+q ${exclude_args}
+    COMMAND ${CTAGS_EXECUTABLE} -R --python-kinds=-i --c++-kinds=+p --fields=+iaS --extra=+q ${exclude_args}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${TAGS_SRC_DIR}
     COMMENT "Building ctags file ${TAGS_TAG_FILE}"
     VERBATIM)

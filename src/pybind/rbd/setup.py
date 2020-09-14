@@ -7,6 +7,12 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+if not pkgutil.find_loader('setuptools'):
+    from distutils.core import setup
+    from distutils.extension import Extension
+else:
+    from setuptools import setup
+    from setuptools.extension import Extension
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
 from itertools import filterfalse, takewhile
@@ -44,13 +50,6 @@ def monkey_with_compiler(customize):
 
 distutils.sysconfig.customize_compiler = \
     monkey_with_compiler(distutils.sysconfig.customize_compiler)
-
-if not pkgutil.find_loader('setuptools'):
-    from distutils.core import setup
-    from distutils.extension import Extension
-else:
-    from setuptools import setup
-    from setuptools.extension import Extension
 
 # PEP 440 versioning of the RBD package on PyPI
 # Bump this version, after every changeset

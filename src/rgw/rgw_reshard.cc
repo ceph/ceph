@@ -4,7 +4,6 @@
 #include <limits>
 #include <sstream>
 
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_bucket.h"
 #include "rgw_reshard.h"

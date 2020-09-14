@@ -22,7 +22,6 @@
 #include "osd.h"
 
 using config_t = crimson::common::ConfigProxy;
-namespace fs = seastar::compat::filesystem;
 
 void usage(const char* prog) {
   std::cout << "usage: " << prog << " -i <ID>\n"
@@ -98,9 +97,9 @@ seastar::future<> make_keyring()
       keyring.encode_plaintext(bl);
       const auto permissions = (seastar::file_permissions::user_read |
                               seastar::file_permissions::user_write);
-      return ceph::buffer::write_file(std::move(bl), path, permissions);
+      return crimson::write_file(std::move(bl), path, permissions);
     }
-  }).handle_exception_type([path](const fs::filesystem_error& e) {
+  }).handle_exception_type([path](const std::filesystem::filesystem_error& e) {
     seastar::fprint(std::cerr, "FATAL: writing new keyring to %s: %s\n", path, e.what());
     throw e;
   });
@@ -133,7 +132,7 @@ int main(int argc, char* argv[])
     usage(argv[0]);
     return EXIT_SUCCESS;
   }
-  std::string cluster_name;
+  std::string cluster_name{"ceph"};
   std::string conf_file_list;
   // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
   // until it's started. so do the boilerplate-settings parsing here.
@@ -172,6 +171,8 @@ int main(int argc, char* argv[])
           ceph_abort_msg(fmt::format("pidfile_write failed with {} {}",
                                      ret, cpp_strerror(-ret)));
         }
+        // just ignore SIGHUP, we don't reread settings
+        seastar::engine().handle_signal(SIGHUP, [] {});
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = get_nonce();
         crimson::net::MessengerRef cluster_msgr, client_msgr;

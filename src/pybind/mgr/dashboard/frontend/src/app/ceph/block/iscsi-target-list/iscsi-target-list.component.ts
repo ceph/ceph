@@ -1,8 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
@@ -18,11 +17,10 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { Task } from '../../../shared/models/task';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { NotAvailablePipe } from '../../../shared/pipes/not-available.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../shared/services/modal.service';
-import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
@@ -39,7 +37,6 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
 
   available: boolean = undefined;
   columns: CdTableColumn[];
-  docsUrl: string;
   modalRef: NgbModalRef;
   permission: Permission;
   selection = new CdTableSelection();
@@ -61,12 +58,10 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
 
   constructor(
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private iscsiService: IscsiService,
+    private joinPipe: JoinPipe,
     private taskListService: TaskListService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
     private notAvailablePipe: NotAvailablePipe,
-    private summaryservice: SummaryService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
@@ -86,16 +81,14 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
         icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT,
-        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
-        disableDesc: () => this.getEditDisableDesc()
+        disable: () => this.getEditDisableDesc()
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
         name: this.actionLabels.DELETE,
-        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
-        disableDesc: () => this.getDeleteDisableDesc()
+        disable: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -103,23 +96,25 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Target'),
+        name: $localize`Target`,
         prop: 'target_iqn',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Portals'),
+        name: $localize`Portals`,
         prop: 'cdPortals',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
-        name: this.i18n('Images'),
+        name: $localize`Images`,
         prop: 'cdImages',
+        pipe: this.joinPipe,
         flexGrow: 2
       },
       {
-        name: this.i18n('# Sessions'),
+        name: $localize`# Sessions`,
         prop: 'info.num_sessions',
         pipe: this.notAvailablePipe,
         flexGrow: 1
@@ -147,11 +142,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
           this.settings = settings;
         });
       } else {
-        this.summaryservice.subscribeOnce((summary) => {
-          const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-          this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-iscsi-management`;
-          this.status = result.message;
-        });
+        this.status = result.message;
       }
     });
   }
@@ -162,31 +153,36 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     }
   }
 
-  getEditDisableDesc(): string | undefined {
+  getEditDisableDesc(): string | boolean {
     const first = this.selection.first();
-    if (first && first.cdExecuting) {
+
+    if (first && first?.cdExecuting) {
       return first.cdExecuting;
     }
-    if (first && _.isUndefined(first['info'])) {
-      return this.i18n('Unavailable gateway(s)');
+
+    if (first && _.isUndefined(first?.['info'])) {
+      return $localize`Unavailable gateway(s)`;
     }
 
-    return undefined;
+    return !first;
   }
 
-  getDeleteDisableDesc(): string | undefined {
+  getDeleteDisableDesc(): string | boolean {
     const first = this.selection.first();
-    if (first && first.cdExecuting) {
+
+    if (first?.cdExecuting) {
       return first.cdExecuting;
     }
-    if (first && _.isUndefined(first['info'])) {
-      return this.i18n('Unavailable gateway(s)');
-    }
-    if (first && first['info'] && first['info']['num_sessions']) {
-      return this.i18n('Target has active sessions');
+
+    if (first && _.isUndefined(first?.['info'])) {
+      return $localize`Unavailable gateway(s)`;
     }
 
-    return undefined;
+    if (first && first?.['info']?.['num_sessions']) {
+      return $localize`Target has active sessions`;
+    }
+
+    return !first;
   }
 
   prepareResponse(resp: any): any[] {
@@ -222,7 +218,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     const target_iqn = this.selection.first().target_iqn;
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.i18n('iSCSI target'),
+      itemDescription: $localize`iSCSI target`,
       itemNames: [target_iqn],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({

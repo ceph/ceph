@@ -1,13 +1,14 @@
+import errno
 import fnmatch
 import re
 from collections import namedtuple, OrderedDict
 from functools import wraps
 from typing import Optional, Dict, Any, List, Union, Callable, Iterator
 
-import six
 import yaml
 
 from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.utils import unwrap_ipv6
 
 
 class ServiceSpecValidationError(Exception):
@@ -15,9 +16,11 @@ class ServiceSpecValidationError(Exception):
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
     """
-
-    def __init__(self, msg):
+    def __init__(self,
+                 msg: str,
+                 errno: int = -errno.EINVAL):
         super(ServiceSpecValidationError, self).__init__(msg)
+        self.errno = errno
 
 
 def assert_valid_host(name):
@@ -119,13 +122,16 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         for network in networks:
             # only if we have versioned network configs
             if network.startswith('v') or network.startswith('[v'):
-                network = network.split(':')[1]
+                # if this is ipv6 we can't just simply split on ':' so do
+                # a split once and rsplit once to leave us with just ipv6 addr
+                network = network.split(':', 1)[1]
+                network = network.rsplit(':', 1)[0]
             try:
                 # if subnets are defined, also verify the validity
                 if '/' in network:
-                    ip_network(six.text_type(network))
+                    ip_network(network)
                 else:
-                    ip_address(six.text_type(network))
+                    ip_address(unwrap_ipv6(network))
             except ValueError as e:
                 # logging?
                 raise e
@@ -373,6 +379,7 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw'.split()
 
     @classmethod
     def _cls(cls, service_type):
@@ -383,6 +390,7 @@ class ServiceSpec(object):
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
+            'alertmanager': AlertManagerSpec
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -409,13 +417,17 @@ class ServiceSpec(object):
                  placement: Optional[PlacementSpec] = None,
                  count: Optional[int] = None,
                  unmanaged: bool = False,
+                 preview_only: bool = False,
                  ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
         self.service_type = service_type
-        self.service_id = service_id
+        self.service_id = None
+        if self.service_type in self.REQUIRES_SERVICE_ID:
+            self.service_id = service_id
         self.unmanaged = unmanaged
+        self.preview_only = preview_only
 
     @classmethod
     @handle_type_error
@@ -526,14 +538,23 @@ class ServiceSpec(object):
         if not self.service_type:
             raise ServiceSpecValidationError('Cannot add Service: type required')
 
-        if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
-            raise ServiceSpecValidationError('Cannot add Service: id required')
+        if self.service_type in self.REQUIRES_SERVICE_ID:
+            if not self.service_id:
+                raise ServiceSpecValidationError('Cannot add Service: id required')
+        elif self.service_id:
+            raise ServiceSpecValidationError(
+                    f'Service of type \'{self.service_type}\' should not contain a service id')
 
         if self.placement is not None:
             self.placement.validate()
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
+
+    def __eq__(self, other):
+        return (self.__class__ == other.__class__
+                and
+                self.__dict__ == other.__dict__)
 
     def one_line_str(self):
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
@@ -554,17 +575,20 @@ class NFSServiceSpec(ServiceSpec):
                  namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
+                 preview_only: bool = False
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
             'nfs', service_id=service_id,
-            placement=placement, unmanaged=unmanaged)
+            placement=placement, unmanaged=unmanaged, preview_only=preview_only)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
 
         #: RADOS namespace where NFS client recovery data is stored in the pool.
         self.namespace = namespace
+
+        self.preview_only = preview_only
 
     def validate(self):
         super(NFSServiceSpec, self).validate()
@@ -579,11 +603,12 @@ class NFSServiceSpec(ServiceSpec):
 
     def rados_config_location(self):
         # type: () -> str
-        assert self.pool
-        url = 'rados://' + self.pool + '/'
-        if self.namespace:
-            url += self.namespace + '/'
-        url += self.rados_config_name()
+        url = ''
+        if self.pool:
+            url += 'rados://' + self.pool + '/'
+            if self.namespace:
+                url += self.namespace + '/'
+            url += self.rados_config_name()
         return url
 
 
@@ -607,12 +632,14 @@ class RGWSpec(ServiceSpec):
                  rgw_frontend_ssl_key: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
+                 preview_only: bool = False,
                  ):
         assert service_type == 'rgw', service_type
         if service_id:
             a = service_id.split('.', 2)
             rgw_realm = a[0]
-            rgw_zone = a[1]
+            if len(a) > 1:
+                rgw_zone = a[1]
             if len(a) > 2:
                 subcluster = a[2]
         else:
@@ -622,7 +649,8 @@ class RGWSpec(ServiceSpec):
                 service_id = '%s.%s' % (rgw_realm, rgw_zone)
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
-            placement=placement, unmanaged=unmanaged)
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
@@ -631,6 +659,7 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
         self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
         self.ssl = ssl
+        self.preview_only = preview_only
 
     def get_port(self):
         if self.rgw_frontend_port:
@@ -650,6 +679,16 @@ class RGWSpec(ServiceSpec):
             ports.append(f"port={self.get_port()}")
         return f'beast {" ".join(ports)}'
 
+    def validate(self):
+        super(RGWSpec, self).validate()
+
+        if not self.rgw_realm:
+            raise ServiceSpecValidationError(
+                'Cannot add RGW: No realm specified')
+        if not self.rgw_zone:
+            raise ServiceSpecValidationError(
+                'Cannot add RGW: No zone specified')
+
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
@@ -667,11 +706,13 @@ class IscsiServiceSpec(ServiceSpec):
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
-                 unmanaged: bool = False
+                 unmanaged: bool = False,
+                 preview_only: bool = False
                  ):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
-                                               placement=placement, unmanaged=unmanaged)
+                                               placement=placement, unmanaged=unmanaged,
+                                               preview_only=preview_only)
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
@@ -682,6 +723,7 @@ class IscsiServiceSpec(ServiceSpec):
         self.api_secure = api_secure
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
+        self.preview_only = preview_only
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
@@ -701,3 +743,38 @@ class IscsiServiceSpec(ServiceSpec):
 
 
 yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
+
+
+class AlertManagerSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'alertmanager',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 user_data: Optional[Dict[str, Any]] = None,
+                 ):
+        assert service_type == 'alertmanager'
+        super(AlertManagerSpec, self).__init__(
+            'alertmanager', service_id=service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only)
+
+        # Custom configuration.
+        #
+        # Example:
+        # service_type: alertmanager
+        # service_id: xyz
+        # user_data:
+        #   default_webhook_urls:
+        #   - "https://foo"
+        #   - "https://bar"
+        #
+        # Documentation:
+        # default_webhook_urls - A list of additional URL's that are
+        #                        added to the default receivers'
+        #                        <webhook_configs> configuration.
+        self.user_data = user_data or {}
+
+
+yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)

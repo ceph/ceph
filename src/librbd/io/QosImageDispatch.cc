@@ -3,8 +3,8 @@
 
 #include "librbd/io/QosImageDispatch.h"
 #include "common/dout.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/FlushTracker.h"
 #include <map>
 
@@ -282,7 +282,7 @@ void QosImageDispatch<I>::handle_throttle_ready(Tag&& tag, uint64_t flag) {
 
   if (set_throttle_flag(tag.image_dispatch_flags, flag)) {
     // timer_lock is held -- so dispatch from outside the timer thread
-    m_image_ctx->op_work_queue->queue(tag.on_dispatched, 0);
+    m_image_ctx->asio_engine->post(tag.on_dispatched, 0);
   }
 }
 

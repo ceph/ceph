@@ -108,4 +108,30 @@ protected:
   seastar::future<> on_stop() final {
     return seastar::now();
   }
+private:
+  /// pull missing object from peer
+  ///
+  /// @return true if the object is pulled, false otherwise
+  seastar::future<bool> maybe_pull_missing_obj(
+    const hobject_t& soid,
+    eversion_t need);
+
+  /// load object context for recovery if it is not ready yet
+  seastar::future<> load_obc_for_recovery(
+    const hobject_t& soid,
+    bool pulled);
+
+  /// read the remaining extents of object to be recovered and fill push_op
+  /// with them
+  ///
+  /// @param oid object being recovered
+  /// @param copy_subset extents we want
+  /// @param offset the offset in object from where we should read
+  /// @return the new offset
+  seastar::future<uint64_t> read_object_for_push_op(
+    const hobject_t& oid,
+    const interval_set<uint64_t>& copy_subset,
+    uint64_t offset,
+    uint64_t max_len,
+    PushOp* push_op);
 };

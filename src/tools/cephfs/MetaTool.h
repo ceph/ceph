@@ -21,7 +21,7 @@ class MetaTool : public MDSUtility
 public:
   class inode_meta_t {
   public:
-    inode_meta_t(snapid_t f = CEPH_NOSNAP, char t = 255, InodeStore* i = NULL):
+    inode_meta_t(snapid_t f = CEPH_NOSNAP, char t = char(255), InodeStore* i = NULL):
         _f(f),_t(t),_i(i) {
     };
     snapid_t get_snapid() const { 
@@ -255,7 +255,6 @@ private:
   int _amend_meta(string &k, inode_meta_t& i, const string& fn, meta_op& op);
   int _show_fn(inode_meta_t& i, const string& fn);
   int _amend_fn(const string& fn, bool confirm);
-  static unsigned long long conv2hexino(const char* ino);
   void usage();
   MetaTool(bool debug=false):
       _debug(debug) {}

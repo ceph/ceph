@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
@@ -25,8 +25,7 @@ describe('ConfigurationComponent', () => {
       NgbNavModule,
       HttpClientTestingModule,
       RouterTestingModule
-    ],
-    providers: i18nProviders
+    ]
   });
 
   beforeEach(() => {

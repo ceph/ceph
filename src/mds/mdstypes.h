@@ -20,7 +20,6 @@
 #include "include/frag.h"
 #include "include/xlist.h"
 #include "include/interval_set.h"
-#include "include/compact_map.h"
 #include "include/compact_set.h"
 #include "include/fs_types.h"
 
@@ -397,12 +396,12 @@ public:
   inline_data_t() {}
   inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
-      get_data() = *o.blp;
+      set_data(*o.blp);
   }
   inline_data_t& operator=(const inline_data_t& o) {
     version = o.version;
     if (o.blp)
-      get_data() = *o.blp;
+      set_data(*o.blp);
     else
       free_data();
     return *this;
@@ -411,10 +410,16 @@ public:
   void free_data() {
     blp.reset();
   }
-  ceph::buffer::list& get_data() {
+  void get_data(ceph::buffer::list& ret) const {
+    if (blp)
+      ret = *blp;
+    else
+      ret.clear();
+  }
+  void set_data(const ceph::buffer::list& bl) {
     if (!blp)
       blp.reset(new ceph::buffer::list);
-    return *blp;
+    *blp = bl;
   }
   size_t length() const { return blp ? blp->length() : 0; }
 
@@ -488,6 +493,11 @@ struct inode_t {
   }
 
   bool is_dirty_rstat() const { return !(rstat == accounted_rstat); }
+
+  uint64_t get_client_range(client_t client) const {
+    auto it = client_ranges.find(client);
+    return it != client_ranges.end() ? it->second.range.last : 0;
+  }
 
   uint64_t get_max_size() const {
     uint64_t max = 0;
@@ -1007,11 +1017,11 @@ template<template<typename> class Allocator>
 using alloc_string = std::basic_string<char,std::char_traits<char>,Allocator<char>>;
 
 template<template<typename> class Allocator>
-using xattr_map = compact_map<alloc_string<Allocator>,
-			      ceph::bufferptr,
-			      std::less<alloc_string<Allocator>>,
-			      Allocator<std::pair<const alloc_string<Allocator>,
-						  ceph::bufferptr>>>; // FIXME bufferptr not in mempool
+using xattr_map = std::map<alloc_string<Allocator>,
+			   ceph::bufferptr,
+			   std::less<alloc_string<Allocator>>,
+			   Allocator<std::pair<const alloc_string<Allocator>,
+					       ceph::bufferptr>>>; // FIXME bufferptr not in mempool
 
 template<template<typename> class Allocator>
 inline void decode_noshare(xattr_map<Allocator>& xattrs, ceph::buffer::list::const_iterator &p)
@@ -1171,8 +1181,30 @@ public:
       return false;
     return _vec[bit / bits_per_block] & ((block_type)1 << (bit % bits_per_block));
   }
+  void insert(size_t bit) {
+    size_t n = bit / bits_per_block;
+    if (n >= _vec.size())
+      _vec.resize(n + 1);
+    _vec[n] |= ((block_type)1 << (bit % bits_per_block));
+  }
+  void erase(size_t bit) {
+    size_t n = bit / bits_per_block;
+    if (n >= _vec.size())
+      return;
+    _vec[n] &= ~((block_type)1 << (bit % bits_per_block));
+    if (n + 1 == _vec.size()) {
+      while (!_vec.empty() && _vec.back() == 0)
+	_vec.pop_back();
+    }
+  }
   void clear() {
     _vec.clear();
+  }
+  bool operator==(const feature_bitset_t& other) const {
+    return _vec == other._vec;
+  }
+  bool operator!=(const feature_bitset_t& other) const {
+    return _vec != other._vec;
   }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &p);

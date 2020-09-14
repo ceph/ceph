@@ -31,7 +31,11 @@
 std::string PyModule::config_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+// Boost apparently can't be bothered to fix its own usage of its own
+// deprecated features.
 #include <boost/python.hpp>
+#undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"  // boost clobbers this
 // decode a Python exception into a string

@@ -12,7 +12,7 @@ import {
   NgbModalRef,
   NgbNavModule
 } from '@ng-bootstrap/ng-bootstrap';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
@@ -21,7 +21,6 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   Mocks,
   modalServiceShow
 } from '../../../../testing/unit-test-helper';
@@ -152,8 +151,7 @@ describe('PoolFormComponent', () => {
         ErasureCodeProfileService,
         NgbActiveModal,
         SelectBadgesComponent,
-        { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } },
-        i18nProviders
+        { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
       ]
     },
     [CriticalConfirmationModalComponent]

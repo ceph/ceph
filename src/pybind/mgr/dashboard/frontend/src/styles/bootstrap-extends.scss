@@ -1,6 +1,6 @@
 /*
  * Include here all styles from components that extend from bootstrap.
- * This removes the need to @import bootstrap into those componenet,
+ * This removes the need to @import bootstrap into those component,
  * thus reducing the final css size.
 */
 
@@ -9,6 +9,10 @@ cd-info-card {
     @extend .pb-2;
 
     .card-body {
+      .card-title {
+        @extend .pl-2;
+      }
+
       .card-text {
         @extend .pt-2;
       }
@@ -61,6 +65,21 @@ cd-health {
     &.cd-capacity-card {
       @extend .col-xl;
     }
+
+    &.cd-capacity-card {
+      @extend .col-lg-3;
+    }
+
+    &.cd-performance-card {
+      @extend .col-lg-6;
+    }
+
+    &.cd-chart-card {
+      @extend .col-md-12;
+      @extend .col-lg-6;
+      @extend .col-xl-4;
+      @extend .col-2xl-3;
+    }
   }
 }
 
@@ -88,4 +107,23 @@ cd-about {
   dd {
     @extend .col-8;
   }
+}
+
+.cd-header,
+legend {
+  @extend .pb-1;
+  @extend .mt-4;
+  @extend .mb-4;
+  @extend .border-bottom;
+}
+
+// All '.fa' icons will have fixed width
+.fa {
+  @extend .fa-fw;
+}
+
+pre {
+  @extend .card;
+  @extend .bg-light;
+  @extend .p-2;
 }

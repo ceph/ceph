@@ -100,23 +100,23 @@ public:
     CollectionRef c,
     const ghobject_t& oid);
 
-  seastar::future<omap_values_t> omap_get_values(
+  read_errorator::future<omap_values_t> omap_get_values(
     CollectionRef c,
     const ghobject_t& oid,
     const omap_keys_t& keys) final;
+
+  /// Retrieves paged set of values > start (if present)
+  read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
+    CollectionRef c,           ///< [in] collection
+    const ghobject_t &oid,     ///< [in] oid
+    const std::optional<std::string> &start ///< [in] start, empty for begin
+    ) final; ///< @return <done, values> values.empty() iff done
 
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) const final;
-
-  /// Retrieves paged set of values > start (if present)
-  seastar::future<std::tuple<bool, omap_values_t>> omap_get_values(
-    CollectionRef c,           ///< [in] collection
-    const ghobject_t &oid,     ///< [in] oid
-    const std::optional<std::string> &start ///< [in] start, empty for begin
-    ) final; ///< @return <done, values> values.empty() iff done
 
   seastar::future<ceph::bufferlist> omap_get_header(
     CollectionRef c,
@@ -151,6 +151,11 @@ private:
   int _write(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, const ceph::bufferlist& bl,
 	     uint32_t fadvise_flags);
+  int _zero(const coll_t& cid, const ghobject_t& oid,
+	    uint64_t offset, size_t len);
+  int _omap_clear(
+    const coll_t& cid,
+    const ghobject_t& oid);
   int _omap_set_values(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -171,6 +176,8 @@ private:
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferptr>& aset);
+  int _rm_attr(const coll_t& cid, const ghobject_t& oid,
+	       string_view name);
   int _create_collection(const coll_t& cid, int bits);
   boost::intrusive_ptr<Collection> _get_collection(const coll_t& cid);
 };

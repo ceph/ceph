@@ -38,7 +38,7 @@
 #include "librbd/operation/SnapshotLimitRequest.h"
 #include "librbd/operation/SparsifyRequest.h"
 #include <set>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -46,6 +46,8 @@
 #define dout_prefix *_dout << "librbd::Operations: "
 
 namespace librbd {
+
+using namespace boost::placeholders;
 
 namespace {
 
@@ -232,7 +234,7 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r < 0) {
-      complete(r == -EBLACKLISTED ? -EBLACKLISTED : -EROFS);
+      complete(r == -EBLOCKLISTED ? -EBLOCKLISTED : -EROFS);
       return;
     }
 

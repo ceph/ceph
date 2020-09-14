@@ -132,7 +132,7 @@ struct InstanceWatcher<librbd::MockTestImageCtx> {
   static InstanceWatcher* s_instance;
 
   static InstanceWatcher* create(
-      librados::IoCtx &ioctx, librbd::asio::ContextWQ* work_queue,
+      librados::IoCtx &ioctx, librbd::AsioEngine& asio_engine,
       InstanceReplayer<librbd::MockTestImageCtx>* instance_replayer,
       Throttler<librbd::MockTestImageCtx> *image_sync_throttler) {
     ceph_assert(s_instance != nullptr);
@@ -213,7 +213,7 @@ struct PoolWatcher<librbd::MockTestImageCtx> {
     return s_instances[pool_id];
   }
 
-  MOCK_METHOD0(is_blacklisted, bool());
+  MOCK_METHOD0(is_blocklisted, bool());
 
   MOCK_METHOD0(get_image_count, uint64_t());
 
@@ -250,10 +250,11 @@ struct Threads<librbd::MockTestImageCtx> {
   ceph::mutex &timer_lock;
   SafeTimer *timer;
   librbd::asio::ContextWQ *work_queue;
+  librbd::AsioEngine* asio_engine;
 
   Threads(Threads<librbd::ImageCtx> *threads)
     : timer_lock(threads->timer_lock), timer(threads->timer),
-      work_queue(threads->work_queue) {
+      work_queue(threads->work_queue), asio_engine(threads->asio_engine) {
   }
 };
 

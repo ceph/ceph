@@ -2,10 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/io/AsyncOperation.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/asio/ContextWQ.h"
-#include "common/dout.h"
 #include "include/ceph_assert.h"
+#include "common/dout.h"
+#include "librbd/AsioEngine.h"
+#include "librbd/ImageCtx.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -70,7 +70,7 @@ void AsyncOperation::finish_op() {
   if (!m_flush_contexts.empty()) {
     C_CompleteFlushes *ctx = new C_CompleteFlushes(m_image_ctx,
                                                    std::move(m_flush_contexts));
-    m_image_ctx->op_work_queue->queue(ctx);
+    m_image_ctx->asio_engine->post(ctx, 0);
   }
 }
 
@@ -87,7 +87,7 @@ void AsyncOperation::flush(Context* on_finish) {
     }
   }
 
-  m_image_ctx->op_work_queue->queue(on_finish);
+  m_image_ctx->asio_engine->post(on_finish, 0);
 }
 
 } // namespace io

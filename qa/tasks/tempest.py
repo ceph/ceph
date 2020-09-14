@@ -1,10 +1,9 @@
 """
 Deploy and configure Tempest for Teuthology
 """
+import configparser
 import contextlib
 import logging
-
-from six.moves import configparser
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -149,8 +148,8 @@ def run_tempest(ctx, config):
     log.info('Configuring Tempest')
 
     for (client, cconf) in config.items():
-        blacklist = cconf.get('blacklist', [])
-        assert isinstance(blacklist, list)
+        blocklist = cconf.get('blocklist', [])
+        assert isinstance(blocklist, list)
         run_in_tempest_venv(ctx, client,
             [
                 'tempest',
@@ -160,7 +159,7 @@ def run_tempest(ctx, config):
                 '--workspace',
                 'rgw',
                 '--regex', '^tempest.api.object_storage',
-                '--black-regex', '|'.join(blacklist)
+                '--black-regex', '|'.join(blocklist)
             ])
     try:
         yield
@@ -220,7 +219,7 @@ def task(ctx, config):
             object-storage-feature-enabled:
               container_sync: false
               discoverability: false
-            blacklist:
+            blocklist:
               # please strip half of these items after merging PRs #15369
               # and #12704
               - .*test_list_containers_reverse_order.*

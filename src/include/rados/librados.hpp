@@ -19,6 +19,8 @@ namespace libradosstriper
   class RadosStriper;
 }
 
+namespace neorados { class RADOS; }
+
 namespace librados {
 
 using ceph::bufferlist;
@@ -518,7 +520,6 @@ inline namespace v14_2_0 {
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
-    void tier_flush();
 
 
     friend class IoCtx;
@@ -733,6 +734,12 @@ inline namespace v14_2_0 {
      * triggering a promote on the OSD (that is then evicted).
      */
     void cache_evict();
+
+    /**
+     * flush a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_flush();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -1418,7 +1425,7 @@ inline namespace v14_2_0 {
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
 
     // Features useful for test cases
-    void test_blacklist_self(bool set);
+    void test_blocklist_self(bool set);
 
     /* pool info */
     int pool_list(std::list<std::string>& v);
@@ -1486,7 +1493,7 @@ inline namespace v14_2_0 {
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
 
-    int blacklist_add(const std::string& client_address,
+    int blocklist_add(const std::string& client_address,
                       uint32_t expire_seconds);
 
     /*
@@ -1503,9 +1510,11 @@ inline namespace v14_2_0 {
 						callback_t cb_safe)
       __attribute__ ((deprecated));
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
-    
+
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
+    friend class neorados::RADOS;
+
     // We don't allow assignment or copying
     Rados(const Rados& rhs);
     const Rados& operator=(const Rados& rhs);

@@ -61,24 +61,3 @@ vector<string> get_str_vec(const string& str, const char *delims)
   get_str_vec(str, delims, result);
   return result;
 }
-
-void get_str_set(const string& str, const char *delims, set<string>& str_set)
-{
-  str_set.clear();
-  for_each_substr(str, delims, [&str_set] (auto token) {
-      str_set.emplace(token.begin(), token.end());
-    });
-}
-
-void get_str_set(const string& str, set<string>& str_set)
-{
-  const char *delims = ";,= \t";
-  get_str_set(str, delims, str_set);
-}
-
-set<string> get_str_set(const string& str, const char *delims)
-{
-  set<string> result;
-  get_str_set(str, delims, result);
-  return result;
-}

@@ -56,8 +56,8 @@ public:
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                                    StrEq("set_protection_status"), ContentsEqual(bl),
-                                    _, _));
+                                    StrEq("set_protection_status"),
+                                    ContentsEqual(bl), _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -90,8 +90,8 @@ public:
     encode(children, bl);
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("get_children"), _,
-                               _, _));
+                               exec(RBD_CHILDREN, _, StrEq("rbd"),
+                               StrEq("get_children"), _, _, _, _));
     if (r < 0) {
       expect.WillRepeatedly(Return(r));
     } else {

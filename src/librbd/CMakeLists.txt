@@ -9,6 +9,7 @@ set(librbd_internal_srcs
   AsioEngine.cc
   AsyncObjectThrottle.cc
   AsyncRequest.cc
+  ConfigWatcher.cc
   DeepCopyRequest.cc
   ExclusiveLock.cc
   ImageCtx.cc
@@ -42,7 +43,10 @@ set(librbd_internal_srcs
   cache/ObjectCacherObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
   cache/PassthroughImageCache.cc
+  cache/rwl/InitRequest.cc
+  cache/rwl/ShutdownRequest.cc
   cache/WriteAroundObjectDispatch.cc
+  crypto/CryptoObjectDispatch.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
   deep_copy/ObjectCopyRequest.cc
@@ -163,27 +167,12 @@ set(librbd_internal_srcs
   operation/SnapshotLimitRequest.cc
   operation/SparsifyRequest.cc
   operation/TrimRequest.cc
+  plugin/Api.cc
   trash/MoveRequest.cc
   trash/RemoveRequest.cc
   watcher/Notifier.cc
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
-
-add_custom_target(librbd_plugins)
-set(librbd_plugins_dir ${CEPH_INSTALL_PKGLIBDIR}/librbd)
-
-set(rbd_plugin_parent_cache_srcs
-  cache/ParentCacheObjectDispatch.cc
-  plugin/ParentCache.cc)
-add_library(librbd_plugin_parent_cache SHARED ${rbd_plugin_parent_cache_srcs})
-target_link_libraries(librbd_plugin_parent_cache PRIVATE
-  ceph_immutable_object_cache_lib)
-set_target_properties(librbd_plugin_parent_cache PROPERTIES
-  OUTPUT_NAME ceph_librbd_parent_cache
-  VERSION 1.0.0
-  SOVERSION 1)
-install(TARGETS librbd_plugin_parent_cache DESTINATION ${librbd_plugins_dir})
-add_dependencies(librbd_plugins librbd_plugin_parent_cache)
 
 if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
@@ -196,6 +185,7 @@ if(WITH_RBD_RWL)
     cache/rwl/LogEntry.cc
     cache/rwl/LogMap.cc
     cache/rwl/LogOperation.cc
+    cache/rwl/ReadRequest.cc
     cache/rwl/Request.cc
     cache/rwl/SyncPoint.cc
     cache/rwl/Types.cc
@@ -223,6 +213,24 @@ if(WITH_RBD_RWL)
     PUBLIC blk)
 endif()
 
+add_custom_target(librbd_plugins)
+set(librbd_plugins_dir ${CEPH_INSTALL_PKGLIBDIR}/librbd)
+
+set(rbd_plugin_parent_cache_srcs
+  cache/ParentCacheObjectDispatch.cc
+  plugin/ParentCache.cc)
+add_library(librbd_plugin_parent_cache SHARED
+  ${rbd_plugin_parent_cache_srcs})
+target_link_libraries(librbd_plugin_parent_cache PRIVATE
+  ceph_immutable_object_cache_lib
+  librados)
+set_target_properties(librbd_plugin_parent_cache PROPERTIES
+  OUTPUT_NAME ceph_librbd_parent_cache
+  VERSION 1.0.0
+  SOVERSION 1)
+install(TARGETS librbd_plugin_parent_cache DESTINATION ${librbd_plugins_dir})
+add_dependencies(librbd_plugins librbd_plugin_parent_cache)
+
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
 if(WITH_LTTNG)
@@ -234,10 +242,11 @@ target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
+  libneorados
   librados
-  cls_rbd_client 
-  cls_lock_client 
-  cls_journal_client 
+  cls_rbd_client
+  cls_lock_client
+  cls_journal_client
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}

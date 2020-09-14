@@ -229,7 +229,7 @@ TEST_F(TestInternal, ResizeFailsToLockImage) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
+  ASSERT_EQ(0, lock_image(*ictx, ClsLockType::EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(-EROFS, ictx->operations->resize(m_image_size >> 1, true, no_op));
@@ -258,7 +258,7 @@ TEST_F(TestInternal, SnapCreateFailsToLockImage) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
+  ASSERT_EQ(0, lock_image(*ictx, ClsLockType::EXCLUSIVE, "manually locked"));
 
   ASSERT_EQ(-EROFS, snap_create(*ictx, "snap1"));
 }
@@ -289,7 +289,7 @@ TEST_F(TestInternal, SnapRollbackFailsToLockImage) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
+  ASSERT_EQ(0, lock_image(*ictx, ClsLockType::EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(-EROFS,
@@ -368,7 +368,7 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-  ASSERT_EQ(0, lock_image(*ictx2, LOCK_EXCLUSIVE, "manually locked"));
+  ASSERT_EQ(0, lock_image(*ictx2, ClsLockType::EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(-EROFS, ictx2->operations->flatten(no_op));
@@ -379,7 +379,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
+  ASSERT_EQ(0, lock_image(*ictx, ClsLockType::EXCLUSIVE, "manually locked"));
 
   std::string buffer(256, '1');
   Context *ctx = new DummyContext();
@@ -405,7 +405,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
+  ASSERT_EQ(0, lock_image(*ictx, ClsLockType::EXCLUSIVE, "manually locked"));
 
   Context *ctx = new DummyContext();
   auto c = librbd::io::AioCompletion::create(ctx);
@@ -538,7 +538,12 @@ TEST_F(TestInternal, Metadata) {
   map<string, bufferlist> pairs;
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(5u, pairs.size());
+
+  uint8_t original_pairs_num = 0;
+  if (ictx->test_features(RBD_FEATURE_DIRTY_CACHE)) {
+    original_pairs_num = 1;
+  }
+  ASSERT_EQ(original_pairs_num + 5, pairs.size());
   r = ictx->operations->metadata_remove("abcd");
   ASSERT_EQ(0, r);
   r = ictx->operations->metadata_remove("xyz");
@@ -546,7 +551,7 @@ TEST_F(TestInternal, Metadata) {
   pairs.clear();
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(3u, pairs.size());
+  ASSERT_EQ(original_pairs_num + 3, pairs.size());
   string val;
   r = librbd::metadata_get(ictx, it->first, &val);
   ASSERT_EQ(0, r);
@@ -611,6 +616,7 @@ TEST_F(TestInternal, SnapshotCopyup)
   ASSERT_EQ(256, api::Io<>::write(*ictx2, 256, bl.length(), bufferlist{bl},
                                   0));
 
+  ASSERT_EQ(0, flush_writeback_cache(ictx2));
   librados::IoCtx snap_ctx;
   snap_ctx.dup(ictx2->data_ctx);
   snap_ctx.snap_set_read(CEPH_SNAPDIR);
@@ -752,8 +758,9 @@ TEST_F(TestInternal, SnapshotCopyupZeros)
 
   bufferlist bl;
   bl.append(std::string(256, '1'));
-  ASSERT_EQ(256, api::Io<>::write(*ictx2, 256, bl.length(), bufferlist{bl},
-                                  0));
+  ASSERT_EQ(256, api::Io<>::write(*ictx2, 256, bl.length(), bufferlist{bl}, 0));
+
+  ASSERT_EQ(0, flush_writeback_cache(ictx2));
 
   librados::IoCtx snap_ctx;
   snap_ctx.dup(ictx2->data_ctx);
@@ -1026,32 +1033,6 @@ TEST_F(TestInternal, DiscardCopyup)
   }
 }
 
-TEST_F(TestInternal, ShrinkFlushesCache) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  std::string buffer(4096, '1');
-
-  // ensure write-path is initialized
-  bufferlist write_bl;
-  write_bl.append(buffer);
-  api::Io<>::write(*ictx, 0, buffer.size(), bufferlist{write_bl}, 0);
-
-  C_SaferCond cond_ctx;
-  auto c = librbd::io::AioCompletion::create(&cond_ctx);
-  c->get();
-  api::Io<>::aio_write(*ictx, c, 0, buffer.size(), bufferlist{write_bl}, 0,
-                       true);
-
-  librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, true, no_op));
-
-  ASSERT_TRUE(c->is_complete());
-  ASSERT_EQ(0, c->wait_for_complete());
-  ASSERT_EQ(0, cond_ctx.wait());
-  c->put();
-}
-
 TEST_F(TestInternal, ImageOptions) {
   rbd_image_options_t opts1 = NULL, opts2 = NULL;
   uint64_t uint64_val1 = 10, uint64_val2 = 0;
@@ -1132,7 +1113,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   bl.append(std::string(1 << ictx->order, '1'));
   ASSERT_EQ((ssize_t)bl.length(),
             api::Io<>::write(*ictx, 0, bl.length(), bufferlist{bl}, 0));
-  ASSERT_EQ(0, api::Io<>::flush(*ictx));
+  ASSERT_EQ(0, flush_writeback_cache(ictx));
 
   ASSERT_EQ(0, create_snapshot("snap1", true));
 
@@ -1443,7 +1424,8 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
-  ASSERT_EQ(0, image.flush());
+  ASSERT_EQ(0, image.close());
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str(), NULL));
 
   bufferlist readbl;
   printf("verify written data by reading\n");
@@ -1628,7 +1610,7 @@ TEST_F(TestInternal, Sparsify) {
             api::Io<>::write(*ictx, (1 << ictx->order) * 10 + 4096 * 10,
                              bl2.length(), bufferlist{bl2}, 0));
 
-  ASSERT_EQ(0, api::Io<>::flush(*ictx));
+  ASSERT_EQ(0, flush_writeback_cache(ictx));
 
   ASSERT_EQ(0, ictx->operations->sparsify(4096, no_op));
 
@@ -1716,7 +1698,7 @@ TEST_F(TestInternal, SparsifyClone) {
   ASSERT_EQ((ssize_t)bl.length(),
             api::Io<>::write(*ictx, (1 << ictx->order) * 10, bl.length(),
                              bufferlist{bl}, 0));
-  ASSERT_EQ(0, api::Io<>::flush(*ictx));
+  ASSERT_EQ(0, flush_writeback_cache(ictx));
 
   ASSERT_EQ(0, ictx->operations->sparsify(4096, no_op));
 

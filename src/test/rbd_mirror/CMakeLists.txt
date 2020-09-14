@@ -57,7 +57,6 @@ add_dependencies(unittest_rbd_mirror
   cls_rbd)
 target_link_libraries(unittest_rbd_mirror
   rbd_mirror_test
-  rados_test_stub
   rbd_mirror_internal
   rbd_mirror_types
   rbd_api
@@ -69,6 +68,7 @@ target_link_libraries(unittest_rbd_mirror
   cls_lock_client
   cls_journal_client
   rbd_types
+  rados_test_stub
   librados
   osdc
   global
@@ -89,6 +89,7 @@ target_link_libraries(ceph_test_rbd_mirror
   cls_rbd_client
   cls_journal_client
   rbd_types
+  libneorados
   librados
   radostest-cxx
   ${UNITTEST_LIBS}

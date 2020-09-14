@@ -1,7 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -35,8 +34,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
   constructor(
     private authStorageService: AuthStorageService,
     private rbdMirroringService: RbdMirroringService,
-    private modalService: ModalService,
-    private i18n: I18n
+    private modalService: ModalService
   ) {
     this.permission = this.authStorageService.getPermissions().rbdMirroring;
 
@@ -44,7 +42,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
       permission: 'update',
       icon: Icons.edit,
       click: () => this.editSiteNameModal(),
-      name: this.i18n('Edit Site Name'),
+      name: $localize`Edit Site Name`,
       canBePrimary: () => true,
       disable: () => false
     };
@@ -52,14 +50,14 @@ export class OverviewComponent implements OnInit, OnDestroy {
       permission: 'update',
       icon: Icons.upload,
       click: () => this.createBootstrapModal(),
-      name: this.i18n('Create Bootstrap Token'),
+      name: $localize`Create Bootstrap Token`,
       disable: () => false
     };
     const importBootstrapAction: CdTableAction = {
       permission: 'update',
       icon: Icons.download,
       click: () => this.importBootstrapModal(),
-      name: this.i18n('Import Bootstrap Token'),
+      name: $localize`Import Bootstrap Token`,
       disable: () => this.peersExist
     };
     this.tableActions = [editSiteNameAction, createBootstrapAction, importBootstrapAction];

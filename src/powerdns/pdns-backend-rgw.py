@@ -53,7 +53,7 @@ from ConfigParser import SafeConfigParser, NoSectionError
 from flask import abort, Flask, request, Response
 from hashlib import sha1 as sha
 from time import gmtime, strftime
-from six.moves.urllib.parse import urlparse
+from urllib.parse import urlparse
 import argparse
 import base64
 import hmac

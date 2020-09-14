@@ -263,14 +263,13 @@ void ReplayStatusFormatter<I>::format(std::string *description) {
   root_obj["entries_per_second"] = round_to_two_places(entries_per_second);
 
   if (m_entries_behind_master > 0 && entries_per_second > 0) {
-    auto seconds_until_synced = round_to_two_places(
+    std::uint64_t seconds_until_synced = round_to_two_places(
       m_entries_behind_master / entries_per_second);
     if (seconds_until_synced >= std::numeric_limits<uint64_t>::max()) {
       seconds_until_synced = std::numeric_limits<uint64_t>::max();
     }
 
-    root_obj["seconds_until_synced"] = static_cast<uint64_t>(
-      seconds_until_synced);
+    root_obj["seconds_until_synced"] = seconds_until_synced;
   }
 
   *description = json_spirit::write(

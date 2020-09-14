@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { OsdCreationPreviewModalComponent } from './osd-creation-preview-modal.component';
 
@@ -22,7 +22,7 @@ describe('OsdCreationPreviewModalComponent', () => {
       RouterTestingModule,
       ToastrModule.forRoot()
     ],
-    providers: [NgbActiveModal, i18nProviders],
+    providers: [NgbActiveModal],
     declarations: [OsdCreationPreviewModalComponent]
   });
 

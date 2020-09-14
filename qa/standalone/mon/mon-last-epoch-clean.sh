@@ -181,8 +181,8 @@ function TEST_mon_last_clean_epoch() {
 
   sleep 5
 
-  ceph tell osd.* injectargs '--osd-beacon-report-interval 10' || exit 1
-  ceph tell mon.* injectargs \
+  ceph tell 'osd.*' injectargs '--osd-beacon-report-interval 10' || exit 1
+  ceph tell 'mon.*' injectargs \
     '--mon-min-osdmap-epochs 2 --paxos-service-trim-min 1' || exit 1
 
   create_pool foo 32

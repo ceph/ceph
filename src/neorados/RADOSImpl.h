@@ -11,8 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifndef CEPH_LIBRADOS_RADOSCLIENT_H
-#define CEPH_LIBRADOS_RADOSCLIENT_H
+#ifndef CEPH_NEORADOS_RADOSIMPL_H
+#define CEPH_NEORADOS_RADOSIMPL_H
 
 #include <functional>
 #include <memory>
@@ -24,6 +24,8 @@
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
 
+#include "librados/RadosClient.h"
+
 #include "mon/MonClient.h"
 
 #include "mgr/MgrClient.h"
@@ -31,55 +33,30 @@
 #include "osdc/Objecter.h"
 
 namespace neorados {
-  class RADOS;
+
+class RADOS;
+
 namespace detail {
+
+class NeoClient;
 
 class RADOS : public Dispatcher
 {
   friend ::neorados::RADOS;
-  struct MsgDeleter {
-    void operator()(Messenger* p) const {
-      if (p) {
-	p->shutdown();
-	p->wait();
-      }
-      delete p;
-    }
-  };
-
-  struct ObjDeleter {
-    void operator()(Objecter* p) const {
-      if (p) {
-	p->shutdown();
-      }
-      delete p;
-    }
-  };
-
-  template<typename T>
-  struct scoped_shutdown {
-    T& m;
-    scoped_shutdown(T& m) : m(m) {}
-
-    ~scoped_shutdown() {
-      m.shutdown();
-    }
-  };
+  friend NeoClient;
 
   boost::asio::io_context& ioctx;
+  boost::intrusive_ptr<CephContext> cct;
+
   ceph::mutex lock = ceph::make_mutex("RADOS_unleashed::_::RADOSImpl");
   int instance_id = -1;
 
-  std::unique_ptr<Messenger, MsgDeleter> messenger;
+  std::unique_ptr<Messenger> messenger;
 
   MonClient monclient;
-  scoped_shutdown<MonClient> moncsd;
-
   MgrClient mgrclient;
-  scoped_shutdown<MgrClient> mgrcsd;
 
-  std::unique_ptr<Objecter, ObjDeleter> objecter;
-
+  std::unique_ptr<Objecter> objecter;
 
 public:
 
@@ -93,11 +70,66 @@ public:
   mon_feature_t get_required_monitor_features() const {
     return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
   }
-  int get_instance_id() const {
-    return instance_id;
-  }
 };
-}
-}
+
+class Client {
+public:
+  Client(boost::asio::io_context& ioctx,
+         boost::intrusive_ptr<CephContext> cct,
+         MonClient& monclient, Objecter* objecter)
+    : ioctx(ioctx), cct(cct), monclient(monclient), objecter(objecter) {
+  }
+  virtual ~Client() {}
+
+  Client(const Client&) = delete;
+  Client& operator=(const Client&) = delete;
+
+  boost::asio::io_context& ioctx;
+
+  boost::intrusive_ptr<CephContext> cct;
+  MonClient& monclient;
+  Objecter* objecter;
+
+  mon_feature_t get_required_monitor_features() const {
+    return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
+  }
+
+  virtual int get_instance_id() const = 0;
+};
+
+class NeoClient : public Client {
+public:
+  NeoClient(std::unique_ptr<RADOS>&& rados)
+    : Client(rados->ioctx, rados->cct, rados->monclient,
+             rados->objecter.get()),
+      rados(std::move(rados)) {
+  }
+
+  int get_instance_id() const override {
+    return rados->instance_id;
+  }
+
+private:
+  std::unique_ptr<RADOS> rados;
+};
+
+class RadosClient : public Client {
+public:
+  RadosClient(librados::RadosClient* rados_client)
+    : Client(rados_client->poolctx, {rados_client->cct},
+             rados_client->monclient, rados_client->objecter),
+      rados_client(rados_client) {
+  }
+
+  int get_instance_id() const override {
+    return rados_client->instance_id;
+  }
+
+public:
+  librados::RadosClient* rados_client;
+};
+
+} // namespace detail
+} // namespace neorados
 
 #endif

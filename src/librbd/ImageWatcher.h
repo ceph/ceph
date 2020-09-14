@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
 #include "cls/rbd/cls_rbd_types.h"
+#include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
@@ -170,6 +171,8 @@ private:
 
   ceph::mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
+
+  AsyncOpTracker m_async_op_tracker;
 
   void handle_register_watch(int r);
 

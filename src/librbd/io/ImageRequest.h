@@ -79,7 +79,7 @@ protected:
 	       const ZTracer::Trace &parent_trace)
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
       m_image_extents(std::move(image_extents)),
-      m_trace(util::create_trace(image_ctx, trace_name, parent_trace)) {
+      m_trace(librbd::util::create_trace(image_ctx, trace_name, parent_trace)) {
     m_trace.event("start");
   }
 

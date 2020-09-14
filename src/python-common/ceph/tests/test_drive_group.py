@@ -43,6 +43,16 @@ placement:
   host_pattern: '*'
 data_devices:
   limit: 1
+"""),
+
+        yaml.safe_load("""
+service_type: osd
+service_id: mydg
+placement:
+  host_pattern: '*'
+data_devices:
+  all: True
+filter_logic: XOR
 """)
     )
 ])
@@ -182,3 +192,19 @@ def test_ceph_volume_command_7():
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, ['0', '1']).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-ids 0 1 --yes --no-systemd'
+
+
+def test_ceph_volume_command_8():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          data_devices=DeviceSelection(rotational=True, model='INTEL SSDS'),
+                          db_devices=DeviceSelection(model='INTEL SSDP'),
+                          filter_logic='OR',
+                          osd_id_claims={}
+                          )
+    inventory = _mk_inventory(_mk_device(rotational=True,  size='1.82 TB',  model='ST2000DM001-1ER1') +  # data
+                              _mk_device(rotational=False, size="223.0 GB", model='INTEL SSDSC2KG24') +  # data
+                              _mk_device(rotational=False, size="349.0 GB", model='INTEL SSDPED1K375GA')  # wal/db
+                              )
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmd = translate.to_ceph_volume(sel, []).run()
+    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc --yes --no-systemd'

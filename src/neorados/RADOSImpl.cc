@@ -25,18 +25,17 @@ namespace neorados {
 namespace detail {
 
 RADOS::RADOS(boost::asio::io_context& ioctx,
-	     boost::intrusive_ptr<CephContext> _cct)
-  : Dispatcher(_cct.detach()),
+	     boost::intrusive_ptr<CephContext> cct)
+  : Dispatcher(cct.get()),
     ioctx(ioctx),
-    monclient(cct, ioctx),
-    moncsd(monclient),
-    mgrclient(cct, nullptr, &monclient.monmap),
-    mgrcsd(mgrclient) {
+    cct(cct),
+    monclient(cct.get(), ioctx),
+    mgrclient(cct.get(), nullptr, &monclient.monmap) {
   auto err = monclient.build_initial_monmap();
   if (err < 0)
     throw std::system_error(ceph::to_error_code(err));
 
-  messenger.reset(Messenger::create_client_messenger(cct, "radosclient"));
+  messenger.reset(Messenger::create_client_messenger(cct.get(), "radosclient"));
   if (!messenger)
     throw std::bad_alloc();
 
@@ -46,7 +45,7 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
   messenger->set_default_policy(
     Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  objecter.reset(new Objecter(cct, messenger.get(), &monclient,
+  objecter.reset(new Objecter(cct.get(), messenger.get(), &monclient,
 			      ioctx,
 			      cct->_conf->rados_mon_op_timeout,
 			      cct->_conf->rados_osd_op_timeout));
@@ -87,6 +86,20 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
   instance_id = monclient.get_global_id();
 }
 
+RADOS::~RADOS() {
+  if (objecter && objecter->initialized) {
+    objecter->shutdown();
+  }
+
+  mgrclient.shutdown();
+  monclient.shutdown();
+
+  if (messenger) {
+    messenger->shutdown();
+    messenger->wait();
+  }
+}
+
 bool RADOS::ms_dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -107,6 +120,5 @@ bool RADOS::ms_handle_refused(Connection *con) {
   return false;
 }
 
-RADOS::~RADOS() = default;
-}
-}
+} // namespace detail
+} // namespace neorados

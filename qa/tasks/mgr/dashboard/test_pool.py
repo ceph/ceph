@@ -2,11 +2,10 @@
 from __future__ import absolute_import
 
 import logging
-import six
 import time
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JAny, JList, JObj
+from .helper import DashboardTestCase, JAny, JList, JObj, JUnion
 
 log = logging.getLogger(__name__)
 
@@ -23,14 +22,16 @@ class PoolTest(DashboardTestCase):
     }, allow_unknown=True)
 
     pool_list_stat_schema = JObj(sub_elems={
-        'latest': int,
+        'latest': JUnion([int,float]),
         'rate': float,
         'rates': JList(JAny(none=False)),
     })
 
     pool_list_stats_schema = JObj(sub_elems={
+        'avail_raw': pool_list_stat_schema,
         'bytes_used': pool_list_stat_schema,
         'max_avail': pool_list_stat_schema,
+        'percent_used': pool_list_stat_schema,
         'rd_bytes': pool_list_stat_schema,
         'wr_bytes': pool_list_stat_schema,
         'rd': pool_list_stat_schema,
@@ -82,7 +83,7 @@ class PoolTest(DashboardTestCase):
         self._task_delete('/api/pool/' + name)
         self.assertStatus(204)
 
-    def _validate_pool_properties(self, data, pool):
+    def _validate_pool_properties(self, data, pool, timeout=DashboardTestCase.TIMEOUT_HEALTH_CLEAR):
         for prop, value in data.items():
             if prop == 'pool_type':
                 self.assertEqual(pool['type'], value)
@@ -110,13 +111,15 @@ class PoolTest(DashboardTestCase):
                 #   1.  The default value cannot be given to this method, which becomes relevant
                 #       when resetting a value, because it's not always zero.
                 #   2.  The expected `source` cannot be given to this method, and it cannot
-                #       relibably be determined (see 1)
+                #       reliably be determined (see 1)
                 pass
             else:
                 self.assertEqual(pool[prop], value, '{}: {} != {}'.format(prop, pool[prop], value))
 
-        health = self._get('/api/health/minimal')['health']
-        self.assertEqual(health['status'], 'HEALTH_OK', msg='health={}'.format(health))
+        self.wait_until_equal(self._get_health_status, 'HEALTH_OK', timeout)
+
+    def _get_health_status(self):
+        return self._get('/api/health/minimal')['health']['status']
 
     def _get_pool(self, pool_name):
         pool = self._get("/api/pool/" + pool_name)
@@ -133,8 +136,8 @@ class PoolTest(DashboardTestCase):
         """
         pgp_prop = 'pg_placement_num'
         t = 0
-        while (int(value) != pool[pgp_prop] or self._get('/api/health/minimal')['health']['status']
-               != 'HEALTH_OK') and t < 180:
+        while (int(value) != pool[pgp_prop] or self._get_health_status() != 'HEALTH_OK') \
+                and t < 180:
             time.sleep(2)
             t += 2
             pool = self._get_pool(pool['pool_name'])
@@ -157,6 +160,16 @@ class PoolTest(DashboardTestCase):
     def test_delete_access_permissions(self):
         self._delete('/api/pool/ddd')
         self.assertStatus(403)
+
+    def test_pool_configuration(self):
+        pool_name = 'device_health_metrics'
+        data = self._get('/api/pool/{}/configuration'.format(pool_name))
+        self.assertStatus(200)
+        self.assertSchema(data, JList(JObj({
+             'name': str,
+             'value': str,
+             'source': int
+             })))
 
     def test_pool_list(self):
         data = self._get("/api/pool")
@@ -314,23 +327,23 @@ class PoolTest(DashboardTestCase):
         with self.__yield_pool(pool_name):
             props = {'application_metadata': ['rbd', 'sth']}
             self._task_put('/api/pool/{}'.format(pool_name), props)
-            time.sleep(5)
-            self._validate_pool_properties(props, self._get_pool(pool_name))
+            self._validate_pool_properties(props, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
             properties = {'application_metadata': ['rgw']}
             self._task_put('/api/pool/' + pool_name, properties)
-            time.sleep(5)
-            self._validate_pool_properties(properties, self._get_pool(pool_name))
+            self._validate_pool_properties(properties, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
             properties = {'application_metadata': ['rbd', 'sth']}
             self._task_put('/api/pool/' + pool_name, properties)
-            time.sleep(5)
-            self._validate_pool_properties(properties, self._get_pool(pool_name))
+            self._validate_pool_properties(properties, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
             properties = {'application_metadata': ['rgw']}
             self._task_put('/api/pool/' + pool_name, properties)
-            time.sleep(5)
-            self._validate_pool_properties(properties, self._get_pool(pool_name))
+            self._validate_pool_properties(properties, self._get_pool(pool_name),
+                                           self.TIMEOUT_HEALTH_CLEAR * 2)
 
     def test_pool_update_configuration(self):
         pool_name = 'pool_update_configuration'
@@ -403,16 +416,16 @@ class PoolTest(DashboardTestCase):
     def test_pool_info(self):
         self._get("/ui-api/pool/info")
         self.assertSchemaBody(JObj({
-            'pool_names': JList(six.string_types),
-            'compression_algorithms': JList(six.string_types),
-            'compression_modes': JList(six.string_types),
+            'pool_names': JList(str),
+            'compression_algorithms': JList(str),
+            'compression_modes': JList(str),
             'is_all_bluestore': bool,
-            'bluestore_compression_algorithm': six.string_types,
+            'bluestore_compression_algorithm': str,
             'osd_count': int,
             'crush_rules_replicated': JList(JObj({}, allow_unknown=True)),
             'crush_rules_erasure': JList(JObj({}, allow_unknown=True)),
-            'pg_autoscale_default_mode': six.string_types,
-            'pg_autoscale_modes': JList(six.string_types),
+            'pg_autoscale_default_mode': str,
+            'pg_autoscale_modes': JList(str),
             'erasure_code_profiles': JList(JObj({}, allow_unknown=True)),
             'used_rules': JObj({}, allow_unknown=True),
             'used_profiles': JObj({}, allow_unknown=True),

@@ -72,7 +72,6 @@ TEST_P(WatchStress, Stress1) {
   ASSERT_EQ("", create_one_pool_pp(pool_name, ncluster));
   IoCtx nioctx;
   ncluster.ioctx_create(pool_name.c_str(), nioctx);
-  WatchNotifyTestCtx ctx;
 
   WatcherUnwatcher *thr = new WatcherUnwatcher(pool_name);
   thr->create("watcher_unwatch");
@@ -89,25 +88,25 @@ TEST_P(WatchStress, Stress1) {
     cluster.ioctx_create(pool_name.c_str(), ioctx);
     ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
 
-    bool do_blacklist = i % 2;
-    if (do_blacklist) {
-      cluster.test_blacklist_self(true);
-      std::cerr << "blacklisted" << std::endl;
+    bool do_blocklist = i % 2;
+    if (do_blocklist) {
+      cluster.test_blocklist_self(true);
+      std::cerr << "blocklisted" << std::endl;
       sleep(1);
     }
 
     bufferlist bl2;
     ASSERT_EQ(0, nioctx.notify("foo", 0, bl2));
 
-    if (do_blacklist) {
+    if (do_blocklist) {
       sleep(1); // Give a change to see an incorrect notify
     } else {
       TestAlarm alarm;
       sem_wait(sem);
     }
 
-    if (do_blacklist) {
-      cluster.test_blacklist_self(false);
+    if (do_blocklist) {
+      cluster.test_blocklist_self(false);
     }
 
     ioctx.unwatch("foo", handle);

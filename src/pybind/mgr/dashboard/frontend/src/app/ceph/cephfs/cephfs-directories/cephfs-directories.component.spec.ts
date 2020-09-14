@@ -12,7 +12,6 @@ import { Observable, of } from 'rxjs';
 
 import {
   configureTestBed,
-  i18nProviders,
   modalServiceShow,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
@@ -375,7 +374,7 @@ describe('CephfsDirectoriesComponent', () => {
         NgbModalModule
       ],
       declarations: [CephfsDirectoriesComponent],
-      providers: [i18nProviders, NgbActiveModal]
+      providers: [NgbActiveModal]
     },
     [CriticalConfirmationModalComponent, FormModalComponent, ConfirmationModalComponent]
   );

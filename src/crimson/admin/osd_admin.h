@@ -9,12 +9,10 @@
 namespace crimson::admin {
 
 class AssertAlwaysHook;
-class ConfigShowHook;
-class ConfigGetHook;
-class ConfigSetHook;
 class FlushPgStatsHook;
 class OsdStatusHook;
 class SendBeaconHook;
+class DumpPGStateHistory;
 
 template<class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args);

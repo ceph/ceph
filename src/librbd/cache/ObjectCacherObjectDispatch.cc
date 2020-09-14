@@ -48,8 +48,8 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
     ceph_assert(ceph_mutex_is_locked(dispatcher->m_cache_lock));
     auto cct = dispatcher->m_image_ctx->cct;
 
-    if (r == -EBLACKLISTED) {
-      lderr(cct) << "blacklisted during flush (purging)" << dendl;
+    if (r == -EBLOCKLISTED) {
+      lderr(cct) << "blocklisted during flush (purging)" << dendl;
       dispatcher->m_object_cacher->purge_set(dispatcher->m_object_set);
     } else if (r < 0 && purge_on_error) {
       lderr(cct) << "failed to invalidate cache (purging): "
@@ -181,15 +181,21 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::ExtentMap* extent_map,
+    uint64_t object_no, const io::Extents &extents, librados::snap_t snap_id,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, io::Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   // IO chained in reverse order
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
-                 << object_len << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
+
+  if (version != nullptr || extents.size() != 1) {
+    // we currently don't cache read versions
+    // and don't support reading more than one extent
+    return false;
+  }
+  auto [object_off, object_len] = extents.front();
 
   // ensure we aren't holding the cache lock post-read
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
@@ -261,7 +267,8 @@ bool ObjectCacherObjectDispatch<I>::discard(
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    const ::SnapContext &snapc, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -272,6 +279,23 @@ bool ObjectCacherObjectDispatch<I>::write(
   // ensure we aren't holding the cache lock post-write
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
+
+  // cache layer does not handle version checking
+  if (assert_version.has_value() ||
+      (write_flags & io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
+    ObjectExtents object_extents;
+    object_extents.emplace_back(data_object_name(m_image_ctx, object_no),
+                                object_no, object_off, data.length(), 0);
+
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+
+    // ensure any in-flight writeback is complete before advancing
+    // the write request
+    std::lock_guard locker{m_cache_lock};
+    m_object_cacher->discard_writeback(m_object_set, object_extents,
+                                       on_dispatched);
+    return true;
+  }
 
   m_image_ctx->image_lock.lock_shared();
   ObjectCacher::OSDWrite *wr = m_object_cacher->prepare_write(
@@ -311,8 +335,8 @@ bool ObjectCacherObjectDispatch<I>::write_same(
   bufferlist ws_data;
   io::util::assemble_write_same_extent(extent, data, &ws_data, true);
 
-  return write(object_no, object_off, std::move(ws_data), snapc, op_flags,
-               parent_trace, object_dispatch_flags, journal_tid,
+  return write(object_no, object_off, std::move(ws_data), snapc, op_flags, 0,
+               std::nullopt, parent_trace, object_dispatch_flags, journal_tid,
                dispatch_result, on_finish, on_dispatched);
 }
 

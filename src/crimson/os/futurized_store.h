@@ -118,16 +118,16 @@ public:
 
   using omap_values_t = std::map<std::string, bufferlist, std::less<>>;
   using omap_keys_t = std::set<std::string>;
-  virtual seastar::future<omap_values_t> omap_get_values(
-                                         CollectionRef c,
-                                         const ghobject_t& oid,
-                                         const omap_keys_t& keys) = 0;
+  virtual read_errorator::future<omap_values_t> omap_get_values(
+    CollectionRef c,
+    const ghobject_t& oid,
+    const omap_keys_t& keys) = 0;
   virtual seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) const = 0;
-  virtual seastar::future<std::tuple<bool, omap_values_t>> omap_get_values(
+  virtual read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
     const std::optional<std::string> &start ///< [in] start, empty for begin

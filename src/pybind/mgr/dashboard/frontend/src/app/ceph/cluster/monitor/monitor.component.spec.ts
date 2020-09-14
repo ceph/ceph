@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { MonitorService } from '../../../shared/api/monitor.service';
 import { MonitorComponent } from './monitor.component';
 
@@ -17,7 +17,7 @@ describe('MonitorComponent', () => {
     imports: [HttpClientTestingModule],
     declarations: [MonitorComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [MonitorService, i18nProviders]
+    providers: [MonitorService]
   });
 
   beforeEach(() => {

@@ -9,7 +9,6 @@
 #include "rgw_xml.h"
 #include "rgw_arn.h"
 #include "rgw_pubsub_push.h"
-#include "rgw_rados.h"
 #include <regex>
 #include <algorithm>
 

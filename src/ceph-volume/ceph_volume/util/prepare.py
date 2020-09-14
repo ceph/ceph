@@ -4,9 +4,11 @@ but also a compounded ("single call") helper to do them in order. Some plugins
 may want to change some part of the process, while others might want to consume
 the single-call helper
 """
+import errno
 import os
 import logging
 import json
+import time
 from ceph_volume import process, conf, __release__, terminal
 from ceph_volume.util import system, constants, str_to_int, disk
 
@@ -458,9 +460,23 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
 
     command = base_command + supplementary_command
 
-    _, _, returncode = process.call(command, stdin=keyring, show_command=True)
-    if returncode != 0:
-        raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
+    """
+    When running in containers the --mkfs on raw device sometimes fails
+    to acquire a lock through flock() on the device because systemd-udevd holds one temporarily.
+    See KernelDevice.cc and _lock() to understand how ceph-osd acquires the lock.
+    Because this is really transient, we retry up to 5 times and wait for 1 sec in-between
+    """
+    for retry in range(5):
+        _, _, returncode = process.call(command, stdin=keyring, terminal_verbose=True, show_command=True)
+        if returncode == 0:
+            break
+        else:
+            if returncode == errno.EWOULDBLOCK:
+                    time.sleep(1)
+                    logger.info('disk is held by another process, trying to mkfs again... (%s/5 attempt)' % retry)
+                    continue
+            else:
+                raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
 
 
 def osd_mkfs_filestore(osd_id, fsid, keyring):

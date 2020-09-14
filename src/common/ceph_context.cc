@@ -45,6 +45,9 @@
 #include "common/PluginRegistry.h"
 #include "common/valgrind.h"
 #include "include/spinlock.h"
+#if !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN))
+#include "mon/MonMap.h"
+#endif
 
 // for CINIT_FLAGS
 #include "common/common_init.h"
@@ -386,9 +389,14 @@ public:
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
       std::lock_guard lg(cct->_feature_lock);
-      get_str_set(
-	conf->enable_experimental_unrecoverable_data_corrupting_features,
-	cct->_experimental_features);
+
+      cct->_experimental_features.clear();
+      auto add_experimental_feature = [this] (auto feature) {
+        cct->_experimental_features.emplace(std::string{feature});
+      };
+      for_each_substr(conf->enable_experimental_unrecoverable_data_corrupting_features,
+          ";,= \t", add_experimental_feature);
+
       if (getenv("CEPH_DEV") == NULL) {
         if (!cct->_experimental_features.empty()) {
           if (cct->_experimental_features.count("*")) {
@@ -782,6 +790,8 @@ void CephContext::put() {
   if (--nref == 0) {
     ANNOTATE_HAPPENS_AFTER(&nref);
     ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
+    if (g_ceph_context == this)
+      g_ceph_context = nullptr;
     delete this;
   } else {
     ANNOTATE_HAPPENS_BEFORE(&nref);
@@ -988,6 +998,15 @@ void CephContext::notify_post_fork()
   ceph::spin_unlock(&_fork_watchers_lock);
   for (auto &&t : _fork_watchers)
     t->handle_post_fork();
+}
+
+void CephContext::set_mon_addrs(const MonMap& mm) {
+  std::vector<entity_addrvec_t> mon_addrs;
+  for (auto& i : mm.mon_info) {
+    mon_addrs.push_back(i.second.public_addrs);
+  }
+
+  set_mon_addrs(mon_addrs);
 }
 }
 #endif	// WITH_SEASTAR

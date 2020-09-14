@@ -8,7 +8,6 @@ from collections import namedtuple
 import time
 
 import requests
-import six
 from teuthology.exceptions import CommandFailedError
 
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -18,6 +17,12 @@ log = logging.getLogger(__name__)
 
 
 class DashboardTestCase(MgrTestCase):
+    # Display full error diffs
+    maxDiff = None
+
+    # Increased x3 (20 -> 60)
+    TIMEOUT_HEALTH_CLEAR = 60
+
     MGRS_REQUIRED = 2
     MDSS_REQUIRED = 1
     REQUIRE_FILESYSTEM = True
@@ -143,7 +148,7 @@ class DashboardTestCase(MgrTestCase):
         super(DashboardTestCase, cls).setUpClass()
         cls._assign_ports("dashboard", "ssl_server_port")
         cls._load_module("dashboard")
-        cls._base_uri = cls._get_uri("dashboard").rstrip('/')
+        cls.update_base_uri()
 
         if cls.CEPHFS:
             cls.mds_cluster.clear_firewall()
@@ -179,11 +184,16 @@ class DashboardTestCase(MgrTestCase):
         if cls.AUTO_AUTHENTICATE:
             cls.login('admin', 'admin')
 
+    @classmethod
+    def update_base_uri(cls):
+        if cls._base_uri is None:
+            cls._base_uri = cls._get_uri("dashboard").rstrip('/')
+
     def setUp(self):
         super(DashboardTestCase, self).setUp()
         if not self._loggedin and self.AUTO_AUTHENTICATE:
             self.login('admin', 'admin')
-        self.wait_for_health_clear(20)
+        self.wait_for_health_clear(self.TIMEOUT_HEALTH_CLEAR)
 
     @classmethod
     def tearDownClass(cls):
@@ -192,6 +202,7 @@ class DashboardTestCase(MgrTestCase):
     # pylint: disable=inconsistent-return-statements
     @classmethod
     def _request(cls, url, method, data=None, params=None):
+        cls.update_base_uri()
         url = "{}{}".format(cls._base_uri, url)
         log.info("Request %s to %s", method, url)
         headers = {}
@@ -455,18 +466,16 @@ class DashboardTestCase(MgrTestCase):
                 return obj
         return None
 
-
+# TODP: pass defaults=(False,) to namedtuple() if python3.7
 class JLeaf(namedtuple('JLeaf', ['typ', 'none'])):
     def __new__(cls, typ, none=False):
-        if typ == str:
-            typ = six.string_types
-        return super(JLeaf, cls).__new__(cls, typ, none)
-
+        return super().__new__(cls, typ, none)
 
 JList = namedtuple('JList', ['elem_typ'])
 
 JTuple = namedtuple('JList', ['elem_typs'])
 
+JUnion = namedtuple('JUnion', ['elem_typs'])
 
 class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none', 'unknown_schema'])):
     def __new__(cls, sub_elems, allow_unknown=False, none=False, unknown_schema=None):
@@ -496,6 +505,10 @@ def _validate_json(val, schema, path=[]):
     ... ds = JObj({'a': int, 'b': str, 'c': JList(int)})
     ... _validate_json(d, ds)
     True
+    >>> _validate_json({'num': 1}, JObj({'num': JUnion([int,float])}))
+    True
+    >>> _validate_json({'num': 'a'}, JObj({'num': JUnion([int,float])}))
+    False
     """
     if isinstance(schema, JAny):
         if not schema.none and val is None:
@@ -514,6 +527,14 @@ def _validate_json(val, schema, path=[]):
     if isinstance(schema, JTuple):
         return all(_validate_json(val[i], typ, path + [i])
                    for i, typ in enumerate(schema.elem_typs))
+    if isinstance(schema, JUnion):
+        for typ in schema.elem_typs:
+            try:
+                if _validate_json(val, typ, path):
+                    return True
+            except _ValError:
+                pass
+        return False
     if isinstance(schema, JObj):
         if val is None and schema.none:
             return True
@@ -537,7 +558,7 @@ def _validate_json(val, schema, path=[]):
                 for key in unknown_keys
             )
         return result
-    if schema in [str, int, float, bool, six.string_types]:
+    if schema in [str, int, float, bool]:
         return _validate_json(val, JLeaf(schema), path)
 
     assert False, str(path)

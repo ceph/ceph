@@ -3,21 +3,23 @@ import os
 from typing import List, Any, Tuple, Dict
 
 from orchestrator import DaemonDescription
-from cephadm.services.cephadmservice import CephadmService
+from ceph.deployment.service_spec import AlertManagerSpec
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 
 logger = logging.getLogger(__name__)
+
 
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
 
-    def create(self, daemon_id, host):
-        # type: (str, str) -> str
-        return self.mgr._create_daemon('grafana', daemon_id, host)
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        return self.mgr._create_daemon(daemon_spec)
 
-    def generate_config(self):
-        # type: () -> Tuple[Dict[str, Any], List[str]]
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         deps = []  # type: List[str]
 
         prom_services = []  # type: List[str]
@@ -59,7 +61,10 @@ class GrafanaService(CephadmService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon
-        return daemon_descrs[-1]
+        if daemon_descrs:
+            return daemon_descrs[-1]
+        # if empty list provided, return empty Daemon Desc
+        return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         # TODO: signed cert
@@ -73,19 +78,29 @@ class GrafanaService(CephadmService):
             service_url
         )
 
+
 class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
 
-    def create(self, daemon_id, host) -> str:
-        return self.mgr._create_daemon('alertmanager', daemon_id, host)
+    def create(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
+        return self.mgr._create_daemon(daemon_spec)
 
-    def generate_config(self):
-        # type: () -> Tuple[Dict[str, Any], List[str]]
-        deps = [] # type: List[str]
+    def generate_config(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps: List[str] = []
+        default_webhook_urls: List[str] = []
+
+        if daemon_spec.spec:
+            user_data = daemon_spec.spec.user_data
+            if 'default_webhook_urls' in user_data and isinstance(
+                    user_data['default_webhook_urls'], list):
+                default_webhook_urls.extend(user_data['default_webhook_urls'])
 
         # dashboard(s)
-        dashboard_urls = []
+        dashboard_urls: List[str] = []
         mgr_map = self.mgr.get('mgr_map')
         port = None
         proto = None  # http: or https:
@@ -109,7 +124,8 @@ class AlertmanagerService(CephadmService):
                                                   port))
 
         context = {
-            'dashboard_urls': dashboard_urls
+            'dashboard_urls': dashboard_urls,
+            'default_webhook_urls': default_webhook_urls
         }
         yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
 
@@ -128,7 +144,10 @@ class AlertmanagerService(CephadmService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?
-        return daemon_descrs[0]
+        if daemon_descrs:
+            return daemon_descrs[0]
+        # if empty list provided, return empty Daemon Desc
+        return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
@@ -145,11 +164,12 @@ class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
 
-    def create(self, daemon_id, host) -> str:
-        return self.mgr._create_daemon('prometheus', daemon_id, host)
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        return self.mgr._create_daemon(daemon_spec)
 
-    def generate_config(self):
-        # type: () -> Tuple[Dict[str, Any], List[str]]
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         deps = []  # type: List[str]
 
         # scrape mgrs
@@ -217,7 +237,10 @@ class PrometheusService(CephadmService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?
-        return daemon_descrs[0]
+        if daemon_descrs:
+            return daemon_descrs[0]
+        # if empty list provided, return empty Daemon Desc
+        return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
@@ -230,11 +253,14 @@ class PrometheusService(CephadmService):
             service_url
         )
 
+
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
 
-    def create(self, daemon_id, host) -> str:
-        return self.mgr._create_daemon('node-exporter', daemon_id, host)
+    def create(self, daemon_spec: CephadmDaemonSpec) -> str:
+        assert self.TYPE == daemon_spec.daemon_type
+        return self.mgr._create_daemon(daemon_spec)
 
-    def generate_config(self) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
         return {}, []

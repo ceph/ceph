@@ -655,7 +655,7 @@ public:
 
   static string status_oid(const rgw_zone_id& source_zone, const rgw_bucket_sync_pair_info& bs);
   static string obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
-                               const rgw_zone_id& source_zone, const rgw_obj& obj); /* specific source obj sync status,
+                               const rgw_zone_id& source_zone, const rgw::sal::RGWObject* obj); /* specific source obj sync status,
                                                                                        can be used by sync modules */
 
   // implements DoutPrefixProvider

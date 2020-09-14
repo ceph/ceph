@@ -240,13 +240,15 @@ class FuseMount(CephFSMount):
 
         self.mounted = True
 
-        # Now that we're mounted, set permissions so that the rest of the test will have
-        # unrestricted access to the filesystem mount.
+        # Now that we're mounted, set permissions so that the rest of the test
+        # will have unrestricted access to the filesystem mount.
         for retry in range(10):
             try:
                 stderr = StringIO()
-                self.client_remote.run(args=['sudo', 'chmod', '1777', self.mountpoint],
-                                       timeout=(15*60), cwd=self.test_dir, stderr=stderr)
+                self.client_remote.run(args=['sudo', 'chmod', '1777',
+                                             self.mountpoint],
+                                       timeout=(15*60), cwd=self.test_dir,
+                                       stderr=stderr, omit_sudo=False)
                 break
             except run.CommandFailedError:
                 stderr = stderr.getvalue()

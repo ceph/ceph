@@ -5,6 +5,7 @@ add_executable(ceph_test_cls_rbd
 target_link_libraries(ceph_test_cls_rbd
   cls_rbd_client
   cls_lock_client
+  libneorados
   librados
   global
   ${UNITTEST_LIBS}

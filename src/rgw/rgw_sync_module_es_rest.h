@@ -11,7 +11,8 @@ class RGWRESTMgr_MDSearch_S3 : public RGWRESTMgr {
 public:
   explicit RGWRESTMgr_MDSearch_S3() {}
 
-  RGWHandler_REST *get_handler(struct req_state* s,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };

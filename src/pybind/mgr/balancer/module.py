@@ -470,7 +470,7 @@ class Module(MgrModule):
             return (0, '', '')
         elif command['prefix'] == 'balancer pool ls':
             pool_ids = self.get_module_option('pool_ids')
-            if pool_ids is '':
+            if pool_ids == '':
                 return (0, '', '')
             pool_ids = pool_ids.split(',')
             pool_ids = [int(p) for p in pool_ids]
@@ -496,7 +496,7 @@ class Module(MgrModule):
             to_add = [str(pool_id_by_name[p]) for p in raw_names if p in pool_id_by_name]
             existing = self.get_module_option('pool_ids')
             final = to_add
-            if existing is not '':
+            if existing != '':
                 existing = existing.split(',')
                 final = set(to_add) | set(existing)
             self.set_module_option('pool_ids', ','.join(final))
@@ -504,7 +504,7 @@ class Module(MgrModule):
         elif command['prefix'] == 'balancer pool rm':
             raw_names = command['pools']
             existing = self.get_module_option('pool_ids')
-            if existing is '': # for idempotence
+            if existing == '': # for idempotence
                 return (0, '', '')
             existing = existing.split(',')
             osdmap = self.get_osdmap()
@@ -664,7 +664,7 @@ class Module(MgrModule):
                 osdmap = self.get_osdmap()
                 allow = self.get_module_option('pool_ids')
                 final = []
-                if allow is not '':
+                if allow != '':
                     allow = allow.split(',')
                     valid = [str(p['pool']) for p in osdmap.dump().get('pools', [])]
                     final = set(allow) & set(valid)

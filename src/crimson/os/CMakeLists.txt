@@ -1,4 +1,4 @@
-add_library(crimson-os
+add_library(crimson-os STATIC
   futurized_store.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc)
 add_subdirectory(cyanstore)

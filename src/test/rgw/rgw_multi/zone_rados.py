@@ -1,10 +1,7 @@
 import logging
 from boto.s3.deletemarker import DeleteMarker
 
-try:
-    from itertools import izip_longest as zip_longest  # type: ignore
-except ImportError:
-    from itertools import zip_longest
+from itertools import zip_longest  # type: ignore
 
 from nose.tools import eq_ as eq
 

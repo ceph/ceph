@@ -11,7 +11,7 @@
 #include "common/TextTable.h"
 #include <algorithm>
 #include <iostream>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -20,6 +20,7 @@ namespace disk_usage {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+using namespace boost::placeholders;
 
 static int disk_usage_callback(uint64_t offset, size_t len, int exists,
                                void *arg) {

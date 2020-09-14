@@ -37,10 +37,13 @@ From within the `src/pybind/mgr/cephadm` directory.
 
    # vagrant up
 
-This will spawn three machines.
-mon0, mgr0, osd0
+This will spawn three machines by default.
+mon0, mgr0 and osd0 with 2 additional disks.
 
-NUM_DAEMONS can be used to increase the number of VMs created. (defaults to 1)
+You can change that by passing `MONS` (default: 1), `MGRS` (default: 1), `OSDS` (default: 1) and
+`DISKS` (default: 2) environment variables to overwrite the defaults. In order to not always have
+to set the environment variables you can now create as JSON see `./vagrant.config.example.json`
+for details.
 
 If will also come with the necessary packages preinstalled as well as your ~/.ssh/id_rsa.pub key
 injected. (to users root and vagrant; the cephadm-orchestrator currently connects as root)
@@ -48,7 +51,8 @@ injected. (to users root and vagrant; the cephadm-orchestrator currently connect
 
 2) Update the ssh-config
 
-The cephadm orchestrator needs to understand how to connect to the new node. Most likely the VM isn't reachable with the default settings used:
+The cephadm orchestrator needs to understand how to connect to the new node. Most likely the VM
+isn't reachable with the default settings used:
 
 ```
 Host *
@@ -82,12 +86,32 @@ Add the newly created host(s) to the inventory.
 
 4) Verify the inventory
 
+You should see the hostname in the list.
+
 ::
 
    # ceph orch host ls
 
 
-You should see the hostname in the list.
+5) Verify the devices
+
+To verify all disks are set and in good shape look if all devices have been spawned
+and can be found
+
+::
+
+   # ceph orch device ls
+
+
+6) Make a snapshot of all your VMs!
+
+To not go the long way again the next time snapshot your VMs in order to revert them back
+if they are dirty.
+
+In `this repository <https://github.com/Devp00l/vagrant-helper-scripts>`_ you can find two
+scripts that will help you with doing a snapshot and reverting it, without having to manual
+snapshot and revert each VM individually.
+
 
 Understanding ``AsyncCompletion``
 =================================

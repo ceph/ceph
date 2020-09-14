@@ -1,7 +1,8 @@
 # type: ignore
 from __future__ import absolute_import
 
-
+import json
+import logging
 import os
 
 if 'UNITTEST' in os.environ:
@@ -19,24 +20,58 @@ if 'UNITTEST' in os.environ:
     M_classes = set()
 
     class M(object):
-        def _ceph_get_store(self, k):
-            return self._store.get(k, None)
+        """
+        Note that:
 
-        def _ceph_set_store(self, k, v):
-            if v is None:
+        * self.set_store() populates self._store
+        * self.set_module_option() populates self._store[module_name]
+        * self.get(thing) comes from self._store['_ceph_get' + thing]
+
+        """
+
+        def mock_store_get(self, kind, key, default):
+            if not hasattr(self, '_store'):
+                self._store = {}
+            return self._store.get(f'mock_store/{kind}/{key}', default)
+
+        def mock_store_set(self, kind, key, value):
+            if not hasattr(self, '_store'):
+                self._store = {}
+            k = f'mock_store/{kind}/{key}'
+            if value is None:
                 if k in self._store:
                     del self._store[k]
             else:
-                self._store[k] = v
+                self._store[k] = value
 
-        def _ceph_get_store_prefix(self, prefix):
+        def mock_store_preifx(self, kind, prefix):
+            if not hasattr(self, '_store'):
+                self._store = {}
+            full_prefix = f'mock_store/{kind}/{prefix}'
+            kind_len = len(f'mock_store/{kind}/')
             return {
-                k: v for k, v in self._store.items()
-                if k.startswith(prefix)
+                k[kind_len:]: v for k, v in self._store.items()
+                if k.startswith(full_prefix)
             }
 
-        def _ceph_get_module_option(self, module, key, localized_prefix: None):
-            val =  self._ceph_get_store(f'{module}/{key}')
+        def _ceph_get_store(self, k):
+            return self.mock_store_get('store', k, None)
+
+        def _ceph_set_store(self, k, v):
+            self.mock_store_set('store', k, v)
+
+        def _ceph_get_store_prefix(self, prefix):
+            return self.mock_store_preifx('store', prefix)
+
+        def _ceph_get_module_option(self, module, key, localized_prefix= None):
+            try:
+                _, val, _ = self.check_mon_command({
+                    'prefix': 'config get',
+                    'who': 'mgr',
+                    'key': f'mgr/{module}/{key}'
+                })
+            except FileNotFoundError:
+                val = None
             mo = [o for o in self.MODULE_OPTIONS if o['name'] == key]
             if len(mo) == 1 and val is not None:
                 cls = {
@@ -49,10 +84,70 @@ if 'UNITTEST' in os.environ:
             return val
 
         def _ceph_set_module_option(self, module, key, val):
-            return self._ceph_set_store(f'{module}/{key}', val)
+            _, _, _ = self.check_mon_command({
+                'prefix': 'config set',
+                'who': 'mgr',
+                'name': f'mgr/{module}/{key}',
+                'value': val
+            })
+            return val
+
+        def _ceph_get(self, data_name):
+            return self.mock_store_get('_ceph_get', data_name, mock.MagicMock())
+
+        def _ceph_send_command(self, res, svc_type, svc_id, command, tag):
+            cmd = json.loads(command)
+
+            # Mocking the config store is handy sometimes:
+            def config_get():
+                who = cmd['who'].split('.')
+                whos = ['global'] + ['.'.join(who[:i+1]) for i in range(len(who))]
+                for attepmt in reversed(whos):
+                    val = self.mock_store_get('config', f'{attepmt}/{cmd["key"]}', None)
+                    if val is not None:
+                        return val
+                return None
+
+            def config_set():
+                self.mock_store_set('config', f'{cmd["who"]}/{cmd["name"]}', cmd['value'])
+                return ''
+
+            def config_dump():
+                r = []
+                for prefix, value in self.mock_store_preifx('config', '').items():
+                    section, name = prefix.split('/', 1)
+                    r.append({
+                        'name': name,
+                        'section': section,
+                        'value': value
+                    })
+                return json.dumps(r)
+
+            outb = ''
+            if cmd['prefix'] == 'config get':
+                outb = config_get()
+            elif cmd['prefix'] == 'config set':
+                outb = config_set()
+            elif cmd['prefix'] == 'config dump':
+                outb = config_dump()
+            elif hasattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_')):
+                a = getattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_'))
+                outb = a(cmd)
+
+            res.complete(0, outb, '')
+
+        @property
+        def _logger(self):
+            return logging.getLogger(__name__)
+
+        @_logger.setter
+        def _logger(self, _):
+            pass
 
         def __init__(self, *args):
-            self._store = {}
+            if not hasattr(self, '_store'):
+                self._store = {}
+
 
             if self.__class__.__name__ not in M_classes:
                 # call those only once. 
@@ -62,7 +157,6 @@ if 'UNITTEST' in os.environ:
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
-            self._ceph_get = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
             self._ceph_get_context = mock.MagicMock()
             self._ceph_register_client = mock.MagicMock()
@@ -92,7 +186,10 @@ if 'UNITTEST' in os.environ:
 
 
         sys.modules.update({
-            'rados': mock.Mock(Error=MockRadosError, OSError=MockRadosError),
+            'rados': mock.MagicMock(Error=MockRadosError, OSError=MockRadosError),
             'rbd': mock.Mock(),
             'cephfs': mock.Mock(),
         })
+
+    # Unconditionally mock the rados objects when we're imported
+    mock_ceph_modules()  # type: ignore

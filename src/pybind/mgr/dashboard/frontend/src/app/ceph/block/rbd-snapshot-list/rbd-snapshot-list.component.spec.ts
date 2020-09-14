@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
@@ -13,7 +12,6 @@ import { Subject, throwError as observableThrowError } from 'rxjs';
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -71,8 +69,7 @@ describe('RbdSnapshotListComponent', () => {
       ],
       providers: [
         { provide: AuthStorageService, useValue: fakeAuthStorageService },
-        TaskListService,
-        i18nProviders
+        TaskListService
       ]
     },
     [CriticalConfirmationModalComponent]
@@ -98,7 +95,6 @@ describe('RbdSnapshotListComponent', () => {
 
     beforeEach(() => {
       fixture.detectChanges();
-      const i18n = TestBed.inject(I18n);
       const modalService = TestBed.inject(ModalService);
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
@@ -116,7 +112,6 @@ describe('RbdSnapshotListComponent', () => {
         notificationService,
         null,
         null,
-        i18n,
         actionLabelsI18n
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
@@ -210,7 +205,6 @@ describe('RbdSnapshotListComponent', () => {
           null,
           null,
           null,
-          TestBed.inject(I18n),
           TestBed.inject(ActionLabelsI18n)
         );
         ref.componentInstance.onSubmit = new Subject();

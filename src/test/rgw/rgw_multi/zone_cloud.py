@@ -11,12 +11,8 @@ import datetime
 import re
 
 from nose.tools import eq_ as eq
-try:
-    from itertools import izip_longest as zip_longest  # type: ignore
-except ImportError:
-    from itertools import zip_longest
-
-from six.moves.urllib.parse import urlparse
+from itertools import zip_longest # type: ignore
+from urllib.parse import urlparse
 
 from .multisite import *
 from .tools import *

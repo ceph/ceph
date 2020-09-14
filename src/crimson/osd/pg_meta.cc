@@ -32,13 +32,14 @@ namespace {
     return std::make_optional(std::move(value));
   }
 }
+
 seastar::future<epoch_t> PGMeta::get_epoch()
 {
   return store->open_collection(coll_t{pgid}).then([this](auto ch) {
     return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
                                 {string{infover_key},
-                                 string{epoch_key}}).then(
+                                 string{epoch_key}}).safe_then(
     [](auto&& values) {
       {
         // sanity check
@@ -53,6 +54,9 @@ seastar::future<epoch_t> PGMeta::get_epoch()
         assert(epoch);
         return seastar::make_ready_future<epoch_t>(*epoch);
       }
+    },
+    FuturizedStore::read_errorator::assert_all{
+      "PGMeta::get_epoch: unable to read pgmeta"
     });
   });
 }
@@ -66,7 +70,7 @@ seastar::future<std::tuple<pg_info_t, PastIntervals>> PGMeta::load()
                                  string{info_key},
                                  string{biginfo_key},
                                  string{fastinfo_key}});
-  }).then([](auto&& values) {
+  }).safe_then([](auto&& values) {
     {
       // sanity check
       auto infover = find_value<__u8>(values, infover_key);
@@ -97,5 +101,8 @@ seastar::future<std::tuple<pg_info_t, PastIntervals>> PGMeta::load()
     }
     return seastar::make_ready_future<std::tuple<pg_info_t, PastIntervals>>(
       std::make_tuple(std::move(info), std::move(past_intervals)));
+  },
+  FuturizedStore::read_errorator::assert_all{
+    "PGMeta::load: unable to read pgmeta"
   });
 }

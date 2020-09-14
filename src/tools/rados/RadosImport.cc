@@ -194,6 +194,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
   }
 
   ioctx.set_namespace(ob.hoid.hobj.get_namespace());
+  ioctx.locator_set_key(ob.hoid.hobj.get_key());
 
   string msg("Write");
   skipping = false;

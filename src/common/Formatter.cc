@@ -85,9 +85,10 @@ Formatter *Formatter::create(std::string_view type,
 			     std::string_view default_type,
 			     std::string_view fallback)
 {
-  std::string mytype(type);
-  if (mytype == "")
+  std::string_view mytype(type);
+  if (mytype.empty()) {
     mytype = default_type;
+  }
 
   if (mytype == "json")
     return new JSONFormatter(false);

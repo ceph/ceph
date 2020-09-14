@@ -353,7 +353,6 @@ public:
           map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
-  int remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, optional_yield y,
            map<string, bufferlist>& attrs, std::string *err_msg = NULL);
   int chown(RGWBucketAdminOpState& op_state, const string& marker,

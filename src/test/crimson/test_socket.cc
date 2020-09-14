@@ -153,6 +153,8 @@ class SocketFactory {
           });
         })
       );
+    }).then_unpack([] {
+      return seastar::now();
     }).then([psf] {
       return psf->server_connected.get_future();
     }).finally([psf] {
@@ -190,6 +192,8 @@ class SocketFactory {
           });
         })
       );
+    }).then_unpack([] {
+      return seastar::now();
     }).finally([cleanup = std::move(owner)] {});
   }
 };
@@ -332,7 +336,9 @@ class Connection {
       return seastar::when_all_succeed(
         conn.dispatch_write(round, force_shut),
         conn.dispatch_read(round, force_shut)
-      );
+      ).then_unpack([] {
+        return seastar::now();
+      });
     });
   }
 
@@ -352,7 +358,9 @@ class Connection {
             return seastar::now();
           }
         })
-      );
+      ).then_unpack([] {
+        return seastar::now();
+      });
     });
   }
 };

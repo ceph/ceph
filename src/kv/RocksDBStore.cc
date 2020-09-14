@@ -5,6 +5,13 @@
 #include <map>
 #include <string>
 #include <memory>
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -320,13 +327,17 @@ int RocksDBStore::create_db_dir()
     unique_ptr<rocksdb::Directory> dir;
     env->NewDirectory(path, &dir);
   } else {
-    int r = ::mkdir(path.c_str(), 0755);
-    if (r < 0)
-      r = -errno;
-    if (r < 0 && r != -EEXIST) {
-      derr << __func__ << " failed to create " << path << ": " << cpp_strerror(r)
-	   << dendl;
-      return r;
+    if (!fs::exists(path)) {
+      std::error_code ec;
+      if (!fs::create_directory(path, ec)) {
+	derr << __func__ << " failed to create " << path
+	     << ": " << ec.message() << dendl;
+	return -ec.value();
+      }
+      fs::permissions(path,
+		      fs::perms::owner_all |
+		      fs::perms::group_read | fs::perms::group_exec |
+		      fs::perms::others_read | fs::perms::others_exec);
     }
   }
   return 0;
@@ -603,7 +614,6 @@ bool RocksDBStore::parse_sharding_def(const std::string_view text_def_in,
       column_def = column_def.substr(0, eqpos);
     }
 
-    std::string_view shards_def;
     size_t bpos = column_def.find('(');
     if (bpos != std::string_view::npos) {
       name = column_def.substr(0, bpos);
@@ -947,8 +957,6 @@ int RocksDBStore::do_open(ostream &out,
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
-  plb.add_u64_counter(l_rocksdb_txns, "submit_transaction", "Submit transactions");
-  plb.add_u64_counter(l_rocksdb_txns_sync, "submit_transaction_sync", "Submit transactions sync");
   plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
@@ -1298,7 +1306,6 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
   int result = submit_common(woptions, t);
 
   utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_txns);
   logger->tinc(l_rocksdb_submit_latency, lat);
   
   return result;
@@ -1314,7 +1321,6 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   int result = submit_common(woptions, t);
   
   utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_txns_sync);
   logger->tinc(l_rocksdb_submit_sync_latency, lat);
 
   return result;

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/neorados/RADOS.hpp"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockSafeTimer.h"
 #include "librbd/io/AsyncOperation.h"
@@ -33,6 +34,15 @@ void MockImageCtx::wait_for_async_ops() {
   ctx.wait();
 
   async_op.finish_op();
+}
+
+IOContext MockImageCtx::get_data_io_context() {
+  auto ctx = std::make_shared<neorados::IOContext>(
+    data_ctx.get_id(), data_ctx.get_namespace());
+  ctx->read_snap(snap_id);
+  ctx->write_snap_context(
+    {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+  return ctx;
 }
 
 } // namespace librbd

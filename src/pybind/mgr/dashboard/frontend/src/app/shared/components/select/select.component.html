@@ -11,7 +11,7 @@
              (keyup)="$event.keyCode == 13 ? selectOption() : updateFilter()"
              class="form-control text-center" />
       <ng-container *ngFor="let error of Object.keys(messages.customValidations)">
-        <span class="invalid-feedback text-center"
+        <span class="invalid-feedback text-center d-block"
               *ngIf="form.showError('filter', formDir) && filter.hasError(error)">
           {{ messages.customValidations[error] }}
         </span>

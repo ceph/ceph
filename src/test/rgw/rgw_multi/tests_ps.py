@@ -1,13 +1,13 @@
 import logging
 import json
 import tempfile
-from six.moves import BaseHTTPServer
 import random
 import threading
 import subprocess
 import socket
 import time
 import os
+from http import server as http_server
 from random import randint
 from .tests import get_realm, \
     ZonegroupConns, \
@@ -54,7 +54,7 @@ def set_contents_from_string(key, content):
 # HTTP endpoint functions
 # multithreaded streaming server, based on: https://stackoverflow.com/questions/46210672/
 
-class HTTPPostHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class HTTPPostHandler(http_server.BaseHTTPRequestHandler):
     """HTTP POST hanler class storing the received events in its http server"""
     def do_POST(self):
         """implementation of POST handler"""
@@ -72,10 +72,10 @@ class HTTPPostHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.end_headers()
 
 
-class HTTPServerWithEvents(BaseHTTPServer.HTTPServer):
+class HTTPServerWithEvents(http_server.HTTPServer):
     """HTTP server used by the handler to store events"""
     def __init__(self, addr, handler, worker_id):
-        BaseHTTPServer.HTTPServer.__init__(self, addr, handler, False)
+        http_server.HTTPServer.__init__(self, addr, handler, False)
         self.worker_id = worker_id
         self.events = []
 

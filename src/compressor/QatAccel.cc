@@ -113,7 +113,7 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
     if (rc == QZ_DATA_ERROR) {
       if (!joint) {
         tmp.append(cur_ptr.c_str(), cur_ptr.length());
-        p.advance(remaining);
+        p += remaining;
         joint = true;
       }
       read_more = true;
@@ -133,7 +133,7 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
       read_more = false;
     }
 
-    p.advance(remaining);
+    p += remaining;
     remaining -= len;
     dst.append(ptr, 0, out_len);
   }

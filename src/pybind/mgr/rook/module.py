@@ -493,8 +493,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
-            all_hosts = [h.hostname for h in all_hosts_]
-            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
+            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts_)
 
             assert len(matching_hosts) == 1
 

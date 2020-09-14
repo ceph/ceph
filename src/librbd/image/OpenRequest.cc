@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/ConfigWatcher.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/PluginRegistry.h"
 #include "librbd/Utils.h"
@@ -483,6 +484,7 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
       m_image_ctx->data_ctx.close();
     } else {
       m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+      m_image_ctx->rebuild_data_io_context();
     }
   } else {
     data_pool_id = m_image_ctx->md_ctx.get_id();
@@ -499,6 +501,9 @@ void OpenRequest<I>::send_refresh() {
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->config_watcher = ConfigWatcher<I>::create(*m_image_ctx);
+  m_image_ctx->config_watcher->init();
 
   using klass = OpenRequest<I>;
   RefreshRequest<I> *req = RefreshRequest<I>::create(
@@ -544,6 +549,8 @@ Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to initialize plugin registry: "
                << cpp_strerror(*result) << dendl;
+    send_close_image(*result);
+    return nullptr;
   }
 
   return send_init_cache(result);

@@ -126,7 +126,7 @@ class RGWCORSConfiguration
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)
 
-static inline int validate_name_string(string& o) {
+static inline int validate_name_string(std::string_view o) {
   if (o.length() == 0)
     return -1;
   if (o.find_first_of("*") != o.find_last_of("*"))

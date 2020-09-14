@@ -8,9 +8,9 @@ CephFS namespaces can be exported over NFS protocol using the
 Requirements
 ============
 
--  Latest Ceph file system with mgr and dashboard enabled
--  'nfs-ganesha', 'nfs-ganesha-ceph' and nfs-ganesha-rados-grace packages
-   (version 2.7.6-2 and above)
+-  Latest Ceph file system with mgr enabled
+-  'nfs-ganesha', 'nfs-ganesha-ceph', 'nfs-ganesha-rados-grace' and
+   'nfs-ganesha-rados-urls' packages (version 3.3 and above)
 
 Create NFS Ganesha Cluster
 ==========================
@@ -63,6 +63,25 @@ Show NFS Ganesha Cluster Information
 
 This displays ip and port of deployed cluster.
 
+Set Customized Ganesha Configuration
+====================================
+
+.. code:: bash
+
+    $ ceph nfs cluster config set <clusterid> -i <config_file>
+
+With this the nfs cluster will use the specified config and it will have
+precedence over default config blocks.
+
+Reset Ganesha Configuration
+===========================
+
+.. code:: bash
+
+    $ ceph nfs cluster config reset <clusterid>
+
+This removes the user defined configuration.
+
 Create CephFS Export
 ====================
 
@@ -104,11 +123,24 @@ It displays export block for a cluster based on pseudo root name (binding).
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================
 
-.. code:: bash
+1) Using cephadm
 
-    $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
+    .. code:: bash
 
-NFS: It denotes the number of NFS-Ganesha clusters to be created.
+        $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d --cephadm
+
+    It can deploy only single ganesha daemon with vstart on default ganesha port.
+
+2) Using test orchestrator
+
+    .. code:: bash
+
+       $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
+
+    It can deploy multiple ganesha daemons on random port. But this requires
+    ganesha packages to be installed.
+
+NFS: It is the number of NFS-Ganesha clusters to be created.
 
 Mount
 =====

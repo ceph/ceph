@@ -118,11 +118,11 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
-#define RBD_SNAP_CREATE_SKIP_QUIESCE		1 << 0
-#define RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR	1 << 1
+#define RBD_SNAP_CREATE_SKIP_QUIESCE		(1 << 0)
+#define RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR	(1 << 1)
 
-#define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
-#define RBD_SNAP_REMOVE_FLATTEN		1 << 1
+#define RBD_SNAP_REMOVE_UNPROTECT	(1 << 0)
+#define RBD_SNAP_REMOVE_FLATTEN		(1 << 1)
 #define RBD_SNAP_REMOVE_FORCE		(RBD_SNAP_REMOVE_UNPROTECT | RBD_SNAP_REMOVE_FLATTEN)
 
 /**
@@ -328,6 +328,7 @@ typedef enum {
   RBD_IMAGE_MIGRATION_STATE_PREPARED = 2,
   RBD_IMAGE_MIGRATION_STATE_EXECUTING = 3,
   RBD_IMAGE_MIGRATION_STATE_EXECUTED = 4,
+  RBD_IMAGE_MIGRATION_STATE_ABORTING = 5,
 } rbd_image_migration_state_t;
 
 typedef struct {
@@ -1109,7 +1110,7 @@ CEPH_RBD_API ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
                                    const char *buf, size_t data_len,
                                    int op_flags);
 CEPH_RBD_API ssize_t rbd_write_zeroes(rbd_image_t image, uint64_t ofs,
-                                      uint64_t len, int zero_flags,
+                                      size_t len, int zero_flags,
                                       int op_flags);
 CEPH_RBD_API ssize_t rbd_compare_and_write(rbd_image_t image, uint64_t ofs,
                                            size_t len, const char *cmp_buf,

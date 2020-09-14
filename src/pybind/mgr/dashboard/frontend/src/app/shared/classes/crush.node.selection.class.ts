@@ -1,6 +1,6 @@
 import { AbstractControl } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { CrushNode } from '../models/crush-node';
 

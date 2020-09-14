@@ -36,12 +36,94 @@ using std::stringstream;
 using ceph::bufferlist;
 using ceph::Formatter;
 
+void ClusterInfo::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(client_name, bl);
+  encode(cluster_name, bl);
+  encode(fs_name, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ClusterInfo::decode(ceph::buffer::list::const_iterator &iter) {
+  DECODE_START(1, iter);
+  decode(client_name, iter);
+  decode(cluster_name, iter);
+  decode(fs_name, iter);
+  DECODE_FINISH(iter);
+}
+
+void ClusterInfo::dump(ceph::Formatter *f) const {
+  f->dump_string("client_name", client_name);
+  f->dump_string("cluster_name", cluster_name);
+  f->dump_string("fs_name", fs_name);
+}
+
+void ClusterInfo::print(std::ostream& out) const {
+  out << "[client_name=" << client_name << ", cluster_name=" << cluster_name
+      << ", fs_name=" << fs_name << "]" << std::endl;
+}
+
+void Peer::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(uuid, bl);
+  encode(remote, bl);
+  ENCODE_FINISH(bl);
+}
+
+void Peer::decode(ceph::buffer::list::const_iterator &iter) {
+  DECODE_START(1, iter);
+  decode(uuid, iter);
+  decode(remote, iter);
+  DECODE_FINISH(iter);
+}
+
+void Peer::dump(ceph::Formatter *f) const {
+  f->open_object_section(uuid);
+  f->dump_object("remote", remote);
+  f->close_section();
+}
+
+void Peer::print(std::ostream& out) const {
+  out << "[uuid=" << uuid << ", remote=" << remote << "]" << std::endl;
+}
+
+void MirrorInfo::encode(ceph::buffer::list &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(mirrored, bl);
+  encode(peers, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorInfo::decode(ceph::buffer::list::const_iterator &iter) {
+  DECODE_START(1, iter);
+  decode(mirrored, iter);
+  decode(peers, iter);
+  DECODE_FINISH(iter);
+}
+
+void MirrorInfo::dump(ceph::Formatter *f) const {
+  f->open_object_section("peers");
+  for (auto &peer : peers) {
+    peer.dump(f);
+  }
+  f->close_section(); // peers
+}
+
+void MirrorInfo::print(std::ostream& out) const {
+  out << "[peers=" << peers << "]" << std::endl;
+}
+
 void Filesystem::dump(Formatter *f) const
 {
   f->open_object_section("mdsmap");
   mds_map.dump(f);
   f->close_section();
   f->dump_int("id", fscid);
+  if (mirror_info.is_mirrored()) {
+    f->open_object_section("mirror_info");
+    mirror_info.dump(f);
+    f->close_section(); // mirror_info
+  }
 }
 
 void FSMap::dump(Formatter *f) const
@@ -501,187 +583,29 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::const_iterator& p)
 {
-  // The highest MDSMap encoding version before we changed the
-  // MDSMonitor to store an FSMap instead of an MDSMap was
-  // 5, so anything older than 6 is decoded as an MDSMap,
-  // and anything newer is decoded as an FSMap.
-  DECODE_START_LEGACY_COMPAT_LEN_16(8, 4, 4, p);
-  if (struct_v < 6) {
-    // Because the mon used to store an MDSMap where we now
-    // store an FSMap, FSMap knows how to decode the legacy
-    // MDSMap format (it never needs to encode it though).
-    MDSMap legacy_mds_map;
-
-    // Decoding an MDSMap (upgrade)
-    decode(epoch, p);
-    decode(legacy_mds_map.flags, p);
-    decode(legacy_mds_map.last_failure, p);
-    decode(legacy_mds_map.root, p);
-    decode(legacy_mds_map.session_timeout, p);
-    decode(legacy_mds_map.session_autoclose, p);
-    decode(legacy_mds_map.max_file_size, p);
-    decode(legacy_mds_map.max_mds, p);
-    decode(legacy_mds_map.mds_info, p);
-    if (struct_v < 3) {
-      __u32 n;
-      decode(n, p);
-      while (n--) {
-        __u32 m;
-        decode(m, p);
-        legacy_mds_map.data_pools.push_back(m);
-      }
-      __s32 s;
-      decode(s, p);
-      legacy_mds_map.cas_pool = s;
-    } else {
-      decode(legacy_mds_map.data_pools, p);
-      decode(legacy_mds_map.cas_pool, p);
-    }
-
-    // kclient ignores everything from here
-    __u16 ev = 1;
-    if (struct_v >= 2)
-      decode(ev, p);
-    if (ev >= 3)
-      decode(legacy_mds_map.compat, p);
-    else
-      legacy_mds_map.compat = MDSMap::get_compat_set_base();
-    if (ev < 5) {
-      __u32 n;
-      decode(n, p);
-      legacy_mds_map.metadata_pool = n;
-    } else {
-      decode(legacy_mds_map.metadata_pool, p);
-    }
-    decode(legacy_mds_map.created, p);
-    decode(legacy_mds_map.modified, p);
-    decode(legacy_mds_map.tableserver, p);
-    decode(legacy_mds_map.in, p);
-    std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
-    decode(inc, p);
-    decode(legacy_mds_map.up, p);
-    decode(legacy_mds_map.failed, p);
-    decode(legacy_mds_map.stopped, p);
-    if (ev >= 4)
-      decode(legacy_mds_map.last_failure_osd_epoch, p);
-    if (ev >= 6) {
-      if (ev < 10) {
-	// previously this was a bool about snaps, not a flag map
-	bool flag;
-	decode(flag, p);
-	legacy_mds_map.ever_allowed_features = flag ?
-	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
-	decode(flag, p);
-	legacy_mds_map.explicitly_allowed_features = flag ?
-	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      } else {
-	decode(legacy_mds_map.ever_allowed_features, p);
-	decode(legacy_mds_map.explicitly_allowed_features, p);
-      }
-    } else {
-      legacy_mds_map.ever_allowed_features = 0;
-      legacy_mds_map.explicitly_allowed_features = 0;
-    }
-    if (ev >= 7)
-      decode(legacy_mds_map.inline_data_enabled, p);
-
-    if (ev >= 8) {
-      ceph_assert(struct_v >= 5);
-      decode(legacy_mds_map.enabled, p);
-      decode(legacy_mds_map.fs_name, p);
-    } else {
-      legacy_mds_map.fs_name = "default";
-      if (epoch > 1) {
-        // If an MDS has ever been started, epoch will be greater than 1,
-        // assume filesystem is enabled.
-        legacy_mds_map.enabled = true;
-      } else {
-        // Upgrading from a cluster that never used an MDS, switch off
-        // filesystem until it's explicitly enabled.
-        legacy_mds_map.enabled = false;
-      }
-    }
-
-    if (ev >= 9) {
-      decode(legacy_mds_map.damaged, p);
-    }
-
-    // We're upgrading, populate filesystems from the legacy fields
+  DECODE_START(7, p);
+  if (struct_v <= 6)
+    ceph_abort("detected old mdsmap in mon stores");
+  decode(epoch, p);
+  decode(next_filesystem_id, p);
+  decode(legacy_client_fscid, p);
+  decode(compat, p);
+  decode(enable_multiple, p);
+  {
+    std::vector<Filesystem::ref> v;
+    decode(v, p);
     filesystems.clear();
-    standby_daemons.clear();
-    standby_epochs.clear();
-    mds_roles.clear();
-    compat = legacy_mds_map.compat;
-    enable_multiple = false;
-
-    // Synthesise a Filesystem from legacy_mds_map, if enabled
-    if (legacy_mds_map.enabled) {
-      // Construct a Filesystem from the legacy MDSMap
-      auto migrate_fs = Filesystem::create();
-      migrate_fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
-      migrate_fs->mds_map = legacy_mds_map;
-      migrate_fs->mds_map.epoch = epoch;
-      filesystems[migrate_fs->fscid] = migrate_fs;
-
-      // List of GIDs that had invalid states
-      std::set<mds_gid_t> drop_gids;
-
-      // Construct mds_roles, standby_daemons, and remove
-      // standbys from the MDSMap in the Filesystem.
-      for (const auto& [gid, info] : migrate_fs->mds_map.mds_info) {
-        if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-          /* drop any legacy standby-replay daemons */
-          drop_gids.insert(gid);
-        } else if (info.rank == MDS_RANK_NONE) {
-          if (info.state != MDSMap::STATE_STANDBY) {
-            // Old MDSMaps can have down:dne here, which
-            // is invalid in an FSMap (#17837)
-            drop_gids.insert(gid);
-          } else {
-            insert(info); // into standby_daemons
-          }
-        } else {
-          mds_roles[gid] = migrate_fs->fscid;
-        }
-      }
-      for (const auto &p : standby_daemons) {
-        // Erase from this Filesystem's MDSMap, because it has
-        // been copied into FSMap::Standby_daemons above
-        migrate_fs->mds_map.mds_info.erase(p.first);
-      }
-      for (const auto &gid : drop_gids) {
-        // Throw away all info for this MDS because it was identified
-        // as having invalid state above.
-        migrate_fs->mds_map.mds_info.erase(gid);
-      }
-
-      legacy_client_fscid = migrate_fs->fscid;
-    } else {
-      legacy_client_fscid = FS_CLUSTER_ID_NONE;
-    }
-  } else {
-    decode(epoch, p);
-    decode(next_filesystem_id, p);
-    decode(legacy_client_fscid, p);
-    decode(compat, p);
-    decode(enable_multiple, p);
-    {
-      std::vector<Filesystem::ref> v;
-      decode(v, p);
-      filesystems.clear();
-      for (auto& ref : v) {
-        auto em = filesystems.emplace(std::piecewise_construct, std::forward_as_tuple(ref->fscid), std::forward_as_tuple(std::move(ref)));
-        ceph_assert(em.second);
-      }
-    }
-    decode(mds_roles, p);
-    decode(standby_daemons, p);
-    decode(standby_epochs, p);
-    if (struct_v >= 7) {
-      decode(ever_enabled_multiple, p);
+    for (auto& ref : v) {
+      auto em = filesystems.emplace(std::piecewise_construct, std::forward_as_tuple(ref->fscid), std::forward_as_tuple(std::move(ref)));
+      ceph_assert(em.second);
     }
   }
-
+  decode(mds_roles, p);
+  decode(standby_daemons, p);
+  decode(standby_epochs, p);
+  if (struct_v >= 7) {
+    decode(ever_enabled_multiple, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -694,22 +618,26 @@ void FSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
 
 void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(fscid, bl);
   bufferlist mdsmap_bl;
   mds_map.encode(mdsmap_bl, features);
   encode(mdsmap_bl, bl);
+  encode(mirror_info, bl);
   ENCODE_FINISH(bl);
 }
 
 void Filesystem::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(fscid, p);
   bufferlist mdsmap_bl;
   decode(mdsmap_bl, p);
   auto mdsmap_bl_iter = mdsmap_bl.cbegin();
   mds_map.decode(mdsmap_bl_iter);
+  if (struct_v >= 2) {
+    decode(mirror_info, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -740,6 +668,9 @@ void Filesystem::print(std::ostream &out) const
   out << "Filesystem '" << mds_map.fs_name
       << "' (" << fscid << ")" << std::endl;
   mds_map.print(out);
+  if (mirror_info.is_mirrored()) {
+    mirror_info.print(out);
+  }
 }
 
 bool FSMap::is_any_degraded() const
@@ -975,7 +906,7 @@ void FSMap::assign_standby_replay(
   fs->mds_map.epoch = epoch;
 }
 
-void FSMap::erase(mds_gid_t who, epoch_t blacklist_epoch)
+void FSMap::erase(mds_gid_t who, epoch_t blocklist_epoch)
 {
   if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
     standby_daemons.erase(who);
@@ -998,20 +929,20 @@ void FSMap::erase(mds_gid_t who, epoch_t blacklist_epoch)
       fs->mds_map.up.erase(info.rank);
     }
     fs->mds_map.mds_info.erase(who);
-    fs->mds_map.last_failure_osd_epoch = blacklist_epoch;
+    fs->mds_map.last_failure_osd_epoch = blocklist_epoch;
     fs->mds_map.epoch = epoch;
   }
 
   mds_roles.erase(who);
 }
 
-void FSMap::damaged(mds_gid_t who, epoch_t blacklist_epoch)
+void FSMap::damaged(mds_gid_t who, epoch_t blocklist_epoch)
 {
   ceph_assert(mds_roles.at(who) != FS_CLUSTER_ID_NONE);
   auto fs = filesystems.at(mds_roles.at(who));
   mds_rank_t rank = fs->mds_map.mds_info[who].rank;
 
-  erase(who, blacklist_epoch);
+  erase(who, blocklist_epoch);
   fs->mds_map.failed.erase(rank);
   fs->mds_map.damaged.insert(rank);
 

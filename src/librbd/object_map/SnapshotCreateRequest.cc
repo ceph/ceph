@@ -121,7 +121,7 @@ bool SnapshotCreateRequest::send_add_snapshot() {
   m_state = STATE_ADD_SNAPSHOT;
 
   librados::ObjectWriteOperation op;
-  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   cls_client::object_map_snap_add(&op);
 
   librados::AioCompletion *rados_completion = create_callback_completion();

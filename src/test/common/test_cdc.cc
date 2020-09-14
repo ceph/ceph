@@ -40,7 +40,7 @@ public:
 
   CDCTest() {
     auto plugin = GetParam();
-    cdc = std::move(CDC::create(plugin, 18));
+    cdc = CDC::create(plugin, 18);
   }
 };
 

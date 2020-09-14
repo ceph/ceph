@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { JoinPipe } from '../../../../shared/pipes/join.pipe';
 import { NotificationService } from '../../../../shared/services/notification.service';
@@ -34,8 +34,7 @@ describe('OsdScrubModalComponent', () => {
       NgbActiveModal,
       JoinPipe,
       { provide: OsdService, useValue: fakeService },
-      { provide: NotificationService, useValue: fakeService },
-      i18nProviders
+      { provide: NotificationService, useValue: fakeService }
     ]
   });
 

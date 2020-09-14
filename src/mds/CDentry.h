@@ -30,7 +30,7 @@
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
 #include "SimpleLock.h"
-#include "LocalLock.h"
+#include "LocalLockC.h"
 #include "ScrubHeader.h"
 
 class CInode;
@@ -237,7 +237,7 @@ public:
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t projected_dirv, LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
 
   void mark_new();
@@ -344,7 +344,7 @@ public:
   static LockType versionlock_type;
 
   SimpleLock lock; // FIXME referenced containers not in mempool
-  LocalLock versionlock; // FIXME referenced containers not in mempool
+  LocalLockC versionlock; // FIXME referenced containers not in mempool
 
   mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;

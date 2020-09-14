@@ -66,7 +66,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   int print_nodes(ceph::Formatter *f);
 
   /**
-   * Return true if a blacklist was done (i.e. OSD propose needed)
+   * Return true if a blocklist was done (i.e. OSD propose needed)
    */
   bool fail_mds_gid(FSMap &fsmap, mds_gid_t gid);
 

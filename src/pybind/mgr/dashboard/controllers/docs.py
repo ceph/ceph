@@ -254,6 +254,7 @@ class Docs(BaseController):
 
     @classmethod
     def _gen_paths(cls, all_endpoints):
+        # pylint: disable=R0912
         method_order = ['get', 'post', 'put', 'delete']
         paths = {}
         for path, endpoints in sorted(list(ENDPOINT_MAP.items()),
@@ -304,6 +305,13 @@ class Docs(BaseController):
                             'content': {
                                 'application/json': {
                                     'schema': cls._gen_schema_for_content(body_params)}}}
+
+                    if endpoint.query_params:
+                        query_params = cls._add_param_info(endpoint.query_params, p_info)
+                        methods[method.lower()]['requestBody'] = {
+                            'content': {
+                                'application/json': {
+                                    'schema': cls._gen_schema_for_content(query_params)}}}
 
                 if endpoint.is_secure:
                     methods[method.lower()]['security'] = [{'jwt': []}]

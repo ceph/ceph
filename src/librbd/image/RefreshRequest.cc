@@ -124,13 +124,29 @@ Context *RefreshRequest<I>::handle_get_migration_header(int *result) {
   case cls::rbd::MIGRATION_HEADER_TYPE_DST:
     ldout(cct, 1) << this << " " << __func__ << ": migrating from: "
                   << m_migration_spec << dendl;
-    if (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
-        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING &&
-        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTED) {
+    switch (m_migration_spec.state) {
+    case cls::rbd::MIGRATION_STATE_PREPARING:
       ldout(cct, 5) << this << " " << __func__ << ": current migration state: "
                     << m_migration_spec.state << ", retrying" << dendl;
       send();
       return nullptr;
+    case cls::rbd::MIGRATION_STATE_PREPARED:
+    case cls::rbd::MIGRATION_STATE_EXECUTING:
+    case cls::rbd::MIGRATION_STATE_EXECUTED:
+      break;
+    case cls::rbd::MIGRATION_STATE_ABORTING:
+      if (!m_read_only) {
+        lderr(cct) << this << " " << __func__ << ": migration is being aborted"
+                   << dendl;
+        *result = -EROFS;
+        return m_on_finish;
+      }
+      break;
+    default:
+      lderr(cct) << this << " " << __func__ << ": migration is in an "
+                 << "unexpected state" << dendl;
+      *result = -EINVAL;
+      return m_on_finish;
     }
     break;
   default:
@@ -295,7 +311,7 @@ Context *RefreshRequest<I>::handle_v1_get_locks(int *result) {
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
     if (*result == 0) {
-      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+      m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
   if (*result < 0) {
@@ -389,11 +405,11 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   }
 
   if (*result >= 0) {
-    ClsLockType lock_type = LOCK_NONE;
+    ClsLockType lock_type = ClsLockType::NONE;
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
     if (*result == 0) {
-      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+      m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
 
@@ -1306,8 +1322,14 @@ void RefreshRequest<I>::apply() {
     m_image_ctx.operations_disabled = (
       (m_op_features & ~RBD_OPERATION_FEATURES_ALL) != 0ULL);
     m_image_ctx.group_spec = m_group_spec;
-    if (get_migration_info(&m_image_ctx.parent_md,
-                           &m_image_ctx.migration_info)) {
+
+    bool migration_info_valid;
+    int r = get_migration_info(&m_image_ctx.parent_md,
+                               &m_image_ctx.migration_info,
+                               &migration_info_valid);
+    ceph_assert(r == 0); // validated in refresh parent step
+
+    if (migration_info_valid) {
       for (auto it : m_image_ctx.migration_info.snap_map) {
         migration_reverse_snap_seq[it.second.front()] = it.first;
       }
@@ -1318,7 +1340,7 @@ void RefreshRequest<I>::apply() {
 
     librados::Rados rados(m_image_ctx.md_ctx);
     int8_t require_osd_release;
-    int r = rados.get_min_compatible_osd(&require_osd_release);
+    r = rados.get_min_compatible_osd(&require_osd_release);
     if (r == 0 && require_osd_release >= CEPH_RELEASE_OCTOPUS) {
       m_image_ctx.enable_sparse_copyup = true;
     }
@@ -1385,6 +1407,7 @@ void RefreshRequest<I>::apply() {
   if (m_image_ctx.data_ctx.is_valid()) {
     m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
                                                         m_image_ctx.snaps);
+    m_image_ctx.rebuild_data_io_context();
   }
 
   // handle dynamically enabled / disabled features
@@ -1421,7 +1444,13 @@ template <typename I>
 int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
                                        ParentImageInfo *parent_md,
                                        MigrationInfo *migration_info) {
-  if (get_migration_info(parent_md, migration_info)) {
+  bool migration_info_valid;
+  int r = get_migration_info(parent_md, migration_info, &migration_info_valid);
+  if (r < 0) {
+    return r;
+  }
+
+  if (migration_info_valid) {
     return 0;
   } else if (snap_id == CEPH_NOSNAP) {
     *parent_md = m_parent_md;
@@ -1440,17 +1469,24 @@ int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
 }
 
 template <typename I>
-bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
-                                           MigrationInfo *migration_info) {
+int RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
+                                          MigrationInfo *migration_info,
+                                          bool* migration_info_valid) {
+  CephContext *cct = m_image_ctx.cct;
   if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST ||
       (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
-       m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING)) {
-    ceph_assert(m_migration_spec.header_type ==
-                    cls::rbd::MIGRATION_HEADER_TYPE_SRC ||
-                m_migration_spec.pool_id == -1 ||
-                m_migration_spec.state == cls::rbd::MIGRATION_STATE_EXECUTED);
+       m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING &&
+       m_migration_spec.state != cls::rbd::MIGRATION_STATE_ABORTING)) {
+    if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_SRC &&
+        m_migration_spec.pool_id != -1 &&
+        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTED) {
+      lderr(cct) << this << " " << __func__ << ": invalid migration spec"
+                 << dendl;
+      return -EINVAL;
+    }
 
-    return false;
+    *migration_info_valid = false;
+    return 0;
   }
 
   parent_md->spec.pool_id = m_migration_spec.pool_id;
@@ -1487,10 +1523,11 @@ bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
   *migration_info = {m_migration_spec.pool_id, m_migration_spec.pool_namespace,
                      m_migration_spec.image_name, m_migration_spec.image_id, {},
                      overlap, m_migration_spec.flatten};
+  *migration_info_valid = true;
 
   deep_copy::util::compute_snap_map(m_image_ctx.cct, 0, CEPH_NOSNAP, {},
                                     snap_seqs, &migration_info->snap_map);
-  return true;
+  return 0;
 }
 
 } // namespace image

@@ -8,7 +8,7 @@
 #include "common/Finisher.h"
 #include "test/librados_test_stub/TestCluster.h"
 #include "test/librados_test_stub/TestRadosClient.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/function.hpp>
 #include "include/ceph_assert.h"
 
@@ -394,7 +394,7 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
   maybe_remove_watcher(watcher);
 }
 
-void TestWatchNotify::blacklist(uint32_t nonce) {
+void TestWatchNotify::blocklist(uint32_t nonce) {
   std::lock_guard locker{m_lock};
 
   for (auto file_it = m_file_watchers.begin();

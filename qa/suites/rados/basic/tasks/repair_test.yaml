@@ -1,7 +1,7 @@
 overrides:
   ceph:
     wait-for-scrub: false
-    log-whitelist:
+    log-ignorelist:
       - candidate had a stat error
       - candidate had a read error
       - deep-scrub 0 missing, 1 inconsistent objects

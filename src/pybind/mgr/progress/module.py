@@ -530,6 +530,10 @@ class Module(MgrModule):
             ))
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
         elif notify_type == "pg_summary":
+            # if there are no events we will skip this here to avoid 
+            # expensive get calls
+            if len(self._events) == 0:
+                return
             data = self.get("pg_stats")
             ready = self.get("pg_ready")
             for ev_id in list(self._events):

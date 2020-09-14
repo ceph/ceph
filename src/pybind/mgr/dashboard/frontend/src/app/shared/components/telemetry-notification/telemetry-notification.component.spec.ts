@@ -5,7 +5,7 @@ import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { UserFormModel } from '../../../core/auth/user-form/user-form.model';
 import { MgrModuleService } from '../../api/mgr-module.service';
 import { UserService } from '../../api/user.service';
@@ -59,7 +59,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   configureTestBed({
     declarations: [TelemetryNotificationComponent],
     imports: [NgbAlertModule, HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
-    providers: [MgrModuleService, UserService, i18nProviders]
+    providers: [MgrModuleService, UserService]
   });
 
   beforeEach(() => {

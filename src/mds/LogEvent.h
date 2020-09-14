@@ -31,7 +31,7 @@
 #define EVENT_SESSIONS     12
 
 #define EVENT_UPDATE       20
-#define EVENT_SLAVEUPDATE  21
+#define EVENT_PEERUPDATE   21
 #define EVENT_OPEN         22
 #define EVENT_COMMITTED    23
 #define EVENT_PURGED       24

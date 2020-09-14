@@ -77,7 +77,8 @@ public:
   RGWRESTMgr_Config() = default;
   ~RGWRESTMgr_Config() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *,
+			       struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Config(auth_registry);

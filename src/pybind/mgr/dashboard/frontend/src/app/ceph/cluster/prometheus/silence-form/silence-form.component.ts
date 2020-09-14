@@ -2,9 +2,8 @@ import { Component } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import * as moment from 'moment';
+import _ from 'lodash';
+import moment from 'moment';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import {
@@ -46,23 +45,23 @@ export class SilenceFormComponent {
   id: string;
 
   action: string;
-  resource = this.i18n('silence');
+  resource = $localize`silence`;
 
   matchers: AlertmanagerSilenceMatcher[] = [];
   matcherMatch: AlertmanagerSilenceMatcherMatch = undefined;
   matcherConfig = [
     {
-      tooltip: this.i18n('Attribute name'),
+      tooltip: $localize`Attribute name`,
       icon: this.icons.paragraph,
       attribute: 'name'
     },
     {
-      tooltip: this.i18n('Value'),
+      tooltip: $localize`Value`,
       icon: this.icons.terminal,
       attribute: 'value'
     },
     {
-      tooltip: this.i18n('Regular expression'),
+      tooltip: $localize`Regular expression`,
       icon: this.icons.magic,
       attribute: 'isRegex'
     }
@@ -71,7 +70,6 @@ export class SilenceFormComponent {
   datetimeFormat = 'YYYY-MM-DD HH:mm';
 
   constructor(
-    private i18n: I18n,
     private router: Router,
     private authStorageService: AuthStorageService,
     private formBuilder: CdFormBuilder,
@@ -143,7 +141,10 @@ export class SilenceFormComponent {
   }
 
   private updateDate(updateStartDate?: boolean) {
-    const date = moment(this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt')).toDate();
+    const date = moment(
+      this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt'),
+      this.datetimeFormat
+    ).toDate();
     const next = this.timeDiff.calculateDate(date, this.form.getValue('duration'), updateStartDate);
     if (next) {
       const nextDate = moment(next).format(this.datetimeFormat);
@@ -164,8 +165,8 @@ export class SilenceFormComponent {
   }
 
   private onDateChange(updateStartDate?: boolean) {
-    const startsAt = moment(this.form.getValue('startsAt'));
-    const endsAt = moment(this.form.getValue('endsAt'));
+    const startsAt = moment(this.form.getValue('startsAt'), this.datetimeFormat);
+    const endsAt = moment(this.form.getValue('endsAt'), this.datetimeFormat);
     if (startsAt.isBefore(endsAt)) {
       this.updateDuration();
     } else {
@@ -174,8 +175,8 @@ export class SilenceFormComponent {
   }
 
   private updateDuration() {
-    const startsAt = moment(this.form.getValue('startsAt')).toDate();
-    const endsAt = moment(this.form.getValue('endsAt')).toDate();
+    const startsAt = moment(this.form.getValue('startsAt'), this.datetimeFormat).toDate();
+    const endsAt = moment(this.form.getValue('endsAt'), this.datetimeFormat).toDate();
     this.form.silentSet('duration', this.timeDiff.calculateDuration(startsAt, endsAt));
   }
 
@@ -203,9 +204,7 @@ export class SilenceFormComponent {
         this.rules = [];
         this.notificationService.show(
           NotificationType.info,
-          this.i18n(
-            'Please add your Prometheus host to the dashboard configuration and refresh the page'
-          ),
+          $localize`Please add your Prometheus host to the dashboard configuration and refresh the page`,
           undefined,
           undefined,
           'Prometheus'

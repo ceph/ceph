@@ -1,6 +1,8 @@
 >=16.0.0
 --------
 
+* The ``ceph df`` command now lists the number of pgs in each pool.
+
 * Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
   by default. However, if enabled, user now have to pass the
   ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
@@ -16,6 +18,12 @@
   the balancer off using the ``ceph balancer off`` command. In earlier versions,
   the balancer was included in the ``always_on_modules`` list, but needed to be
   turned on explicitly using the ``ceph balancer on`` command.
+
+* MGR: the "cloud" mode of the diskprediction module is not supported anymore
+  and the ``ceph-mgr-diskprediction-cloud`` manager module has been removed. This
+  is because the external cloud service run by ProphetStor is no longer accessible
+  and there is no immediate replacement for it at this time. The "local" prediction
+  mode will continue to be supported.
 
 * Cephadm: There were a lot of small usability improvements and bug fixes:
 
@@ -73,10 +81,6 @@
   or use any other convenient way to restore the schedule after the
   upgrade.
 
-
->=16.0.0
----------
-
 * librbd: The shared, read-only parent cache has been moved to a separate librbd
   plugin. If the parent cache was previously in-use, you must also instruct
   librbd to load the plugin by adding the following to your configuration::
@@ -86,3 +90,50 @@
 * Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
   If any OSD has repaired more than this many I/O errors in stored data a
  ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
+
+* Introduce commands that manipulate required client features of a file system::
+
+    ceph fs required_client_features <fs name> add <feature>
+    ceph fs required_client_features <fs name> rm <feature>
+    ceph fs feature ls
+
+* OSD: A new configuration option ``osd_compact_on_start`` has been added which triggers
+  an OSD compaction on start. Setting this option to ``true`` and restarting an OSD
+  will result in an offline compaction of the OSD prior to booting.
+
+* Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
+  scheduled scrubs of the type disabled will be aborted. All user initiated
+  scrubs are NOT interrupted.
+
+* Alpine build related script, documentation and test have been removed since
+  the most updated APKBUILD script of Ceph is already included by Alpine Linux's
+  aports repository.
+
+* fs: Names of new FSs, volumes, subvolumes and subvolume groups can only
+  contain alphanumeric and ``-``, ``_`` and ``.`` characters. Some commands
+  or CephX credentials may not work with old FSs with non-conformant names.
+
+* `blacklist` has been replaced with `blocklist` throughout.  The following commands have changed:
+
+  - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
+  - ``ceph <tell|daemon> osd.<NNN> dump_blacklist`` is now ``ceph <tell|daemon> osd.<NNN> dump_blocklist``
+
+* The following config options have changed:
+
+  - ``mon osd blacklist default expire`` is now ``mon osd blocklist default expire``
+  - ``mon mds blacklist interval`` is now ``mon mds blocklist interval``
+  - ``mon mgr blacklist interval`` is now ''mon mgr blocklist interval``
+  - ``rbd blacklist on break lock`` is now ``rbd blocklist on break lock``
+  - ``rbd blacklist expire seconds`` is now ``rbd blocklist expire seconds``
+  - ``mds session blacklist on timeout`` is now ``mds session blocklist on timeout``
+  - ``mds session blacklist on evict`` is now ``mds session blocklist on evict``
+
+* The following librados API calls have changed:
+
+  - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
+  - ``rados.blacklist_add`` is now ``rados.blocklist_add`` in the C++ API.
+
+* The JSON output for the following commands now shows ``blocklist`` instead of ``blacklist``:
+
+  - ``ceph osd dump``
+  - ``ceph <tell|daemon> osd.<N> dump_blocklist``

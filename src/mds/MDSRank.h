@@ -336,7 +336,7 @@ class MDSRank {
       return map_targets.count(rank);
     }
 
-    bool evict_client(int64_t session_id, bool wait, bool blacklist,
+    bool evict_client(int64_t session_id, bool wait, bool blocklist,
                       std::ostream& ss, Context *on_killed=nullptr);
     int config_client(int64_t session_id, bool remove,
 		      const std::string& option, const std::string& value,
@@ -546,6 +546,7 @@ class MDSRank {
     int dispatch_depth = 0;
 
     ceph::heartbeat_handle_d *hb = nullptr;  // Heartbeat for threads using mds_lock
+    double heartbeat_grace;
 
     map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
@@ -581,6 +582,8 @@ class MDSRank {
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
 private:
+    bool send_status = true;
+
     // "task" string that gets displayed in ceph status
     inline static const std::string SCRUB_STATUS_KEY = "scrub status";
 
@@ -661,7 +664,7 @@ public:
   const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
-  void dump_sessions(const SessionFilter &filter, Formatter *f) const;
+  void dump_sessions(const SessionFilter &filter, Formatter *f, bool cap_dump=false) const;
   void evict_clients(const SessionFilter &filter,
 		     std::function<void(int,const std::string&,bufferlist&)> on_finish);
 

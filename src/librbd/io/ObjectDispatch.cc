@@ -3,9 +3,9 @@
 
 #include "librbd/io/ObjectDispatch.h"
 #include "common/dout.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -28,25 +28,23 @@ void ObjectDispatch<I>::shut_down(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  m_image_ctx->op_work_queue->queue(on_finish, 0);
+  m_image_ctx->asio_engine->post(on_finish, 0);
 }
 
 template <typename I>
 bool ObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, ExtentMap* extent_map,
+    uint64_t object_no, const Extents &extents, librados::snap_t snap_id,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, Extents* extent_map, uint64_t* version,
     int* object_dispatch_flags, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
-                 << object_off << "~" << object_len << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << extents << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  auto req = new ObjectReadRequest<I>(m_image_ctx, object_no, object_off,
-                                      object_len, snap_id, op_flags,
-                                      parent_trace, read_data, extent_map,
-                                      on_dispatched);
+  auto req = new ObjectReadRequest<I>(m_image_ctx, object_no, extents, snap_id,
+                                      op_flags, parent_trace, read_data,
+                                      extent_map, version, on_dispatched);
   req->send();
   return true;
 }
@@ -73,7 +71,8 @@ bool ObjectDispatch<I>::discard(
 template <typename I>
 bool ObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    const ::SnapContext &snapc, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -84,6 +83,7 @@ bool ObjectDispatch<I>::write(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   auto req = new ObjectWriteRequest<I>(m_image_ctx, object_no, object_off,
                                        std::move(data), snapc, op_flags,
+                                       write_flags, assert_version,
                                        parent_trace, on_dispatched);
   req->send();
   return true;

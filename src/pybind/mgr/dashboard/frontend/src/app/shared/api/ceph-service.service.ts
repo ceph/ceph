@@ -24,4 +24,26 @@ export class CephServiceService {
   getDaemons(serviceName?: string): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.url}/${serviceName}/daemons`);
   }
+
+  create(serviceSpec: { [key: string]: any }) {
+    const serviceName = serviceSpec['service_id']
+      ? `${serviceSpec['service_type']}.${serviceSpec['service_id']}`
+      : serviceSpec['service_type'];
+    return this.http.post(
+      this.url,
+      {
+        service_name: serviceName,
+        service_spec: serviceSpec
+      },
+      { observe: 'response' }
+    );
+  }
+
+  delete(serviceName: string) {
+    return this.http.delete(`${this.url}/${serviceName}`, { observe: 'response' });
+  }
+
+  getKnownTypes(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.url}/known_types`);
+  }
 }

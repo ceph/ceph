@@ -69,7 +69,7 @@ void locker_info_t::generate_test_instances(std::list<locker_info_t*>& o)
 
 void lock_info_t::dump(ceph::Formatter *f) const
 {
-  f->dump_int("lock_type", lock_type);
+  f->dump_int("lock_type", static_cast<int>(lock_type));
   f->dump_string("tag", tag);
   f->open_array_section("lockers");
   for (auto &i : lockers) {
@@ -91,7 +91,7 @@ void lock_info_t::generate_test_instances(std::list<lock_info_t *>& o)
   generate_test_addr(info.addr, 1, 2);
   info.description = "description";
   i->lockers[id] = info;
-  i->lock_type = LOCK_EXCLUSIVE;
+  i->lock_type = ClsLockType::EXCLUSIVE;
   i->tag = "tag";
   o.push_back(i);
   o.push_back(new lock_info_t);

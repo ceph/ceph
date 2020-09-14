@@ -1,20 +1,10 @@
-import { TestBed } from '@angular/core/testing';
-
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { BooleanTextPipe } from './boolean-text.pipe';
 
 describe('BooleanTextPipe', () => {
   let pipe: BooleanTextPipe;
 
-  configureTestBed({
-    providers: [i18nProviders]
-  });
-
   beforeEach(() => {
-    const i18n = TestBed.inject(I18n);
-    pipe = new BooleanTextPipe(i18n);
+    pipe = new BooleanTextPipe();
   });
 
   it('create an instance', () => {

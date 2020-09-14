@@ -1,7 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -38,28 +37,24 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   icons = Icons;
 
-  constructor(
-    private rgwUserService: RgwUserService,
-    private modalService: ModalService,
-    private i18n: I18n
-  ) {}
+  constructor(private rgwUserService: RgwUserService, private modalService: ModalService) {}
 
   ngOnInit() {
     this.keysColumns = [
       {
-        name: this.i18n('Username'),
+        name: $localize`Username`,
         prop: 'username',
         flexGrow: 1
       },
       {
-        name: this.i18n('Type'),
+        name: $localize`Type`,
         prop: 'type',
         flexGrow: 1
       }
     ];
     this.maxBucketsMap = {
-      '-1': this.i18n('Disabled'),
-      0: this.i18n('Unlimited')
+      '-1': $localize`Disabled`,
+      0: $localize`Unlimited`
     };
   }
 

@@ -1,6 +1,8 @@
-=============================
- Storage Cluster Quick Start
-=============================
+.. _storage-cluster-quick-start:
+
+===========================
+Storage Cluster Quick Start
+===========================
 
 If you haven't completed your `Preflight Checklist`_, do that first. This
 **Quick Start** sets up a :term:`Ceph Storage Cluster` using ``ceph-deploy``

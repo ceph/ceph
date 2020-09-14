@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { NgControl } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
 import { FormatterService } from '../services/formatter.service';

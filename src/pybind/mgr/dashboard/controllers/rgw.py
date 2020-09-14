@@ -5,9 +5,8 @@ import logging
 import json
 
 import cherrypy
-
 from . import ApiController, BaseController, RESTController, Endpoint, \
-    ReadPermission
+    ReadPermission, ControllerDoc, EndpointDoc
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..security import Scope, Permission
@@ -18,22 +17,40 @@ from ..tools import json_str_to_object, str_to_bool
 
 try:
     from typing import List
-except ImportError:
+except ImportError:  # pragma: no cover
     pass  # Just for type checking
 
-logger = logging.getLogger('controllers.rgw')
+logger = logging.getLogger("controllers.rgw")
+
+RGW_SCHEMA = {
+    "available": (bool, "Is RGW available?"),
+    "message": (str, "Descriptions")
+}
+
+RGW_DAEMON_SCHEMA = {
+    "id": (str, "Daemon ID"),
+    "version": (str, "Ceph Version"),
+    "server_hostname": (str, "")
+}
+
+RGW_USER_SCHEMA = {
+    "list_of_users": ([str], "list of rgw users")
+}
 
 
 @ApiController('/rgw', Scope.RGW)
+@ControllerDoc("RGW Management API", "Rgw")
 class Rgw(BaseController):
     @Endpoint()
     @ReadPermission
+    @EndpointDoc("Display RGW Status",
+                 responses={200: RGW_SCHEMA})
     def status(self):
         status = {'available': False, 'message': None}
         try:
             instance = RgwClient.admin_instance()
             # Check if the service is online.
-            if not instance.is_service_online():
+            if not instance.is_service_online():  # pragma: no cover - no complexity there
                 msg = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
                 raise RequestException(msg)
             # Ensure the API user ID is known by the RGW.
@@ -42,7 +59,7 @@ class Rgw(BaseController):
                     instance.userid)
                 raise RequestException(msg)
             # Ensure the system flag is set for the API user ID.
-            if not instance.is_system_user():
+            if not instance.is_system_user():  # pragma: no cover - no complexity there
                 msg = 'The system flag is not set for user "{}".'.format(
                     instance.userid)
                 raise RequestException(msg)
@@ -53,7 +70,10 @@ class Rgw(BaseController):
 
 
 @ApiController('/rgw/daemon', Scope.RGW)
+@ControllerDoc("RGW Daemon Management API", "RgwDaemon")
 class RgwDaemon(RESTController):
+    @EndpointDoc("Display RGW Daemons",
+                 responses={200: RGW_DAEMON_SCHEMA})
     def list(self):
         # type: () -> List[dict]
         daemons = []
@@ -112,6 +132,7 @@ class RgwRESTController(RESTController):
 
 
 @ApiController('/rgw/site', Scope.RGW)
+@ControllerDoc("RGW Site Management API", "RgwSite")
 class RgwSite(RgwRESTController):
     def list(self, query=None):
         if query == 'placement-targets':
@@ -126,6 +147,7 @@ class RgwSite(RgwRESTController):
 
 
 @ApiController('/rgw/bucket', Scope.RGW)
+@ControllerDoc("RGW Bucket Management API", "RgwBucket")
 class RgwBucket(RgwRESTController):
     def _append_bid(self, bucket):
         """
@@ -229,7 +251,7 @@ class RgwBucket(RgwRESTController):
                                   lock_retention_period_days,
                                   lock_retention_period_years)
             return result
-        except RequestException as e:
+        except RequestException as e:  # pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')
 
     def set(self, bucket, bucket_id, uid, versioning_state=None,
@@ -274,6 +296,7 @@ class RgwBucket(RgwRESTController):
 
 
 @ApiController('/rgw/user', Scope.RGW)
+@ControllerDoc("RGW User Management API", "RgwUser")
 class RgwUser(RgwRESTController):
     def _append_uid(self, user):
         """
@@ -297,6 +320,8 @@ class RgwUser(RgwRESTController):
         return Scope.RGW in permissions and Permission.READ in permissions[Scope.RGW] \
             and len(set(edit_permissions).intersection(set(permissions[Scope.RGW]))) > 0
 
+    @EndpointDoc("Display RGW Users",
+                 responses={200: RGW_USER_SCHEMA})
     def list(self):
         # type: () -> List[str]
         users = []  # type: List[str]
@@ -380,7 +405,7 @@ class RgwUser(RgwRESTController):
                                              'Object Gateway'.format(uid))
             # Finally redirect request to the RGW proxy.
             return self.proxy('DELETE', 'user', {'uid': uid}, json_response=False)
-        except (DashboardException, RequestException) as e:
+        except (DashboardException, RequestException) as e:  # pragma: no cover
             raise DashboardException(e, component='rgw')
 
     # pylint: disable=redefined-builtin

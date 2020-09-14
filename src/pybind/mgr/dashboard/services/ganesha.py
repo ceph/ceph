@@ -147,7 +147,7 @@ class Ganesha(object):
                 continue
             if daemons[cluster_id][daemon_id] == 1:
                 reload_list.append((cluster_id, daemon_id))
-        OrchClient.instance().reload_service("nfs", reload_list)
+        OrchClient.instance().services.reload("nfs", reload_list)
 
     @classmethod
     def fsals_available(cls):

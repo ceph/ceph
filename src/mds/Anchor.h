@@ -36,15 +36,17 @@ public:
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<Anchor*>& ls);
-  bool operator==(const Anchor &r) {
+  bool operator==(const Anchor &r) const {
     return ino == r.ino && dirino == r.dirino &&
-    d_name == r.d_name && d_type == r.d_type;
+	   d_name == r.d_name && d_type == r.d_type &&
+	   frags == r.frags;
   }
 
   inodeno_t ino;	// anchored ino
   inodeno_t dirino;
   std::string d_name;
   __u8 d_type = 0;
+  std::set<frag_t> frags;
 
   int omap_idx = -1;	// stored in which omap object
 };

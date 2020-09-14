@@ -155,6 +155,14 @@ public:
     });
   }
 
+  seastar::future<> inject_args(const std::string& s) {
+    return do_change([s, this](ConfigValues& values) {
+      std::stringstream err;
+      if (get_config().injectargs(values, obs_mgr, s, &err)) {
+        throw std::invalid_argument(err.str());
+      }
+    });
+  }
   void show_config(ceph::Formatter* f) const;
 
   seastar::future<> parse_argv(std::vector<const char*>& argv) {
@@ -171,17 +179,7 @@ public:
     });
   }
 
-  seastar::future<> parse_config_files(const std::string& conf_files) {
-    return do_change([this, conf_files](ConfigValues& values) {
-      const char* conf_file_paths =
-	conf_files.empty() ? nullptr : conf_files.c_str();
-      get_config().parse_config_files(values,
-				      obs_mgr,
-				      conf_file_paths,
-				      &std::cerr,
-				      CODE_ENVIRONMENT_DAEMON);
-      });
-  }
+  seastar::future<> parse_config_files(const std::string& conf_files);
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;
 

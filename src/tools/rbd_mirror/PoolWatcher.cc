@@ -16,7 +16,6 @@
 #include "librbd/asio/ContextWQ.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
-#include <boost/bind.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -89,9 +88,9 @@ PoolWatcher<I>::~PoolWatcher() {
 }
 
 template <typename I>
-bool PoolWatcher<I>::is_blacklisted() const {
+bool PoolWatcher<I>::is_blocklisted() const {
   std::lock_guard locker{m_lock};
-  return m_blacklisted;
+  return m_blocklisted;
 }
 
 template <typename I>
@@ -171,18 +170,20 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
   Context *on_init_finish = nullptr;
   if (r >= 0) {
     refresh_images();
-  } else if (r == -EBLACKLISTED) {
-    dout(0) << "detected client is blacklisted" << dendl;
+  } else if (r == -EBLOCKLISTED) {
+    dout(0) << "detected client is blocklisted" << dendl;
 
     std::lock_guard locker{m_lock};
-    m_blacklisted = true;
+    m_blocklisted = true;
     std::swap(on_init_finish, m_on_init_finish);
   } else if (r == -ENOENT) {
     dout(5) << "mirroring directory does not exist" << dendl;
-    schedule_refresh_images(30);
+    {
+      std::lock_guard locker{m_lock};
+      std::swap(on_init_finish, m_on_init_finish);
+    }
 
-    std::lock_guard locker{m_lock};
-    std::swap(on_init_finish, m_on_init_finish);
+    schedule_refresh_images(30);
   } else {
     derr << "unexpected error registering mirroring directory watch: "
          << cpp_strerror(r) << dendl;
@@ -266,10 +267,10 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
       std::swap(on_init_finish, m_on_init_finish);
 
       schedule_listener();
-    } else if (r == -EBLACKLISTED) {
-      dout(0) << "detected client is blacklisted during image refresh" << dendl;
+    } else if (r == -EBLOCKLISTED) {
+      dout(0) << "detected client is blocklisted during image refresh" << dendl;
 
-      m_blacklisted = true;
+      m_blocklisted = true;
       std::swap(on_init_finish, m_on_init_finish);
     } else {
       retry_refresh = true;
@@ -314,11 +315,11 @@ template <typename I>
 void PoolWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
-    dout(0) << "detected client is blacklisted" << dendl;
+  if (r == -EBLOCKLISTED) {
+    dout(0) << "detected client is blocklisted" << dendl;
 
     std::lock_guard locker{m_lock};
-    m_blacklisted = true;
+    m_blocklisted = true;
     return;
   } else if (r == -ENOENT) {
     dout(5) << "mirroring directory deleted" << dendl;

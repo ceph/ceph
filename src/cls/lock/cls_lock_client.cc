@@ -213,52 +213,52 @@ namespace rados {
 
       void Lock::assert_locked_shared(ObjectOperation *op)
       {
-        assert_locked(op, name, LOCK_SHARED, cookie, tag);
+        assert_locked(op, name, ClsLockType::SHARED, cookie, tag);
       }
 
       void Lock::assert_locked_exclusive(ObjectOperation *op)
       {
-        assert_locked(op, name, LOCK_EXCLUSIVE, cookie, tag);
+        assert_locked(op, name, ClsLockType::EXCLUSIVE, cookie, tag);
       }
 
       void Lock::assert_locked_exclusive_ephemeral(ObjectOperation *op)
       {
-        assert_locked(op, name, LOCK_EXCLUSIVE_EPHEMERAL, cookie, tag);
+        assert_locked(op, name, ClsLockType::EXCLUSIVE_EPHEMERAL, cookie, tag);
       }
 
       void Lock::lock_shared(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_SHARED,
+        lock(op, name, ClsLockType::SHARED,
              cookie, tag, description, duration, flags);
       }
 
       int Lock::lock_shared(IoCtx *ioctx, const std::string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_SHARED,
+        return lock(ioctx, oid, name, ClsLockType::SHARED,
                     cookie, tag, description, duration, flags);
       }
 
       void Lock::lock_exclusive(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_EXCLUSIVE,
+        lock(op, name, ClsLockType::EXCLUSIVE,
              cookie, tag, description, duration, flags);
       }
 
       int Lock::lock_exclusive(IoCtx *ioctx, const std::string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_EXCLUSIVE,
+        return lock(ioctx, oid, name, ClsLockType::EXCLUSIVE,
                     cookie, tag, description, duration, flags);
       }
 
       void Lock::lock_exclusive_ephemeral(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_EXCLUSIVE_EPHEMERAL,
+        lock(op, name, ClsLockType::EXCLUSIVE_EPHEMERAL,
              cookie, tag, description, duration, flags);
       }
 
       int Lock::lock_exclusive_ephemeral(IoCtx *ioctx, const std::string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_EXCLUSIVE_EPHEMERAL,
+        return lock(ioctx, oid, name, ClsLockType::EXCLUSIVE_EPHEMERAL,
                     cookie, tag, description, duration, flags);
       }
 

@@ -4,9 +4,8 @@
                 *ngIf="available === false"
                 title="iSCSI Targets not available"
                 i18n-title>
-  <ng-container i18n>Please consult the <a href="{{docsUrl}}"
-       target="_blank">documentation</a>
-    on how to configure and enable the iSCSI Targets management functionality.</ng-container>
+  <ng-container i18n>Please consult the <cd-doc section="iscsi"></cd-doc> on
+    how to configure and enable the iSCSI Targets management functionality.</ng-container>
 
   <ng-container *ngIf="status">
     <br>

@@ -510,9 +510,8 @@ flushjournal_out:
   }
 
   {
-    auto from_release = require_osd_release;
     ostringstream err;
-    if (!can_upgrade_from(from_release, "require_osd_release", err)) {
+    if (!can_upgrade_from(require_osd_release, "require_osd_release", err)) {
       derr << err.str() << dendl;
       forker.exit(1);
     }

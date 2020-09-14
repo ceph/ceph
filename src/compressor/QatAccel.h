@@ -16,6 +16,7 @@
 #define CEPH_QATACCEL_H
 
 #include <qatzip.h>
+#include <boost/optional.hpp>
 #include "include/buffer.h"
 
 class QatAccel {

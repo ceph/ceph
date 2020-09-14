@@ -30,7 +30,7 @@ public:
     std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
                                                  CEPH_NOSNAP));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(oid, _, StrEq("lock"), StrEq("lock"), _, _, _))
+                exec(oid, _, StrEq("lock"), StrEq("lock"), _, _, _, _))
                   .WillOnce(Return(r));
   }
 
@@ -38,7 +38,8 @@ public:
     std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
                                                  CEPH_NOSNAP));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, StrEq("lock"), StrEq("get_info"), _, _, _));
+                               exec(oid, _, StrEq("lock"), StrEq("get_info"), _,
+                                    _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -64,7 +65,8 @@ public:
     std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
                                                  CEPH_NOSNAP));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, StrEq("lock"), StrEq("break_lock"), _, _, _));
+                               exec(oid, _, StrEq("lock"), StrEq("break_lock"),
+                                    _, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

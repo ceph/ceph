@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
 import { ComponentsModule } from '../components/components.module';
@@ -18,6 +18,7 @@ import { TableComponent } from './table/table.component';
     NgxDatatableModule,
     FormsModule,
     NgbDropdownModule,
+    NgbTooltipModule,
     PipesModule,
     ComponentsModule,
     RouterModule

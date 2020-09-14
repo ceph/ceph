@@ -130,6 +130,7 @@ try:
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.kernel_mount import KernelMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
+    from tasks.cephfs.mount import CephFSMount
     from tasks.mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
@@ -864,23 +865,32 @@ class LocalCephManager(CephManager):
         proc = self.controller.run(args=args, wait=False, stdout=StringIO())
         return proc
 
+    def run_cluster_cmd(self, **kwargs):
+        """
+        Run a Ceph command and the object representing the process for the
+        command.
+
+        Accepts arguments same as teuthology.orchestra.remote.run().
+        """
+        kwargs['args'] = [os.path.join(BIN_PREFIX,'ceph')]+list(kwargs['args'])
+        return self.controller.run(**kwargs)
+
     def raw_cluster_cmd(self, *args, **kwargs):
         """
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] +\
-                                   list(args), **kwargs, stdout=StringIO())
-        return proc.stdout.getvalue()
+        kwargs['args'] = args
+        if kwargs.get('stdout') is None:
+            kwargs['stdout'] = StringIO()
+        return self.run_cluster_cmd(**kwargs).stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         like raw_cluster_cmd but don't check status, just return rc
         """
-        kwargs['check_status'] = False
-        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
-                                        list(args), **kwargs)
-        return proc.exitstatus
+        kwargs['args'], kwargs['check_status'] = args, False
+        return self.run_cluster_cmd(**kwargs).exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
                      timeout=None, stdout=None):
@@ -1233,6 +1243,7 @@ def exec_test():
     global opt_use_ns
     opt_use_ns = False
     opt_brxnet= None
+    opt_verbose = True
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1261,13 +1272,15 @@ def exec_test():
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
                 sys.exit(-1)
             opt_brxnet=f.split('=')[1]
-            try:  
-                IP(opt_brxnet)  
+            try:
+                IP(opt_brxnet)
                 if IP(opt_brxnet).iptype() == 'PUBLIC':
                     raise RuntimeError('is public')
             except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
+        elif '--no-verbose' == f:
+            opt_verbose = False
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1286,6 +1299,8 @@ def exec_test():
 
     global remote
     remote = LocalRemote()
+
+    CephFSMount.cleanup_stale_netnses_and_bridge(remote)
 
     # Tolerate no MDSs or clients running at start
     ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],
@@ -1308,10 +1323,16 @@ def exec_test():
         vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
-        args = [os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d",
-                    "--nolockdep"]
+        args = [
+            os.path.join(SRC_PREFIX, "vstart.sh"),
+            "-n",
+            "--nolockdep",
+        ]
         if require_memstore:
             args.append("--memstore")
+
+        if opt_verbose:
+            args.append("-d")
 
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
@@ -1476,6 +1497,8 @@ def exec_test():
         resultclass=LoggingResult,
         verbosity=2,
         failfast=True).run(overall_suite)
+
+    CephFSMount.cleanup_stale_netnses_and_bridge(remote)
 
     if opt_teardown_cluster:
         teardown_cluster()

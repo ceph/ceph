@@ -1,7 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -26,7 +24,6 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
     private rgwDaemonService: RgwDaemonService,
     private authStorageService: AuthStorageService,
     private cephShortVersionPipe: CephShortVersionPipe,
-    private i18n: I18n,
     private rgwSiteService: RgwSiteService
   ) {
     super();
@@ -36,17 +33,17 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
     this.grafanaPermission = this.authStorageService.getPermissions().grafana;
     this.columns = [
       {
-        name: this.i18n('ID'),
+        name: $localize`ID`,
         prop: 'id',
         flexGrow: 2
       },
       {
-        name: this.i18n('Hostname'),
+        name: $localize`Hostname`,
         prop: 'server_hostname',
         flexGrow: 2
       },
       {
-        name: this.i18n('Version'),
+        name: $localize`Version`,
         prop: 'version',
         flexGrow: 1,
         pipe: this.cephShortVersionPipe

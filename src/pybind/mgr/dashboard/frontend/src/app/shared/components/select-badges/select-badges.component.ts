@@ -1,8 +1,6 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { ValidatorFn } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { Icons } from '../../../shared/enum/icons.enum';
 import { SelectMessages } from '../select/select-messages.model';
 import { SelectOption } from '../select/select-option.model';
@@ -19,7 +17,7 @@ export class SelectBadgesComponent {
   @Input()
   options: Array<SelectOption> = [];
   @Input()
-  messages = new SelectMessages({}, this.i18n);
+  messages = new SelectMessages({});
   @Input()
   selectionLimit: number;
   @Input()
@@ -34,6 +32,4 @@ export class SelectBadgesComponent {
   cdSelect: SelectComponent;
 
   icons = Icons;
-
-  constructor(private i18n: I18n) {}
 }

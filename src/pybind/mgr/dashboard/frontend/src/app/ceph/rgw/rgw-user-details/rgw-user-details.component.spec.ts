@@ -4,7 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders, TabHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, TabHelper } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
@@ -15,8 +15,7 @@ describe('RgwUserDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserDetailsComponent],
-    imports: [BrowserAnimationsModule, HttpClientTestingModule, SharedModule, NgbNavModule],
-    providers: [i18nProviders]
+    imports: [BrowserAnimationsModule, HttpClientTestingModule, SharedModule, NgbNavModule]
   });
 
   beforeEach(() => {

@@ -22,9 +22,10 @@ import {
   SortPropDir,
   TableColumnProp
 } from '@swimlane/ngx-datatable';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
+import { TableStatus } from '../../../shared/classes/table-status';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
@@ -144,6 +145,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input()
   extraFilterableColumns: CdTableColumn[] = [];
 
+  @Input()
+  status = new TableStatus();
+
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
@@ -204,7 +208,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   search = '';
   rows: any[] = [];
   loadingIndicator = true;
-  loadingError = false;
   paginationClasses = {
     pagerLeftArrow: Icons.leftArrowDouble,
     pagerRightArrow: Icons.rightArrowDouble,
@@ -594,10 +597,12 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   reloadData() {
     if (!this.updating) {
-      this.loadingError = false;
+      this.status = new TableStatus();
       const context = new CdTableFetchDataContext(() => {
         // Do we have to display the error panel?
-        this.loadingError = context.errorConfig.displayError;
+        if (!!context.errorConfig.displayError) {
+          this.status = new TableStatus('danger', $localize`Failed to load data.`);
+        }
         // Force data table to show no data?
         if (context.errorConfig.resetData) {
           this.data = [];
@@ -691,7 +696,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   onSelect($event: any) {
-    this.selection.selected = $event['selected'];
+    // Ensure we do not process DOM 'select' events.
+    // https://github.com/swimlane/ngx-datatable/issues/899
+    if (_.has($event, 'selected')) {
+      this.selection.selected = $event['selected'];
+    }
     this.updateSelection.emit(_.clone(this.selection));
   }
 

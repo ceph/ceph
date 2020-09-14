@@ -1,7 +1,3 @@
-<cd-alert-panel *ngIf="isStale"
-                type="warning"
-                size="slim"
-                i18n>The user list data might be stale. If needed, you can manually reload it.</cd-alert-panel>
 <cd-table #table
           [autoReload]="false"
           [data]="users"
@@ -12,7 +8,8 @@
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)"
           identifier="uid"
-          (fetchData)="getUserList($event)">
+          (fetchData)="getUserList($event)"
+          [status]="tableStatus">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
                     [selection]="selection"

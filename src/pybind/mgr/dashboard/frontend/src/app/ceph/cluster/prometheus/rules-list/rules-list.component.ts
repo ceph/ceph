@@ -1,14 +1,10 @@
 import { Component, Inject, OnInit } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { PrometheusRule } from '../../../../shared/models/prometheus-alerts';
-import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { DurationPipe } from '../../../../shared/pipes/duration.pipe';
 import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
-import { SummaryService } from '../../../../shared/services/summary.service';
 import { PrometheusListHelper } from '../prometheus-list-helper';
 
 @Component({
@@ -28,24 +24,21 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
   hideKeys = ['alerts', 'type'];
 
   constructor(
-    private i18n: I18n,
     public prometheusAlertService: PrometheusAlertService,
-    @Inject(PrometheusService) prometheusService: PrometheusService,
-    @Inject(SummaryService) summaryService: SummaryService,
-    @Inject(CephReleaseNamePipe) cephReleaseNamePipe: CephReleaseNamePipe
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
-    super(prometheusService, summaryService, cephReleaseNamePipe);
+    super(prometheusService);
   }
 
   ngOnInit() {
     super.ngOnInit();
     this.columns = [
-      { prop: 'name', name: this.i18n('Name') },
-      { prop: 'labels.severity', name: this.i18n('Severity') },
-      { prop: 'group', name: this.i18n('Group') },
-      { prop: 'duration', name: this.i18n('Duration'), pipe: new DurationPipe() },
-      { prop: 'query', name: this.i18n('Query'), isHidden: true },
-      { prop: 'annotations.description', name: this.i18n('Description') }
+      { prop: 'name', name: $localize`Name` },
+      { prop: 'labels.severity', name: $localize`Severity` },
+      { prop: 'group', name: $localize`Group` },
+      { prop: 'duration', name: $localize`Duration`, pipe: new DurationPipe() },
+      { prop: 'query', name: $localize`Query`, isHidden: true },
+      { prop: 'annotations.description', name: $localize`Description` }
     ];
   }
 }

@@ -27,15 +27,6 @@ BackgroundRecovery::BackgroundRecovery(
     scheduler_class(scheduler_class)
 {}
 
-seastar::future<bool> BackgroundRecovery::do_recovery()
-{
-  if (pg->has_reset_since(epoch_started))
-    return seastar::make_ready_future<bool>(false);
-  return with_blocking_future(
-    pg->get_recovery_handler()->start_recovery_ops(
-      crimson::common::local_conf()->osd_recovery_max_single_start));
-}
-
 void BackgroundRecovery::print(std::ostream &lhs) const
 {
   lhs << "BackgroundRecovery(" << pg->get_pgid() << ")";
@@ -97,4 +88,51 @@ void UrgentRecovery::dump_detail(Formatter *f) const
   f->close_section();
 }
 
+PglogBasedRecovery::PglogBasedRecovery(
+  Ref<PG> pg,
+  ShardServices &ss,
+  const epoch_t epoch_started)
+  : BackgroundRecovery(
+      std::move(pg),
+      ss,
+      epoch_started,
+      crimson::osd::scheduler::scheduler_class_t::background_recovery)
+{}
+
+seastar::future<bool> PglogBasedRecovery::do_recovery()
+{
+  if (pg->has_reset_since(epoch_started))
+    return seastar::make_ready_future<bool>(false);
+  return with_blocking_future(
+    pg->get_recovery_handler()->start_recovery_ops(
+      crimson::common::local_conf()->osd_recovery_max_single_start));
 }
+
+BackfillRecovery::BackfillRecoveryPipeline &BackfillRecovery::bp(PG &pg)
+{
+  return pg.backfill_pipeline;
+}
+
+seastar::future<bool> BackfillRecovery::do_recovery()
+{
+  logger().debug("{}", __func__);
+
+  if (pg->has_reset_since(epoch_started)) {
+    logger().debug("{}: pg got reset since epoch_started={}",
+                   __func__, epoch_started);
+    return seastar::make_ready_future<bool>(false);
+  }
+  // TODO: limits
+  return with_blocking_future(
+    // process_event() of our boost::statechart machine is non-reentrant.
+    // with the backfill_pipeline we protect it from a second entry from
+    // the implementation of BackfillListener.
+    // additionally, this stage serves to synchronize with PeeringEvent.
+    handle.enter(bp(*pg).process)
+  ).then([this] {
+    pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
+    return seastar::make_ready_future<bool>(false);
+  });
+}
+
+} // namespace crimson::osd

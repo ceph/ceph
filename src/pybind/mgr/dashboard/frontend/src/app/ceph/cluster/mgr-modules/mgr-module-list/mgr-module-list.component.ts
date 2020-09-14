@@ -1,6 +1,5 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { timer as observableTimer } from 'rxjs';
 
@@ -37,26 +36,25 @@ export class MgrModuleListComponent extends ListWithDetails {
   constructor(
     private authStorageService: AuthStorageService,
     private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService,
-    private i18n: I18n
+    private notificationService: NotificationService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().configOpt;
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Enabled'),
+        name: $localize`Enabled`,
         prop: 'enabled',
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: this.i18n('Always-On'),
+        name: $localize`Always-On`,
         prop: 'always_on',
         isHidden: true,
         flexGrow: 1,
@@ -68,7 +66,7 @@ export class MgrModuleListComponent extends ListWithDetails {
       this.selection.first() && encodeURIComponent(this.selection.first().name);
     this.tableActions = [
       {
-        name: this.i18n('Edit'),
+        name: $localize`Edit`,
         permission: 'update',
         disable: () => {
           if (!this.selection.hasSelection) {
@@ -81,18 +79,17 @@ export class MgrModuleListComponent extends ListWithDetails {
         icon: Icons.edit
       },
       {
-        name: this.i18n('Enable'),
+        name: $localize`Enable`,
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('enabled'),
         icon: Icons.start
       },
       {
-        name: this.i18n('Disable'),
+        name: $localize`Disable`,
         permission: 'update',
         click: () => this.updateModuleState(),
-        disable: () => this.isTableActionDisabled('disabled'),
-        disableDesc: () => this.getTableActionDisabledDesc(),
+        disable: () => () => this.getTableActionDisabledDesc(),
         icon: Icons.stop
       }
     ];
@@ -142,15 +139,12 @@ export class MgrModuleListComponent extends ListWithDetails {
     }
   }
 
-  getTableActionDisabledDesc(): string | undefined {
-    if (this.selection.hasSelection) {
-      const selected = this.selection.first();
-      if (selected.always_on) {
-        return this.i18n('This Manager module is always on.');
-      }
+  getTableActionDisabledDesc(): string | boolean {
+    if (this.selection.first().always_on) {
+      return $localize`This Manager module is always on.`;
     }
 
-    return undefined;
+    return this.isTableActionDisabled('disabled');
   }
 
   /**
@@ -197,7 +191,7 @@ export class MgrModuleListComponent extends ListWithDetails {
         this.notificationService.suspendToasties(true);
         // Block the whole UI to prevent user interactions until
         // the connection to the backend is reestablished
-        this.blockUI.start(this.i18n('Reconnecting, please wait ...'));
+        this.blockUI.start($localize`Reconnecting, please wait ...`);
         fnWaitUntilReconnected();
       }
     );

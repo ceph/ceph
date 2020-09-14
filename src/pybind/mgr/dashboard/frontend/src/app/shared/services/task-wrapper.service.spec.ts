@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { Observable } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { FinishedTask } from '../models/finished-task';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
@@ -18,7 +18,7 @@ describe('TaskWrapperService', () => {
 
   configureTestBed({
     imports: [HttpClientTestingModule, ToastrModule.forRoot(), SharedModule, RouterTestingModule],
-    providers: [TaskWrapperService, i18nProviders]
+    providers: [TaskWrapperService]
   });
 
   beforeEach(inject([TaskWrapperService], (wrapper: TaskWrapperService) => {

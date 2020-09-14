@@ -36,7 +36,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return journal.open_for_write().safe_then([this] {
     logger().debug("TransactionManager::mkfs: about to do_with");
     return seastar::do_with(
-      lba_manager.create_transaction(),
+      create_transaction(),
       [this](auto &transaction) {
 	logger().debug("TransactionManager::mkfs: about to cache.mkfs");
 	cache.init();
@@ -66,6 +66,16 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     return cache.replay_delta(paddr, e);
   }).safe_then([this] {
     return journal.open_for_write();
+  }).safe_then([this] {
+    return seastar::do_with(
+      create_transaction(),
+      [this](auto &t) {
+	return cache.init_cached_extents(*t, [this](auto &t, auto &e) {
+	  return lba_manager.init_cached_extent(t, e);
+	}).safe_then([this, &t]() mutable {
+	  return submit_transaction(std::move(t));
+	});
+      });
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::all_same_way([] {
@@ -85,8 +95,9 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  return lba_manager.incref_extent(t, ref->get_laddr()
-  ).handle_error(
+  return lba_manager.incref_extent(t, ref->get_laddr()).safe_then([](auto r) {
+    return r.refcount;
+  }).handle_error(
     ref_ertr::pass_further{},
     ct_error::all_same_way([](auto e) {
       ceph_assert(0 == "unhandled error, TODO");
@@ -97,27 +108,42 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   laddr_t offset)
 {
-  return lba_manager.incref_extent(t, offset);
+  return lba_manager.incref_extent(t, offset).safe_then([](auto result) {
+    return result.refcount;
+  });
 }
 
 TransactionManager::ref_ret TransactionManager::dec_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  return dec_ref(t, ref->get_laddr()
-  ).handle_error(
-    ref_ertr::pass_further{},
-    ct_error::all_same_way([](auto e) {
-      ceph_assert(0 == "unhandled error, TODO");
-    }));
+  return lba_manager.decref_extent(t, ref->get_laddr()
+  ).safe_then([this, &t, ref](auto ret) {
+    if (ret.refcount == 0) {
+      cache.retire_extent(t, ref);
+    }
+    return ret.refcount;
+  });
 }
 
 TransactionManager::ref_ret TransactionManager::dec_ref(
   Transaction &t,
   laddr_t offset)
 {
-  // TODO: need to retire the extent (only) if it's live, will need cache call
-  return lba_manager.decref_extent(t, offset);
+  return lba_manager.decref_extent(t, offset
+  ).safe_then([this, &t](auto result) -> ref_ret {
+    if (result.refcount == 0) {
+      return cache.retire_extent_if_cached(t, result.addr).safe_then([] {
+	return ref_ret(
+	  ref_ertr::ready_future_marker{},
+	  0);
+      });
+    } else {
+      return ref_ret(
+	ref_ertr::ready_future_marker{},
+	result.refcount);
+    }
+  });
 }
 
 TransactionManager::submit_transaction_ertr::future<>
@@ -132,8 +158,9 @@ TransactionManager::submit_transaction(
   logger().debug("TransactionManager::submit_transaction");
 
   return journal.submit_record(std::move(*record)).safe_then(
-    [this, t=std::move(t)](paddr_t addr) {
+    [this, t=std::move(t)](paddr_t addr) mutable {
       cache.complete_commit(*t, addr);
+      lba_manager.complete_transaction(*t);
     },
     submit_transaction_ertr::pass_further{},
     crimson::ct_error::all_same_way([](auto e) {
