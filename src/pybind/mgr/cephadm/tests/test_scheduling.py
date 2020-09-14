@@ -93,13 +93,11 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
                     hosts=explicit,
                     count=count,
                 ))
-        mk_hosts = lambda _: hosts
     elif spec_section == 'label':
         mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
             label='mylabel',
             count=count,
         ))
-        mk_hosts = lambda l: [e for e in explicit if e in hosts] if l == 'mylabel' else hosts
     elif spec_section == 'host_pattern':
         pattern = {
             'e': 'notfound',
@@ -111,16 +109,16 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
                     host_pattern=pattern,
                     count=count,
                 ))
-        mk_hosts = lambda _: hosts
     else:
         assert False
-    def _get_hosts_wrapper(label=None, as_hostspec=False):
-        hosts = mk_hosts(label)
-        if as_hostspec:
-            return list(map(HostSpec, hosts))
-        return hosts
 
-    return mk_spec, _get_hosts_wrapper
+    def mk_hosts(*_, **__):
+        return [
+            HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
+            for h in hosts
+        ]
+
+    return mk_spec, mk_hosts
 
 
 def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_elems):
@@ -431,7 +429,7 @@ class NodeAssignmentTest(NamedTuple):
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
     def get_hosts_func(label=None, as_hostspec=False):
         if as_hostspec:
-            return [HostSpec(h) for h in hosts]
+            return [HostSpec(h, labels=['foo']) for h in hosts]
         return hosts
 
     service_id = None
@@ -522,7 +520,7 @@ def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
     def get_hosts_func(label=None, as_hostspec=False):
         if as_hostspec:
-            return [HostSpec(h) for h in hosts]
+            return [HostSpec(h, labels=['foo']) for h in hosts]
         return hosts
 
     hosts = HostAssignment(
