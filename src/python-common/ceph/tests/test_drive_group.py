@@ -63,13 +63,19 @@ def test_DriveGroup_fail(test_input):
 
 
 def test_drivegroup_pattern():
-    dg = DriveGroupSpec(PlacementSpec(host_pattern='node[1-3]'), data_devices=DeviceSelection(all=True))
+    dg = DriveGroupSpec(
+        PlacementSpec(host_pattern='node[1-3]'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True))
     assert dg.placement.filter_matching_hostspecs([HostSpec('node{}'.format(i)) for i in range(10)]) == ['node1', 'node2', 'node3']
 
 
 def test_drive_selection():
     devs = DeviceSelection(paths=['/dev/sda'])
-    spec = DriveGroupSpec(PlacementSpec('node_name'), data_devices=devs)
+    spec = DriveGroupSpec(
+        PlacementSpec('node_name'),
+        service_id='foobar',
+        data_devices=devs)
     assert all([isinstance(x, Device) for x in spec.data_devices.paths])
     assert spec.data_devices.paths[0].path == '/dev/sda'
 
@@ -79,8 +85,10 @@ def test_drive_selection():
 
 def test_ceph_volume_command_0():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(all=True)
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, []).run()
@@ -89,9 +97,11 @@ def test_ceph_volume_command_0():
 
 def test_ceph_volume_command_1():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(rotational=True),
                           db_devices=DeviceSelection(rotational=False)
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, []).run()
@@ -101,10 +111,12 @@ def test_ceph_volume_command_1():
 
 def test_ceph_volume_command_2():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G')
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
                               _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
@@ -118,11 +130,13 @@ def test_ceph_volume_command_2():
 
 def test_ceph_volume_command_3():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G'),
                           encrypted=True
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
                               _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
@@ -137,6 +151,7 @@ def test_ceph_volume_command_3():
 
 def test_ceph_volume_command_4():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G'),
@@ -145,6 +160,7 @@ def test_ceph_volume_command_4():
                           osds_per_device=3,
                           encrypted=True
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
                               _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
@@ -159,9 +175,12 @@ def test_ceph_volume_command_4():
 
 def test_ceph_volume_command_5():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(rotational=True),
                           objectstore='filestore'
                           )
+    with pytest.raises(DriveGroupValidationError):
+        spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, []).run()
@@ -170,11 +189,14 @@ def test_ceph_volume_command_5():
 
 def test_ceph_volume_command_6():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(rotational=False),
                           journal_devices=DeviceSelection(rotational=True),
                           journal_size='500M',
                           objectstore='filestore'
                           )
+    with pytest.raises(DriveGroupValidationError):
+        spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, []).run()
@@ -185,9 +207,11 @@ def test_ceph_volume_command_6():
 
 def test_ceph_volume_command_7():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(all=True),
                           osd_id_claims={'host1': ['0', '1']}
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, ['0', '1']).run()
@@ -196,11 +220,13 @@ def test_ceph_volume_command_7():
 
 def test_ceph_volume_command_8():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
                           data_devices=DeviceSelection(rotational=True, model='INTEL SSDS'),
                           db_devices=DeviceSelection(model='INTEL SSDP'),
                           filter_logic='OR',
                           osd_id_claims={}
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True,  size='1.82 TB',  model='ST2000DM001-1ER1') +  # data
                               _mk_device(rotational=False, size="223.0 GB", model='INTEL SSDSC2KG24') +  # data
                               _mk_device(rotational=False, size="349.0 GB", model='INTEL SSDPED1K375GA')  # wal/db
