@@ -501,31 +501,20 @@ void AdminSocket::execute_command(
 
   auto f = Formatter::create(format, "json-pretty", "json-pretty");
 
-  std::unique_lock l(lock);
-  decltype(hooks)::iterator p;
-  p = hooks.find(prefix);
-  if (p == hooks.cend()) {
+  auto [retval, hook] = find_matched_hook(prefix, cmdmap);
+  switch (retval) {
+  case ENOENT:
     lderr(m_cct) << "AdminSocket: request '" << cmdvec
 		 << "' not defined" << dendl;
     delete f;
     return on_finish(-EINVAL, "unknown command prefix "s + prefix, empty);
+  case EINVAL:
+    delete f;
+    return on_finish(-EINVAL, "invalid command json", empty);
+  default:
+    assert(retval == 0);
   }
 
-  // make sure one of the registered commands with this prefix validates.
-  if (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
-    if (p->first != prefix) {
-      delete f;
-      return on_finish(-EINVAL, "invalid command json", empty);
-    }
-  }
-
-  // Drop lock to avoid cycles in cases where the hook takes
-  // the same lock that was held during calls to register/unregister,
-  // and set in_hook to allow unregister to wait for us before
-  // removing this hook.
-  in_hook = true;
-  auto hook = p->second.hook;
-  l.unlock();
   hook->call_async(
     prefix, cmdmap, f, inbl,
     [f, on_finish](int r, const std::string& err, bufferlist& out) {
@@ -537,9 +526,33 @@ void AdminSocket::execute_command(
       on_finish(r, err, out);
     });
 
-  l.lock();
+  std::unique_lock l(lock);
   in_hook = false;
   in_hook_cond.notify_all();
+}
+
+std::pair<int, AdminSocketHook*>
+AdminSocket::find_matched_hook(std::string& prefix,
+			       const cmdmap_t& cmdmap)
+{
+  std::unique_lock l(lock);
+  // Drop lock after done with the lookup to avoid cycles in cases where the
+  // hook takes the same lock that was held during calls to
+  // register/unregister, and set in_hook to allow unregister to wait for us
+  // before removing this hook.
+  auto [hooks_begin, hooks_end] = hooks.equal_range(prefix);
+  if (hooks_begin == hooks_end) {
+    return {ENOENT, nullptr};
+  }
+  // make sure one of the registered commands with this prefix validates.
+  stringstream errss;
+  for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
+    if (validate_cmd(m_cct, hook->second.desc, cmdmap, errss)) {
+      in_hook = true;
+      return {0, hook->second.hook};
+    }
+  }
+  return {EINVAL, nullptr};
 }
 
 void AdminSocket::queue_tell_command(cref_t<MCommand> m)
