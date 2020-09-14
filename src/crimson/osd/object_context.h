@@ -11,6 +11,7 @@
 
 #include "common/intrusive_lru.h"
 #include "osd/object_state.h"
+#include "crimson/common/tri_mutex.h"
 #include "crimson/osd/osd_operation.h"
 
 namespace ceph {
@@ -84,33 +85,8 @@ public:
   }
 
 private:
-  RWState rwstate;
-  seastar::shared_mutex wait_queue;
-  std::optional<seastar::shared_promise<>> wake;
-
-  template <typename F>
-  seastar::future<> with_queue(F &&f) {
-    return wait_queue.lock().then([this, f=std::move(f)] {
-      ceph_assert(!wake);
-      return seastar::repeat([this, f=std::move(f)]() {
-	if (f()) {
-	  wait_queue.unlock();
-	  return seastar::make_ready_future<seastar::stop_iteration>(
-	    seastar::stop_iteration::yes);
-	} else {
-	  rwstate.inc_waiters();
-	  wake = seastar::shared_promise<>();
-	  return wake->get_shared_future().then([this, f=std::move(f)] {
-	    wake = std::nullopt;
-	    rwstate.dec_waiters(1);
-	    return seastar::make_ready_future<seastar::stop_iteration>(
-	      seastar::stop_iteration::no);
-	  });
-	}
-      });
-    });
-  }
-
+  tri_mutex rwlock;
+  bool recovery_read_marker = false;
 
   const char *get_type_name() const final {
     return "ObjectContext";
@@ -122,23 +98,18 @@ private:
     Operation *op,
     LockF &&lockf) {
     return op->with_blocking_future(
-      make_blocking_future(with_queue(std::forward<LockF>(lockf))));
+      make_blocking_future(std::forward<LockF>(lockf)));
   }
 
-  template <typename UnlockF>
-  void put_lock(
-    UnlockF &&unlockf) {
-    if (unlockf() && wake) wake->set_value();
-  }
 public:
   seastar::future<> get_lock_type(Operation *op, RWState::State type) {
     switch (type) {
     case RWState::RWWRITE:
-      return get_lock(op, [this] { return rwstate.get_write_lock(); });
+      return get_lock(op, rwlock.lock_for_write(false));
     case RWState::RWREAD:
-      return get_lock(op, [this] { return rwstate.get_read_lock(); });
+      return get_lock(op, rwlock.lock_for_read());
     case RWState::RWEXCL:
-      return get_lock(op, [this] { return rwstate.get_excl_lock(); });
+      return get_lock(op, rwlock.lock_for_excl());
     case RWState::RWNONE:
       return seastar::make_ready_future<>();
     default:
@@ -150,11 +121,11 @@ public:
   void put_lock_type(RWState::State type) {
     switch (type) {
     case RWState::RWWRITE:
-      return put_lock([this] { return rwstate.put_write(); });
+      return rwlock.unlock_for_write();
     case RWState::RWREAD:
-      return put_lock([this] { return rwstate.put_read(); });
+      return rwlock.unlock_for_read();
     case RWState::RWEXCL:
-      return put_lock([this] { return rwstate.put_excl(); });
+      return rwlock.unlock_for_excl();
     case RWState::RWNONE:
       return;
     default:
@@ -165,66 +136,62 @@ public:
 
   void degrade_excl_to(RWState::State type) {
     // assume we already hold an excl lock
-    bool put = rwstate.put_excl();
+    rwlock.unlock_for_excl();
     bool success = false;
     switch (type) {
     case RWState::RWWRITE:
-      success = rwstate.get_write_lock();
+      success = rwlock.try_lock_for_write(false);
       break;
     case RWState::RWREAD:
-      success = rwstate.get_read_lock();
+      success = rwlock.try_lock_for_read();
       break;
     case RWState::RWEXCL:
-      success = rwstate.get_excl_lock();
+      success = rwlock.try_lock_for_excl();
       break;
     case RWState::RWNONE:
       success = true;
       break;
     default:
-      ceph_abort_msg("invalid lock type");
+      assert(0 == "invalid lock type");
       break;
     }
     ceph_assert(success);
-    if (put && wake) {
-      wake->set_value();
-    }
   }
 
-  bool empty() const { return rwstate.empty(); }
+  bool empty() const {
+    return !rwlock.is_acquired();
+  }
+  bool is_request_pending() const {
+    return rwlock.is_acquired();
+  }
 
   template <typename F>
   seastar::future<> get_write_greedy(Operation *op) {
-    return get_lock(op, [this] { return rwstate.get_write_lock(true); });
+    return get_lock(op, [this] {
+      return rwlock.lock_for_write(true);
+    });
   }
 
-  bool try_get_read_lock() {
-    return rwstate.get_read_lock();
-  }
-  void drop_read() {
-    return put_lock_type(RWState::RWREAD);
-  }
   bool get_recovery_read() {
-    return rwstate.get_recovery_read();
+    if (rwlock.try_lock_for_read()) {
+      recovery_read_marker = true;
+      return true;
+    } else {
+      return false;
+    }
   }
   seastar::future<> wait_recovery_read() {
-    if (rwstate.get_recovery_read()) {
-      return seastar::make_ready_future<>();
-    }
-    return with_queue([this] {
-      return rwstate.get_recovery_read();
+    return rwlock.lock_for_read().then([this] {
+      recovery_read_marker = true;
     });
   }
   void drop_recovery_read() {
-    ceph_assert(rwstate.recovery_read_marker);
-    drop_read();
-    rwstate.recovery_read_marker = false;
+    assert(recovery_read_marker);
+    rwlock.unlock_for_read();
+    recovery_read_marker = false;
   }
   bool maybe_get_excl() {
-    return rwstate.get_excl_lock();
-  }
-
-  bool is_request_pending() const {
-    return !rwstate.empty();
+    return rwlock.try_lock_for_excl();
   }
 };
 using ObjectContextRef = ObjectContext::Ref;
