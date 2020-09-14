@@ -811,7 +811,7 @@ struct ObjectOperation {
 	      clone.cloneid = std::move(c.cloneid);
 	      clone.snaps.reserve(c.snaps.size());
 	      std::move(c.snaps.begin(), c.snaps.end(),
-			clone.snaps.end());
+			std::back_inserter(clone.snaps));
 	      clone.overlap = c.overlap;
 	      clone.size = c.size;
 	      neosnaps->clones.push_back(std::move(clone));
