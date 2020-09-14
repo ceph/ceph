@@ -1835,6 +1835,7 @@ def get_container(fsid, daemon_type, daemon_id,
             '--cidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id)])
 
+
     return CephContainer(
         image=args.image,
         entrypoint=entrypoint,
@@ -2358,6 +2359,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
+            '--log-driver=journald',
             '--ipc=host',
         ] + self.container_args + priv + \
         cname + envs + \
