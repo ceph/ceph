@@ -753,6 +753,11 @@ inline namespace v14_2_0 {
      * updates.
      */
     void tier_flush();
+    /**
+     * evict a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_evict();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.

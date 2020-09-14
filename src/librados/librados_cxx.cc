@@ -638,6 +638,13 @@ void librados::ObjectReadOperation::tier_flush()
   o->tier_flush();
 }
 
+void librados::ObjectReadOperation::tier_evict()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_evict();
+}
+
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
 						  uint64_t tgt_version,
