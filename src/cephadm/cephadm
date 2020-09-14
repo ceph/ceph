@@ -100,13 +100,6 @@ cached_stdin = None
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
-cephadm_cache = {
-    "health": {},
-    "host": {},
-    "daemons": {},
-    "disks": {},
-}
-cephadm_cache_lock = RLock()
 
 class termcolor:
     yellow = '\033[93m'
@@ -5281,7 +5274,7 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type','application/json')
         self.end_headers()
-        self.wfile.write(bytes(json.dumps(cephadm_cache), 'ascii'))
+        self.wfile.write(bytes(json.dumps(self.server.cephadm_cache), 'ascii'))
     
     def log_message(self, format, *args):
         rqst = " ".join(args)
@@ -5291,6 +5284,7 @@ class CephadmDaemonHandler(BaseHTTPRequestHandler):
 class CephadmHTTPServer(ThreadingMixIn, HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
+    cephadm_cache = None
 
 
 class CephadmDaemon():
@@ -5298,7 +5292,7 @@ class CephadmDaemon():
     daemon_type = "cephadm"
     default_port = 5003
     bin_name = 'cephadm'
-    loop_delay = 0.1
+    loop_delay = 1
     thread_check_interval = 5
 
     def __init__(self, fsid, daemon_id, port=5003):
@@ -5308,6 +5302,13 @@ class CephadmDaemon():
         self.workers = []
         self.http_server = None
         self.stop = False
+        self.cephadm_cache = {
+            "health": {},
+            "host": {},
+            "daemons": {},
+            "disks": {},
+        }
+        self.cephadm_cache_lock = RLock()
 
     @property
     def port_active(self):
@@ -5363,8 +5364,8 @@ class CephadmDaemon():
                     errors.append("host-facts received invalid JSON")
                     logger.warning(errors[-1])
                     data = {}
-                with cephadm_cache_lock:
-                    cephadm_cache['host'] = {
+                with self.cephadm_cache_lock:
+                    self.cephadm_cache['host'] = {
                         "scrape_timestamp": s_time,
                         "scrape_duration_secs": elapsed,
                         "scrape_errors": errors,
@@ -5410,8 +5411,8 @@ class CephadmDaemon():
                     errors.append("ceph-volume didn't return any data")
                     logger.warning(errors[-1])
 
-                with cephadm_cache_lock:
-                    cephadm_cache['disks'] = {
+                with self.cephadm_cache_lock:
+                    self.cephadm_cache['disks'] = {
                         "scrape_timestamp": s_time,
                         "scrape_duration_secs": elapsed,
                         "scrape_errors": errors,
@@ -5437,8 +5438,8 @@ class CephadmDaemon():
                 s_time = time.time()
                 ld = list_daemons()
                 elapsed = time.time() - s_time
-                with cephadm_cache_lock:
-                    cephadm_cache['daemons'] = {
+                with self.cephadm_cache_lock:
+                    self.cephadm_cache['daemons'] = {
                         "scrape_timestamp": s_time,
                         "scrape_duration_secs": elapsed,
                         "scrape_errors": errors,
@@ -5457,8 +5458,8 @@ class CephadmDaemon():
             t = Thread(target=target)
         t.daemon = True
         t.name = name
-        with cephadm_cache_lock:
-            cephadm_cache['health'][name] = "active"
+        with self.cephadm_cache_lock:
+            self.cephadm_cache['health'][name] = "active"
         t.start()
 
         start_msg = f"Started {name} thread"
@@ -5498,6 +5499,7 @@ class CephadmDaemon():
         self.workers.append(disks)
 
         self.http_server = CephadmHTTPServer(('0.0.0.0', self.port), CephadmDaemonHandler)  # IPv4 only
+        self.http_server.cephadm_cache = self.cephadm_cache
         server_thread = self._create_thread(self.http_server.serve_forever, 'http_server')
         logger.info(f"http server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}")
         
@@ -5511,9 +5513,9 @@ class CephadmDaemon():
                 for worker in self.workers:
                     if not worker.is_alive():
                         logger.warning(f"{worker.name} thread not running")
-                        with cephadm_cache_lock:
+                        with self.cephadm_cache_lock:
                             # update health in the cache
-                            cephadm_cache['health'][worker.name] = "inactive"
+                            self.cephadm_cache['health'][worker.name] = "inactive"
         
             time.sleep(CephadmDaemon.loop_delay)
             ctr += CephadmDaemon.loop_delay
