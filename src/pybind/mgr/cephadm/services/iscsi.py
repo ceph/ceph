@@ -23,7 +23,7 @@ class IscsiService(CephService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> str:
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
         assert daemon_spec.spec
 
@@ -70,7 +70,7 @@ class IscsiService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.extra_config = {'iscsi-gateway.cfg': igw_conf}
 
-        return self.mgr._create_daemon(daemon_spec)
+        return daemon_spec
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         def get_set_cmd_dicts(out: str) -> List[dict]:
