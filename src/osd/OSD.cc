@@ -10543,14 +10543,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->shard_lock.lock();
 
     auto q = sdata->pg_slots.find(token);
-    if (q == sdata->pg_slots.end()) {
-      // this can happen if we race with pg removal.
-      dout(20) << __func__ << " slot " << token << " no longer there" << dendl;
-      pg->unlock();
-      sdata->shard_lock.unlock();
-      handle_oncommits(oncommits);
-      return;
-    }
+    // slot->num_running > 0 ensure that slot can't remove.
+    ceph_assert(q != sdata->pg_slots.end());
     slot = q->second.get();
     --slot->num_running;
 
