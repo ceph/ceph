@@ -239,6 +239,7 @@ class RGWRadosStore : public RGWStore {
                             rgw_placement_rule& placement_rule,
                             std::string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
+                            const RGWAccessControlPolicy& policy,
 			    RGWAttrs& attrs,
                             RGWBucketInfo& info,
                             obj_version& ep_objv,

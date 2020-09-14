@@ -829,6 +829,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				 rgw_placement_rule& placement_rule,
 				 string& swift_ver_location,
 				 const RGWQuotaInfo * pquota_info,
+				 const RGWAccessControlPolicy& policy,
 				 RGWAttrs& attrs,
 				 RGWBucketInfo& info,
 				 obj_version& ep_objv,
@@ -844,7 +845,6 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
   rgw_bucket *pmaster_bucket;
   uint32_t *pmaster_num_shards;
   real_time creation_time;
-  RGWAccessControlPolicy old_policy(ctx());
   std::unique_ptr<RGWBucket> bucket;
   obj_version objv, *pobjv = NULL;
 
@@ -854,19 +854,19 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
     return ret;
 
   if (ret != -ENOENT) {
+    RGWAccessControlPolicy old_policy(ctx());
     *existed = true;
     if (swift_ver_location.empty()) {
       swift_ver_location = bucket->get_info().swift_ver_location;
     }
     placement_rule.inherit_from(bucket->get_info().placement_rule);
+
+    // don't allow changes to the acl policy
     int r = rgw_op_get_bucket_policy_from_attr(this, u, bucket->get_attrs(),
 					       &old_policy);
-    if (r >= 0)  {
-      if (old_policy.get_owner().get_id().compare(u.get_id()) != 0) {
-	bucket_out->swap(bucket);
-	ret = -EEXIST;
-	return ret;
-      }
+    if (r >= 0 && old_policy != policy) {
+      bucket_out->swap(bucket);
+      return -EEXIST;
     }
   } else {
     bucket = std::unique_ptr<RGWBucket>(new RGWRadosBucket(this, b, &u));
@@ -925,6 +925,7 @@ int RGWRadosStore::create_bucket(RGWUser& u, const rgw_bucket& b,
 				    pmaster_bucket, pmaster_num_shards, exclusive);
     if (ret == -EEXIST) {
       *existed = true;
+      ret = 0;
     } else if (ret != 0) {
       return ret;
     }

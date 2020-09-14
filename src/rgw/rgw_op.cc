@@ -3046,7 +3046,6 @@ void RGWCreateBucket::execute()
 {
   buffer::list aclbl;
   buffer::list corsbl;
-  bool existed;
   string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
   rgw_raw_obj obj(store->svc()->zone->get_zone_params().domain_root, bucket_name);
 
@@ -3161,7 +3160,7 @@ void RGWCreateBucket::execute()
   op_ret = store->create_bucket(*s->user, tmp_bucket, zonegroup_id,
 				placement_rule,
 				info.swift_ver_location,
-				pquota_info, attrs, info, ep_objv,
+				pquota_info, policy, attrs, info, ep_objv,
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
 				&s->bucket);
 
@@ -3169,11 +3168,10 @@ void RGWCreateBucket::execute()
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret << " bucket=" << s->bucket.get() << dendl;
 
-  if (op_ret && op_ret != -EEXIST)
+  if (op_ret)
     return;
 
-  existed = (op_ret == -EEXIST);
-
+  const bool existed = s->bucket_exists;
   if (existed) {
     /* bucket already existed, might have raced with another bucket creation, or
      * might be partial bucket creation that never completed. Read existing bucket
@@ -6892,7 +6890,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path)
   op_ret = store->create_bucket(*s->user, new_bucket,
                                 store->get_zonegroup().get_id(),
                                 placement_rule, swift_ver_location,
-                                pquota_info, attrs,
+                                pquota_info, policy, attrs,
                                 out_info, ep_objv,
                                 true, false, &bucket_exists,
 				info, &bucket);
