@@ -2536,9 +2536,11 @@ class CephContainer:
             cmd_args.extend([
                 '--privileged',
                 # let OSD etc read block devs that haven't been chowned
-                '--group-add=disk',
-            ])
-        if self.ptrace:
+                '--group-add=disk'])
+        if self.ptrace and not self.privileged:
+            # if privileged, the SYS_PTRACE cap is already added
+            # in addition, --cap-add and --privileged are mutually
+            # exclusive since podman >= 2.0
             cmd_args.append('--cap-add=SYS_PTRACE')
         if self.init:
             cmd_args.append('--init')
