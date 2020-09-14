@@ -986,7 +986,7 @@ Usage:
 
     @_cli_write_command(
         'orch',
-        "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
+        "name=action,type=CephChoices,strings=start|restart|redeploy|reconfig "
         "name=service_name,type=CephString",
         'Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)')
     def _service_action(self, action, service_name):

@@ -924,7 +924,7 @@ class Orchestrator(object):
         Perform an action (start/stop/reload) on a service (i.e., all daemons
         providing the logical service).
 
-        :param action: one of "start", "stop", "restart", "redeploy", "reconfig"
+        :param action: one of "start", "restart", "redeploy", "reconfig"
         :param service_name: service_type + '.' + service_id
                             (e.g. "mon", "mgr", "mds.mycephfs", "rgw.realm.zone", ...)
         :rtype: Completion
