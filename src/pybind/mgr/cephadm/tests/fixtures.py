@@ -114,9 +114,11 @@ def wait(m, c):
 
 
 @contextmanager
-def with_host(m: CephadmOrchestrator, name):
+def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
     wait(m, m.add_host(HostSpec(hostname=name)))
+    if refresh_hosts:
+        m._refresh_hosts_and_daemons()
     yield
     wait(m, m.remove_host(name))
 

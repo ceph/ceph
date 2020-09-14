@@ -436,6 +436,16 @@ class HostCache():
             return True
         return False
 
+    def host_had_daemon_refresh(self, host: str) -> bool:
+        """
+        ... at least once.
+        """
+        if host in self.last_daemon_update:
+            return True
+        if host not in self.daemons:
+            return False
+        return bool(self.daemons[host])
+
     def host_needs_device_refresh(self, host):
         # type: (str) -> bool
         if host in self.mgr.offline_hosts:
@@ -514,7 +524,7 @@ class HostCache():
         We're not checking for `host_needs_daemon_refresh`, as this might never be
         False for all hosts.
         """
-        return all((h in self.last_daemon_update or h in self.mgr.offline_hosts)
+        return all((self.host_had_daemon_refresh(h) or h in self.mgr.offline_hosts)
                    for h in self.get_hosts())
 
     def schedule_daemon_action(self, host: str, daemon_name: str, action: str):

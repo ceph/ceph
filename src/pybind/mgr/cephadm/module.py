@@ -1239,6 +1239,20 @@ To check that the host is reachable:
                         code, '\n'.join(err)))
             return out, err, code
 
+    def _hosts_with_daemon_inventory(self) -> List[HostSpec]:
+        """
+        Returns all hosts that went through _refresh_host_daemons().
+
+        This mitigates a potential race, where new host was added *after*
+        ``_refresh_host_daemons()`` was called, but *before*
+        ``_apply_all_specs()`` was called. thus we end up with a hosts
+        where daemons might be running, but we have not yet detected them.
+        """
+        return [
+            h for h in self.inventory.all_specs()
+            if self.cache.host_had_daemon_refresh(h.hostname)
+        ]
+
     def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -2100,6 +2114,8 @@ To check that the host is reachable:
         Schedule a service.  Deploy new daemons or remove old ones, depending
         on the target label and count specified in the placement.
         """
+        self.migration.verify_no_migration()
+
         daemon_type = spec.service_type
         service_name = spec.service_name()
         if spec.unmanaged:
@@ -2140,7 +2156,7 @@ To check that the host is reachable:
 
         ha = HostAssignment(
             spec=spec,
-            hosts=self.inventory.all_specs(),
+            hosts=self._hosts_with_daemon_inventory(),
             get_daemons_func=self.cache.get_daemons_by_service,
             filter_new_host=matches_network if daemon_type == 'mon' else None,
         )
@@ -2384,8 +2400,6 @@ To check that the host is reachable:
         return self._add_daemon('mgr', spec, self.mgr_service.prepare_create)
 
     def _apply(self, spec: GenericSpec) -> str:
-        self.migration.verify_no_migration()
-
         if spec.service_type == 'host':
             return self._add_host(cast(HostSpec, spec))
 
@@ -2404,7 +2418,7 @@ To check that the host is reachable:
 
         ha = HostAssignment(
             spec=spec,
-            hosts=self.inventory.all_specs(),
+            hosts=self._hosts_with_daemon_inventory(),
             get_daemons_func=self.cache.get_daemons_by_service,
         )
         ha.validate()
@@ -2459,7 +2473,7 @@ To check that the host is reachable:
 
         HostAssignment(
             spec=spec,
-            hosts=self.inventory.all_specs(),
+            hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
             get_daemons_func=self.cache.get_daemons_by_service,
         ).validate()
 

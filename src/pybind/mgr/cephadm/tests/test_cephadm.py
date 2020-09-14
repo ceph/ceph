@@ -769,7 +769,7 @@ class TestCephadm(object):
             return '{}', None, 0
         with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
             with mock.patch("remoto.process.check", _check):
-                with with_host(cephadm_module, 'test'):
+                with with_host(cephadm_module, 'test', refresh_hosts=False):
                     code, out, err = cephadm_module.check_host('test')
                     # First should succeed.
                     assert err is None
@@ -878,7 +878,7 @@ class TestCephadm(object):
                                  True
                              ])
     def test_upgrade_run(self, use_repo_digest, cephadm_module: CephadmOrchestrator):
-        with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
             cephadm_module.set_container_image('global', 'image')
             if use_repo_digest:
                 cephadm_module.use_repo_digest = True
