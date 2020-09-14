@@ -189,6 +189,7 @@ class PlacementSpec(object):
             self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
                           for x in hosts if x]
 
+    # deprecated
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
         return self.filter_matching_hostspecs(_get_hosts_func(as_hostspec=True))
 

@@ -107,7 +107,8 @@ class OSDService(CephService):
 
     def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
-        matching_hosts = drive_group.placement.filter_matching_hosts(self.mgr._get_hosts)
+        matching_hosts = drive_group.placement.filter_matching_hostspecs(
+            self.mgr.inventory.all_specs())
         # 2) Map the inventory to the InventoryHost object
         host_ds_map = []
 
@@ -211,7 +212,7 @@ class OSDService(CephService):
         if not osdspecs:
             self.mgr.log.debug("No OSDSpecs found")
             return []
-        return sum([spec.placement.filter_matching_hosts(self.mgr._get_hosts) for spec in osdspecs], [])
+        return sum([spec.placement.filter_matching_hostspecs(self.mgr.inventory.all_specs()) for spec in osdspecs], [])
 
     def resolve_osdspecs_for_host(self, host: str, specs: Optional[List[DriveGroupSpec]] = None):
         matching_specs = []
@@ -220,7 +221,7 @@ class OSDService(CephService):
             specs = [cast(DriveGroupSpec, spec) for (sn, spec) in self.mgr.spec_store.spec_preview.items()
                      if spec.service_type == 'osd']
         for spec in specs:
-            if host in spec.placement.filter_matching_hosts(self.mgr._get_hosts):
+            if host in spec.placement.filter_matching_hostspecs(self.mgr.inventory.all_specs()):
                 self.mgr.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
                 matching_specs.append(spec)
         return matching_specs

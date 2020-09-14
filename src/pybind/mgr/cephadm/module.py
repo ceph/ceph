@@ -1239,9 +1239,6 @@ To check that the host is reachable:
                         code, '\n'.join(err)))
             return out, err, code
 
-    def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
-        return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
-
     def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
