@@ -809,7 +809,7 @@ Usage:
             table.left_padding_width = 0
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
-                table.add_row([osd.osd_id, osd.nodename, osd.drain_status_human(),
+                table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
                                osd.get_pg_count(), osd.replace, osd.replace, osd.drain_started_at])
             out = table.get_string()
 
