@@ -87,7 +87,7 @@ class Inventory:
                 else:
                     yield h
 
-    def spec_from_dict(self, info):
+    def spec_from_dict(self, info) -> HostSpec:
         hostname = info['hostname']
         return HostSpec(
             hostname,
@@ -96,8 +96,8 @@ class Inventory:
             status='Offline' if hostname in self.mgr.offline_hosts else info.get('status', ''),
         )
 
-    def all_specs(self) -> Iterator[HostSpec]:
-        return map(self.spec_from_dict, self._inventory.values())
+    def all_specs(self) -> List[HostSpec]:
+        return list(map(self.spec_from_dict, self._inventory.values()))
 
     def save(self):
         self.mgr.set_store('inventory', json.dumps(self._inventory))
