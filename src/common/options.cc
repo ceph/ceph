@@ -9067,6 +9067,15 @@ std::vector<Option> get_mds_client_options() {
     });
 }
 
+std::vector<Option> get_replica_options() {
+  return std::vector<Option>({
+      Option("cache_replica_rootdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+      .set_default("")
+      .set_description("the device mounted dir used to allocate replicated cache space")
+      .set_flag(Option::FLAG_STARTUP),
+    });
+}
+
 std::vector<Option> get_cephfs_mirror_options() {
   return std::vector<Option>({
     Option("cephfs_mirror_max_concurrent_directory_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -9136,6 +9145,7 @@ static std::vector<Option> build_options()
   ingest(get_immutable_object_cache_options(), "immutable-objet-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
+  ingest(get_replica_options(), "replica");
   ingest(get_cephfs_mirror_options(), "cephfs-mirror");
 
   return result;
